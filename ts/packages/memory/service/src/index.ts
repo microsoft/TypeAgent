@@ -23,6 +23,7 @@ export * from "./viewSynthesis.js";
 export * from "./viewTypes.js";
 export * from "./viewDetail.js";
 export * from "./viewExtensions.js";
+export * from "./viewPackages.js";
 export * from "./viewExtensionUnderstanding.js";
 export type {
     WikiConsolidationReceipt,

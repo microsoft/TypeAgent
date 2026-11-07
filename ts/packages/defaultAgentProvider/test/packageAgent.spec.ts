@@ -16,6 +16,7 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { McpServerSourceApi } from "../src/mcp/mcpAppAgentSource.js";
 import { NormalizedMcpServerConfig } from "../src/mcp/mcpServerConfig.js";
 import { McpInstallCandidate } from "../src/installSources/config.js";
+import type { MemoryViewPackageManager } from "../src/memoryViewPackages.js";
 
 const noopHost: AppAgentProviderSetController = {
     runExclusive: async (callback) => {
@@ -27,6 +28,67 @@ const noopHost: AppAgentProviderSetController = {
     },
 };
 
+test("memory-view package commands are separate and delegate without activation", async () => {
+    const calls: string[] = [];
+    const memoryViews: MemoryViewPackageManager = {
+        install: async () => {
+            throw new Error("Dry-run must not install");
+        },
+        update: async () => {
+            throw new Error("Not requested");
+        },
+        load: async () => {
+            throw new Error("Commands must not activate");
+        },
+        preview: async () => {
+            calls.push("preview");
+            return undefined;
+        },
+        available: async () => [],
+        list: async () => {
+            calls.push("list");
+            return [];
+        },
+        uninstall: async (name) => {
+            calls.push(`remove:${name}`);
+        },
+    };
+    const table = buildPackageCommandTable({
+        description: "sources",
+        commands: {},
+    });
+    const entry = table.commands["memory-view"];
+    if (!("commands" in entry))
+        throw new Error("Missing memory-view command subtree");
+    expect(table.defaultSubCommand).toBe("list");
+    expect(entry.defaultSubCommand).toBe("list");
+    const context = fakeActionContext({
+        memoryViews,
+        source: makeSource().api,
+        appAgentProviderSetController: noopHost,
+    });
+    await (entry.commands.list as CommandHandler).run(context, {
+        args: {},
+        flags: {},
+    });
+    await expect(
+        (entry.commands.install as CommandHandler).run(context, {
+            args: { target: "fixture" },
+            flags: { "dry-run": true },
+        }),
+    ).rejects.toThrow("No source");
+    await (entry.commands.uninstall as CommandHandler).run(context, {
+        args: { target: "fixture" },
+        flags: {},
+    });
+    expect(calls).toEqual(["list", "preview", "remove:fixture"]);
+    await expect(
+        (entry.commands.update as CommandHandler).run(context, {
+            args: { target: "fixture" },
+            flags: { "dry-run": true },
+        }),
+    ).rejects.toThrow("supported only");
+});
 type SourceCall =
     | {
           op: "install";
@@ -574,6 +636,7 @@ describe("@package command table", () => {
             "install",
             "list",
             "mcp",
+            "memory-view",
             "source",
             "uninstall",
             "update",
