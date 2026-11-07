@@ -200,8 +200,15 @@ jobs:
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
       - script: |
-          pnpm exec playwright install --with-deps
-        displayName: Install Playwright Browsers
+          pnpm exec playwright install chromium
+        displayName: Install Playwright Browsers (Windows)
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+        workingDirectory: $(buildDirectory)/packages/shell
+
+      - script: |
+          pnpm exec playwright install --with-deps chromium
+        displayName: Install Playwright Browsers (Linux)
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         workingDirectory: $(buildDirectory)/packages/shell
 
       - script: |
