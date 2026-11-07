@@ -19,7 +19,7 @@ import {
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("legacy rollback retains its full matrix and nightly/manual coverage", () => {
+test("legacy rollback retains Node 24/26 and full nightly/manual test coverage", () => {
     const workflow = yaml.load(
         fs.readFileSync(
             new URL(
@@ -62,11 +62,7 @@ test("legacy rollback retains its full matrix and nightly/manual coverage", () =
             );
         }
     }
-    assert.deepEqual(job.strategy.matrix.version, [
-        "22.23.4",
-        "24.22.1",
-        "26.12.1",
-    ]);
+    assert.deepEqual(job.strategy.matrix.version, ["24.22.1", "26.12.1"]);
     assert.equal(step.shell, "pwsh");
     assert.match(step.run, /exit \$LASTEXITCODE/);
 });
