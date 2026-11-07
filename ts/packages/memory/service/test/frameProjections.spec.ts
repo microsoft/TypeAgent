@@ -536,6 +536,107 @@ describe("source dataframe lifecycle", () => {
             (await service.getFrameProjectionStatus(corpusId)).coverage.failed,
         ).toBe(0);
     });
+    test.each([false, true])(
+        "maintenance refreshes a changed provider without hiding receipt failures=%s",
+        async (failReceipt) => {
+            await service.close();
+            let authorizations = 0;
+            const changingProvider: FrameSourceProvider = {
+                ...provider,
+                authorize: async () => {
+                    authorizations++;
+                    changingProvider.version = "2";
+                    return true;
+                },
+            };
+            service = new FileMemoryService(root, {
+                ...options(),
+                maintenanceMode: "manual",
+                sourceFrameProviders: [changingProvider],
+                frameStoreFactory: (filename) =>
+                    new sqlite.SqliteFrameProjectionStore(filename, (point) => {
+                        if (point === "receipt" && failReceipt)
+                            throw new Error(
+                                "injected maintenance receipt failure",
+                            );
+                    }),
+            });
+            await ingest("changing", [
+                { id: "one", component: "api", duration: 40 },
+            ]);
+            const status = await service.drainMaintenance(5000);
+            if (failReceipt) {
+                expect(status.settled).toBe(false);
+                expect(status.failures).toEqual([
+                    {
+                        key: `${corpusId}:frames`,
+                        error: "1 frame owner projections failed",
+                    },
+                ]);
+                const frames = await service.getFrameProjectionStatus(corpusId);
+                expect(frames.coverage.failed).toBe(1);
+                expect(frames.owners[0].error).toContain(
+                    "injected maintenance receipt failure",
+                );
+            } else {
+                expect(status).toMatchObject({
+                    settled: true,
+                    pending: [],
+                    running: [],
+                    failures: [],
+                });
+                expect((await query()).rows).toHaveLength(1);
+            }
+            expect(authorizations).toBeGreaterThan(1);
+        },
+    );
+    test("maintenance refreshes a source replaced during frame preparation", async () => {
+        await service.close();
+        let pause = true;
+        let enter!: () => void, release!: () => void;
+        const entered = new Promise<void>((resolve) => {
+            enter = resolve;
+        });
+        const resumed = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        service = new FileMemoryService(root, {
+            ...options(),
+            maintenanceMode: "manual",
+            sourceFrameProviders: [
+                {
+                    ...provider,
+                    authorize: async () => {
+                        if (pause) {
+                            pause = false;
+                            enter();
+                            await resumed;
+                        }
+                        return true;
+                    },
+                },
+            ],
+        });
+        await ingest("changing", [
+            { id: "old", component: "api", duration: 40 },
+        ]);
+        const draining = service.drainMaintenance(5000);
+        try {
+            await entered;
+            await ingest("changing", [
+                { id: "new", component: "api", duration: 80 },
+            ]);
+        } finally {
+            release();
+        }
+        expect(await draining).toMatchObject({
+            settled: true,
+            pending: [],
+            running: [],
+            failures: [],
+        });
+        expect((await query()).rows.map((row) => row.itemKey)).toEqual(["new"]);
+    });
     test("forget during preparation cannot resurrect persistent owner facts", async () => {
         await ingest("forgotten", [
             { id: "one", component: "api", duration: 40 },

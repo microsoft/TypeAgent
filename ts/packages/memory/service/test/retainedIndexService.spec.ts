@@ -203,7 +203,12 @@ describe.each([false, true])(
             corpusId: string,
             messageCount = 1,
         ): Promise<void> {
-            expect((await service.drainMaintenance()).settled).toBe(true);
+            expect(await service.drainMaintenance()).toMatchObject({
+                settled: true,
+                pending: [],
+                running: [],
+                failures: [],
+            });
             expect(
                 await service.getSource(corpusId, "private"),
             ).toBeUndefined();

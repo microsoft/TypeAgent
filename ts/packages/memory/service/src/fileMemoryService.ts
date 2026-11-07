@@ -3577,11 +3577,11 @@ export class FileMemoryService
             frameHash([runtime.manifest.sources, runtime.events]),
         );
         if (current !== frames.authoritative)
-            throw new Error(
+            throw new ViewBuildStaleError(
                 "Frame authoritative snapshot changed during the read",
             );
         if (frames.providerStamp !== this.frameProviderStamp())
-            throw new Error(
+            throw new ViewBuildStaleError(
                 "Frame provider registration changed during the read",
             );
         if (frames.viewsHead !== undefined)
@@ -3728,6 +3728,31 @@ export class FileMemoryService
             },
         };
     }
+    private scheduleFrameProjections(corpusId: string): void {
+        if (!this.frameOptions.frameProjections || this.closed) return;
+        this.maintenance.request(
+            corpusId,
+            "frames",
+            undefined,
+            async (signal) => {
+                signal.throwIfAborted();
+                try {
+                    const status =
+                        await this.getFrameProjectionStatus(corpusId);
+                    if (status.coverage.failed)
+                        throw new Error(
+                            `${status.coverage.failed} frame owner projections failed`,
+                        );
+                } catch (error) {
+                    if (!(error instanceof ViewBuildStaleError)) throw error;
+                    signal.throwIfAborted();
+                    // A foreground write invalidated the read; keep its replacement queued.
+                    this.scheduleFrameProjections(corpusId);
+                }
+            },
+        );
+    }
+
     public getFrameProjectionStatus(
         corpusId: string,
     ): Promise<FrameProjectionStatus> {
@@ -15280,21 +15305,7 @@ export class FileMemoryService
                 ),
             ),
         );
-        if (this.frameOptions.frameProjections && !this.closed)
-            this.maintenance.request(
-                corpusId,
-                "frames",
-                undefined,
-                async (signal) => {
-                    signal.throwIfAborted();
-                    const status =
-                        await this.getFrameProjectionStatus(corpusId);
-                    if (status.coverage.failed)
-                        throw new Error(
-                            `${status.coverage.failed} frame owner projections failed`,
-                        );
-                },
-            );
+        this.scheduleFrameProjections(corpusId);
         return result;
     }
 
