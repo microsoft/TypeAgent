@@ -4,6 +4,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+    viewDetailPageRequestSchema,
+    viewDetailPageSchema,
     viewArchiveRequestSchema,
     viewBuildJobRequestSchema,
     viewBuildContinuationRequestSchema,
@@ -248,6 +250,35 @@ export function registerViewTools(
             outputSchema: z.object({ result: viewSnapshotSchema }),
         },
         async ({ corpusId }) => run(() => views.listViews(corpusId)),
+    );
+    server.registerTool(
+        viewToolNames.getViewDetailPage,
+        {
+            description:
+                "Read bounded JSON slices of a view revision. Complete projection retains build inputs; presentation retains all view content and citations without the embedded build input snapshot. Follow every nextOffset with the same projection, revisionId and digest. An individual slice is not a complete view. Each page rechecks original access. Prefer summaries for inventory.",
+            inputSchema: viewDetailPageRequestSchema,
+            outputSchema: z.object({ result: viewDetailPageSchema.nullable() }),
+        },
+        async (request) =>
+            run(async () => {
+                if (!views.getViewDetailPage)
+                    throw new Error("Paged view detail is unavailable");
+                return (
+                    (await views.getViewDetailPage({
+                        corpusId: request.corpusId,
+                        viewId: request.viewId,
+                        ...(request.revisionId !== undefined
+                            ? { revisionId: request.revisionId }
+                            : {}),
+                        ...(request.includeContext !== undefined
+                            ? { includeContext: request.includeContext }
+                            : {}),
+                        offset: request.offset,
+                        digest: request.digest,
+                        projection: request.projection,
+                    })) ?? null
+                );
+            }),
     );
     server.registerTool(
         viewToolNames.getView,

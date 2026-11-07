@@ -20,13 +20,12 @@ import {
     changeFamily,
     settleConsolidation,
 } from "./sourceFollowingFixtures.js";
-import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
+import {
+    editPausedConsolidationDraft,
+    originalFixtureRoot,
+} from "./wikiConsolidationFixtures.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
-import {
-    authoredRelationships,
-    derivedDefinitionInput,
-} from "../src/viewRelationships.js";
 
 async function prePolicyClasses(directory: string) {
     const compiled = path.resolve(
@@ -63,10 +62,10 @@ async function prePolicyClasses(directory: string) {
     const currentFragments = pathToFileURL(
         path.join(compiled, "indexedFragments.js"),
     ).href;
-    // Preserve the frozen selector while supplying the current host's query-term API.
+    // Preserve the frozen selector while supplying the current host's helper APIs.
     await writeFile(
         path.join(directory, "indexedFragments.js"),
-        `${compiledWindows}\nexport { indexedQueryTerms } from ${JSON.stringify(currentFragments)};\n`,
+        `${compiledWindows}\nexport { applyIndexedBlockPolicy, indexedQueryTerms } from ${JSON.stringify(currentFragments)};\n`,
     );
     const recipeFile = path.join(directory, "informationalView.js");
     const recipe = await readFile(recipeFile, "utf8");
@@ -230,17 +229,14 @@ test.each([false, true])(
                 ":indexed-evidence-v2",
             );
             expect(old.content.sections[0].body).not.toContain(tail);
-            const content = structuredClone(old.content);
-            content.title = "My worksheet navigation";
-            await service.saveViewDraft({
+            await editPausedConsolidationDraft(
+                service,
                 corpusId,
                 viewId,
-                expectedHead: (await service.listViews(corpusId)).head,
-                expectedVersion: old.version,
-                definition: derivedDefinitionInput(old),
-                content,
-                relationships: authoredRelationships(old),
-            });
+                (content) => {
+                    content.title = "My worksheet navigation";
+                },
+            );
             await publishCurrent(service, corpusId, viewId);
             await changeFamily(service, corpusId, "resume");
             await settleConsolidation(service, corpusId);

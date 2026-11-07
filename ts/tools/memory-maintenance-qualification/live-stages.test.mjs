@@ -17,6 +17,81 @@ import {
     maintainLiveFamily,
 } from "./live-stages.mjs";
 
+test("provider receipts retain safe member identity, trace and body-completion timing", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+        Response.json({ model: "fixture", usage: { total_tokens: 3 } });
+    const events = [];
+    const restore = observeProvider(
+        events,
+        () => "knowledge",
+        () => "trace-1",
+    );
+    try {
+        for (const host of ["first.invalid", "second.invalid", "first.invalid"])
+            await fetch(
+                `https://${host}/chat/completions?secret=private-query`,
+                {
+                    body: JSON.stringify({
+                        messages: [{ role: "user", content: "private-prompt" }],
+                        response_format: {
+                            json_schema: { name: "private-schema" },
+                        },
+                    }),
+                },
+            );
+        assert.equal(events[0].endpointId, events[2].endpointId);
+        assert.notEqual(events[0].endpointId, events[1].endpointId);
+        assert.match(events[0].endpointId, /^[0-9a-f]{64}$/);
+        assert.equal(events[0].traceId, "trace-1");
+        assert.ok(events[0].bodyObservedDurationMs >= events[0].durationMs);
+        assert.ok(events[0].bodyObservedEpochMs >= events[0].responseEpochMs);
+        assert.equal(events[0].usage.total_tokens, 3);
+        assert.ok(!JSON.stringify(events).includes(".invalid"));
+        assert.ok(!JSON.stringify(events).includes("private-"));
+    } finally {
+        restore();
+        globalThis.fetch = original;
+    }
+});
+
+test("provider observation records and propagates transport and body failures", async () => {
+    const original = globalThis.fetch;
+    const failure = new Error("private-network-detail");
+    const events = [];
+    globalThis.fetch = async () => {
+        throw failure;
+    };
+    const restore = observeProvider(events);
+    try {
+        await assert.rejects(
+            fetch("https://fixture.invalid/chat/completions"),
+            (error) => error === failure,
+        );
+        assert.equal(events[0].observationFailed, true);
+        assert.equal(events[0].status, undefined);
+        assert.ok(events[0].bodyObservedDurationMs >= 0);
+        assert.ok(!JSON.stringify(events).includes("private-network-detail"));
+    } finally {
+        restore();
+        globalThis.fetch = original;
+    }
+    globalThis.fetch = async () =>
+        new Response("{", { headers: { "content-type": "application/json" } });
+    const restoreBody = observeProvider(events);
+    try {
+        await assert.rejects(
+            fetch("https://fixture.invalid/chat/completions"),
+            SyntaxError,
+        );
+        assert.equal(events[1].status, 200);
+        assert.equal(events[1].observationFailed, true);
+    } finally {
+        restoreBody();
+        globalThis.fetch = original;
+    }
+});
+
 test("baseline19 permits thirty minutes from spawn plus five minutes for cleanup without extending other scopes", () => {
     const baseline = liveAllowances({ sourceScope: "baseline19" });
     assert.equal(baseline.workAllowanceMs, 35 * 60 * 1000);
@@ -59,8 +134,16 @@ test("actual fresh compiled live imports/public APIs and production job handle c
         return import(pathToFileURL(path.join(productRoot, relative)).href);
     });
 
-    assert.ok(loaded.includes("packages\\memory\\service\\dist\\rpcFacade.js"));
-    assert.ok(!loaded.includes("packages\\memory\\client\\dist\\index.js"));
+    assert.ok(
+        loaded.includes(
+            path.join("packages", "memory", "service", "dist", "rpcFacade.js"),
+        ),
+    );
+    assert.ok(
+        !loaded.includes(
+            path.join("packages", "memory", "client", "dist", "index.js"),
+        ),
+    );
     const status = {
         jobId: "compiled-job-handle-control",
         state: "complete",

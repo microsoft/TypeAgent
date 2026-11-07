@@ -406,17 +406,7 @@ export function matchesTemporalRange(
     const end = range.end === undefined ? undefined : bound(range.end);
     if (end !== undefined && start > end)
         throw new Error("Temporal query range ends before it starts");
-    const values =
-        range.dimension === "message"
-            ? [context?.messageTime]
-            : [
-                  ...(context?.eventMentions ?? []).map(
-                      (mention) => mention.value,
-                  ),
-                  ...(context?.discoveredDateEvidence ?? [])
-                      .filter((evidence) => evidence.role === "eventTime")
-                      .map((evidence) => evidence.value),
-              ];
+    const values = temporalValues(context, range.dimension);
     return values.some((value) => {
         if (!value) return false;
         const key =
@@ -427,4 +417,23 @@ export function matchesTemporalRange(
             (end === undefined || key.slice(0, end.length) <= end)
         );
     });
+}
+
+export function temporalValues(
+    context:
+        | Pick<
+              MessageTemporalContext,
+              "messageTime" | "eventMentions" | "discoveredDateEvidence"
+          >
+        | undefined,
+    dimension: TemporalQueryRange["dimension"],
+): (TemporalValue | undefined)[] {
+    return dimension === "message"
+        ? [context?.messageTime]
+        : [
+              ...(context?.eventMentions ?? []).map((mention) => mention.value),
+              ...(context?.discoveredDateEvidence ?? [])
+                  .filter((evidence) => evidence.role === "eventTime")
+                  .map((evidence) => evidence.value),
+          ];
 }

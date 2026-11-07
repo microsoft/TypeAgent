@@ -27,6 +27,18 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        ...(service.listFrameSchemas
+            ? { listFrameSchemas: service.listFrameSchemas.bind(service) }
+            : {}),
+        ...(service.queryFrame
+            ? { queryFrame: service.queryFrame.bind(service) }
+            : {}),
+        ...(service.getFrameProjectionStatus
+            ? {
+                  getFrameProjectionStatus:
+                      service.getFrameProjectionStatus.bind(service),
+              }
+            : {}),
         warmViewIndexes: (corpusId) =>
             service.warmViewIndexes?.(corpusId) ??
             unsupportedCapability("view-index warmup"),
@@ -185,6 +197,9 @@ export function createMemoryServiceRpcFacade(
             unsupportedCapability("source View usage"),
         getView: (...args) =>
             service.getView?.(...args) ?? unsupportedCapability("view drafts"),
+        getViewDetailPage: (request) =>
+            service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail"),
         saveViewDraft: (...args) =>
             service.saveViewDraft?.(...args) ??
             unsupportedCapability("view drafts"),

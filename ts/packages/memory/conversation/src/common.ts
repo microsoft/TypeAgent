@@ -6,9 +6,7 @@ import * as kp from "@typeagent/knowpro";
 import * as ms from "@typeagent/memory-storage";
 import {
     embeddingIdentityKey,
-    embeddingModelForRole,
     getEmbeddingSize,
-    resolveEmbeddingModel,
     TextEmbeddingModel,
     tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
@@ -48,60 +46,7 @@ export function createEmbeddingModelWithCache(
 export async function prepareConversationEmbeddings(
     settings: kp.ConversationSettings,
 ): Promise<kp.PersistedEmbeddingIdentities> {
-    const identities: kp.PersistedEmbeddingIdentities = {};
-    let complete = true;
-    const lanes = {
-        relatedTerms: settings.relatedTermIndexSettings.embeddingIndexSettings,
-        message: settings.messageTextIndexSettings.embeddingIndexSettings,
-        thread: settings.threadSettings,
-    };
-    const resolutions = new Map<
-        NonNullable<typeof settings.threadSettings.embeddingModel>,
-        Promise<NonNullable<typeof settings.threadSettings.embeddingModel>>
-    >();
-    for (const [lane, indexSettings] of Object.entries(lanes)) {
-        if (!indexSettings?.embeddingModel) continue;
-        const original = indexSettings.embeddingModel;
-        let resolution = resolutions.get(original);
-        if (!resolution) {
-            resolution = resolveEmbeddingModel(original);
-            resolutions.set(original, resolution);
-        }
-        const model = await resolution;
-        indexSettings.embeddingModel = model;
-        let dimensions: number | undefined;
-        for (const role of ["query", "document"] as const) {
-            const identity = embeddingModelForRole(
-                model,
-                role,
-            ).embeddingIdentity;
-            if (!identity) {
-                complete = false;
-                continue;
-            }
-            embeddingIdentityKey(identity);
-            if (
-                dimensions !== undefined &&
-                dimensions !== identity.dimensions
-            ) {
-                throw new Error("Embedding model role dimensions disagree");
-            }
-            dimensions = identity.dimensions;
-            indexSettings.embeddingSize = identity.dimensions;
-            identities[`${lane}.${role}`] = identity;
-        }
-    }
-    const dimensions = new Set(
-        Object.values(lanes).flatMap((lane) =>
-            lane?.embeddingModel ? [lane.embeddingSize] : [],
-        ),
-    );
-    if (dimensions.size > 1) {
-        throw new Error(
-            "Conversation embedding lanes must use the same dimensions for the shared vector file.",
-        );
-    }
-    return complete ? identities : {};
+    return kp.prepareConversationEmbeddings(settings);
 }
 
 export async function writeMemoryDataToFile(

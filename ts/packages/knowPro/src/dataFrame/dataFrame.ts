@@ -264,7 +264,7 @@ export class DataFrame implements IDataFrame {
         value: DataFrameValue,
         op: ComparisonOp,
     ): boolean {
-        const propertyValue = (rowData as any)[name];
+        const propertyValue = rowData[name];
         if (value === undefined || propertyValue === undefined) {
             return false;
         }
@@ -274,13 +274,13 @@ export class DataFrame implements IDataFrame {
             case ComparisonOp.Eq:
                 return value == propertyValue;
             case ComparisonOp.Lt:
-                return value < propertyValue;
+                return propertyValue < value;
             case ComparisonOp.Lte:
-                return value <= propertyValue;
+                return propertyValue <= value;
             case ComparisonOp.Gt:
-                return value > propertyValue;
+                return propertyValue > value;
             case ComparisonOp.Gte:
-                return value >= propertyValue;
+                return propertyValue >= value;
             case ComparisonOp.Neq:
                 return value != propertyValue;
         }

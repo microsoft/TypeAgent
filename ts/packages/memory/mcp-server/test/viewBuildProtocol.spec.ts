@@ -3,11 +3,14 @@
 
 import {
     McpMemoryServiceClient,
+    readViewDetail,
     viewBuildRequestSchema,
     viewResolutionSchema,
 } from "@typeagent/memory-client";
 import {
     FileMemoryService,
+    viewDetailPageChars,
+    type ViewDetailPageRequest,
     type ViewBuildSnapshot,
     type ViewSynthesisOutput,
     type ViewExtensionProvider,
@@ -54,7 +57,7 @@ function syntheticOutput(input: ViewBuildSnapshot): ViewSynthesisOutput {
                 id: role,
                 role,
                 heading: role,
-                body: source.content,
+                body: source.content.repeat(1000),
             })),
         },
         relationships: roles.map((role) => ({
@@ -407,7 +410,14 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
                 }),
             },
         });
-    let host = await MemoryServiceHost.start(open());
+    const service = open();
+    const detailRequests: ViewDetailPageRequest[] = [];
+    const getViewDetailPage = service.getViewDetailPage.bind(service);
+    service.getViewDetailPage = async (request) => {
+        detailRequests.push(request);
+        return getViewDetailPage(request);
+    };
+    let host = await MemoryServiceHost.start(service);
     let client = await McpMemoryServiceClient.create({
         kind: "http",
         url: host.endpoint,
@@ -472,6 +482,31 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
         expect(job.results[0].state).toBe("draft");
         const snapshot = await client.listViews(corpus.corpusId);
         const view = snapshot.views[0];
+        const detailRequest = {
+            corpusId: corpus.corpusId,
+            viewId: view.viewId,
+            revisionId: view.revisionId,
+            includeContext: false,
+        };
+        const firstPage = await client.getViewDetailPage(detailRequest);
+        expect(detailRequests[0]).toMatchObject(detailRequest);
+        expect(firstPage?.text.length).toBe(viewDetailPageChars);
+        expect(firstPage?.nextOffset).toBe(viewDetailPageChars);
+        expect(await readViewDetail(client, detailRequest)).toEqual(view);
+        const presentation = await readViewDetail(client, {
+            ...detailRequest,
+            projection: "presentation",
+        });
+        expect(presentation?.content).toEqual(view.content);
+        expect(presentation?.relationships).toEqual(view.relationships);
+        expect(presentation?.generation?.input).toBeUndefined();
+        await expect(
+            client.getViewDetailPage({
+                ...detailRequest,
+                offset: viewDetailPageChars,
+                digest: "a".repeat(64),
+            }),
+        ).rejects.toThrow(/changed or continuation/);
         if (view.content.kind !== "troubleshootingGuide")
             throw new Error("Expected a generated troubleshooting guide");
         expect(view.generation?.input?.inputs[0].content).toContain(

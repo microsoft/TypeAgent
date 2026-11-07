@@ -659,6 +659,10 @@ class SearchQueryCompiler {
                 this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
                 if (term.facets) {
                     for (const facet of term.facets) {
+                        if (facet.compareOp && facet.compareOp !== "eq")
+                            throw new Error(
+                                "Ordered and inequality facet comparisons require a dataframe",
+                            );
                         if (!isWildcard(facet.facetValue)) {
                             this.addPropertyTermToGroup(
                                 facet.facetValue,
@@ -837,6 +841,10 @@ class SearchQueryCompiler {
         }
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
+                if (facetTerm.compareOp && facetTerm.compareOp !== "eq")
+                    throw new Error(
+                        "Ordered and inequality facet comparisons require a dataframe",
+                    );
                 const nameWildcard = isWildcard(facetTerm.facetName);
                 const valueWildcard = isWildcard(facetTerm.facetValue);
                 if (!(nameWildcard || valueWildcard)) {
@@ -941,6 +949,10 @@ class SearchQueryCompiler {
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
                 this.addSearchTermToGroup(facetTerm.facetName, termGroup);
+                if (facetTerm.compareOp && facetTerm.compareOp !== "eq")
+                    throw new Error(
+                        "Ordered and inequality facet comparisons require a dataframe",
+                    );
                 this.addSearchTermToGroup(facetTerm.facetValue, termGroup);
             }
         }

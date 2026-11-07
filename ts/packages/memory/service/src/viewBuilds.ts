@@ -229,7 +229,11 @@ export class ViewBuildRunner {
             job.results.some(
                 (result) => result.snapshot.pipeline === "topics-v1",
             ),
-            job.corpusId,
+            job.results.every(
+                (result) => result.snapshot.pipeline === "topics-v1",
+            )
+                ? `${job.corpusId}:topics`
+                : job.corpusId,
         );
         const settled = task
             .catch((error: unknown) => {

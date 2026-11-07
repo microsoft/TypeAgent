@@ -12,6 +12,7 @@ import {
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
 import {
     assertReaderOriginalCitations,
+    readerCitationBundle,
     ReaderStatusMismatch,
     readWithStatusRepair,
 } from "./readerStatusRepair.js";
@@ -28,7 +29,7 @@ export const influencingSourceScopeInstructions =
     "influencingSourceCount is the number of distinct sources in a view's full construction scope, not independent observations or a count of supplied original passages. Complete identifiers remain with the host; cite only the supplied evidence IDs and original passages.";
 
 export const viewInterpretationInstructions =
-    "When the question requests a supplied maintained view's interpretation, treat that view as the requested artifact: explain and cite its interpretation together with its required supportingEvidenceIds and opposingEvidenceIds. Attribute the view as a derived interpretation, not independent confirmation. Do not silently replace a requested view interpretation with a source-only answer or drop its citation to avoid the original-citation requirement. If no matching view was supplied, state that limitation without inventing one. Availability alone does not require citing unrelated views.";
+    "When the question requests a supplied maintained view's interpretation, treat that view as the requested artifact: explain and cite its interpretation together with its required supportingEvidenceIds and opposingEvidenceIds. Each view's requiredEvidenceIds is the complete citation bundle, including its own ID. Copy that entire array into evidenceIds for every claim citing that view; do not select a subset or put its originals only in another claim. Attribute the view as a derived interpretation, not independent confirmation. Do not silently replace a requested view interpretation with a source-only answer or drop its citation to avoid the original-citation requirement. If no matching view was supplied, state that limitation without inventing one. Availability alone does not require citing unrelated views.";
 
 export function answerEvidenceForReader(item: AnswerEvidence) {
     if (item.kind === "source") return item;
@@ -36,6 +37,7 @@ export function answerEvidenceForReader(item: AnswerEvidence) {
     return {
         ...view,
         influencingSourceCount: new Set(influencingSourceIds).size,
+        requiredEvidenceIds: readerCitationBundle(item),
     };
 }
 

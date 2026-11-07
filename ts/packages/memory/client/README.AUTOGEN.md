@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=46908ebccaea7dffd5079f221d9ea4499a6e60d07aeb972035601c265d0c7904 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=135666ba35cfc569cca62d909fa86f1190843afecee5beee62c26871029d5cd4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-client — AI-generated documentation
@@ -21,6 +21,7 @@ Typed clients and protocol schemas for the TypeAgent memory service
 ### Entry points
 
 - default → [./dist/index.js](./dist/index.js)
+- `./view-protocol` → [./dist/viewProtocol.js](./dist/viewProtocol.js)
 
 ### Dependencies
 
@@ -38,10 +39,10 @@ External: `@modelcontextprotocol/client`, `zod`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/memoryClient.ts`, `./src/protocol.ts`, …and 1 more under `./src/`.
+`./src/index.ts`, `./src/acquisitionProtocol.ts`, `./src/agentSessionProtocol.ts`, …and 11 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `698fc097c4b8743475487a6ec91e80c3a0ac4f25` on `2026-09-22T17:27:42.286Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-client docs:verify-links` to spot-check._
+_Auto-generated against commit `dfbb1dd26cd55181537e3d66daacfa5821e02f18` on `2026-11-01T08:18:02.889Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

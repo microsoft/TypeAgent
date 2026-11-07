@@ -6,8 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { TypedViewStore } from "../src/viewStore.js";
 import { ViewHistory } from "../src/viewHistory.js";
+import { runWithSearchTiming } from "@typeagent/knowpro";
+import type { KnowledgeStatus } from "../src/knowledgeTypes.js";
 import type {
     ViewBuildSnapshot,
+    ViewBuildJob,
     ViewSaveRequest,
     ViewVersion,
 } from "../src/viewTypes.js";
@@ -49,6 +52,199 @@ describe("derived-only View persistence", () => {
         store = new TypedViewStore(root, "owner");
     });
     afterEach(async () => rm(root, { recursive: true, force: true }));
+
+    test("metadata polling selects real retained history fields and preserves committed snapshots", async () => {
+        const job: ViewBuildJob = {
+            jobId: "current",
+            corpusId,
+            fingerprint: "current",
+            request: { corpusId, expectedHead: null, targets: [] },
+            actor: "owner",
+            createdAt: "2026-01-01",
+            updatedAt: "2026-01-01",
+            state: "running",
+            results: [],
+            publication: false,
+        };
+        const knowledge: KnowledgeStatus = {
+            discovery: {
+                version: 1,
+                policy: "off",
+                policyVersion: 1,
+                receipts: [],
+                routes: [],
+                callTimes: [],
+            },
+            checkpoints: [],
+        };
+        const state = {
+            views: {},
+            knowledge,
+            builds: {
+                current: job,
+                retained: {
+                    ...job,
+                    jobId: "retained",
+                    state: "failed" as const,
+                    results: [
+                        {
+                            viewId: "guide",
+                            state: "blocked" as const,
+                            reason: "Synthetic evidence rejection",
+                            snapshot: {
+                                corpusId,
+                                actor: "owner",
+                                definition: request.definition,
+                                expectedVersion: 0,
+                                bounds: {},
+                                pipeline: "troubleshooting-v1",
+                                model: "offline",
+                                fingerprint: "retained",
+                                inputs: [
+                                    {
+                                        sourceId: "evidence",
+                                        revisionId: "r1",
+                                        title: "Synthetic history",
+                                        content:
+                                            "Synthetic retained evidence. ".repeat(
+                                                60000,
+                                            ),
+                                        contentHash: "synthetic",
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                } satisfies ViewBuildJob,
+            },
+        };
+        const history = new ViewHistory(
+            path.join(root, corpusId, "views"),
+            () => state,
+        );
+        const first = await history.commit(
+            null,
+            state,
+            {},
+            "owner",
+            "Retained history",
+        );
+        const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const output = import.meta.jest
+            .spyOn(console, "warn")
+            .mockImplementation();
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        try {
+            for (let count = 0; count < 3; count++) {
+                await runWithSearchTiming(
+                    "metadata-test",
+                    "metadata-test",
+                    async () => {
+                        expect(await store.getKnowledgeState(corpusId)).toEqual(
+                            knowledge,
+                        );
+                        expect(
+                            await store.getViewBuild(corpusId, "current"),
+                        ).toEqual(job);
+                    },
+                );
+            }
+            const reads = output.mock.calls
+                .map(([text]) =>
+                    JSON.parse(
+                        String(text).slice("[memory-search-timing] ".length),
+                    ),
+                )
+                .filter((entry) => entry.stage === "view.history.payload.read");
+            expect(reads).toHaveLength(6);
+            for (const read of reads) {
+                expect(read.metadata.selected).toBe(true);
+                expect(read.metadata.payloadBytesRead).toBeLessThan(
+                    read.metadata.stateBytes * 0.01,
+                );
+            }
+            console.log(
+                JSON.stringify({
+                    boundary:
+                        "six TypedViewStore metadata reads; uncompressed payload blobs, excluding manifests and trees",
+                    logicalStateBytes: reads[0].metadata.stateBytes,
+                    selectedPayloadBytesRead: reads.reduce(
+                        (sum, read) => sum + read.metadata.payloadBytesRead,
+                        0,
+                    ),
+                    reads: reads.length,
+                }),
+            );
+            await store.updateKnowledgeState(corpusId, (current) => {
+                current.discovery.policy = "suggest";
+            });
+            const fullJob = import.meta.jest.spyOn(store, "getViewBuild");
+            try {
+                const diagnostics = await store.getKnowledgeBuildDiagnostics(
+                    corpusId,
+                    ["retained", "missing"],
+                );
+                expect(diagnostics.map(({ code }) => code)).toEqual([
+                    "target-blocked",
+                    "job-unavailable",
+                ]);
+                expect(fullJob.mock.calls.map((call) => call[1])).toEqual([
+                    "missing",
+                ]);
+                expect(diagnostics[1].state).toBe("unavailable");
+            } finally {
+                fullJob.mockRestore();
+            }
+            expect(
+                (await store.getKnowledgeState(corpusId)).discovery.policy,
+            ).toBe("suggest");
+            await store.withCommittedSnapshot(corpusId, first, async () => {
+                expect(
+                    (await store.getKnowledgeState(corpusId)).discovery.policy,
+                ).toBe("off");
+                expect(await store.getViewBuild(corpusId, "current")).toEqual(
+                    job,
+                );
+            });
+            const concurrent = new TypedViewStore(root);
+            try {
+                expect(
+                    await concurrent.getViewBuild(corpusId, "current"),
+                ).toEqual(job);
+                await store.withInventorySnapshot(
+                    corpusId,
+                    async () => {
+                        await concurrent.updateKnowledgeState(
+                            corpusId,
+                            (current) => {
+                                current.discovery.policy = "off";
+                            },
+                        );
+                        expect(
+                            (await store.getKnowledgeState(corpusId)).discovery
+                                .policy,
+                        ).toBe("suggest");
+                    },
+                    false,
+                );
+                expect(
+                    (await store.getKnowledgeState(corpusId)).discovery.policy,
+                ).toBe("off");
+            } finally {
+                concurrent.closeReadCaches();
+            }
+            const mutable = await store.getViewBuild(corpusId, "current");
+            mutable!.state = "failed";
+            expect((await store.getViewBuild(corpusId, "current"))?.state).toBe(
+                "running",
+            );
+        } finally {
+            if (trace === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+            output.mockRestore();
+        }
+    });
 
     test("source usage excludes event identity collisions and historical-only dependencies", async () => {
         await store.saveViewDraft(request);

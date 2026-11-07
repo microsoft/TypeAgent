@@ -43,6 +43,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { settleConsolidation } from "./wikiConsolidationFixtures.js";
 import { questionSummary } from "../src/inventory.js";
 
 const name: QuestionSlot = {
@@ -491,13 +492,14 @@ describe("ordinary-source schema lifecycle", () => {
     let fetchCalls = 0;
     let discoveryCalls = 0;
     let expectedCloseFailure: string | undefined;
+    let adapter: ViewSynthesisAdapter;
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-views-"));
         modelCalls = 0;
         fetchCalls = 0;
         discoveryCalls = 0;
         expectedCloseFailure = undefined;
-        const adapter: ViewSynthesisAdapter = {
+        adapter = {
             identity: "offline-schema-fixture-v1",
             proposeSchema: async () => ({
                 ...schema([name]),
@@ -525,7 +527,15 @@ describe("ordinary-source schema lifecycle", () => {
             generate: async (input) => {
                 modelCalls++;
                 return hydrateSchemaAnswers(input, {
-                    answers: input.inputs.length ? [raw("Ada")] : [],
+                    answers: input.definition
+                        .schemaView!.slots.filter(
+                            (slot) => slot.approval === "approved",
+                        )
+                        .map((slot) =>
+                            input.inputs.length && slot.id === "name"
+                                ? raw("Ada")
+                                : { slotId: slot.id, candidates: [] },
+                        ),
                 });
             },
             validate: async (_input, output) => ({
@@ -862,37 +872,40 @@ describe("ordinary-source schema lifecycle", () => {
         );
     }
 
+    async function withQuiescentSchemaFixture<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const release = service.deferMaintenance();
+        try {
+            await service["schemaWork"].get(corpusId);
+            await settleConsolidation(service, corpusId);
+            await service["corpusAccess"](corpusId).idle();
+            return await operation();
+        } finally {
+            release();
+        }
+    }
+
     async function editCurrentQuestion(
         corpusId: string,
         slotId: string,
         edit: QuestionEdit,
     ) {
-        for (let attempt = 0; attempt < 5; attempt++) {
+        return withQuiescentSchemaFixture(corpusId, async () => {
             const inventory = await service.listQuestions(corpusId);
             const question = inventory.items.find(
                 (item) => item.slot.id === slotId,
             )!;
-            try {
-                return await service.editQuestion({
-                    corpusId,
-                    viewId: question.viewId,
-                    slotId,
-                    expectedHead: inventory.head,
-                    expectedVersion: question.viewVersion,
-                    edit,
-                });
-            } catch (error) {
-                if (
-                    !(error instanceof Error) ||
-                    !/^(View history head|View version|Question edit version) conflict/.test(
-                        error.message,
-                    )
-                )
-                    throw error;
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-        }
-        throw new Error(`Question editing did not settle: ${slotId}`);
+            return await service.editQuestion({
+                corpusId,
+                viewId: question.viewId,
+                slotId,
+                expectedHead: inventory.head,
+                expectedVersion: question.viewVersion,
+                edit,
+            });
+        });
     }
 
     test("one acquired ordinary source contributes to two independently eligible views without refetch", async () => {
@@ -923,6 +936,74 @@ describe("ordinary-source schema lifecycle", () => {
         expect((await service.listSources(corpus.corpusId)).length).toBe(1);
     }, 60000);
 
+    test("opting an existing corpus into frames backfills questions without synthesis and retires rejected fields", async () => {
+        const { corpus } = await overlappingFixture();
+        await service.updateViewPublicationPolicy({
+            corpusId: corpus.corpusId,
+            expectedHead: (await service.listViews(corpus.corpusId)).head,
+            expectedRevision: (
+                await service.getViewPublicationPolicy(corpus.corpusId)
+            ).revision,
+            autoPublish: false,
+        });
+        const acquisition = await service.runAcquisitions(corpus.corpusId);
+        await waitForMemoryJob(service, acquisition[0].receipt!.jobId);
+        await answered(corpus.corpusId);
+        await service.close();
+        const calls = modelCalls;
+        service = new FileMemoryService(root, {
+            frameProjections: true,
+            informationalViews: false,
+            sourceSynopses: false,
+            discoveryPolicy: "off",
+            viewSynthesisAdapter: adapter,
+            indexFactory: (_id, directory) =>
+                new FakeSemanticCorpusIndex(directory),
+        });
+        const schemas = (
+            await service.listFrameSchemas(corpus.corpusId)
+        ).filter((schema) => schema.id.startsWith("question.answer."));
+        expect(schemas).toHaveLength(2);
+        const request = {
+            corpusId: corpus.corpusId,
+            schemaId: schemas[0].id,
+            schemaRevision: schemas[0].revision,
+            predicate: {
+                and: [{ fieldId: "value", op: "eq" as const, value: "Ada" }],
+            },
+        };
+        const selected = await service.queryFrame({
+            ...request,
+            includeUnconfirmed: true,
+        });
+        expect(selected.rows).toHaveLength(1);
+        expect(selected.rows[0].eligible).toBe(false);
+        expect(selected.rows[0].evidence).not.toHaveLength(0);
+        expect((await service.queryFrame(request)).rows).toEqual([]);
+        const question = (
+            await service.listQuestions(corpus.corpusId)
+        ).items.find(
+            (item) => `view:${item.viewId}` === selected.rows[0].ownerKey,
+        )!;
+        await service.editQuestion({
+            corpusId: corpus.corpusId,
+            viewId: question.viewId,
+            slotId: question.slot.id,
+            expectedHead: (await service.listQuestions(corpus.corpusId)).head,
+            expectedVersion: question.viewVersion,
+            edit: { kind: "approval", approval: "rejected" },
+        });
+        expect(
+            (await service.listFrameSchemas(corpus.corpusId)).some(
+                (schema) => schema.id === schemas[0].id,
+            ),
+        ).toBe(false);
+        await expect(
+            service.queryFrame({ ...request, includeUnconfirmed: true }),
+        ).rejects.toThrow("Unknown frame schema");
+        expect(modelCalls).toBe(calls);
+    }, 60000);
+
     test("an admitted upcoming ordinary source resolves questions before enrichment: zero fetches", async () => {
         const { corpus } = await overlappingFixture();
         let jobId = "";
@@ -951,6 +1032,34 @@ describe("ordinary-source schema lifecycle", () => {
         expect(fetchCalls).toBe(0);
     }, 60000);
 
+    test("explicit maintenance holds defer schema reconciliation and resume on release", async () => {
+        const { corpus } = await overlappingFixture();
+        const before = await service.listViewBuilds(corpus.corpusId);
+        const release = service.deferMaintenance();
+        try {
+            const admitted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "held-schema-evidence",
+                    sourceType: "text",
+                    title: "Deferred profile",
+                    text: "Preferred name is Ada.",
+                    tags: ["profile"],
+                },
+            });
+            await waitForMemoryJob(service, admitted.jobId, {
+                pollIntervalMs: 10,
+            });
+            await service["reconcileSchemaViews"](corpus.corpusId);
+            expect(await service.listViewBuilds(corpus.corpusId)).toHaveLength(
+                before.length,
+            );
+        } finally {
+            release();
+        }
+        await answered(corpus.corpusId);
+    }, 60000);
+
     test.each([
         { conflicts: 1, exhausted: false },
         { conflicts: 4, exhausted: true },
@@ -967,15 +1076,26 @@ describe("ordinary-source schema lifecycle", () => {
                 ) {
                     rebuildPlans++;
                     if (rebuildPlans <= conflicts) {
-                        const policy = await service.getViewPublicationPolicy(
-                            request.corpusId,
-                        );
-                        await service.updateViewPublicationPolicy({
-                            corpusId: request.corpusId,
-                            expectedHead: current.expectedHead,
-                            expectedRevision: policy.revision,
-                            autoPublish: policy.autoPublish,
-                        });
+                        const release = service.deferMaintenance();
+                        try {
+                            await service["corpusAccess"](
+                                request.corpusId,
+                            ).idle();
+                            const policy =
+                                await service.getViewPublicationPolicy(
+                                    request.corpusId,
+                                );
+                            await service.updateViewPublicationPolicy({
+                                corpusId: request.corpusId,
+                                expectedHead: (
+                                    await service.listViews(request.corpusId)
+                                ).head,
+                                expectedRevision: policy.revision,
+                                autoPublish: policy.autoPublish,
+                            });
+                        } finally {
+                            release();
+                        }
                     }
                 }
                 return current;
@@ -1087,12 +1207,16 @@ describe("ordinary-source schema lifecycle", () => {
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         expect(discoveryCalls).toBe(0);
-        const beforeDiscovery = await service.listQuestions(corpus.corpusId);
-        await service.discoverSchemaQuestions({
-            corpusId: corpus.corpusId,
-            viewId: "assisted",
-            expectedHead: beforeDiscovery.head,
-            expectedVersion: beforeDiscovery.items[0].viewVersion,
+        await withQuiescentSchemaFixture(corpus.corpusId, async () => {
+            const beforeDiscovery = await service.listQuestions(
+                corpus.corpusId,
+            );
+            await service.discoverSchemaQuestions({
+                corpusId: corpus.corpusId,
+                viewId: "assisted",
+                expectedHead: beforeDiscovery.head,
+                expectedVersion: beforeDiscovery.items[0].viewVersion,
+            });
         });
         for (let count = 0; count < 1000; count++) {
             inventory = await service.listQuestions(corpus.corpusId);

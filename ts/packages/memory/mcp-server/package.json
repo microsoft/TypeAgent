@@ -31,8 +31,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "1.3.2",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/memory-client": "workspace:*",

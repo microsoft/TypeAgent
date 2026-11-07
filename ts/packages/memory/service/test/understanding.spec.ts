@@ -262,6 +262,12 @@ describe("bounded original-citation repair", () => {
                                 .content,
                         ),
                     );
+                    const packet = JSON.parse(packets[packets.length - 1]);
+                    expect(
+                        packet.evidence.find(
+                            (item: { id: string }) => item.id === "d0",
+                        ).requiredEvidenceIds,
+                    ).toEqual(["d0", "s0", "s1"]);
                     expect(
                         JSON.stringify({ messages: prompt, jsonSchema }).length,
                     ).toBeLessThanOrEqual(32000);
@@ -1213,6 +1219,50 @@ describe("understanding lifecycle and orchestration", () => {
 });
 
 describe("snapshot and wire budgets", () => {
+    test("retains shared evidence once without discarding any lineage or accepting distinct oversized data", () => {
+        const store = new UnderstandingStore<{
+            corpusId: string;
+            envelopes: { influencingSourceIds: string[] }[];
+        }>();
+        const evidence = {
+            influencingSourceIds: Array.from(
+                { length: 4000 },
+                (_, index) => `${index}-` + "x".repeat(60),
+            ),
+        };
+        const shared = {
+            corpusId: "corpus",
+            envelopes: [evidence, evidence, evidence],
+        };
+        expect(
+            Buffer.byteLength(JSON.stringify(shared), "utf8"),
+        ).toBeGreaterThan(512 * 1024);
+        store.put("shared", shared, 0);
+        expect(store.get("shared")).toBe(shared);
+        expect(store.get("shared").envelopes[2].influencingSourceIds).toEqual(
+            evidence.influencingSourceIds,
+        );
+        expect(() =>
+            store.put(
+                "distinct",
+                {
+                    corpusId: "corpus",
+                    envelopes: shared.envelopes.map((item) =>
+                        structuredClone(item),
+                    ),
+                },
+                0,
+            ),
+        ).toThrow("byte budget");
+        const cyclic: { influencingSourceIds: string[]; self?: object } = {
+            influencingSourceIds: ["original"],
+        };
+        cyclic.self = cyclic;
+        expect(() =>
+            store.put("cyclic", { corpusId: "corpus", envelopes: [cyclic] }, 0),
+        ).toThrow(/circular/i);
+        store.close();
+    });
     test("empty retrieval is explicitly noAnswer and never spends a prose completion", async () => {
         const { engine, calls } = fixture([]);
         const result = await engine.understand(request);

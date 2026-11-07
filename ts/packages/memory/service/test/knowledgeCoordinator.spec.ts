@@ -468,10 +468,186 @@ test("a wait deadline does not cancel the captured work", async () => {
             f.coordinator.wait({ ...request, timeoutMs: 20 }),
         ).rejects.toThrow("work continues");
         expect((await f.coordinator.get(request)).state).toBe("running");
+        expect((await f.coordinator.get(request)).diagnostics).toEqual([
+            {
+                phase: "maintenance",
+                state: "running",
+                code: "maintenance-running",
+            },
+        ]);
         release();
         expect((await f.coordinator.wait(request)).state).toBe("ready");
     } finally {
         release();
+        await f.coordinator.close();
+    }
+});
+
+test("required failures wake opt-in waiters without cancelling independent maintenance or ordinary waiters", async () => {
+    const f = fixture();
+    f.host.enabledFamilies = () => ["questions", "topics"];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    let independentCompleted = false;
+    f.host.maintain = async (_checkpoint, signal, reportFailure) => {
+        entered();
+        await gate;
+        await reportFailure({
+            family: "questions",
+            state: "failed",
+            reasons: ["QUESTION_SELECTION_FAILED"],
+            jobIds: ["question-job"],
+            viewIds: ["question"],
+        });
+        await gateAfterFailure;
+        signal.throwIfAborted();
+        independentCompleted = true;
+        return {
+            state: "ready",
+            reasons: [],
+            jobIds: ["question-job", "topic-job"],
+            viewIds: [],
+        };
+    };
+    let finish!: () => void;
+    const gateAfterFailure = new Promise<void>((resolve) => {
+        finish = resolve;
+    });
+    try {
+        const checkpoint = await f.coordinator.create({ corpusId: "corpus" });
+        const request = {
+            corpusId: "corpus",
+            checkpointId: checkpoint.checkpointId,
+        };
+        await started;
+        let ordinaryReturned = false;
+        const ordinary = f.coordinator.wait(request).then((value) => {
+            ordinaryReturned = true;
+            return value;
+        });
+        const early = f.coordinator.wait({
+            ...request,
+            failOnRequiredFailure: true,
+        });
+        release();
+        const failure = await early;
+        expect(failure.state).toBe("running");
+        expect(failure.requiredFailures).toEqual([
+            {
+                family: "questions",
+                state: "failed",
+                reasons: ["QUESTION_SELECTION_FAILED"],
+                jobIds: ["question-job"],
+                viewIds: ["question"],
+                observedAt: expect.any(String),
+            },
+        ]);
+        expect(ordinaryReturned).toBe(false);
+        expect(independentCompleted).toBe(false);
+        finish();
+        const done = await ordinary;
+        expect(done.state).toBe("failed");
+        expect(done.reasons).toContain("QUESTION_SELECTION_FAILED");
+        expect(done.jobIds).toContain("topic-job");
+        expect(independentCompleted).toBe(true);
+    } finally {
+        release();
+        finish();
+        await f.coordinator.close();
+    }
+});
+
+test.each(["deadline", "close"] as const)(
+    "required question failure survives later %s while independent work drains",
+    async (outcome) => {
+        const f = fixture();
+        f.host.enabledFamilies = () => ["questions", "topics"];
+        let aborted = false;
+        f.host.maintain = async (_checkpoint, signal, reportFailure) => {
+            await reportFailure({
+                family: "questions",
+                state: "failed",
+                reasons: ["QUESTION_ANSWER_INVALID"],
+                jobIds: ["question-job"],
+                viewIds: ["question"],
+            });
+            await new Promise<void>((_resolve, reject) => {
+                const abort = () => {
+                    aborted = true;
+                    reject(signal.reason);
+                };
+                signal.addEventListener("abort", abort, { once: true });
+                if (signal.aborted) abort();
+            });
+            return { state: "ready", reasons: [], jobIds: [], viewIds: [] };
+        };
+        try {
+            const checkpoint = await f.coordinator.create({
+                corpusId: "corpus",
+                timeoutMs: outcome === "deadline" ? 30 : 10000,
+            });
+            const request = {
+                corpusId: "corpus",
+                checkpointId: checkpoint.checkpointId,
+                timeoutMs: 1000,
+            };
+            const early = await f.coordinator.wait({
+                ...request,
+                failOnRequiredFailure: true,
+            });
+            expect(early.requiredFailures?.[0].reasons).toEqual([
+                "QUESTION_ANSWER_INVALID",
+            ]);
+            expect(aborted).toBe(false);
+            const ordinary = f.coordinator.wait(request);
+            if (outcome === "close") await f.coordinator.close();
+            const done = await ordinary;
+            expect(done.state).toBe(
+                outcome === "close" ? "cancelled" : "failed",
+            );
+            expect(done.reasons).toContain("QUESTION_ANSWER_INVALID");
+            expect(done.reasons.join("; ")).toContain(
+                outcome === "close" ? "closing" : "deadline",
+            );
+            expect(done.requiredFailures?.[0].jobIds).toEqual(["question-job"]);
+            expect(aborted).toBe(true);
+        } finally {
+            await f.coordinator.close();
+        }
+    },
+);
+
+test("unrequired family reports cannot become fatal checkpoint failures", async () => {
+    const f = fixture();
+    f.host.maintain = async (_checkpoint, _signal, reportFailure) => {
+        await reportFailure({
+            family: "topics",
+            state: "failed",
+            reasons: ["OPTIONAL_FAMILY_FAILURE"],
+            jobIds: [],
+            viewIds: [],
+        });
+        return { state: "ready", reasons: [], viewIds: [], jobIds: [] };
+    };
+    try {
+        const checkpoint = await f.coordinator.create({
+            corpusId: "corpus",
+            families: ["questions"],
+        });
+        const done = await f.coordinator.wait({
+            corpusId: "corpus",
+            checkpointId: checkpoint.checkpointId,
+            failOnRequiredFailure: true,
+        });
+        expect(done.state).toBe("ready");
+        expect(done.requiredFailures).toBeUndefined();
+    } finally {
         await f.coordinator.close();
     }
 });
@@ -552,6 +728,30 @@ test("required disabled families block qualification explicitly", async () => {
         });
         expect(done.state).toBe("blocked");
         expect(done.reasons.join(" ")).toContain("wiki");
+        expect(done.diagnostics).toEqual([
+            {
+                phase: "checkpoint",
+                family: "wiki",
+                state: "blocked",
+                code: "family-disabled",
+            },
+        ]);
+        const restored = fixture();
+        restored.restore(
+            JSON.parse(JSON.stringify(f.state())) as KnowledgeStatus,
+        );
+        try {
+            expect(
+                (
+                    await restored.coordinator.get({
+                        corpusId: "corpus",
+                        checkpointId: checkpoint.checkpointId,
+                    })
+                ).diagnostics,
+            ).toEqual(done.diagnostics);
+        } finally {
+            await restored.coordinator.close();
+        }
         expect(f.discoveries()).toBe(0);
     } finally {
         await f.coordinator.close();
@@ -791,6 +991,13 @@ test("checkpoint deadline aborts discovery and reports failure", async () => {
         });
         expect(done.state).toBe("failed");
         expect(done.reasons.join(" ")).toContain("deadline");
+        expect(done.diagnostics).toEqual([
+            {
+                phase: "checkpoint",
+                state: "failed",
+                code: "checkpoint-deadline",
+            },
+        ]);
     } finally {
         await f.coordinator.close();
     }

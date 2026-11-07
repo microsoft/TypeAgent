@@ -19,6 +19,45 @@ job files at once. Filtering, ordering and pagination remain unchanged;
 unreadable or corrupt job files still fail explicitly rather than producing
 an apparently empty or complete result.
 
+## Installed memory-view packs
+
+A memory-view pack is an npm package exporting a static JSON manifest at
+`./memory/views/manifest` and a named-factory ESM module at
+`./memory/views/provider`. Use `.mjs`, or `.js` in a package with `type: "module"`;
+the package does not need to change the module type of unrelated assets.
+The manifest declares `schemaVersion: 1`, `packId`, `files` and
+`providers: [{ providerId, factory }]`. Include every implementation, schema,
+prompt and other required asset in `files`, including the provider module.
+Exports and assets must remain inside the package, including after symlink
+resolution. Inspection fingerprints package metadata, the manifest and listed
+assets without importing package code.
+
+The [package loader](src/viewPackages.ts), exported as
+`@typeagent/memory-service/view-packages`, provides
+`inspectMemoryViewPackage(root)` and
+`loadMemoryViewPackage(installation, [{ providerId, context }])`.
+Loading requires explicit selections and injected host capabilities and validates
+returned descriptors through the existing registry. This is trusted code
+activation, not a sandbox or a source grant. Changed assets require an explicit
+inventory update; changing an already imported root also requires host restart.
+
+The [shared manager](../../packageInstallation/src/memoryViewPackages.ts),
+exported by the publishable `@typeagent/package-installation` package, owns acquisition and
+the separate locked inventory. It reuses configured path/catalog/feed sources.
+Catalogs declare `memoryViews` beside `agents`; npm metadata uses
+`typeagent.defaultMemoryViewName` and keyword `typeagent-memory-view`.
+Installation never constructs providers or starts models, jobs or publication.
+`@package memory-view available|list|install|update|uninstall` manages packs.
+Only install supports `--dry-run`/`--source`, available supports `--source`,
+and update supports `--range`. Uninstall removes the record, not retained Views
+or possibly active package roots. Existing agent/MCP commands and defaults
+are unchanged.
+The private `default-agent-provider/memory-view-packages` export remains a
+compatibility facade; external hosts do not need that private workspace package.
+
+For host adoption and validation boundaries, see the
+[cross-repository guide](../../../../../codeDocs/TypeAgent/forAgent/features/memory-view-packaging/README.md).
+
 ## Host-registered extension Views
 
 Hosts can inject `extensionProviders: ViewExtensionProvider[]` and explicitly
@@ -62,6 +101,11 @@ versioned definition. The legacy direct selector still accepts at most 32
 references. Larger selections require `sourceManifest`: an ingested immutable
 manifest revision plus the complete expanded member list and content hashes.
 The manifest root and every member remain dependencies; no input is truncated.
+Providers can opt into a complete-source proof bound up to 8,000,000
+characters through `limits.maxInputChars`. Smaller declared bounds remain
+enforced. This limits the native original-source snapshot, not the model
+prompt: a provider can prepare a smaller extraction packet. Model-token
+budgets, source-count limits and output limits remain independent.
 
 Accepted structured payloads, readable sections, template bindings, fidelity
 proofs, qualification receipts and revisions live in the corpus View store.
@@ -320,6 +364,12 @@ once, rather than repeating identical native authorization for every block.
 No authorization result is retained across reader return, Understanding snapshot
 validation or module reads. A revoked dependency blocks return even when it was
 not selected as an answer citation.
+Derived-view module reads use those complete checks before and after assembling
+their exact-revision response. The assembly step separately checks the provider's
+read permission without repeating the full dependency sweep between those
+boundaries. Each later expansion runs both complete checks again; authorization
+is not cached between requests. Original-source expansion also retains its
+independent source authorization.
 Build completion and publication do not alone establish indexed readiness.
 `retryViewIndex` / `memory_view_index_retry` repairs publication indexing without
 regenerating the stored artifact.
@@ -412,6 +462,39 @@ full root build; use an installed Chromium or set
 private deployment, live-model quality result or cross-platform qualification.
 Linux/WSL Node validation and private application/live evaluation remain separate.
 
+## Paged view details
+
+Use view summaries for inventory and `getViewDetailPage`
+(`memory_view_detail_page`) for complete large artifacts. Each response contains
+at most 262144 JSON characters, with corpus/view/revision identity, a SHA-256
+digest, total character count, offset and optional next offset. Continuations
+must carry the returned revision, digest and projection. Every page uses the ordinary
+authorized exact-view read; access changes fail rather than returning cached
+proof without validation.
+
+The default `complete` projection preserves the entire stored artifact.
+Explicit `presentation` projection omits only `generation.input`, the embedded
+construction snapshot; it preserves all view content, presentation layouts,
+citations, relationships, generation output and validation metadata. Native Hub
+uses presentation details instead of downloading every original build input.
+The canonical corpus revision is unchanged, and complete paging remains
+available for inspection of that snapshot. Neither projection bypasses
+authorization of the complete original-source dependency set.
+
+The typed client's `readViewDetail` assembles and schema-validates all pages,
+verifies identity, offsets, length and the complete digest, and returns nothing
+partial on failure. Complete reads are bounded to 33554432 characters.
+Native Hub uses this path behind its existing detail interaction; layout
+selection and original-source inspection are unchanged. Complete corpus
+payloads, lineage and legacy full-read APIs are retained. The native MCP
+transport's default message limit is unchanged; neither truncation nor a larger
+transport buffer is used to admit large views.
+
+Switching layouts in an already-open extension view reuses that displayed
+revision only for the layout's own URL handoff. Exact links, explicit reopen,
+other views and later navigation still perform a fresh authorized read.
+Original-source expansion retains its independent authorization checks.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
@@ -436,7 +519,11 @@ Module-only requests do not invoke the prose reader.
 
 Snapshots are service-local: 64 entries, 8 MiB total, 512 KiB per entry, with
 absolute 15-minute expiry. Corpus clear, source forgetting and close purge
-cached bodies. Parent/module reads revalidate all influencing evidence and
+cached bodies. Oversized serialized snapshots are additionally accounted as a
+retained object graph: shared evidence objects count once, without removing any
+body or lineage identifiers. Distinct objects remain separately charged, even
+when equal; cycles and genuinely oversized entries still fail. Response and
+model-request wire limits are unchanged. Parent/module reads revalidate all influencing evidence and
 index versions. Handles do not replace authorization or provide per-chat-session
 isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
@@ -447,19 +534,25 @@ reader-call counts and response-byte/module counts, not prompt/source text.
 These are opt-in experiments, not recommended production defaults. Set
 `TYPEAGENT_MEMORY_PERF_EXPERIMENTS` to a comma-separated switch list, or pass
 `performanceExperiments` to `FileMemoryService`. Unknown names fail explicitly.
-`p2` expands to the first five switches below; `p3` expands to the last four.
+`p2` expands to the first five switches below; `p3` expands to the four switches
+from `evidence-leases` through `lazy-collections`. Indexing experiments are
+selected separately.
 
-| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments. |
-| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                             |
-| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                     |
-| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                    |
-| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                      |
-| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                      |
-| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                      |
-| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                           |
-| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                           |
+| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments.                                                                                                                                                                     |
+| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                                                                                                                                                                                         |
+| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                                                                                                                                                                                        |
+| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                                                                                                                                                                                          |
+| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                                                                                                                                                                                          |
+| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                                                                                                                                                                                               |
+| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                                                                                                                                                                                               |
+| `indexing-parallel`   | Default generative topic speculation at concurrency two (explicit topic settings retain precedence); two independent source synopses per batch; isolated prepared message embeddings overlap knowledge extraction. Source publication and topic commits remain serialized, stale inputs are revalidated, and started siblings settle before failure leaves scope. Embedding overlap requires `TYPEAGENT_MEMORY_PREPARED_INDEXING=1` and the built-in corpus index; legacy indexing and custom index factories are unchanged. |
+| `topic-parallel`      | Only the topic-speculation component of `indexing-parallel`; explicit topic settings still take precedence.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `synopsis-parallel`   | Only the bounded two-source synopsis component of `indexing-parallel`.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `embedding-parallel`  | Only the prepared-message embedding overlap component of `indexing-parallel`; prepared indexing and the built-in index remain prerequisites.                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Fast model deployments also need verified `modelRequestConstraints` context,
 input and full output capacities for uncapped request admission. A soft reader
@@ -491,11 +584,19 @@ may explicitly request `phase: "preview"` only from an enabled host; provisional
 results have `provisional: true`, no answer and no prepared evidence handle.
 
 Both readers allow one same-model regeneration when the returned status conflicts
-with its factual citations/sections. The same evidence, cancellation/deadline and
+with its factual citations/sections or omits a view's original citations.
+The model receives an explicit `requiredEvidenceIds` bundle for each view and
+the complete required bundle in repair feedback. The host never invents missing
+citations or accepts a repeated omission. The same evidence, cancellation/deadline and
 serialized request limits still apply. The regenerated response is fully parsed
 and revalidated; invalid references, malformed JSON, privacy changes and other
 failures are not silently accepted or converted into a successful answer.
 `memory.reader.statusRepair` records the exceptional extra model call.
+
+Extension-view lookup uses bounded indexed fragments when available, matching
+the existing informational-wiki path rather than relying solely on a semantic
+search rewrite of a long question. Every returned block includes its view title
+and retains exact support/opposition, publication freshness and authorization.
 
 The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
 accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`
@@ -614,6 +715,28 @@ persisted hourly discovery allowance, retry failed discovery implicitly, or
 turn partial/failed coverage into `ready`. No progress, exhausted allowances,
 disabled families, deadlines and failed builds remain explicit.
 
+Checkpoint `diagnostics` add safe phase/family/job/target identifiers and enum
+codes without source passages, provider responses or assessment text. Discovery
+and terminal checkpoint codes persist with the checkpoint. Public get/wait/status
+reads also derive target diagnostics from persisted job receipts, including
+`jobUpdatedAt`; these can reflect progress after the checkpoint timestamp.
+`target-skipped` is not a blocking evidence failure. `evidence-incomplete`,
+blocked targets, unavailable jobs and disabled families remain distinguishable.
+Diagnostics never substitute for the authoritative checkpoint state. A waiter
+timeout leaves work running and does not become a checkpoint deadline failure.
+
+Knowledge-state and individual-job reads select fields from existing history
+payload manifests instead of hydrating unrelated retained builds. Legacy state
+files still use full reads. Pinned read scopes, independent returned objects,
+integrity checks for selected payloads and privacy quarantine remain enforced.
+Timing reports distinguish full logical `stateBytes` from the uncompressed
+`payloadBytesRead`/`payloadsRead` actually hydrated. Small-state blobs may still
+contain several fields. Current inventory projections retain safe per-job
+diagnostics, so status polling does not hydrate retained job snapshots to
+classify targets. Legacy projections fall back to selected job reads until the
+next normal write refreshes them. Full mutations and prior-state comparison still hydrate
+the complete state; this does not remove all history amplification.
+
 Completed discovery receipts are not made partial by an obsolete deferral
 reason. Successful low-utility wiki skips remain complete build outcomes;
 their admission receipts prevent unchanged utility deferrals from cycling
@@ -632,8 +755,13 @@ Models that disable response formatting retain the existing JSON-prompt path;
 host validation still rejects invalid responses on both paths.
 
 Configured question discovery requires a contiguous subject phrase in one of
-the proposal's cited passages. An unresolved subject permits one logged repair
-against the same frozen evidence, followed by full validation. That extra call
+the proposal's cited passages. An unresolved subject or typed-proposal shape
+failure permits one shared, logged repair against the same frozen evidence,
+followed by full validation. A typed repair must preserve proposal count;
+it cannot silently discard invalid proposals or add unrelated ones. Detailed
+validator feedback is private to the correction request; public errors/logs
+retain only a diagnostic fingerprint, character count and proposal count.
+The rejected response and diagnostic are not evidence. That extra call
 reserves another persisted hourly allowance before dispatch; exhausted budgets,
 repeated invalid output and unrelated errors remain failures. The existing
 per-window timeout and hourly cap are not increased.
@@ -789,7 +917,13 @@ defaults to 24 and accepts 1..24. Hosts can opt in through
 `TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY`. Invalid settings fail explicitly.
 Automatic maintenance and view builds preserve per-corpus ordering while
 allowing independent corpora to use the configured build slots. Same-corpus
-jobs wait before taking a slot. The default configured view, topic, source
+page jobs wait before taking a slot. With more than one build slot, an explicit
+knowledge checkpoint can prepare its independent topic snapshot concurrently
+with Wiki/project pages after question maintenance. Topic jobs have a separate
+per-corpus lane; page jobs remain ordered. Commits still use the corpus writer,
+and source eligibility/fingerprints are rechecked before materialization.
+Readiness joins both lanes and retains failures from either; the default single
+slot remains serial. The default configured view, topic, source
 synopsis and Decision models share the service's model-request pool. Default
 derived-view indexing also schedules extraction completions through this pool
 within maintenance scope; foreground extraction and embeddings are not included.
@@ -800,6 +934,12 @@ Foreground reads may use an older committed generation while maintenance runs.
 Retrying a failed View build selects its history head and target versions inside
 the admission writer rather than reusing that foreground inventory head.
 Explicit build requests still enforce the caller's `expectedHead`.
+
+With `frameProjections` enabled, a concurrent source or provider change can
+invalidate a frame snapshot. Background frame maintenance queues a fresh read
+instead of retaining that stale snapshot as a permanent failure. Receipt and
+authorization failures remain reported. Foreground frame reads still reject
+changed snapshots rather than returning stale rows.
 
 `topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
 3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.
@@ -1059,6 +1199,31 @@ incomparable. No timezone is inferred from ingestion time. Each support keeps
 its own chronology when equal candidate values coalesce; a candidate-level
 timestamp is not invented across incompatible clocks.
 
+Rendered local chronology is a source-local ordering anchor, not an assertion
+that an action occurred or became effective at that time. A session header
+does not establish an individual turn's timestamp. Absolute `effectiveAt`
+values are rendered separately, as are date-only `support.sourceRecordedDate`
+values; recording dates alone do not choose a `mostRecent` winner.
+
+Configured synthesis separates factual `passageIds` from
+`chronologyPassageIds`, including date headers. Persisted support records carry
+`role: "value" | "chronology" | "valueAndChronology"`; a passage can serve both
+roles when the evidence warrants it. Chronology binds to factual reports from
+the same retained source/revision. Multiple factual passages can jointly support
+a record; a header alone cannot support its value. Chronology-only citations
+remain in aggregate provenance for access checks and source removal, but do
+not confer factual authority or independent-support votes. Final auditing checks
+both roles. Existing stored/custom-adapter records without roles retain their
+legacy joint-evidence semantics; they are not automatically reclassified.
+Configured native generation and repair require explicit bindings.
+
+Typed candidate values are rendered using JSON serialization. Delimiters around
+scalar strings or record fields are not verbatim-source quotation claims.
+The audit permits faithful paraphrases only with unchanged, unambiguous facts,
+speaker/referents, attribution and qualifications. Explicit verbatim-quotation
+claims inside a value must still match cited wording. This audit contract does
+not change persisted values or canonical body rendering.
+
 Historical value changes are separate dated observations, not automatically
 opposing evidence. Confirmation, authority, independent-support and freshness
 requirements remain in force. A complete but unsupported schema-answer audit
@@ -1071,9 +1236,16 @@ Silence in an excerpt does not establish that an entire source has no decision.
 Repair adds the actual supporting passages or narrows unsupported clauses while
 preserving supported competing history; an unresolved aggregate answer does not
 exempt its candidates from these checks.
-Rendered source-derived answers explicitly describe historical observations and
-show their source times or unknown chronology. Maintenance freshness is not
-present-day verification of the observed fact.
+Rendered source-derived answers describe what the cited sources state, not
+independently verified occurrences or current-day status. Source statements
+can include facts, intentions, hypotheticals or illustrative examples. Preserve
+that scope in discovery questions and candidate answers: example figures do
+not answer a question requiring actual recorded events. If no retained evidence
+answers that question, it has no answer candidates (an empty collection stays
+`pending`); an explicitly example-scoped question can still retain the example
+values. Nonempty collections retain their existing `partial` coverage state.
+Original sources remain intact. Maintenance freshness does not verify a source
+claim.
 
 Wiki assessment repair reports omitted fragment ordinals and invalid witness
 ordinals. A coverage witness must quote a contiguous, verbatim substring of
@@ -1286,6 +1458,15 @@ durable source/family state after restart, not from an in-memory timer journal.
 Reconciliation does not enqueue duplicate passes behind an occupied corpus.
 Privacy removal and eligibility checks are never postponed by this policy.
 
+For an explicitly finite sequence of independently awaited source jobs, use the
+local in-process `deferTopicMaintenance(corpusId)` instead. Its nestable,
+idempotent release holds only that corpus's autonomous topic admission; synopsis,
+other families and other corpora remain eligible. Already-running work still
+owns/drains its workers and retains stale-generation rejection. Always release
+in `finally`, before requesting readiness. Held pending families appear in
+maintenance `deferred` status; a drain can return `reason: "paused"` without
+claiming settlement. The closure is a local orchestration API, not an RPC token.
+
 Non-privacy segment collection uses the same coalesced queue and admission
 guards. Manual mode, foreground holds and shutdown may leave that cleanup
 pending; startup reconstructs it while retaining index generations and integrity
@@ -1459,6 +1640,11 @@ Agent revisions use `memory-view-generator` authorship, not authenticated human 
 Deliberate human title/text/annotation edits are protected at existing reliable
 edit units. Genuine overlapping changes create the existing recoverable conflict;
 unrelated targets continue and routine supported corrections remain automatic.
+Canonical Wiki contributions use the same editorial merge as normal rebuilds:
+unprotected titles may advance with the generated candidate, while deliberate
+human title edits remain protected and genuine conflicts require resolution.
+The host does not retain an old unedited title against a different generated
+base or manufacture a human edit to account for that difference.
 
 `saveViewDraft` accepts optional `unlockProtection: string[]` with unchanged
 content, definition and relationships plus the current head/version guards.
@@ -2004,6 +2190,24 @@ Automatic discovery admits distinct new subjects, recognizes already-covered
 evidence, contributes to existing eligible articles or records ambiguity without
 inventing an identity. Generated-article consolidation is separately guarded;
 historically human-edited/protected pages cannot be retired automatically.
+Standalone admission checks independent utility first: sparse passing mentions
+defer even when multiple existing pages repeat their incidental facts.
+Only useful candidates proceed to canonical coverage/contribution/ambiguity
+checks; competing same-purpose pages still require explicit review. Canonical
+contribution coverage checks are not standalone admission and remain mandatory.
+Native assessments explicitly distinguish evidence-only utility deferrals from
+canonical-context-dependent deferrals. Evidence-only receipts survive canonical
+page changes, but changed indexed evidence, subject/selector, model or admission
+policy requires reassessment. Legacy or context-dependent deferrals retain the
+full nominated-page dependency check. This does not infer cache scope from the
+reason text, reuse coverage/ambiguity against changed pages, or bypass source
+freshness checks.
+Native canonical comparisons select host-labelled verbatim prose witnesses
+instead of retyping quotations. The host resolves IDs only against the selected
+current page and still applies the existing exact-prose, scope and mandatory
+distinction checks. Stored assessments retain exact quotation text. Article
+construction receives construction instructions, not standalone admission
+directives to return assessment dispositions.
 Stable IDs, citations, generated bases, explicit edits, conflicts and redirects
 are retained by the owning store, not an independent Wiki service.
 

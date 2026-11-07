@@ -165,7 +165,16 @@ class EditorialIndex extends FakeSemanticCorpusIndex {
     }
 }
 
-async function settled(service: FileMemoryService, corpusId: string) {
+async function settled(
+    service: Pick<
+        FileMemoryService,
+        | "drainMaintenance"
+        | "listViewBuilds"
+        | "getMaintenanceStatus"
+        | "listViews"
+    >,
+    corpusId: string,
+) {
     let maintenance = await service.drainMaintenance(15_000);
     // Consecutive ingests can obsolete a detached read with newer work queued.
     for (
@@ -190,12 +199,26 @@ async function settled(service: FileMemoryService, corpusId: string) {
             `Offline editorial maintenance did not drain: ${JSON.stringify(maintenance)}`,
         );
     for (let attempt = 0; attempt < 1000; attempt++) {
-        const snapshot = await service.listViews(corpusId);
         const running = (await service.listViewBuilds(corpusId)).some(
             (job) => job.state === "running",
         );
-        // Family pending also includes conflicts awaiting a human decision.
-        if (!running) return snapshot;
+        const maintenance = service.getMaintenanceStatus();
+        // Family pending can require a decision, but active writers must finish.
+        if (
+            !running &&
+            ![...maintenance.pending, ...maintenance.running].some((key) =>
+                key.startsWith(`${corpusId}:`),
+            )
+        ) {
+            const snapshot = await service.listViews(corpusId);
+            const after = service.getMaintenanceStatus();
+            if (
+                ![...after.pending, ...after.running].some((key) =>
+                    key.startsWith(`${corpusId}:`),
+                )
+            )
+                return snapshot;
+        }
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
 
@@ -211,6 +234,42 @@ async function settled(service: FileMemoryService, corpusId: string) {
         )}`,
     );
 }
+
+test.each(["pending", "running"] as const)(
+    "editorial settlement waits for %s writers before reading the final inventory",
+    async (state) => {
+        let checks = 0;
+        let inventories = 0;
+        const idle: ReturnType<FileMemoryService["getMaintenanceStatus"]> = {
+            mode: "automatic",
+            paused: false,
+            settled: true,
+            pending: [],
+            running: [],
+            failures: [],
+            deferred: [],
+            coalesced: 0,
+        };
+        const service: Parameters<typeof settled>[0] = {
+            drainMaintenance: async () => idle,
+            listViewBuilds: async () => [],
+            getMaintenanceStatus: () =>
+                checks++ < 2
+                    ? { ...idle, settled: false, [state]: ["corpus:wiki"] }
+                    : idle,
+            listViews: async () => {
+                expect(checks).toBeGreaterThan(2);
+                inventories++;
+                return { head: "current", views: [] };
+            },
+        };
+        expect(await settled(service, "corpus")).toEqual({
+            head: "current",
+            views: [],
+        });
+        expect(inventories).toBe(1);
+    },
+);
 
 async function maintainFamily(
     service: FileMemoryService,

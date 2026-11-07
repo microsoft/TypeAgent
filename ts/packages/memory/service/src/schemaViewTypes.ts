@@ -86,6 +86,8 @@ export interface AnswerCandidate {
     derivedFrom: string[];
     support: Array<{
         citation: ViewCitation;
+        role?: "value" | "chronology" | "valueAndChronology";
+        sourceRecordedDate?: string;
         independenceKey?: string;
         assertionOwner?: string;
         effectiveAt?: string;

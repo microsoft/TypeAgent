@@ -3,6 +3,8 @@
 For the separate frozen topic-curation tool, including its explicitly authorized
 live mode, see [Frozen topic-curation replay](topic-curation-README.md).
 The offline-only scope below describes the quality utilities on this page.
+For separately authorized indexing, recovery and performance diagnostics, see
+[Small LongMemEval indexing benchmark](indexing-README.md).
 
 This lane adds **offline evaluation utilities**, not a memory implementation,
 inference runner, factual judge, or new lifecycle harness. It makes no model calls,
@@ -424,7 +426,7 @@ on private approved storage.
 
 For a fresh-store pilot with expensive import and a thirty-minute knowledge
 allowance, explicitly select `--work-minutes 60 --knowledge-minutes 30`.
-Invocation work accepts 1-60 minutes plus five minutes of cleanup; the default
+Invocation work accepts 1-360 minutes plus five minutes of cleanup; the default
 remains thirty minutes of work. This does not extend the knowledge deadline or
 permit changing a resumed run's frozen allowances.
 
@@ -607,6 +609,26 @@ explicit inference authorization remain unchanged.
 
 ## Executing the full LongMemEval suite
 
+Provider receipts retain a hashed endpoint identity (excluding query parameters),
+an optional native trace ID, a hashed response-schema identity, request size,
+response-header latency and elapsed time through observation of the cloned JSON
+body. Transport/body failures remain failures and retain a receipt; raw network
+messages, endpoints and request bodies are not copied into these diagnostics.
+Header latency is not full response-processing or CPU time. The frozen model
+configuration includes the sanitized pool membership, not only its first member.
+Indexing-pilot preflight, approval validation and worker admission use that same
+identity. Regenerate approvals created before pool membership was included;
+changed member models, endpoints or request constraints invalidate approval.
+
+Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` before an explicitly authorized run to retain
+the existing native stage spans in worker stderr. The arm records this setting
+and the existing opt-in `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`,
+`TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION`
+settings; changing them is a different arm and cannot silently resume an older
+run. Production topic defaults are unchanged. Qualify packet admission and
+coverage before increasing concurrency; context capacity does not establish
+provider tokens-per-minute capacity.
+
 During required-knowledge waits, an independent observer reads the authoritative
 checkpoint every 30 seconds. Progress records separate the wait outcome from
 durable readiness and report observation age and unresolved family debt; family
@@ -615,6 +637,122 @@ failures remain explicit rather than becoming successful readiness.
 Before resuming retained corpora, a read-only preflight records discovery
 failures before service initialization can admit maintenance. It does not reset
 semantic failures or automatically retry them.
+
+History construction uses durable batch groups for all original sessions,
+preserving each separate source, canonical URI, content hash and temporal scope.
+Automatic maintenance is deferred by the production batch lifecycle. Batch
+identity, member errors and completed mappings are retained; interrupted or
+failed members are retried on a later invocation without duplicating completed
+sources. Groups respect the production limits of 50 members and 8 MiB, with up
+to four groups admitted before polling; larger histories continue in bounded
+groups without dropping sessions. Cancellation drains admitted batches before
+retaining their terminal receipts. Missing batch APIs or an individually
+oversized source fail explicitly, never fall back to independent admissions or
+truncate history. This ingestion arm differs from older sequential-admission
+runs.
+
+Checkpoint `requiredFailures` retain original family/job causes while independent
+maintenance continues. The runner requests `failOnRequiredFailure` readiness
+waits and stops before answering once required readiness is unattainable, even
+if another family is still running. Ordinary service waits still join all work.
+Optional deferrals and stale superseded build results are not early fatal
+signals; later deadlines or cancellation do not erase earlier required failures.
+
+The benchmark arm records effective Wiki assessment preparation concurrency
+(default one). `TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY=3` opts into the
+existing bounded concurrent preparation path; targets still commit in order
+and stale canonical context requires reassessment. Resume rejects changed or
+unrecorded concurrency. This is a separate timing experiment, not a production
+default change or permission to reuse stale grounding decisions. It does not
+raise the one-hour product knowledge-checkpoint ceiling or the external
+six-hour work allowance.
+
+The arm also records effective maintenance build concurrency (default one).
+`TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY=2` enables the checkpoint's independent
+topic/page lanes after question maintenance. Page commits remain ordered and
+all commits retain source-freshness checks. Resume rejects changed or unrecorded
+build concurrency. This setting does not relax required-family readiness or
+increase the model-request cap or either deadline.
+
+Standalone Wiki admission defers sparse candidates before canonical ambiguity
+screening, including incidental facts repeated in multiple broader articles.
+This does not choose, merge or delete canonical pages: useful candidates with
+competing same-purpose pages still block for review. Canonical contribution
+coverage and the requirement for a fully ready benchmark checkpoint are unchanged.
+From native `evidence-first-v21`, assessments declare `deferBasis`: `evidence` for
+insufficient standalone utility established only by the original indexed
+fragments and subject, or `canonical-context` when deferral depends on page
+comparison. Non-deferrals use an empty basis. Only explicit evidence-only
+deferrals receive page-independent dependency receipts; source, selector,
+model and policy changes still invalidate them. Missing legacy bases remain
+context-dependent. Cold restart preserves those semantics; no archive rewrite
+or reason-text classification is performed.
+
+Native `evidence-first-v22` comparisons select `canonicalWitnessId` from
+host-labelled contiguous canonical prose, leaving native `canonicalExcerpt`
+empty. The host resolves the selected page-local ID into exact quotation text
+before the unchanged strict assessment parser runs. Unknown IDs, another page's
+unavailable witness, missing mandatory distinctions, truncated coverage and
+invented prose still fail. Legacy adapter quotations retain their existing
+exact-substring validation. Article construction no longer receives standalone
+admission directives. This does not add repairs, reinterpret rejected responses
+or relax readiness.
+
+Configured corpus discovery shares one correction allowance between
+cited-subject grounding and typed-proposal contract errors. Correction reserves
+the existing persisted hourly budget and preserves frozen evidence and typed
+proposal count. Detailed validator feedback is sent only to that correction
+request; retained errors/logs contain safe fingerprint/size metadata. Repeated
+invalid output, budget/cancellation failures and final host rejections still
+block readiness; no timeout, hourly cap or retry count is increased.
+
+Typed question support can retain an explicitly documented `sourceRecordedDate`
+as a date-only value, separately from occurrence/effective chronology. Source
+recording dates do not supply a missing event time or timezone and do not select
+`mostRecent` winners. Rendered answers distinguish those concepts; semantic
+support auditing still checks the date against the cited source/header.
+Missing metadata remains unbound, not an assertion that the source is undated.
+Configured question synthesis explicitly separates factual passages from
+chronology/header passages. Both remain in persisted provenance; only factual
+support confers authority or independent votes. Structural checks require
+same-source/revision bindings and final semantic auditing verifies both roles.
+Legacy stored support is not silently assigned new roles.
+The typed-value audit distinguishes host-added JSON string delimiters from
+explicit verbatim-source claims. Faithful paraphrases retain all facts and
+attribution; false explicit quotes remain unsupported. Persisted rendering
+is unchanged.
+Source-local chronology is rendered as an ordering anchor, never as the
+occurrence/effective or exact turn time. A session timestamp does not establish
+when a reported plan was adopted or carried out. Absolute effective timestamps
+remain separately labeled; local-clock ordering behavior is unchanged.
+
+Question construction and support repair preserve source modality, negation,
+conditions and action status inside candidate values, including nested strings.
+Tentative actions must not become commitments, imperatives or completed work.
+A review flag or historical caveat does not repair an overstated value; the
+value itself must be corrected and independently audited again. Offline repair
+contracts exercise this sequence, not live model quality.
+Question discovery and construction also preserve factuality scope. A cited
+illustrative figure does not establish an actual observation or recorded
+event. A question requiring actual records has no answer candidates when only
+examples are available (an empty collection remains `pending`); examples can
+still answer an explicitly example-scoped question.
+The host describes what retained sources state rather than categorizing all
+source-derived values as historical observations. Independent support audits
+are unchanged.
+
+The configured question-view adapter uses `configured-complete-request-v1`
+admission instead of the legacy 120000-character source-content guard.
+Its exact generation, structural repair, support audit and support repair
+requests must pass native request inspection with positive declared input or
+context limits, serialized schema/input accounting, reserved output and safety
+tokens. Missing inspection, unknown or output-only capacity, and exceeded
+limits fail explicitly before the model call. No sources are truncated.
+Other view kinds and custom adapters without this admission capability retain
+the legacy character bound. Configured question models therefore need declared
+input/context metadata even for small requests. The benchmark arm freezes this
+admission identity; compiled dependency hashes include aiclient, and all pool
+members' sanitized request constraints are recorded.
 
 Derived-knowledge readiness is separate from source ingestion and the overall
 invocation allowance. `--knowledge-minutes` sets the per-case checkpoint
@@ -715,6 +853,9 @@ recorded. Invalid judge responses fail explicitly; no automatic positive labels
 or invented independent-human approvals are supplied.
 
 By default, each invocation has a 35-minute total cap with five minutes reserved for cleanup.
+Use `--work-minutes 360` for an explicitly authorized six-hour work budget
+plus the same five-minute cleanup reserve. The knowledge-readiness allowance
+remains separate and unchanged unless explicitly configured.
 Job waits and the judge observe the work deadline. Aborting a polling delay
 reaches the normal job-cancellation path and removes its abort listener.
 The runner does not inject a global fetch abort below the production client:

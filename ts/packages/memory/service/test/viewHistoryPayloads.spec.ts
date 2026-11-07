@@ -48,6 +48,74 @@ describe("incremental history payloads", () => {
             },
             (state) => state.views,
         );
+    test("selected receipt reads hydrate less than one percent while preserving pinned and independent values", async () => {
+        const state = initialState();
+        const store = history();
+        const first = await store.commit(null, state, {}, "test", "large");
+        const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const output = import.meta.jest
+            .spyOn(console, "warn")
+            .mockImplementation();
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        try {
+            const selected = await runWithSearchTiming(
+                "selection-test",
+                "history-test",
+                () => store.readField<State["receipt"]>(["receipt"]),
+            );
+            const full = await runWithSearchTiming(
+                "full-test",
+                "history-test",
+                () => store.read(),
+            );
+            expect(selected.value).toEqual(full.state.receipt);
+            const events = output.mock.calls.map(([text]) =>
+                JSON.parse(
+                    String(text).slice("[memory-search-timing] ".length),
+                ),
+            );
+            const reads = events.filter(
+                (event) => event.stage === "view.history.payload.read",
+            );
+            const projected = reads.find((event) => event.metadata.selected);
+            const complete = reads.find((event) => !event.metadata.selected);
+            expect(projected.metadata.payloadBytesRead).toBeLessThan(
+                complete.metadata.payloadBytesRead * 0.01,
+            );
+            expect(projected.metadata.payloadsRead).toBeLessThan(
+                complete.metadata.payloadsRead,
+            );
+            selected.value!.sequence = 99;
+            expect(
+                (await store.readField<State["receipt"]>(["receipt"])).value,
+            ).toEqual({ sequence: 0 });
+            state.receipt.sequence = 1;
+            const next = await store.commit(
+                first,
+                state,
+                {},
+                "test",
+                "receipt",
+            );
+            expect(
+                (await history().readField(["receipt"], first)).value,
+            ).toEqual({ sequence: 0 });
+            expect(
+                (await history().readField(["receipt"], next)).value,
+            ).toEqual({ sequence: 1 });
+            expect(
+                (await store.readField(["absent", "nested"])).value,
+            ).toBeUndefined();
+            expect(
+                (await store.readField(["constructor"])).value,
+            ).toBeUndefined();
+        } finally {
+            if (trace === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+            output.mockRestore();
+        }
+    });
     const options = () => ({
         fs,
         gitdir: path.join(directory, "view-history.git"),
@@ -121,6 +189,7 @@ describe("incremental history payloads", () => {
         );
         const small = { receipt: 1, missing: undefined, number: NaN };
         const legacy = await store.commit(null, small, {}, "test", "legacy");
+        expect((await store.readField(["receipt"], legacy)).value).toBe(1);
         const shared = { text: "shared immutable text".repeat(20000) };
         const large = {
             ...small,
@@ -285,9 +354,24 @@ describe("incremental history payloads", () => {
                 "test",
                 "first",
             );
-            const entry = (await payloadTree(first)).find(
-                (entry) => entry.path !== "manifest.json",
+            const tree = await payloadTree(first);
+            const manifestEntry = tree.find(
+                (entry) => entry.path === "manifest.json",
             )!;
+            const manifest = JSON.parse(
+                Buffer.from(
+                    (
+                        await git.readBlob({
+                            ...options(),
+                            oid: manifestEntry.oid,
+                        })
+                    ).blob,
+                ).toString("utf8"),
+            ) as { root: { object: Array<[string, { blob: string }]> } };
+            const receipt = manifest.root.object.find(
+                ([key]) => key === "receipt",
+            )![1];
+            const entry = tree.find((entry) => entry.oid === receipt.blob)!;
             const file = path.join(
                 options().gitdir,
                 "objects",
@@ -297,6 +381,9 @@ describe("incremental history payloads", () => {
             if (fault === "missing") await rm(file);
             else await writeFile(file, "corrupt object");
             await expect(history().read()).rejects.toThrow(
+                "View history payload is missing or corrupt",
+            );
+            await expect(history().readField(["receipt"])).rejects.toThrow(
                 "View history payload is missing or corrupt",
             );
             await expect(
@@ -476,6 +563,9 @@ describe("incremental history payloads", () => {
                 history(fault).purge("source", sanitize, () => ({})),
             ).rejects.toThrow(`Interrupted ${fault}`);
             await expect(history().read()).rejects.toThrow("quarantined");
+            await expect(history().readField(["receipt"])).rejects.toThrow(
+                "quarantined",
+            );
             await history().recoverPurge(sanitize, () => ({}));
             expect((await history().read()).state).toEqual(
                 sanitize({ ...initialState(), topics: state.topics }),

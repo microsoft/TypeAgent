@@ -21,7 +21,9 @@ export { parseViewDraftCapability } from "./viewBuildValidation.js";
 export * from "./viewStore.js";
 export * from "./viewSynthesis.js";
 export * from "./viewTypes.js";
+export * from "./viewDetail.js";
 export * from "./viewExtensions.js";
+export * from "./viewPackages.js";
 export * from "./viewExtensionUnderstanding.js";
 export type {
     WikiConsolidationReceipt,
@@ -40,3 +42,4 @@ export * from "./knowledgeTypes.js";
 export * from "./schemaViewOperations.js";
 export * from "./deferredAcquisition.js";
 export type * from "./inventoryTypes.js";
+export * from "./frameTypes.js";

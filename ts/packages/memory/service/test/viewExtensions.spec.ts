@@ -113,6 +113,7 @@ function readerModel(understanding = false, onRead?: () => void): ChatModel {
                 ...view.supportingEvidenceIds,
                 ...view.opposingEvidenceIds,
             ];
+            expect(view.requiredEvidenceIds).toEqual(evidenceIds);
             onRead?.();
             return {
                 success: true,
@@ -542,6 +543,129 @@ describe("registered extension service lifecycle", () => {
         expect(fixture.calls()).toBe(0);
     });
 
+    test("complete-source registration retains a finite opt-in ceiling", () => {
+        const fixture = provider();
+        fixture.installed.descriptor.limits.maxInputChars = 8_000_000;
+        expect(
+            () => new ViewExtensionRegistry([fixture.installed]),
+        ).not.toThrow();
+        fixture.installed.descriptor.limits.maxInputChars = 8_000_001;
+        expect(() => new ViewExtensionRegistry([fixture.installed])).toThrow(
+            /provider input bound/,
+        );
+        expect(fixture.calls()).toBe(0);
+    });
+
+    test.each([4_000_000, 8_000_000])(
+        "complete source proof remains untruncated under the declared %i-character bound",
+        async (bound) => {
+            const fixture = provider();
+            fixture.installed.descriptor.limits.maxInputChars = bound;
+            let preparedChars = 0;
+            fixture.installed.prepare = async (snapshot) => {
+                preparedChars = snapshot.inputs[0].content.length;
+                expect(viewHash(snapshot.inputs[0].content)).toBe(
+                    viewHash(text),
+                );
+                return { items: ["prepared"] };
+            };
+            const generate = fixture.installed.generate;
+            fixture.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                const original = content.citations[0];
+                const citation = {
+                    ...original,
+                    locator: "chars:0-9",
+                    excerpt: args[0].inputs[0].content.slice(0, 9),
+                };
+                content.citations = [citation];
+                content.evidence[0].support = [citation];
+                return content;
+            };
+            const text = "x".repeat(4_000_001);
+            let approved = true;
+            const { corpus, request } = await setup(
+                fixture.installed,
+                1,
+                {
+                    sourceAuthorization: async () => approved,
+                },
+                [text],
+            );
+            if (bound < text.length) {
+                await expect(service.buildViews(request)).rejects.toThrow(
+                    /Complete extension input exceeds provider bounds/,
+                );
+                expect(preparedChars).toBe(0);
+                expect(fixture.calls()).toBe(0);
+            } else {
+                const job = await settled(
+                    service,
+                    await service.buildViews(request),
+                );
+                expect(job.state).toBe("complete");
+                expect(preparedChars).toBe(text.length);
+                expect(fixture.calls()).toBe(1);
+                const target = {
+                    corpusId: corpus.corpusId,
+                    viewId: request.targets[0].definition.viewId,
+                };
+                const full = await service.getView(target);
+                const first = await service.getViewDetailPage(target);
+                expect(first).toBeDefined();
+                if (!first) throw new Error("Missing first detail page");
+                const parts = [first.text];
+                let page = first;
+                while (page.nextOffset !== undefined) {
+                    const next = await service.getViewDetailPage({
+                        ...target,
+                        revisionId: first.revisionId,
+                        digest: first.digest,
+                        offset: page.nextOffset,
+                    });
+                    if (!next) throw new Error("Missing continuation");
+                    expect(next.text.length).toBeLessThanOrEqual(256 * 1024);
+                    parts.push(next.text);
+                    page = next;
+                }
+                expect(JSON.parse(parts.join(""))).toEqual(full);
+                expect(parts.length).toBeGreaterThan(1);
+                const presentation = await service.getViewDetailPage({
+                    ...target,
+                    projection: "presentation",
+                });
+                if (!presentation)
+                    throw new Error("Missing presentation detail");
+                expect(presentation.nextOffset).toBeUndefined();
+                const rendered = JSON.parse(presentation.text);
+                expect(rendered.content).toEqual(full?.content);
+                expect(rendered.relationships).toEqual(full?.relationships);
+                expect(rendered.generation.input).toBeUndefined();
+                expect(await service.getView(target)).toEqual(full);
+                approved = false;
+                await expect(
+                    service.getViewDetailPage({
+                        ...target,
+                        revisionId: first.revisionId,
+                        digest: first.digest,
+                        offset: first.nextOffset,
+                    }),
+                ).resolves.toBeUndefined();
+            }
+            approved = true;
+            const source = request.targets[0].definition.selector.sources[0];
+            const retained = await service.getSource(
+                corpus.corpusId,
+                source.sourceId,
+            );
+            expect(
+                retained?.revisions.find(
+                    (revision) => revision.revisionId === source.revisionId,
+                )?.contentHash,
+            ).toBe(createHash("sha256").update(text).digest("hex"));
+        },
+    );
+
     test("static qualification cannot spend model calls and leaves a failed receipt", async () => {
         const fixture = provider();
         fixture.installed.evaluateEligibility = async (_input, context) => {
@@ -968,7 +1092,7 @@ describe("registered extension service lifecycle", () => {
                 },
             },
         });
-        await waitForMemoryJob(service, spoof.jobId);
+        await waitForMemoryJob(service, spoof.jobId, { pollIntervalMs: 10 });
         await service.refreshExtensionViews({ corpusId: corpus.corpusId });
         expect(fixture.calls()).toBe(1);
         const updated = await service.ingestDocument({
@@ -984,7 +1108,7 @@ describe("registered extension service lifecycle", () => {
                 text: "Completed status with a new qualification.",
             },
         });
-        await waitForMemoryJob(service, updated.jobId);
+        await waitForMemoryJob(service, updated.jobId, { pollIntervalMs: 10 });
         await waitForCalls(2);
         const views = await service.listViews(corpus.corpusId);
         expect(views.views).toHaveLength(1);
@@ -999,8 +1123,15 @@ describe("registered extension service lifecycle", () => {
             fixture.installed,
             2,
             {
-                indexFactory: (_id, directory) =>
-                    new ExtensionQueryIndex(directory),
+                indexFactory: (_id, directory) => {
+                    const index = new ExtensionQueryIndex(directory);
+                    const search = index.search.bind(index);
+                    index.search = (query, limit) =>
+                        query.length > 40
+                            ? Promise.resolve([])
+                            : search(query, limit);
+                    return index;
+                },
                 indexedAnswerModel: readerModel(false, () => reads++),
                 understanding: true,
             },
@@ -1038,12 +1169,22 @@ describe("registered extension service lifecycle", () => {
         );
         const answer = await service.answer({
             corpusId: corpus.corpusId,
-            question: "Copper lantern",
+            question: `Summarize the generated analyst interpretation "${view.content.title}", its original evidence and its limits.`,
             retrievalPolicy: "sourcesAndViews",
             answerMode: "synthesized",
             includeDiagnostics: true,
         });
         expect(answer.answer).toContain("not established");
+        expect(
+            answer.readerContext?.integratedAnswer?.suppliedEvidence,
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    kind: "derived",
+                    text: expect.stringContaining(view.content.title),
+                }),
+            ]),
+        );
         expect(
             answer.citations.map((source) => source.sourceId).sort(),
         ).toEqual(["source-0", "source-1"]);
@@ -1059,7 +1200,7 @@ describe("registered extension service lifecycle", () => {
         );
         const understanding = await service.understand({
             corpusId: corpus.corpusId,
-            question: "Copper lantern",
+            question: `Summarize the generated analyst interpretation "${view.content.title}", its original evidence and its limits.`,
             retrievalPolicy: "sourcesAndViews",
         });
         expect(understanding.modules).toEqual(
@@ -1151,8 +1292,14 @@ describe("registered extension service lifecycle", () => {
             let reads = 0;
             let postReaderChecks = 0;
             let deniedSource: string | undefined;
+            let denyModuleRead = false;
+            let onModuleRead: (() => void) | undefined;
             const authorize = fixture.installed.authorize;
             fixture.installed.authorize = async (snapshot, operation) => {
+                if (operation === "read") {
+                    if (denyModuleRead) return false;
+                    onModuleRead?.();
+                }
                 if (operation === "publish" && reads) {
                     postReaderChecks++;
                     if (revoke && postReaderChecks === 2)
@@ -1262,19 +1409,54 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                     }),
                 ]),
             );
-            const module = await service.understandingModule({
+            const beforeModuleChecks = postReaderChecks;
+            gates.length = 0;
+            const moduleRequest = {
                 corpusId: corpus.corpusId,
                 snapshotId: result.snapshotId,
-                kind: "derivedViews",
+                kind: "derivedViews" as const,
                 viewId: view.viewId,
                 revisionId: view.revisionId,
                 layoutId: "story",
                 limit: 4,
-            });
+            };
+            const module = await service.understandingModule(moduleRequest);
             expect(module.derivedViews?.[0].selectedBlockIds).toEqual([
                 "claim",
             ]);
             expect(module.derivedViews?.[0].blocks).toHaveLength(4);
+            expect(reads).toBe(1);
+            expect(postReaderChecks - beforeModuleChecks).toBe(2);
+            expect(
+                gates.filter(
+                    (gate) =>
+                        gate.operation === "read" &&
+                        gate.sourceId === "source-2",
+                ),
+            ).toHaveLength(2);
+            gates.length = 0;
+            await service.understandingModule({
+                ...moduleRequest,
+                layoutId: "roles",
+            });
+            expect(
+                gates.filter(
+                    (gate) =>
+                        gate.operation === "read" &&
+                        gate.sourceId === "source-2",
+                ),
+            ).toHaveLength(2);
+            denyModuleRead = true;
+            await expect(
+                service.understandingModule(moduleRequest),
+            ).rejects.toThrow("not authorized");
+            denyModuleRead = false;
+            onModuleRead = () => {
+                deniedSource = "source-2";
+            };
+            await expect(
+                service.understandingModule(moduleRequest),
+            ).rejects.toThrow(/changed|forgotten|revoked/);
             expect(reads).toBe(1);
         },
         30000,
@@ -1513,7 +1695,7 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                 },
                 pipeline: { mode: "content" },
             });
-            await waitForMemoryJob(service, job.jobId);
+            await waitForMemoryJob(service, job.jobId, { pollIntervalMs: 10 });
             const source = await service.getSource(
                 corpus.corpusId,
                 `source-${index}`,
@@ -1553,6 +1735,89 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
         };
         return { corpus, request, options };
     }
+
+    test("admitted view frame declarations backfill validated block evidence without regeneration", async () => {
+        const fake = provider();
+        const payloadSchema: ViewPayloadSchema = {
+            type: "object",
+            properties: {
+                items: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            id: { type: "string", maxLength: 100 },
+                            blockId: { type: "string", maxLength: 100 },
+                            duration: { type: "number" },
+                        },
+                        required: ["id", "blockId", "duration"],
+                    },
+                    maxItems: 10,
+                },
+            },
+            required: ["items"],
+        };
+        fake.installed.descriptor.outputSchema = payloadSchema;
+        fake.installed.descriptor.identity.schemaDigest =
+            viewHash(payloadSchema);
+        fake.installed.descriptor.indexProjection = [
+            {
+                schema: {
+                    id: "synthetic-recap.duration",
+                    revision: 1,
+                    description: "Retained synthetic durations",
+                    fields: { duration: { type: "number", unit: "ms" } },
+                },
+                rowsPointer: "/items",
+                itemKeyPointer: "/id",
+                blockIdPointer: "/blockId",
+                fields: { duration: "/duration" },
+            },
+        ];
+        const generate = fake.installed.generate;
+        fake.installed.generate = async (...args) => ({
+            ...(await generate(...args)),
+            payload: {
+                items: [{ id: "sample", blockId: "claim", duration: 40 }],
+            },
+        });
+        const { corpus, request, options } = await setup(
+            fake.installed,
+            1,
+            {},
+            ["Retained completed status with limitations; duration is 40 ms."],
+        );
+        expect(
+            (await settled(service, await service.buildViews(request))).state,
+        ).toBe("complete");
+        await service.close();
+        service = new FileMemoryService(root, {
+            ...options,
+            frameProjections: true,
+        });
+        const result = await service.queryFrame({
+            corpusId: corpus.corpusId,
+            schemaId: "synthetic-recap.duration",
+            schemaRevision: 1,
+            predicate: {
+                and: [
+                    { fieldId: "duration", op: "gte", value: 30, unit: "ms" },
+                ],
+            },
+            includeUnconfirmed: true,
+        });
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].eligible).toBe(false);
+        expect(result.rows[0].evidence[0].sourceId).toBe("source-0");
+        expect(result.rows[0].granularity).toBe("record");
+        expect(fake.calls()).toBe(1);
+        fake.revoke();
+        expect(
+            (await service.listFrameSchemas(corpus.corpusId)).some(
+                (schema) => schema.id === "synthetic-recap.duration",
+            ),
+        ).toBe(false);
+    });
 
     test("failed materialization replays retained model stages after restart without another request", async () => {
         const fake = provider();
@@ -1883,7 +2148,9 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                 },
                 pipeline: { mode: "content" },
             });
-            await waitForMemoryJob(service, ingestion.jobId);
+            await waitForMemoryJob(service, ingestion.jobId, {
+                pollIntervalMs: 10,
+            });
             const root = (await service.getSource(
                 corpus.corpusId,
                 "group-manifest",

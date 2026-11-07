@@ -14,7 +14,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./test": "./dist/test/index.js"
+    "./test": "./dist/test/index.js",
+    "./memory-view-packages": "./dist/memoryViewPackages.js"
   },
   "files": [
     "dist",
@@ -63,10 +64,12 @@
     "@typeagent/list-agent": "workspace:*",
     "@typeagent/markdown-agent": "workspace:*",
     "@typeagent/memory-agent": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/montage-agent": "workspace:*",
     "@typeagent/music": "workspace:*",
     "@typeagent/music-local": "workspace:*",
     "@typeagent/os-notifications-agent": "workspace:*",
+    "@typeagent/package-installation": "workspace:*",
     "@typeagent/photo-agent": "workspace:*",
     "@typeagent/powershell-typeagent": "workspace:*",
     "@typeagent/screencapture-agent": "workspace:*",

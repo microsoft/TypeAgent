@@ -75,6 +75,53 @@ test("explicit refresh remains authoritative after terminal polling stops", asyn
     await observer.stop();
 });
 
+test("required-family causes are authoritative before independent maintenance becomes terminal", async () => {
+    const f = fixture();
+    const failure = {
+        family: "questions",
+        state: "failed",
+        reasons: ["QUESTION_SELECTION_FAILED"],
+        jobIds: ["question-job"],
+        viewIds: [],
+    };
+    f.service.getKnowledgeCheckpoint = async () => ({
+        ...f.record.knowledgeCheckpoint,
+        requiredFailures: [failure],
+    });
+    const observer = createCheckpointObserver(f.service, f.record, f.controls);
+    await observer.done;
+    assert.equal(f.record.knowledgeCheckpoint.state, "running");
+    assert.deepEqual(f.record.knowledgeObservation.requiredFailures, [failure]);
+    assert.equal(
+        f.record.knowledgeObservation.families[0].evidence,
+        "required-family-failure",
+    );
+    assert.equal(f.record.knowledgeObservation.active, false);
+    assert.equal(
+        f.record.knowledgeObservation.requiredCheckpointSatisfied,
+        false,
+    );
+    await observer.stop();
+});
+
+test("independent optional-family debt is not promoted to an early required failure", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const f = fixture();
+    f.service.listViewSummaries = async () => ({
+        wikiFamily: {
+            enabled: true,
+            pending: true,
+            error: "Optional deferral",
+        },
+    });
+    const observer = createCheckpointObserver(f.service, f.record, f.controls);
+    await flush();
+    assert.equal(f.record.knowledgeCheckpoint.state, "running");
+    assert.deepEqual(f.record.knowledgeObservation.requiredFailures, []);
+    assert.equal(f.record.knowledgeObservation.active, true);
+    await observer.stop();
+});
+
 test("shutdown joins an explicit refresh started after a terminal observation", async () => {
     const f = fixture();
     f.transition("ready");

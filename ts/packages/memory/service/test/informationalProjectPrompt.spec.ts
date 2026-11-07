@@ -177,9 +177,11 @@ test("wiki prompt keeps retrieval identity independent of labels and separates p
     );
     expect(instructions).toContain("retrieval coverage limits only in limits");
     expect(instructions).toContain("corrections, counterexamples");
-    expect(instructions).toContain("independently useful explanatory purpose");
-    expect(instructions).toContain("sentence-shaped state");
-    expect(instructions).toContain("platform overview");
+    expect(instructions).toContain("Standalone admission is already complete");
+    expect(instructions).toContain("do not return a purpose assessment");
+    expect(instructions).not.toContain(
+        "independently useful explanatory purpose",
+    );
     await expect(
         createConfiguredViewSynthesisAdapter("test").assessWikiSubject!(
             input,
@@ -203,10 +205,19 @@ test("wiki prompt keeps retrieval identity independent of labels and separates p
             new AbortController().signal,
         ),
     ).rejects.toThrow("Controlled provider failure");
+    expect(instructions).toContain("independently useful explanatory purpose");
+    expect(instructions).toContain("sentence-shaped state");
+    expect(instructions).toContain("platform overview");
     expect(instructions).toContain(
         "Assess standalone admission even when no current pages exist",
     );
     expect(instructions).toContain("exact shared fragment IDs");
-    expect(instructions).toContain("actual page prose");
+    expect(instructions).toContain(
+        "Canonical page prose is supplied as ordered proseWitnesses",
+    );
+    expect(instructions).toContain("the host binds its exact text");
+    expect(instructions).toContain(
+        "Keep canonicalExcerpt empty in native output",
+    );
     expect(instructions).toContain("ALL essential distinctions");
 });

@@ -65,6 +65,7 @@ import {
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
 import * as filesystem from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import {
     questionSummary,
@@ -94,6 +95,7 @@ import type {
     KnowledgeCheckpointWait,
     KnowledgeDiscoveryUpdate,
     KnowledgeFamily,
+    KnowledgeFamilyFailure,
     KnowledgeStatus,
 } from "./knowledgeTypes.js";
 import { knowledgeLimits } from "./knowledgeTypes.js";
@@ -194,6 +196,7 @@ import { writeRunbookJson as persistRunbookJson } from "./durableRunbookJson.js"
 
 import {
     classifyIndexSchema,
+    indexTermNormalizationVersion,
     indexFingerprint,
     stampIndexSchema,
     type IndexKind,
@@ -282,13 +285,13 @@ import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import {
     resolveViewMaintenance,
     validateMaintenanceDefinition,
+    configuredSchemaAdmission,
 } from "./viewMaintenance.js";
 import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
 import {
-    mergeView,
     sameViewBuildEvidence,
     viewHash,
     viewBuildEvidenceFingerprint,
@@ -299,6 +302,7 @@ import {
     editorialArticle,
     editorialProtection,
     isEditorialUnlockSuccessor,
+    mergeEditorialView,
     relatedEditorialArticles,
     unlockEditorialProtection,
 } from "./viewEditorial.js";
@@ -360,6 +364,7 @@ import {
 } from "./integratedAnswer.js";
 import { MemoryUnderstanding } from "./understanding.js";
 import { UnderstandingStore } from "./understandingStore.js";
+import { viewDetailPage, type ViewDetailPageRequest } from "./viewDetail.js";
 import {
     ViewExtensionRegistry,
     ViewExtensionUnavailable,
@@ -371,6 +376,31 @@ import {
     validateDerivedModuleScope,
 } from "./viewExtensionUnderstanding.js";
 import type { ViewExtensionProvider } from "./viewExtensionTypes.js";
+import { dataFrame as frame, createKnowledgeModel } from "@typeagent/knowpro";
+import { sqlite as memorySqlite } from "@typeagent/memory-storage";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import {
+    builtinFrameSchemas,
+    descriptorFrameRows,
+    eventFrameRow,
+    frameHash,
+    jsonFrameSpans,
+    sourceFrameRows,
+    viewFrameRows,
+} from "./frameProjection.js";
+import {
+    framePredicateTypeScript,
+    validateFrameQueryRequest,
+    validateFrameSourceProviders,
+    validateFrameQueryTranslator,
+} from "./frameTypes.js";
+import type {
+    FrameQueryRequest,
+    FrameQueryResult,
+    FrameProjectionStatus,
+    FrameSourceProvider,
+} from "./frameTypes.js";
 import type {
     UnderstandingRequest,
     UnderstandingModuleRequest,
@@ -400,6 +430,8 @@ import {
     parseWikiAssessment,
     wikiPageContext,
     wikiAssessmentKey,
+    wikiUtilityDeferralKey,
+    evidenceOnlyWikiDeferral,
 } from "./wikiAdmission.js";
 import {
     refreshWikiContributionInput,
@@ -537,7 +569,7 @@ const eventAuthorities: ReadonlySet<string> = new Set<MemoryEventAuthority>([
 
 type KnowledgeMaintenanceResult = Pick<
     KnowledgeCheckpoint,
-    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions" | "diagnostics"
 >;
 
 function knowledgeMaintenanceResult(
@@ -553,9 +585,21 @@ function knowledgeMaintenanceResult(
             "ready",
         ),
         reasons: results.flatMap((result) => result.reasons),
+        diagnostics: results.flatMap((result) => result.diagnostics ?? []),
         viewIds: [...new Set(results.flatMap((result) => result.viewIds))],
         jobIds: [...new Set(results.flatMap((result) => result.jobIds))],
     };
+}
+
+function knowledgeBuildState(
+    job: ViewBuildJob,
+): "ready" | "failed" | "partial" {
+    if (job.state === "complete") return "ready";
+    return job.results.some((result) =>
+        ["failed", "blocked", "conflicted"].includes(result.state),
+    )
+        ? "failed"
+        : "partial";
 }
 
 class SchemaMaintenanceBlockedError extends Error {}
@@ -686,6 +730,10 @@ interface PreparedEventIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    frameProjections?: boolean;
+    frameQueryTranslator?: import("./frameTypes.js").FrameQueryTranslator;
+    frameStoreFactory?: (filename: string) => frame.FrameProjectionStore;
+    sourceFrameProviders?: readonly FrameSourceProvider[];
     extensionDiscovery?: boolean;
     sourceAuthorization?(
         request: import("./types.js").MemorySourceAuthorizationRequest,
@@ -845,9 +893,19 @@ function configuredTopicCuration(
     options: FileMemoryServiceOptions,
     decisionTopics: boolean,
     curatedTopics: boolean,
+    parallel: boolean,
 ): TopicCurationSettings | undefined {
-    if (!options.topicCuration) return undefined;
-    validateTopicCurationSettings(options.topicCuration);
+    const parallelDefaults =
+        parallel &&
+        !decisionTopics &&
+        curatedTopics &&
+        !options.viewSynthesisAdapter?.generateTopics;
+    if (!options.topicCuration && !parallelDefaults) return undefined;
+    const settings: TopicCurationSettings = {
+        ...(parallelDefaults ? { concurrency: 2 } : {}),
+        ...options.topicCuration,
+    };
+    validateTopicCurationSettings(settings);
     if (
         decisionTopics ||
         !curatedTopics ||
@@ -856,7 +914,7 @@ function configuredTopicCuration(
         throw new Error(
             "Generative topic settings require generative curated topics without a custom generator",
         );
-    return { ...options.topicCuration };
+    return settings;
 }
 
 function now(): string {
@@ -1460,9 +1518,22 @@ export class FileMemoryService
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
+    private readonly frameStores = new Map<
+        string,
+        frame.FrameProjectionStore
+    >();
+    private frameOptions: Pick<
+        FileMemoryServiceOptions,
+        | "frameProjections"
+        | "frameStoreFactory"
+        | "sourceFrameProviders"
+        | "extensionProviders"
+        | "frameQueryTranslator"
+    > = {};
     private readonly knowledge: KnowledgeCoordinator;
     private readonly newCorpusDiscoveryPolicy: DiscoveryPolicy;
     private readonly knowledgeMaintenance = new Set<string>();
+    private readonly concurrentKnowledgeTopics: boolean;
     private readonly acquisition: DeferredAcquisitionCoordinator;
     private readonly acquisitionPolicy: FileMemoryServiceOptions["acquisition"];
     private readonly assetStore: RevisionAssetStore;
@@ -1710,6 +1781,9 @@ export class FileMemoryService
                 } finally {
                     this.pendingReadCleanup.delete(corpusId);
                 }
+                // A reader may release while cleanup publication still holds the pending flag.
+                if (this.retiredCorpora.has(corpusId))
+                    this.scheduleReadCleanup(corpusId);
             },
         );
     }
@@ -1841,6 +1915,7 @@ export class FileMemoryService
         const maintenanceConcurrency = resolveMaintenanceConcurrency(
             options.maintenanceConcurrency,
         );
+        this.concurrentKnowledgeTopics = maintenanceConcurrency.builds > 1;
         const prioritizeShortBuilds = resolveMaintenanceBuildPriority(
             options.maintenanceShortBuildReservation,
             options.maintenanceShortBuildPriority,
@@ -1923,6 +1998,7 @@ export class FileMemoryService
             options,
             this.decisionTopics,
             this.curatedTopics,
+            this.experiments.has("topic-parallel"),
         );
         this.topicPolicy = topicCurationPolicy(
             this.curatedTopics,
@@ -2177,6 +2253,9 @@ export class FileMemoryService
             commitPolicy,
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
+        this.frameOptions = options;
+        validateFrameSourceProviders(options.sourceFrameProviders);
+        validateFrameQueryTranslator(options.frameQueryTranslator);
         this.newCorpusDiscoveryPolicy = this.viewDrafts
             ? (options.discoveryPolicy ?? "sourceObserved")
             : "off";
@@ -2308,8 +2387,12 @@ export class FileMemoryService
                 this.admitKnowledgeQuestion(corpusId, input, proposal, signal),
             route: (corpusId, sources) =>
                 this.routeKnowledgeSources(corpusId, sources),
-            maintain: (checkpoint, signal) =>
-                this.maintainKnowledgeCheckpoint(checkpoint, signal),
+            maintain: (checkpoint, signal, reportFailure) =>
+                this.maintainKnowledgeCheckpoint(
+                    checkpoint,
+                    signal,
+                    reportFailure,
+                ),
             enabledFamilies: () => [
                 ...(this.viewDrafts ? ["questions" as const] : []),
                 ...(this.informationalWikiEnabled
@@ -2378,13 +2461,20 @@ export class FileMemoryService
                 ? openai.createJsonChatModel(this.fastQueryModelEndpoint)
                 : undefined;
         if (options.indexFactory) return options.indexFactory;
-        if (!queryExperiments && !options.indexSettingsFactory)
+        if (
+            !queryExperiments &&
+            !options.indexSettingsFactory &&
+            !this.experiments.has("embedding-parallel")
+        )
             return createKnowProCorpusIndex;
         return (corpusId, directory) =>
             createKnowProCorpusIndex(corpusId, directory, () => {
                 const settings =
                     options.indexSettingsFactory?.() ??
                     createDocMemorySettings();
+                if (this.experiments.has("embedding-parallel"))
+                    settings.conversationSettings.overlapMessageEmbeddings =
+                        true;
                 if (!queryExperiments) return settings;
                 queryModel ??=
                     settings.queryLanguageModel ?? settings.languageModel;
@@ -2729,6 +2819,11 @@ export class FileMemoryService
         return this.maintenance.defer();
     }
 
+    public deferTopicMaintenance(corpusId: string): () => void {
+        validateIdentifier("corpus ID", corpusId);
+        return this.maintenance.deferFamily(corpusId, "topics");
+    }
+
     public getMaintenanceStatus(): MaintenanceStatus {
         const status = this.maintenance.status();
         for (const [corpusId, runtime] of this.corpora)
@@ -2984,6 +3079,9 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        const frames = this.frameStore(corpusId, true);
+        frames?.retainOwners(new Set());
+        frames?.retainSchemas(new Set());
         this.understanding?.invalidate(corpusId);
         this.answerSnapshots.invalidate(corpusId);
         const removedSources = runtime.manifest.pendingCorpusClear;
@@ -3050,6 +3148,826 @@ export class FileMemoryService
         const runtime = await this.getCorpusRuntime(corpusId);
         return runtime.manifest.sources.map((source) =>
             this.toMemorySource(source),
+        );
+    }
+
+    private frameStore(
+        corpusId: string,
+        existingOnly = false,
+    ): frame.FrameProjectionStore | undefined {
+        const current = this.frameStores.get(corpusId);
+        if (current) return current;
+        const filename = path.join(
+            this.rootDirectory,
+            "corpora",
+            corpusId,
+            "frames.db",
+        );
+        if (existingOnly && !existsSync(filename)) return undefined;
+        const store =
+            this.frameOptions.frameStoreFactory?.(filename) ??
+            new memorySqlite.SqliteFrameProjectionStore(filename);
+        this.frameStores.set(corpusId, store);
+        return store;
+    }
+    private frameProviderStamp(): string {
+        return frameHash([
+            this.frameOptions.sourceFrameProviders?.map((p) => [
+                p.providerId,
+                p.version,
+                p.projections,
+            ]),
+            this.frameOptions.extensionProviders?.map((p) => p.descriptor),
+        ]);
+    }
+    private async prepareFrameSource(source: StoredSource) {
+        const revision = source.revisions.find(
+            (r) => r.revisionId === source.activeRevisionId,
+        )!;
+        const document = this.toMemorySource(source);
+        const schemas: frame.FrameSchema[] = [];
+        const checks: Array<() => Promise<boolean>> = [];
+        const providers: FrameSourceProvider[] = [];
+        const recipes: unknown[] = [];
+        for (const provider of this.frameOptions.sourceFrameProviders ?? []) {
+            if (
+                document.metadata?.frameProviderId !== provider.providerId ||
+                !provider.sourceTypes.includes(document.sourceType) ||
+                !(await provider.authorize(document))
+            )
+                continue;
+            schemas.push(...provider.projections.map((d) => d.schema));
+            recipes.push([
+                provider.providerId,
+                provider.version,
+                provider.projections,
+            ]);
+            providers.push(provider);
+            checks.push(() => provider.authorize(document));
+        }
+        let rows: frame.FrameRow[] = [];
+        let failure: string | undefined;
+        try {
+            rows = sourceFrameRows(document, revision.content);
+            if (providers.length) {
+                const payload: unknown = JSON.parse(revision.content);
+                const spans = jsonFrameSpans(revision.content);
+                for (const provider of providers)
+                    for (const descriptor of provider.projections)
+                        rows.push(
+                            ...descriptorFrameRows(
+                                payload,
+                                descriptor,
+                                (index) => {
+                                    const span = spans.get(
+                                        `${descriptor.rowsPointer}/${index}`,
+                                    );
+                                    if (!span)
+                                        throw new Error(
+                                            "Projected JSON record has no retained text anchor",
+                                        );
+                                    return {
+                                        support: [
+                                            {
+                                                sourceId: source.sourceId,
+                                                revisionId: revision.revisionId,
+                                                locator: `chars:${span.start}-${span.end}`,
+                                                excerpt: revision.content.slice(
+                                                    span.start,
+                                                    Math.min(
+                                                        span.end,
+                                                        span.start + 1000,
+                                                    ),
+                                                ),
+                                            },
+                                        ],
+                                        opposition: [],
+                                    };
+                                },
+                                true,
+                            ).map((row) => ({
+                                ...row,
+                                origin: "source" as const,
+                            })),
+                        );
+            }
+        } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+        }
+        const owner: frame.FrameOwnerProjection = {
+            ownerKey: `source:${source.sourceId}`,
+            revisionId: revision.revisionId,
+            fingerprint: frameHash([
+                document,
+                builtinFrameSchemas,
+                recipes,
+                rows,
+            ]),
+            dependencies: [
+                { sourceId: source.sourceId, revisionId: revision.revisionId },
+            ],
+            rows,
+        };
+        return { owner, schemas, checks, failure };
+    }
+    private frameViewDependencies(
+        runtime: CorpusRuntime,
+        view: ViewVersion,
+        sources: ReadonlyMap<string, string>,
+    ) {
+        const dependencies = [
+            ...(view.generation?.input?.influenceSources ?? []),
+            ...(view.generation?.input?.inputs
+                .filter((input) => !input.evidence)
+                .map(({ sourceId, revisionId }) => ({
+                    sourceId,
+                    revisionId,
+                })) ?? []),
+            ...view.content.citations
+                .filter((citation) => !citation.evidence)
+                .map(({ sourceId, revisionId }) => ({ sourceId, revisionId })),
+        ];
+        const eventIds = [
+            ...(view.generation?.input?.influenceEvents?.map(
+                (event) => event.eventId,
+            ) ?? []),
+            ...view.content.citations.flatMap((citation) =>
+                citation.evidence ? [citation.evidence.eventId] : [],
+            ),
+        ];
+        const events = eventIds.map((id) =>
+            runtime.events.find((event) => event.eventId === id),
+        );
+        if (
+            events.some(
+                (event) =>
+                    !event ||
+                    isSuppressedEvent(runtime, event) ||
+                    event.linkedSourceIds?.some((id) => !sources.has(id)),
+            )
+        )
+            return undefined;
+        for (const event of events)
+            for (const id of event?.linkedSourceIds ?? [])
+                dependencies.push({
+                    sourceId: id,
+                    revisionId: sources.get(id)!,
+                });
+        return dependencies.some(
+            (dep) => sources.get(dep.sourceId) !== dep.revisionId,
+        )
+            ? undefined
+            : dependencies;
+    }
+    private async prepareFrameView(
+        runtime: CorpusRuntime,
+        view: ViewVersion,
+        publications: Awaited<ReturnType<TypedViewStore["listPublishedViews"]>>,
+        sources: ReadonlyMap<string, string>,
+    ) {
+        if (
+            view.state === "archived" ||
+            view.redirect ||
+            !(await this.informationalVersionEligible(view, view, true))
+        )
+            return undefined;
+        try {
+            await this.assertInfluenceEligible(view.generation?.input);
+        } catch (error) {
+            if (error instanceof ViewBuildStaleError) return undefined;
+            throw error;
+        }
+        const dependencies = this.frameViewDependencies(runtime, view, sources);
+        if (!dependencies) return undefined;
+        const publication = publications.find(
+            (p) => p.current?.viewId === view.viewId,
+        )?.publication;
+        const eligible =
+            publication?.publishedRevisionId === view.revisionId &&
+            publication.indexState === "ready" &&
+            publication.indexedRevisionId === view.revisionId &&
+            !publication.blockedReason &&
+            view.state !== "stale";
+        let projected: ReturnType<typeof viewFrameRows> = {
+            schemas: [],
+            rows: [],
+        };
+        let failure: string | undefined;
+        try {
+            projected = viewFrameRows(view, eligible);
+            if (view.content.kind === "extension") {
+                const content = view.content;
+                const provider = this.frameOptions.extensionProviders?.find(
+                    (p) =>
+                        p.descriptor.identity.providerId ===
+                            content.provider.providerId &&
+                        p.descriptor.identity.version ===
+                            content.provider.version,
+                );
+                for (const descriptor of provider?.descriptor.indexProjection ??
+                    []) {
+                    projected.schemas.push(descriptor.schema);
+                    projected.rows.push(
+                        ...descriptorFrameRows(
+                            content.payload,
+                            descriptor,
+                            (_index, record) => {
+                                if (!descriptor.blockIdPointer)
+                                    throw new Error(
+                                        "View frame projection requires a block ID selector",
+                                    );
+                                const blockId = frame.framePointer(
+                                    record,
+                                    descriptor.blockIdPointer,
+                                );
+                                const evidence = content.evidence.find(
+                                    (e) => e.blockId === blockId,
+                                );
+                                if (!evidence)
+                                    throw new Error(
+                                        "View frame record has no validated block evidence",
+                                    );
+                                return {
+                                    support: evidence.support,
+                                    opposition: evidence.opposition,
+                                };
+                            },
+                            eligible,
+                        ),
+                    );
+                }
+            }
+            for (const schema of projected.schemas)
+                frame.assertFrameSchema(schema);
+        } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+            projected = { schemas: [], rows: [] };
+        }
+        const owner: frame.FrameOwnerProjection = {
+            ownerKey: `view:${view.viewId}`,
+            revisionId: view.revisionId,
+            fingerprint: frameHash([
+                view,
+                publication,
+                projected.schemas,
+                projected.rows,
+            ]),
+            dependencies,
+            rows: projected.rows,
+        };
+        const checks = [
+            async () => {
+                await this.assertInfluenceEligible(view.generation?.input);
+                if (
+                    !failure &&
+                    view.content.kind === "schemaView" &&
+                    frameHash(viewFrameRows(view, eligible)) !==
+                        frameHash(projected)
+                )
+                    throw new Error(
+                        "Frame question freshness changed during the read",
+                    );
+                return this.informationalVersionEligible(view, view, true);
+            },
+        ];
+        return { owner, schemas: projected.schemas, checks, failure };
+    }
+    private async collectFrameSnapshot(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ) {
+        const store = this.frameStore(corpusId)!;
+        const authoritative = frameHash([
+            runtime.manifest.sources,
+            runtime.events,
+        ]);
+        const providerStamp = this.frameProviderStamp();
+        const providerChecks: Array<() => Promise<boolean>> = [];
+        const errors = new Map<string, string>();
+        const sources = structuredClone(runtime.manifest.sources);
+        const owners: frame.FrameOwnerProjection[] = [];
+        const schemas = [...builtinFrameSchemas];
+        const authorized: StoredSource[] = [];
+        for (const source of sources) {
+            const revision = source.revisions.find(
+                (r) => r.revisionId === source.activeRevisionId,
+            );
+            if (
+                !revision ||
+                revision.state !== "ready" ||
+                !(await this.sourceAllowed(source, revision, "read"))
+            )
+                continue;
+            authorized.push(source);
+            const prepared = await this.prepareFrameSource(source);
+            owners.push(prepared.owner);
+            schemas.push(...prepared.schemas);
+            providerChecks.push(...prepared.checks);
+            if (prepared.failure)
+                errors.set(prepared.owner.ownerKey, prepared.failure);
+        }
+        for (const event of runtime.events) {
+            if (
+                isSuppressedEvent(runtime, event) ||
+                event.linkedSourceIds?.some(
+                    (id) => !authorized.some((s) => s.sourceId === id),
+                )
+            )
+                continue;
+            const dependencies = (event.linkedSourceIds ?? []).flatMap((id) => {
+                const source = authorized.find((s) => s.sourceId === id);
+                return source
+                    ? [{ sourceId: id, revisionId: source.activeRevisionId }]
+                    : [];
+            });
+            owners.push({
+                ownerKey: `event:${event.eventId}`,
+                revisionId: event.eventId,
+                fingerprint: frameHash([event, dependencies]),
+                dependencies,
+                rows: [
+                    eventFrameRow(
+                        event,
+                        eventAuthority(event) ?? event.sourceKind,
+                    ),
+                ],
+            });
+        }
+        const views =
+            this.viewDrafts || this.extensionBuilds
+                ? await this.viewStore.listViews(corpusId)
+                : undefined;
+        const publications = views
+            ? await this.viewStore.listPublishedViews(corpusId)
+            : [];
+        const allowedSources = new Map(
+            authorized.map((s) => [s.sourceId, s.activeRevisionId]),
+        );
+        for (const view of views?.views ?? []) {
+            const prepared = await this.prepareFrameView(
+                runtime,
+                view,
+                publications,
+                allowedSources,
+            );
+            if (!prepared) continue;
+            owners.push(prepared.owner);
+            schemas.push(...prepared.schemas);
+            providerChecks.push(...prepared.checks);
+            if (prepared.failure)
+                errors.set(prepared.owner.ownerKey, prepared.failure);
+        }
+        return {
+            store,
+            authoritative,
+            providerStamp,
+            providerChecks,
+            authorized,
+            owners,
+            schemas,
+            errors,
+            viewsHead: views?.head,
+        };
+    }
+    private reconcileFrameSnapshot(
+        frames: Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+    ): void {
+        const { store, schemas, owners, errors } = frames;
+        for (const schema of schemas) store.registerSchema(schema);
+        store.retainOwners(new Set(owners.map((owner) => owner.ownerKey)));
+        const receipts = new Map(
+            store.receipts().map((receipt) => [receipt.ownerKey, receipt]),
+        );
+        for (const owner of owners) {
+            const old = receipts.get(owner.ownerKey);
+            if (
+                old?.fingerprint === owner.fingerprint &&
+                old.state === "ready" &&
+                !errors.has(owner.ownerKey)
+            )
+                continue;
+            store.stage({ ...owner, rows: [] });
+            try {
+                const failure = errors.get(owner.ownerKey);
+                if (failure) throw new Error(failure);
+                store.commit(owner);
+            } catch (error) {
+                store.fail(
+                    owner,
+                    (error instanceof Error
+                        ? error.message
+                        : String(error)
+                    ).slice(0, 2000),
+                );
+            }
+        }
+        store.retainSchemas(
+            new Set(schemas.map((s) => JSON.stringify([s.id, s.revision]))),
+        );
+    }
+    private async assertFrameSnapshot(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        frames: Pick<
+            Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+            "authoritative" | "providerStamp" | "viewsHead"
+        >,
+    ) {
+        const current = this.readScope.exit(() =>
+            frameHash([runtime.manifest.sources, runtime.events]),
+        );
+        if (current !== frames.authoritative)
+            throw new ViewBuildStaleError(
+                "Frame authoritative snapshot changed during the read",
+            );
+        if (frames.providerStamp !== this.frameProviderStamp())
+            throw new ViewBuildStaleError(
+                "Frame provider registration changed during the read",
+            );
+        if (frames.viewsHead !== undefined)
+            await this.viewStore.assertInventoryHead(
+                corpusId,
+                frames.viewsHead,
+            );
+    }
+    private async withFrameSnapshot<T>(
+        corpusId: string,
+        operation: (
+            store: frame.FrameProjectionStore,
+            owners: frame.FrameOwnerProjection[],
+            snapshot: string,
+        ) => Promise<T>,
+    ): Promise<T> {
+        if (!this.frameOptions.frameProjections)
+            throw new Error(
+                "Memory dataframe projections are disabled by this host",
+            );
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const frames = await runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
+                this.collectFrameSnapshot(corpusId, runtime),
+            ),
+        );
+        const { store, owners } = frames;
+        const receipts = new Map(
+            store.receipts().map((receipt) => [receipt.ownerKey, receipt]),
+        );
+        const schemas = [
+            ...new Map(
+                frames.schemas.map((schema) => [
+                    JSON.stringify([schema.id, schema.revision]),
+                    schema,
+                ]),
+            ).values(),
+        ].sort((a, b) =>
+            a.id < b.id ? -1 : a.id > b.id ? 1 : a.revision - b.revision,
+        );
+        const needsWrite =
+            frames.errors.size > 0 ||
+            receipts.size !== owners.length ||
+            owners.some(
+                (owner) =>
+                    receipts.get(owner.ownerKey)?.fingerprint !==
+                        owner.fingerprint ||
+                    receipts.get(owner.ownerKey)?.state !== "ready",
+            ) ||
+            frameHash(schemas) !== frameHash(store.schemas());
+        if (needsWrite)
+            await runtime.access.write(() =>
+                this.readScope.exit(() =>
+                    this.viewStore.withWritableState(() =>
+                        runtime.access.read(async () => {
+                            await this.assertFrameSnapshot(
+                                corpusId,
+                                runtime,
+                                frames,
+                            );
+                            await this.assertFrameAuthorization(frames);
+                            await this.assertFrameSnapshot(
+                                corpusId,
+                                runtime,
+                                frames,
+                            );
+                            this.reconcileFrameSnapshot(frames);
+                        }),
+                    ),
+                ),
+            );
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, async () => {
+                await this.assertFrameSnapshot(corpusId, runtime, frames);
+                const snapshot = frameHash([
+                    frames.viewsHead,
+                    owners.map((o) => [o.ownerKey, o.fingerprint]),
+                    store.schemas(),
+                ]);
+                const result = await operation(store, owners, snapshot);
+                await this.assertFrameAuthorization(frames);
+                await this.assertFrameSnapshot(corpusId, runtime, frames);
+                return result;
+            }),
+        );
+    }
+    private async assertFrameAuthorization(
+        frames: Pick<
+            Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+            "authorized" | "providerChecks"
+        >,
+    ) {
+        for (const source of frames.authorized) {
+            const revision = source.revisions.find(
+                (r) => r.revisionId === source.activeRevisionId,
+            )!;
+            if (!(await this.sourceAllowed(source, revision, "read")))
+                throw new Error(
+                    "Frame source authorization changed during the read",
+                );
+        }
+        for (const check of frames.providerChecks)
+            if (!(await check()))
+                throw new Error(
+                    "Frame provider authorization changed during the read",
+                );
+    }
+
+    public listFrameSchemas(corpusId: string): Promise<frame.FrameSchema[]> {
+        return this.withFrameSnapshot(corpusId, async (store) =>
+            store.schemas(),
+        );
+    }
+
+    private frameStatus(
+        store: frame.FrameProjectionStore,
+        owners: frame.FrameOwnerProjection[],
+        snapshot: string,
+    ): FrameProjectionStatus {
+        const receipts = store.receipts();
+        return {
+            version: 1,
+            snapshot,
+            owners: receipts,
+            coverage: {
+                ready: receipts.filter((r) => r.state === "ready").length,
+                pending: receipts.filter((r) => r.state === "pending").length,
+                failed: receipts.filter((r) => r.state === "failed").length,
+                unavailableValues: owners.reduce(
+                    (count, owner) =>
+                        count +
+                        owner.rows.reduce(
+                            (n, row) =>
+                                n +
+                                Object.values(row.valueStates ?? {}).filter(
+                                    (v) => v === "unavailable",
+                                ).length,
+                            0,
+                        ),
+                    0,
+                ),
+            },
+        };
+    }
+    private scheduleFrameProjections(corpusId: string): void {
+        if (!this.frameOptions.frameProjections || this.closed) return;
+        this.maintenance.request(
+            corpusId,
+            "frames",
+            undefined,
+            async (signal) => {
+                signal.throwIfAborted();
+                try {
+                    const status =
+                        await this.getFrameProjectionStatus(corpusId);
+                    if (status.coverage.failed)
+                        throw new Error(
+                            `${status.coverage.failed} frame owner projections failed`,
+                        );
+                } catch (error) {
+                    if (!(error instanceof ViewBuildStaleError)) throw error;
+                    signal.throwIfAborted();
+                    // A foreground write invalidated the read; keep its replacement queued.
+                    this.scheduleFrameProjections(corpusId);
+                }
+            },
+        );
+    }
+
+    public getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        return this.withFrameSnapshot(
+            corpusId,
+            async (store, owners, snapshot) =>
+                this.frameStatus(store, owners, snapshot),
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        validateFrameQueryRequest(request);
+        return this.withFrameSnapshot(
+            request.corpusId,
+            async (store, owners, snapshot) => {
+                const schema = store
+                    .schemas()
+                    .find(
+                        (s) =>
+                            s.id === request.schemaId &&
+                            s.revision === request.schemaRevision,
+                    );
+                if (!schema) throw new Error("Unknown frame schema revision");
+                let predicate = request.predicate ?? { and: [] };
+                if (request.query !== undefined) {
+                    if (!request.query.trim() || request.query.length > 120000)
+                        throw new Error("Invalid frame query text");
+                    const adapter = this.frameOptions.frameQueryTranslator;
+                    const translated = await this.translationCache.frame(
+                        request.corpusId,
+                        frameHash([schema, adapter?.identity]),
+                        request.query,
+                        async () => {
+                            if (adapter)
+                                return {
+                                    success: true as const,
+                                    data: await adapter.translate(
+                                        schema,
+                                        request.query!,
+                                    ),
+                                };
+                            const translator =
+                                createJsonTranslator<frame.FramePredicate>(
+                                    createKnowledgeModel(),
+                                    createTypeScriptJsonValidator<frame.FramePredicate>(
+                                        framePredicateTypeScript(schema),
+                                        "FramePredicate",
+                                    ),
+                                );
+                            return translator.translate(request.query!, [
+                                {
+                                    role: "system",
+                                    content: `Use only these admitted frame fields: ${JSON.stringify(schema)}. fieldId must be an exact key of fields; never prefix it with the schema ID or invent a qualified field name. Named states and statuses are literal values for state/status fields; do not substitute empty strings for them. Preserve exact values and units. Calendar and instant domains cannot mix. Current time: ${new Date().toISOString()}.`,
+                                },
+                            ]);
+                        },
+                    );
+                    if (!translated.success)
+                        throw new Error(translated.message);
+                    predicate = translated.data;
+                }
+                frame.frameComparisons(schema, predicate);
+                const identity = frameHash([
+                    snapshot,
+                    predicate,
+                    request.schemaId,
+                    request.schemaRevision,
+                    request.sourceIds,
+                    request.includeUnconfirmed,
+                    request.repository,
+                    request.commit,
+                    request.environment,
+                ]);
+                let offset = 0;
+                if (request.cursor) {
+                    const cursor: unknown = JSON.parse(
+                        Buffer.from(request.cursor, "base64url").toString(
+                            "utf8",
+                        ),
+                    );
+                    if (
+                        !cursor ||
+                        typeof cursor !== "object" ||
+                        Reflect.get(cursor, "identity") !== identity ||
+                        Object.keys(cursor).some(
+                            (key) => !["identity", "offset"].includes(key),
+                        ) ||
+                        !Number.isSafeInteger(Reflect.get(cursor, "offset")) ||
+                        Reflect.get(cursor, "offset") < 0
+                    )
+                        throw new Error("Frame cursor is invalid or stale");
+                    offset = Reflect.get(cursor, "offset");
+                }
+                const selected = owners.filter(
+                    (owner) =>
+                        !request.sourceIds ||
+                        owner.dependencies.some((dep) =>
+                            request.sourceIds!.includes(dep.sourceId),
+                        ),
+                );
+                const stamps = new Map(
+                    selected.map((o) => [o.ownerKey, o.fingerprint]),
+                );
+                if (
+                    store
+                        .receipts()
+                        .some(
+                            (receipt) =>
+                                stamps.has(receipt.ownerKey) &&
+                                receipt.state !== "ready",
+                        )
+                )
+                    throw new Error(
+                        "Required frame projections are not ready; inspect getFrameProjectionStatus",
+                    );
+                const dependencies = new Map(
+                    selected.map((o) => [
+                        o.ownerKey,
+                        o.dependencies.map((dep) => dep.sourceId),
+                    ]),
+                );
+                const sources = new Map(
+                    owners
+                        .filter((owner) => owner.ownerKey.startsWith("source:"))
+                        .map((owner) => [
+                            owner.dependencies[0].sourceId,
+                            owner.rows.find((row) => row.schemaId === "source")
+                                ?.values,
+                        ]),
+                );
+                const eventSources = new Map(
+                    owners
+                        .filter((owner) => owner.ownerKey.startsWith("event:"))
+                        .map((owner) => [
+                            owner.revisionId,
+                            owner.dependencies.map((dep) => dep.sourceId),
+                        ]),
+                );
+                const matches = store
+                    .query(
+                        schema,
+                        predicate,
+                        stamps,
+                        request.includeUnconfirmed ?? false,
+                    )
+                    .map((row) => {
+                        const support = row.evidence.flatMap((ref) =>
+                            ref.evidence
+                                ? (eventSources.get(ref.evidence.eventId) ?? [])
+                                : [ref.sourceId],
+                        );
+                        const sourceIds = [
+                            ...new Set(
+                                support.length
+                                    ? support
+                                    : row.origin === "source"
+                                      ? (dependencies.get(row.ownerKey) ?? [])
+                                      : [],
+                            ),
+                        ];
+                        return { ...row, sourceIds };
+                    })
+                    .filter(
+                        (row) =>
+                            !request.sourceIds ||
+                            row.sourceIds.some((id) =>
+                                request.sourceIds!.includes(id),
+                            ),
+                    )
+                    .filter((row) =>
+                        (
+                            ["repository", "commit", "environment"] as const
+                        ).every((key) => {
+                            if (request[key] === undefined) return true;
+                            const value = row.values[key];
+                            if (value !== undefined)
+                                return Array.isArray(value)
+                                    ? value.includes(request[key]!)
+                                    : value === request[key];
+                            return (
+                                row.sourceIds.length > 0 &&
+                                row.sourceIds.every(
+                                    (id) =>
+                                        sources.get(id)?.[key] === request[key],
+                                )
+                            );
+                        }),
+                    )
+                    .sort(
+                        (a, b) =>
+                            a.ownerKey.localeCompare(b.ownerKey) ||
+                            a.itemKey.localeCompare(b.itemKey),
+                    );
+                if (request.cursor && offset >= matches.length)
+                    throw new Error("Frame cursor is invalid or stale");
+                const limit = request.limit ?? 50;
+                const rows = matches.slice(offset, offset + limit);
+                return {
+                    ...this.frameStatus(store, owners, snapshot),
+                    schema,
+                    predicate,
+                    rows,
+                    ...(offset + limit < matches.length
+                        ? {
+                              nextCursor: Buffer.from(
+                                  JSON.stringify({
+                                      identity,
+                                      offset: offset + limit,
+                                  }),
+                              ).toString("base64url"),
+                          }
+                        : {}),
+                };
+            },
         );
     }
 
@@ -4415,6 +5333,7 @@ export class FileMemoryService
     public async search(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
+        if (request.frameFilter) return this.searchFrameFiltered(request);
         return this.foregroundRead(async () => {
             const result = await runWithSearchTiming(
                 request.traceId,
@@ -4449,6 +5368,55 @@ export class FileMemoryService
         });
     }
 
+    private async searchFrameFiltered(
+        request: MemorySearchRequest,
+    ): Promise<MemorySearchResult> {
+        const { frameFilter, ...search } = request;
+        if (
+            !frameFilter ||
+            ["corpusId", "limit", "cursor"].some((key) => key in frameFilter)
+        )
+            throw new Error("Invalid frame search filter");
+        let query: FrameQueryRequest = {
+            ...frameFilter,
+            corpusId: request.corpusId,
+            limit: 1000,
+        };
+        const sourceIds = new Set<string>();
+        let snapshot: string | undefined;
+        while (true) {
+            const page = await this.queryFrame(query);
+            if (snapshot && snapshot !== page.snapshot)
+                throw new Error(
+                    "Frame filter snapshot changed during selection",
+                );
+            snapshot = page.snapshot;
+            for (const row of page.rows)
+                for (const id of row.sourceIds)
+                    if (!search.sourceIds || search.sourceIds.includes(id))
+                        sourceIds.add(id);
+            if (!page.nextCursor) break;
+            query = {
+                ...query,
+                query: undefined,
+                predicate: page.predicate,
+                cursor: page.nextCursor,
+            };
+        }
+        const result = await this.search({
+            ...search,
+            sourceIds: [...sourceIds],
+        });
+        if (
+            (await this.getFrameProjectionStatus(request.corpusId)).snapshot !==
+            snapshot
+        )
+            throw new Error(
+                "Frame filter snapshot changed during semantic retrieval",
+            );
+        return result;
+    }
+
     private async searchDocuments(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
@@ -4464,22 +5432,24 @@ export class FileMemoryService
         }
         return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
-            const authorized = this.sourceAuthorization
-                ? await this.authorizedSourceScope(
-                      runtime,
-                      request.sourceIds,
-                      "retrieve",
-                  )
-                : undefined;
-            let candidates: CorpusIndexMatch[] = request.indexedFragments
-                ? []
-                : await runtime.index.search(
-                      query,
-                      limit * 4,
-                      undefined,
-                      request.temporalContext,
-                      authorized,
-                  );
+            const authorized =
+                this.sourceAuthorization || request.sourceIds !== undefined
+                    ? await this.authorizedSourceScope(
+                          runtime,
+                          request.sourceIds,
+                          "retrieve",
+                      )
+                    : undefined;
+            let candidates: CorpusIndexMatch[] =
+                request.indexedFragments || request.sourceIds?.length === 0
+                    ? []
+                    : await runtime.index.search(
+                          query,
+                          limit * 4,
+                          undefined,
+                          request.temporalContext,
+                          authorized,
+                      );
             let fragmentLimited = false;
             let indexedSelection: IndexedSelectionDiagnostics | undefined;
             if (request.indexedFragments) {
@@ -4645,6 +5615,7 @@ export class FileMemoryService
                       }
                     : {}),
                 sourceSynopses: this.sourceSynopsesEnabled,
+                dataFrames: this.frameOptions.frameProjections ?? false,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
                     : [],
@@ -5440,12 +6411,16 @@ export class FileMemoryService
     ): Promise<KnowledgeStatus> {
         await this.requireViews(corpusId);
         const status = await this.viewStore.getKnowledgeState(corpusId);
-        for (let index = 0; index < status.checkpoints.length; index++)
+        for (let index = 0; index < status.checkpoints.length; index++) {
             if (status.checkpoints[index].state === "ready")
                 status.checkpoints[index] = await this.knowledge.get({
                     corpusId,
                     checkpointId: status.checkpoints[index].checkpointId,
                 });
+            status.checkpoints[index] = await this.withKnowledgeDiagnostics(
+                status.checkpoints[index],
+            );
+        }
         return status;
     }
 
@@ -5460,21 +6435,39 @@ export class FileMemoryService
         request: KnowledgeCheckpointRequest,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.create(request);
+        return this.withKnowledgeDiagnostics(
+            await this.knowledge.create(request),
+        );
     }
 
     public async getKnowledgeCheckpoint(
         request: KnowledgeCheckpointRead,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.get(request);
+        return this.withKnowledgeDiagnostics(await this.knowledge.get(request));
     }
 
     public async waitForKnowledgeCheckpoint(
         request: KnowledgeCheckpointWait,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.wait(request);
+        return this.withKnowledgeDiagnostics(
+            await this.knowledge.wait(request),
+        );
+    }
+
+    private async withKnowledgeDiagnostics(
+        checkpoint: KnowledgeCheckpoint,
+    ): Promise<KnowledgeCheckpoint> {
+        if (!checkpoint.jobIds.length) return checkpoint;
+        const diagnostics = await this.viewStore.getKnowledgeBuildDiagnostics(
+            checkpoint.corpusId,
+            checkpoint.jobIds,
+        );
+        return {
+            ...checkpoint,
+            diagnostics: [...(checkpoint.diagnostics ?? []), ...diagnostics],
+        };
     }
 
     private async admitKnowledgeQuestion(
@@ -5821,9 +6814,26 @@ export class FileMemoryService
     private async maintainKnowledgeCheckpoint(
         checkpoint: KnowledgeCheckpoint,
         signal: AbortSignal,
+        reportFailure: (
+            failure: Omit<KnowledgeFamilyFailure, "observedAt">,
+        ) => Promise<void>,
     ): Promise<KnowledgeMaintenanceResult> {
         const { corpusId } = checkpoint;
         const results: KnowledgeMaintenanceResult[] = [];
+        const retainResult = async (
+            family: KnowledgeFamily,
+            result: KnowledgeMaintenanceResult,
+        ) => {
+            results.push(result);
+            if (result.state === "failed" || result.state === "blocked")
+                await reportFailure({
+                    family,
+                    state: result.state,
+                    reasons: result.reasons,
+                    jobIds: result.jobIds,
+                    viewIds: result.viewIds,
+                });
+        };
         const pipelines = new Set(
             checkpoint.families.map(
                 (family) =>
@@ -5869,16 +6879,13 @@ export class FileMemoryService
                     )
                         continue;
                     results.push({
-                        state:
-                            finished.state === "complete" ? "ready" : "failed",
+                        // Joined work is reconciled by the fresh family plans below.
+                        state: "ready",
                         jobIds: [job.jobId],
                         viewIds: finished.results
                             .filter((entry) => entry.revisionId)
                             .map((entry) => entry.viewId),
-                        reasons:
-                            finished.state === "complete"
-                                ? []
-                                : finished.results.map((entry) => entry.reason),
+                        reasons: [],
                     });
                 }
             }
@@ -5896,7 +6903,8 @@ export class FileMemoryService
                         ),
                 );
                 for (const view of questions) {
-                    results.push(
+                    await retainResult(
+                        "questions",
                         await this.maintainKnowledgeQuestion(
                             checkpoint,
                             view,
@@ -5905,15 +6913,54 @@ export class FileMemoryService
                     );
                 }
             }
-            for (const family of checkpoint.families)
-                if (family !== "questions")
-                    results.push(
+            const maintainPages = async () => {
+                for (const family of checkpoint.families)
+                    if (family === "wiki" || family === "projects")
+                        await retainResult(
+                            family,
+                            await this.maintainKnowledgeFamily(
+                                checkpoint,
+                                family,
+                                signal,
+                            ),
+                        );
+            };
+            const maintainTopics = async () => {
+                if (checkpoint.families.includes("topics"))
+                    await retainResult(
+                        "topics",
                         await this.maintainKnowledgeFamily(
                             checkpoint,
-                            family,
+                            "topics",
                             signal,
                         ),
                     );
+            };
+            if (this.concurrentKnowledgeTopics) {
+                const settled = await Promise.allSettled([
+                    maintainPages(),
+                    maintainTopics(),
+                ]);
+                const errors = settled.flatMap((entry) =>
+                    entry.status === "rejected" ? [entry.reason] : [],
+                );
+                if (errors.length)
+                    throw new AggregateError(
+                        errors,
+                        "Knowledge family maintenance failed",
+                    );
+            } else {
+                for (const family of checkpoint.families)
+                    if (family !== "questions")
+                        await retainResult(
+                            family,
+                            await this.maintainKnowledgeFamily(
+                                checkpoint,
+                                family,
+                                signal,
+                            ),
+                        );
+            }
             const result = knowledgeMaintenanceResult(results);
             const snapshot = await this.listViews(corpusId);
             result.viewRevisions = snapshot.views
@@ -5954,6 +7001,15 @@ export class FileMemoryService
                 reasons: [
                     `View ${view.viewId} depends on evidence outside the captured scope`,
                 ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family: "questions",
+                        viewId: view.viewId,
+                        state: "partial",
+                        code: "scope-incomplete",
+                    },
+                ],
             };
         }
         const plan = await this.planViewMaintenance({
@@ -5962,7 +7018,20 @@ export class FileMemoryService
         });
         const target = plan.targets[0];
         if (target.state === "blocked")
-            return { ...result, state: "blocked", reasons: [target.reason] };
+            return {
+                ...result,
+                state: "blocked",
+                reasons: [target.reason],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family: "questions",
+                        viewId: view.viewId,
+                        state: "blocked",
+                        code: "target-blocked",
+                    },
+                ],
+            };
         if (target.state === "rebuild") {
             const build = await this.maintainViews({
                 corpusId,
@@ -5984,7 +7053,7 @@ export class FileMemoryService
                 if (finished.state !== "complete")
                     return {
                         ...result,
-                        state: "failed",
+                        state: knowledgeBuildState(finished),
                         reasons: finished.results.map((entry) => entry.reason),
                     };
             }
@@ -6010,6 +7079,15 @@ export class FileMemoryService
                     ...result,
                     state: "failed",
                     reasons: [publication.reason],
+                    diagnostics: [
+                        {
+                            phase: "publication",
+                            family: "questions",
+                            viewId: current.viewId,
+                            state: "failed",
+                            code: "publication-incomplete",
+                        },
+                    ],
                 };
         }
         result.viewIds.push(view.viewId);
@@ -6044,6 +7122,14 @@ export class FileMemoryService
                 reasons: [
                     `${family} corpus family includes sources outside checkpoint scope`,
                 ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family,
+                        state: "partial",
+                        code: "scope-incomplete",
+                    },
+                ],
             };
         }
         if (family !== "topics")
@@ -6062,14 +7148,15 @@ export class FileMemoryService
             return result;
         const job = await this.rebuildTopics(corpusId);
         result.jobIds.push(job.jobId);
-        if (
-            (await this.waitKnowledgeBuild(job, signal, checkpoint)).state !==
-            "complete"
-        )
+        const finished = await this.waitKnowledgeBuild(job, signal, checkpoint);
+        if (finished.state !== "complete")
             return {
                 ...result,
-                state: "failed",
-                reasons: ["Topic maintenance did not complete"],
+                state: knowledgeBuildState(finished),
+                reasons: [
+                    "Topic maintenance did not complete",
+                    ...finished.results.map((entry) => entry.reason),
+                ],
             };
         return result;
     }
@@ -6097,14 +7184,25 @@ export class FileMemoryService
                     ...result,
                     state: "blocked",
                     reasons: [familyState.error],
+                    diagnostics: [
+                        {
+                            phase: "maintenance",
+                            family,
+                            state: "blocked",
+                            code: "family-blocked",
+                        },
+                    ],
                 };
             if (!familyState.dirty) return result;
-            const snapshot = await this.listViews(corpusId);
-            const build = await this.maintainViews({
-                corpusId,
-                expectedHead: snapshot.head,
-                family,
-                operation: "update",
+            const build = await this.enqueueWrite(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const runtime = await this.getCorpusRuntime(corpusId);
+                return this.maintainWikiFamily(runtime, {
+                    corpusId,
+                    expectedHead: snapshot.head,
+                    family,
+                    operation: "update",
+                });
             });
             const progressed =
                 build.job && !result.jobIds.includes(build.job.jobId);
@@ -6123,7 +7221,7 @@ export class FileMemoryService
                 if (finished.state !== "complete")
                     return {
                         ...result,
-                        state: "failed",
+                        state: knowledgeBuildState(finished),
                         reasons: finished.results.map((entry) => entry.reason),
                     };
             }
@@ -6140,6 +7238,14 @@ export class FileMemoryService
                     reasons: [
                         `${family} maintenance made no progress; pending content remains deferred`,
                     ],
+                    diagnostics: [
+                        {
+                            phase: "maintenance",
+                            family,
+                            state: "partial",
+                            code: "maintenance-deferred",
+                        },
+                    ],
                 };
         }
         if ((await this.viewStore.getWikiFamily(corpusId, family)).dirty)
@@ -6148,6 +7254,14 @@ export class FileMemoryService
                 state: "partial",
                 reasons: [
                     `${family} maintenance cursor remains after bounded checkpoint work`,
+                ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family,
+                        state: "partial",
+                        code: "maintenance-deferred",
+                    },
                 ],
             };
         return result;
@@ -6170,6 +7284,9 @@ export class FileMemoryService
                     if (["pending", "running"].includes(checkpoint.state)) {
                         checkpoint.state = "cancelled";
                         checkpoint.reasons = [
+                            ...(checkpoint.requiredFailures ?? []).flatMap(
+                                (failure) => failure.reasons,
+                            ),
                             "Knowledge work was interrupted by service restart",
                         ];
                     }
@@ -6438,6 +7555,10 @@ export class FileMemoryService
     }
 
     private async reconcileSchemaViews(corpusId: string): Promise<void> {
+        if (this.maintenance.status().paused) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
         const snapshot = await this.listViews(corpusId);
         const views = snapshot.views.filter(
             (view) =>
@@ -6609,6 +7730,11 @@ export class FileMemoryService
                 return view;
             }),
         );
+    }
+
+    public async getViewDetailPage(request: ViewDetailPageRequest) {
+        const view = await this.getView(request);
+        return view ? viewDetailPage(view, request) : undefined;
     }
 
     public async saveViewDraft(
@@ -7403,7 +8529,9 @@ export class FileMemoryService
                     view.revisionId,
                 );
                 const matches =
-                    informationalWiki(view.content) && index.readFragments
+                    (informationalWiki(view.content) ||
+                        view.content.kind === "extension") &&
+                    index.readFragments
                         ? (
                               await index.readFragments({
                                   terms: [
@@ -8416,7 +9544,8 @@ export class FileMemoryService
                 this.viewAdapter,
                 input,
                 candidate,
-                (candidate) => mergeView(current, candidate, input.inputs),
+                (candidate) =>
+                    mergeEditorialView(current, candidate, input.inputs),
                 signal,
             ),
             signal,
@@ -8648,10 +9777,15 @@ export class FileMemoryService
                 const canonical = pages.find(
                     (page) => page.viewId === assessment.canonicalViewId,
                 );
-                const currentPages = await timeSearchStage(
-                    "wiki.assessment.pages.recheck",
-                    () => this.wikiAdmissionPages(result.snapshot),
-                );
+                const utilityOnly =
+                    !result.snapshot.wikiContribution &&
+                    evidenceOnlyWikiDeferral(assessment);
+                const currentPages = utilityOnly
+                    ? pages
+                    : await timeSearchStage(
+                          "wiki.assessment.pages.recheck",
+                          () => this.wikiAdmissionPages(result.snapshot),
+                      );
                 const assessmentKey = wikiAssessmentKey(
                     result.snapshot,
                     pages,
@@ -8714,6 +9848,17 @@ export class FileMemoryService
                                       reason: deferredWikiAdmission,
                                       assessmentKey,
                                       assessmentJobId: job.jobId,
+                                      ...(utilityOnly
+                                          ? {
+                                                utilityEvidenceKey:
+                                                    wikiUtilityDeferralKey(
+                                                        result.snapshot,
+                                                        this.wikiAdmissionContext(
+                                                            [],
+                                                        ),
+                                                    ),
+                                            }
+                                          : {}),
                                   };
                           }
                         : undefined,
@@ -9146,7 +10291,20 @@ export class FileMemoryService
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
         const active = await this.viewStore.listViewInventoryBuilds(corpusId);
-        if (active.some((job) => job.state === "running"))
+        if (
+            active.some(
+                (job) =>
+                    job.state === "running" &&
+                    !(
+                        this.concurrentKnowledgeTopics &&
+                        this.knowledgeMaintenance.has(corpusId) &&
+                        job.results.every(
+                            (result) =>
+                                result.snapshot.pipeline === "topics-v1",
+                        )
+                    ),
+            )
+        )
             return this.viewStore.recordViewMaintenance(plan);
         if (
             !family.dirty &&
@@ -9370,21 +10528,31 @@ export class FileMemoryService
         input: ViewBuildSnapshot,
         descriptor: WikiFamilyState["descriptors"][number],
     ): Promise<boolean> {
-        const key = descriptor.admission?.assessmentKey;
+        const utilityKey = descriptor.admission?.utilityEvidenceKey;
+        const key = utilityKey ?? descriptor.admission?.assessmentKey;
         if (
             !key ||
             key !==
-                wikiAssessmentKey(
-                    input,
-                    await this.wikiAdmissionPages(input),
-                    this.wikiAdmissionContext([]),
-                )
+                (utilityKey
+                    ? wikiUtilityDeferralKey(
+                          input,
+                          this.wikiAdmissionContext([]),
+                      )
+                    : wikiAssessmentKey(
+                          input,
+                          await this.wikiAdmissionPages(input),
+                          this.wikiAdmissionContext([]),
+                      ))
         )
             return false;
-        recordSearchTiming("wiki.assessment.retained", 0, {
-            retained: true,
-            fingerprint: key,
-        });
+        recordSearchTiming(
+            utilityKey ? "wiki.utility.retained" : "wiki.assessment.retained",
+            0,
+            {
+                retained: true,
+                fingerprint: key,
+            },
+        );
         return true;
     }
 
@@ -9433,12 +10601,18 @@ export class FileMemoryService
                     fingerprint: receipt.assessmentKey,
                 });
             } else if (
-                receipt.assessmentKey !==
-                wikiAssessmentKey(
-                    result.snapshot,
-                    nominateWikiPages(result.snapshot, views, identities),
-                    this.wikiAdmissionContext([]),
-                )
+                receipt.utilityEvidenceKey
+                    ? receipt.utilityEvidenceKey !==
+                      wikiUtilityDeferralKey(
+                          result.snapshot,
+                          this.wikiAdmissionContext([]),
+                      )
+                    : receipt.assessmentKey !==
+                      wikiAssessmentKey(
+                          result.snapshot,
+                          nominateWikiPages(result.snapshot, views, identities),
+                          this.wikiAdmissionContext([]),
+                      )
             ) {
                 invalid.add(descriptor.viewId);
             }
@@ -9890,6 +11064,24 @@ export class FileMemoryService
         ];
     }
 
+    private assertCompleteViewInputBound(
+        definition: ViewDefinitionInput,
+        inputs: ViewRetainedInput[],
+    ): void {
+        if (
+            definition.kind !== "extension" &&
+            !configuredSchemaAdmission(
+                definition,
+                this.viewAdapter.schemaRequestAdmission,
+            ) &&
+            inputs.reduce((count, input) => count + input.content.length, 0) >
+                120_000
+        )
+            throw new Error(
+                "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
+            );
+    }
+
     private async snapshotViewTarget(
         corpusId: string,
         target: ViewBuildTarget,
@@ -9948,14 +11140,7 @@ export class FileMemoryService
                 );
             inputs.push(timelineEventInput(event, bounds ?? {}));
         }
-        if (
-            target.definition.kind !== "extension" &&
-            inputs.reduce((count, input) => count + input.content.length, 0) >
-                120_000
-        )
-            throw new Error(
-                "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
-            );
+        this.assertCompleteViewInputBound(target.definition, inputs);
         const snapshot = {
             corpusId,
             actor: userInfo().username,
@@ -10007,6 +11192,13 @@ export class FileMemoryService
                 : {}),
         };
         const frozen = { ...snapshot, fingerprint: viewHash(snapshot) };
+        if (
+            configuredSchemaAdmission(
+                frozen.definition,
+                this.viewAdapter.schemaRequestAdmission,
+            )
+        )
+            await this.viewAdapter.schemaRequestAdmission!.validate(frozen);
         await this.authorizeExtensionSnapshot(frozen);
         return frozen;
     }
@@ -10232,7 +11424,15 @@ export class FileMemoryService
             request.operation,
         );
         const jobs = await this.viewStore.listViewBuilds(request.corpusId);
-        const running = jobs.find((job) => job.state === "running");
+        const running = jobs.find(
+            (job) =>
+                job.state === "running" &&
+                (!this.concurrentKnowledgeTopics ||
+                    !this.knowledgeMaintenance.has(request.corpusId) ||
+                    job.results.some(
+                        (result) => result.snapshot.pipeline === "topics-v1",
+                    )),
+        );
         if (running || !family.enabled) {
             await this.viewStore.saveTopicFamily(request.corpusId, family);
             return this.viewStore.recordViewMaintenance(
@@ -10395,7 +11595,7 @@ export class FileMemoryService
                     corpusId,
                     async () => {
                         if (
-                            this.maintenance.isDeferred(corpusId) ||
+                            this.maintenance.isDeferred(corpusId, "topics") ||
                             runtime.manifest.authorizedSourceRemoval
                         )
                             return;
@@ -10409,7 +11609,8 @@ export class FileMemoryService
                             this.topicFingerprint(runtime),
                         );
                         if (!topicFamilyCanSchedule(family)) return;
-                        if (this.maintenance.isDeferred(corpusId)) return;
+                        if (this.maintenance.isDeferred(corpusId, "topics"))
+                            return;
                         return this.maintainTopics(
                             runtime,
                             {
@@ -10597,9 +11798,12 @@ export class FileMemoryService
 
     public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
         validateBuildRequest(request);
-        await this.requireViews(request.corpusId);
+        const runtime = await this.requireViews(request.corpusId);
         this.assertViewBuildEnabled(request);
-        const existing = (await this.listViewBuilds(request.corpusId)).find(
+        const jobs = await runtime.access.read(() =>
+            this.viewStore.listViewBuilds(request.corpusId),
+        );
+        const existing = jobs.find(
             (job) =>
                 viewHash(job.request) === viewHash(request) &&
                 job.results.every(
@@ -10617,6 +11821,7 @@ export class FileMemoryService
                 ),
         );
         if (existing) {
+            await this.authorizeBuildReceipt(existing);
             for (const result of existing.results) {
                 if (result.snapshot.pipeline !== "extension-v1") continue;
                 await this.assertInfluenceEligible(result.snapshot);
@@ -10715,6 +11920,7 @@ export class FileMemoryService
             bounds ?? {},
             current,
             viewHash(events),
+            this.viewAdapter.schemaRequestAdmission,
         );
         if (plan.state === "pinned") return plan;
         if (events.some((event) => !event))
@@ -10797,11 +12003,15 @@ export class FileMemoryService
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
             this.maintenance.cancel(request.corpusId, request.family);
-            return this.enqueueWrite(request.corpusId, () =>
+            const result = await this.enqueueWrite(request.corpusId, () =>
                 request.family === "topics"
                     ? this.maintainTopics(runtime, request)
                     : this.maintainWikiFamily(runtime, request),
             );
+            // Index installation can schedule work while the committed snapshot publishes.
+            if (request.operation === "pause")
+                this.maintenance.cancel(request.corpusId, request.family);
+            return result;
         }
         return this.enqueueWrite(request.corpusId, async () => {
             const plan = await this.planMaintenanceLocked(
@@ -11475,7 +12685,7 @@ export class FileMemoryService
                             rubricVersion: view.content.provider.recipeDigest,
                             extension: view.content.provider,
                         },
-                        text: `${section.heading}\n${section.body}`,
+                        text: `${view.content.title}\n${section.heading}\n${section.body}`,
                         influencingSourceIds: this.answerViewSources(view),
                         supportingSources: binding.support.map(
                             ({ sourceId, revisionId, locator }) => ({
@@ -11707,6 +12917,16 @@ export class FileMemoryService
         );
     }
 
+    private async authorizeUnderstandingDerivedViewRead(
+        view: ViewVersion,
+    ): Promise<void> {
+        if (!this.extensionBuilds || !view.generation?.input)
+            throw new Error(
+                "Selected derived artifact is unavailable or unauthorized",
+            );
+        await this.extensionProviders.authorize(view.generation.input, "read");
+    }
+
     private async readUnderstandingDerivedViews(
         input: import("./understandingTypes.js").UnderstandingModuleRequest,
         evidence: AnswerEvidence[],
@@ -11729,7 +12949,7 @@ export class FileMemoryService
         const derivedViews: import("./viewExtensionUnderstanding.js").UnderstandingDerivedView[] =
             [];
         for (const [viewId, references] of scope) {
-            const view = await this.getView({
+            const view = await this.viewStore.getView({
                 corpusId: input.corpusId,
                 viewId,
                 revisionId: references[0].revisionId,
@@ -11738,7 +12958,9 @@ export class FileMemoryService
                 throw new Error(
                     "Selected derived artifact is unavailable or unauthorized",
                 );
-            await this.assertViewPublicationFresh(view);
+            // The engine checks the complete published snapshot before and after
+            // this hook. The distinct provider read permission still applies.
+            await this.authorizeUnderstandingDerivedViewRead(view);
             const selectedBlockIds = evidence
                 .filter(
                     (item) =>
@@ -12771,8 +13993,32 @@ export class FileMemoryService
             const index = this.indexFactory(corpusId, directory);
             try {
                 await mkdir(directory, { recursive: true });
-                const rebuild = () =>
-                    index.rebuild(capture.documents, bounded, async () => {});
+                const rebuild = async () => {
+                    const upgrade =
+                        capture.baseGeneration !== undefined &&
+                        (await indexTermNormalizationVersion(
+                            this.indexDirectory(
+                                corpusId,
+                                capture.baseGeneration,
+                            ),
+                        )) === 1;
+                    if (
+                        upgrade &&
+                        index.rebuildRetained &&
+                        (await index.rebuildRetained(
+                            capture.runtime.index,
+                            capture.documents,
+                            bounded,
+                            async () => {},
+                        ))
+                    )
+                        return;
+                    await index.rebuild(
+                        capture.documents,
+                        bounded,
+                        async () => {},
+                    );
+                };
                 await timeSearchStage("reindex.prepare", () =>
                     this.wikiBudget
                         ? runWithRequestBudget(
@@ -12874,8 +14120,15 @@ export class FileMemoryService
             const rebuild = async () => {
                 const documents = this.activeDocuments(candidateManifest);
                 if (
-                    candidateManifest.sources.length <
-                        runtime.manifest.sources.length &&
+                    (candidateManifest.sources.length <
+                        runtime.manifest.sources.length ||
+                        (runtime.manifest.indexGeneration !== undefined &&
+                            (await indexTermNormalizationVersion(
+                                this.indexDirectory(
+                                    corpusId,
+                                    runtime.manifest.indexGeneration,
+                                ),
+                            )) === 1)) &&
                     candidateIndex.rebuildRetained &&
                     (await candidateIndex.rebuildRetained(
                         runtime.index,
@@ -14042,7 +15295,7 @@ export class FileMemoryService
             }
             return operation();
         };
-        return runtime.access.write(() =>
+        const result = await runtime.access.write(() =>
             this.readScope.exit(() =>
                 this.viewStore.withWritableState(() =>
                     timeSearchStage(`${timingStage}.work`, run, {
@@ -14052,6 +15305,8 @@ export class FileMemoryService
                 ),
             ),
         );
+        this.scheduleFrameProjections(corpusId);
+        return result;
     }
 
     private enqueueRead<T>(
@@ -14980,177 +16235,189 @@ export class FileMemoryService
         const runtime = await this.getCorpusRuntime(corpusId, true);
         if (runtime.manifest.authorizedSourceRemoval) return;
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
-        for (const sourceId of ids) {
-            if (this.maintenance.isDeferred(corpusId)) return;
-            const capture = await this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (this.maintenance.isDeferred(corpusId)) return undefined;
-                    const current = await this.getCorpusRuntime(corpusId, true);
-                    if (current.manifest.authorizedSourceRemoval)
-                        return undefined;
-                    const candidate = structuredClone(current.manifest);
-                    const source = candidate.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    const revision = source?.revisions.find(
-                        (item) => item.revisionId === source.activeRevisionId,
-                    );
-                    if (
-                        !source ||
-                        !revision ||
-                        !this.synopsisEligible(source, revision)
-                    )
-                        return undefined;
-                    const inputHash = synopsisInputHash(
+        const concurrency = this.experiments.has("synopsis-parallel") ? 2 : 1;
+        for (let offset = 0; offset < ids.length; offset += concurrency) {
+            const outcomes = await Promise.allSettled(
+                ids
+                    .slice(offset, offset + concurrency)
+                    .map((sourceId) =>
+                        this.maintainSourceSynopsis(corpusId, sourceId),
+                    ),
+            );
+            for (const outcome of outcomes)
+                if (outcome.status === "rejected") throw outcome.reason;
+        }
+    }
+
+    private async maintainSourceSynopsis(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<void> {
+        if (this.maintenance.isDeferred(corpusId)) return;
+        const capture = await this.enqueueWrite(
+            corpusId,
+            async () => {
+                if (this.maintenance.isDeferred(corpusId)) return undefined;
+                const current = await this.getCorpusRuntime(corpusId, true);
+                if (current.manifest.authorizedSourceRemoval) return undefined;
+                const candidate = structuredClone(current.manifest);
+                const source = candidate.sources.find(
+                    (item) => item.sourceId === sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === source.activeRevisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    !this.synopsisEligible(source, revision)
+                )
+                    return undefined;
+                const inputHash = synopsisInputHash(
+                    source,
+                    revision,
+                    this.sourceSynopsisIdentity(),
+                    true,
+                );
+                const prior = revision.synopsis;
+                if (
+                    prior?.inputHash === inputHash &&
+                    prior.status === "pending" &&
+                    prior.attempts >= 2
+                ) {
+                    revision.synopsis = {
+                        ...prior,
+                        status: "failed",
+                        reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
+                    };
+                    await this.writeManifest(corpusId, candidate);
+                    current.manifest = candidate;
+                    return undefined;
+                }
+                if (
+                    prior?.inputHash === inputHash &&
+                    (prior.status === "ready" ||
+                        prior.status === "unavailable" ||
+                        prior.attempts >= 2)
+                )
+                    return undefined;
+                const pending = this.emptySourceSynopsis(source, revision);
+                revision.synopsis = {
+                    ...pending,
+                    generatedVersion: prior?.generatedVersion ?? 0,
+                    attempts:
+                        prior?.inputHash === inputHash ? prior.attempts + 1 : 1,
+                };
+                await this.writeManifest(corpusId, candidate);
+                current.manifest = candidate;
+                return {
+                    source: structuredClone(source),
+                    revision: structuredClone(revision),
+                    inputHash,
+                };
+            },
+            true,
+        );
+        const synopsisModel = this.synopsisModel;
+        if (!capture || !synopsisModel) return;
+        const controller = new AbortController();
+        const key = `synopsis:${corpusId}:${sourceId}`;
+        this.controllers.set(key, controller);
+        const signal = AbortSignal.any([
+            controller.signal,
+            this.maintenance.signal,
+            AbortSignal.timeout(90_000),
+        ]);
+        let generated:
+            | Awaited<ReturnType<typeof generateSourceSynopsis>>
+            | undefined;
+        let failure: string | undefined;
+        let failedCoverage = capture.revision.synopsis!.coverage;
+        try {
+            generated = await abortable(
+                runWithSearchTiming(
+                    key,
+                    "memory.synopsis",
+                    () =>
+                        timeSearchStage("synopsis.generate.total", () =>
+                            generateSourceSynopsis(
+                                capture.source,
+                                capture.revision,
+                                capture.revision.content,
+                                synopsisModel,
+                                signal,
+                                (coverage) => {
+                                    failedCoverage = coverage;
+                                },
+                            ),
+                        ),
+                    {
+                        corpusId,
+                        sourceId,
+                        revisionId: capture.revision.revisionId,
+                    },
+                ),
+                signal,
+            );
+        } catch (error) {
+            failure = safeError(error);
+        } finally {
+            this.controllers.delete(key);
+        }
+        if (this.closed) return;
+        await this.enqueueWrite(
+            corpusId,
+            async () => {
+                const current = await this.getCorpusRuntime(corpusId, true);
+                if (current.manifest.authorizedSourceRemoval) return;
+                const candidate = structuredClone(current.manifest);
+                const source = candidate.sources.find(
+                    (item) => item.sourceId === sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === capture.revision.revisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    !this.synopsisEligible(source, revision) ||
+                    synopsisInputHash(
                         source,
                         revision,
                         this.sourceSynopsisIdentity(),
                         true,
-                    );
-                    const prior = revision.synopsis;
-                    if (
-                        prior?.inputHash === inputHash &&
-                        prior.status === "pending" &&
-                        prior.attempts >= 2
-                    ) {
-                        revision.synopsis = {
-                            ...prior,
-                            status: "failed",
-                            reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
-                        };
-                        await this.writeManifest(corpusId, candidate);
-                        current.manifest = candidate;
-                        return undefined;
-                    }
-                    if (
-                        prior?.inputHash === inputHash &&
-                        (prior.status === "ready" ||
-                            prior.status === "unavailable" ||
-                            prior.attempts >= 2)
-                    )
-                        return undefined;
-                    const pending = this.emptySourceSynopsis(source, revision);
+                    ) !== capture.inputHash
+                )
+                    return;
+                await this.assertInfluenceEligible({
+                    corpusId,
+                    influenceSources:
+                        capture.revision.synopsis!.influenceSources,
+                });
+                const detail = revision.synopsis!;
+                if (generated)
                     revision.synopsis = {
-                        ...pending,
-                        generatedVersion: prior?.generatedVersion ?? 0,
-                        attempts:
-                            prior?.inputHash === inputHash
-                                ? prior.attempts + 1
-                                : 1,
+                        ...detail,
+                        ...generated,
+                        status: "ready",
+                        generatedAt: now(),
+                        generatedVersion: detail.generatedVersion + 1,
                     };
-                    await this.writeManifest(corpusId, candidate);
-                    current.manifest = candidate;
-                    return {
-                        source: structuredClone(source),
-                        revision: structuredClone(revision),
-                        inputHash,
+                else
+                    revision.synopsis = {
+                        ...detail,
+                        status: "failed",
+                        reason: failure ?? "Synopsis generation failed",
+                        coverage: failedCoverage,
+                        limitations: [
+                            "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
+                        ],
                     };
-                },
-                true,
-            );
-            const synopsisModel = this.synopsisModel;
-            if (!capture || !synopsisModel) continue;
-            const controller = new AbortController();
-            const key = `synopsis:${corpusId}:${sourceId}`;
-            this.controllers.set(key, controller);
-            const signal = AbortSignal.any([
-                controller.signal,
-                this.maintenance.signal,
-                AbortSignal.timeout(90_000),
-            ]);
-            let generated:
-                | Awaited<ReturnType<typeof generateSourceSynopsis>>
-                | undefined;
-            let failure: string | undefined;
-            let failedCoverage = capture.revision.synopsis!.coverage;
-            try {
-                generated = await abortable(
-                    runWithSearchTiming(
-                        key,
-                        "memory.synopsis",
-                        () =>
-                            timeSearchStage("synopsis.generate.total", () =>
-                                generateSourceSynopsis(
-                                    capture.source,
-                                    capture.revision,
-                                    capture.revision.content,
-                                    synopsisModel,
-                                    signal,
-                                    (coverage) => {
-                                        failedCoverage = coverage;
-                                    },
-                                ),
-                            ),
-                        {
-                            corpusId,
-                            sourceId,
-                            revisionId: capture.revision.revisionId,
-                        },
-                    ),
-                    signal,
-                );
-            } catch (error) {
-                failure = safeError(error);
-            } finally {
-                this.controllers.delete(key);
-            }
-            if (this.closed) return;
-            await this.enqueueWrite(
-                corpusId,
-                async () => {
-                    const current = await this.getCorpusRuntime(corpusId, true);
-                    if (current.manifest.authorizedSourceRemoval) return;
-                    const candidate = structuredClone(current.manifest);
-                    const source = candidate.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    const revision = source?.revisions.find(
-                        (item) =>
-                            item.revisionId === capture.revision.revisionId,
-                    );
-                    if (
-                        !source ||
-                        !revision ||
-                        !this.synopsisEligible(source, revision) ||
-                        synopsisInputHash(
-                            source,
-                            revision,
-                            this.sourceSynopsisIdentity(),
-                            true,
-                        ) !== capture.inputHash
-                    )
-                        return;
-                    await this.assertInfluenceEligible({
-                        corpusId,
-                        influenceSources:
-                            capture.revision.synopsis!.influenceSources,
-                    });
-                    const detail = revision.synopsis!;
-                    if (generated)
-                        revision.synopsis = {
-                            ...detail,
-                            ...generated,
-                            status: "ready",
-                            generatedAt: now(),
-                            generatedVersion: detail.generatedVersion + 1,
-                        };
-                    else
-                        revision.synopsis = {
-                            ...detail,
-                            status: "failed",
-                            reason: failure ?? "Synopsis generation failed",
-                            coverage: failedCoverage,
-                            limitations: [
-                                "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
-                            ],
-                        };
-                    await this.writeManifest(corpusId, candidate);
-                    current.manifest = candidate;
-                },
-                true,
-            );
-        }
+                await this.writeManifest(corpusId, candidate);
+                current.manifest = candidate;
+            },
+            true,
+        );
     }
 
     private collectEventSuppressions(
@@ -17044,6 +18311,8 @@ export class FileMemoryService
         ]);
         await warmupClosure;
         this.viewStore.closeReadCaches();
+        for (const store of this.frameStores.values()) store.close();
+        this.frameStores.clear();
         this.viewIndexes.close();
         await this.releaseLock?.();
         this.releaseLock = undefined;
@@ -17092,6 +18361,7 @@ export class FileMemoryService
         if (!removal)
             throw new Error("No authorized source removal to recover");
         const sourceId = removal.sourceId;
+        this.frameStore(corpusId, true)?.purgeDependency(sourceId);
         const affected = (await this.viewStore.listViews(corpusId)).views.map(
             (view) => view.viewId,
         );

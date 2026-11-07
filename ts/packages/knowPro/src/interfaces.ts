@@ -163,6 +163,7 @@ export type MessageTag = string | StructuredTag;
  * @template TMessage - Type of the message in the conversation.
  */
 export interface IConversation<TMessage extends IMessage = IMessage> {
+    storageProvider?: IStorageProvider;
     /**
      * Name tag for the conversation.
      */
@@ -209,6 +210,7 @@ export type ScoredSemanticRefOrdinal = {
  * Inverted Index from term to Semantic Refs {@link SemanticRef}
  */
 export interface ITermToSemanticRefIndex {
+    readonly normalizationVersion?: import("./termNormalization.js").TermNormalizationVersion;
     /**
      * Retrieves all terms in the index.
      *
@@ -300,6 +302,7 @@ export type Term = {
      * Optional weighting for any matches for this term
      */
     weight?: number | undefined;
+    normalizationVersion?: import("./termNormalization.js").TermNormalizationVersion;
 };
 
 /**
@@ -575,6 +578,7 @@ export type KnowledgePropertyName =
     | "topic";
 
 export type PropertySearchTerm = {
+    compareOp?: import("./queryCmp.js").ComparisonOp;
     /**
      * PropertySearch terms let you match named property, values
      * - You can  match a well known property name (name("Bach") type("book"))
@@ -749,10 +753,47 @@ export interface ICollection<T, TOrdinal = number>
 export interface IMessageCollection<TMessage extends IMessage = IMessage>
     extends ICollection<TMessage, MessageOrdinal> {}
 
+export type SemanticRefMetadata = Pick<
+    SemanticRef,
+    "semanticRefOrdinal" | "range" | "knowledgeType"
+>;
+
 export interface ISemanticRefCollection
-    extends ICollection<SemanticRef, SemanticRefOrdinal> {}
+    extends ICollection<SemanticRef, SemanticRefOrdinal> {
+    getMetadataMultiple?(ordinals: SemanticRefOrdinal[]): SemanticRefMetadata[];
+}
+
+export interface PreparedIndexData {
+    indexedMessageCount: number;
+    semanticIndexData: import("./dataFormats.js").ITermToSemanticRefIndexData;
+    relatedTermsIndexData: import("./secondaryIndexes.js").ITermsToRelatedTermsIndexData;
+    messageIndexData?:
+        | import("./messageIndex.js").IMessageTextIndexData
+        | undefined;
+    embeddingIdentities: import("./serialization.js").PersistedEmbeddingIdentities;
+}
+
+export interface PreparedIndexSnapshot {
+    stamp: string;
+    data?: PreparedIndexData;
+}
+
+export interface PreparedIndexBatch {
+    messages: IMessage[];
+    semanticRefs: SemanticRef[];
+    data: PreparedIndexData;
+}
+
+export interface IPreparedIndexStorage {
+    capture(includeIndex?: boolean): PreparedIndexSnapshot;
+    commit(expectedStamp: string, batch: PreparedIndexBatch): void;
+}
 
 export interface IStorageProvider {
+    createPreparedIndexStorage?(
+        messages: IMessageCollection,
+        semanticRefs: ISemanticRefCollection,
+    ): IPreparedIndexStorage;
     createMessageCollection<TMessage extends IMessage = IMessage>(
         serializer?: JsonSerializer<TMessage>,
     ): IMessageCollection<TMessage>;

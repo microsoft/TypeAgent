@@ -20,6 +20,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SearchQueryTranslator } from "../searchQueryTranslator.js";
 import { compileSearchFilter } from "../searchLang.js";
 import { createPropertySearchTerm } from "../searchLib.js";
+import { ComparisonOp } from "../queryCmp.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -134,7 +135,19 @@ function facetTermsToSearchTerms(
     facetTerms: querySchema.FacetTerm[],
 ): PropertySearchTerm[] {
     return facetTerms.map((f) => {
-        return createPropertySearchTerm(f.facetName, f.facetValue);
+        const term = createPropertySearchTerm(f.facetName, f.facetValue);
+        if (f.compareOp !== undefined) {
+            const ops = {
+                eq: ComparisonOp.Eq,
+                neq: ComparisonOp.Neq,
+                lt: ComparisonOp.Lt,
+                lte: ComparisonOp.Lte,
+                gt: ComparisonOp.Gt,
+                gte: ComparisonOp.Gte,
+            };
+            term.compareOp = ops[f.compareOp];
+        }
+        return term;
     });
 }
 

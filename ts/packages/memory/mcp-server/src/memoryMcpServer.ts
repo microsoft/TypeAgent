@@ -70,6 +70,7 @@ import type {
 import { z } from "zod";
 import { registerViewTools } from "./viewTools.js";
 import { registerGraphTools } from "./graphTools.js";
+import { registerFrameTools } from "./frameTools.js";
 import { registerAgentSessionTools } from "./agentSessionTools.js";
 import { registerUnderstandingTools } from "./understandingTools.js";
 import { registerMemoryPreview } from "./memoryPreview.js";
@@ -144,6 +145,9 @@ export class MemoryMcpServer {
                 this.supportsUi(),
             );
         registerGraphTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerFrameTools(this.server, service, (operation) =>
             this.run(operation),
         );
         registerViewTools(this.server, service, (operation) =>
