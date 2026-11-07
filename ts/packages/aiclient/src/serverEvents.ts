@@ -26,13 +26,23 @@ export async function* readMessages(
 ): AsyncIterableIterator<string> {
     let buffer = "";
     let scanStartAt = 0;
+    let previousChunkEndedWithCR = false;
     // Chunks stream in from the server.
     //  - a single chunk can contain multiple messages
     //  - a message can span multiple chunks
     //  - a message end sequence can span two chunks
     for await (const chunk of textStream) {
+        // A CR already ended the line; skip its LF even across chunks.
+        const normalizedChunk = (
+            previousChunkEndedWithCR && chunk.startsWith("\n")
+                ? chunk.slice(1)
+                : chunk
+        ).replace(/\r\n?/g, "\n");
+        if (chunk.length > 0) {
+            previousChunkEndedWithCR = chunk.endsWith("\r");
+        }
         scanStartAt = buffer.length > 1 ? buffer.length - 1 : 0;
-        buffer += chunk;
+        buffer += normalizedChunk;
         // Scan over buffer finding messages
         while (buffer.length > 0) {
             const terminatorPos = buffer.indexOf(
