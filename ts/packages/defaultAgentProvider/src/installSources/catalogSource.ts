@@ -24,6 +24,7 @@ const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 type AgentCatalog = {
     description?: string;
     agents: Record<string, { path?: string; execMode?: string }>;
+    memoryViews?: Record<string, { path?: string; execMode?: string }>;
 };
 
 // Read + parse a catalog file, wrapping read/parse failures with the file path
@@ -69,6 +70,7 @@ function loadCatalog(file: string): AgentCatalog {
 // resolve walk.
 export function createCatalogSource(
     config: CatalogSourceConfig,
+    extensionKind: "agent" | "memory-view" = "agent",
 ): InstallSource {
     // The directory relative catalog `path` entries resolve against.
     const catalogDir = path.dirname(path.resolve(config.catalog));
@@ -95,7 +97,9 @@ export function createCatalogSource(
         }
         const candidate: ResolvedCandidate = { source: config.name, ref: key };
         candidate.path = resolvedPath;
-        const meta = readPackageMeta(resolvedPath);
+        const meta = readPackageMeta(resolvedPath, extensionKind);
+        if (extensionKind === "memory-view")
+            candidate.extensionKind = extensionKind;
         if (meta.packageName !== undefined) {
             candidate.packageName = meta.packageName;
         }
@@ -141,7 +145,11 @@ export function createCatalogSource(
             };
         }
         const candidatesByKey = new Map<string, ResolvedCandidate>();
-        for (const [key, entry] of Object.entries(catalog.agents)) {
+        for (const [key, entry] of Object.entries(
+            extensionKind === "memory-view"
+                ? (catalog.memoryViews ?? {})
+                : catalog.agents,
+        )) {
             const candidate = buildCandidate(key, entry, entryWarnings);
             if (candidate !== undefined) {
                 candidatesByKey.set(key, candidate);
@@ -242,6 +250,8 @@ export function createCatalogSource(
                 source: config.name,
                 ref: record.ref,
             };
+            if (extensionKind === "memory-view")
+                loaded.extensionKind = extensionKind;
             if (candidate.loaderConfig !== undefined) {
                 loaded.loaderConfig = candidate.loaderConfig;
             }
@@ -257,6 +267,8 @@ export function createCatalogSource(
                 kind: "npm",
                 source: config.name,
             };
+            if (extensionKind === "memory-view")
+                record.extensionKind = extensionKind;
             if (candidate.loaderConfig !== undefined) {
                 record.loaderConfig = candidate.loaderConfig;
             }
@@ -300,6 +312,9 @@ export function createCatalogSource(
                     ref: key,
                     defaultAgentName: candidate.defaultAgentName,
                     packageName: candidate.packageName,
+                    ...(extensionKind === "memory-view"
+                        ? { extensionKind }
+                        : {}),
                 });
             }
             return rows;

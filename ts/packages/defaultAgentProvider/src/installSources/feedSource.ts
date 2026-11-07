@@ -255,6 +255,7 @@ export interface NpmInstallArgs {
 }
 
 export interface FeedSourceDeps {
+    extensionKind?: "agent" | "memory-view";
     // npm root all feed installs land in. Holds a
     // private package.json marker; packages go under its node_modules/.
     installDir: string;
@@ -465,6 +466,7 @@ async function fetchPackument(
     packageName: string,
     token: string,
     fetchFn: typeof fetch,
+    strict = false,
 ): Promise<unknown | undefined> {
     const url = `${registry.replace(/\/$/, "")}/${packageName.replace(/\//g, "%2F")}`;
     try {
@@ -472,6 +474,10 @@ async function fetchPackument(
             headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
+            if (strict && res.status !== 404)
+                throw new Error(
+                    `Memory-view package metadata request failed (${res.status})`,
+                );
             debug(
                 `fetchPackument: GET ${url} -> ${res.status} ${res.statusText} (no packument)`,
             );
@@ -479,6 +485,13 @@ async function fetchPackument(
         }
         const packument = await res.json();
         const record = asRecord(packument);
+        if (
+            strict &&
+            (!record ||
+                !asRecord(record.versions) ||
+                !asRecord(record["dist-tags"]))
+        )
+            throw new Error("Invalid memory-view package metadata response");
         const versions = asRecord(record?.versions);
         const distTags = asRecord(record?.["dist-tags"]);
         const versionCount = versions ? Object.keys(versions).length : 0;
@@ -487,6 +500,7 @@ async function fetchPackument(
         );
         return packument;
     } catch (e) {
+        if (strict) throw e;
         debug(`fetchPackument: ${packageName} failed: ${e}`);
         return undefined;
     }
@@ -543,12 +557,13 @@ function packageManifestForVersion(
 function hasAgentKeywordForVersion(
     packument: unknown,
     version: string,
+    keyword = AGENT_KEYWORD,
 ): boolean {
     const keywords: unknown = packageManifestForVersion(
         packument,
         version,
     )?.keywords;
-    return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+    return Array.isArray(keywords) && keywords.includes(keyword);
 }
 
 function packageOsForVersion(packument: unknown, version: string): unknown {
@@ -591,9 +606,10 @@ export async function enumerateFeedAgents(
 // as no default name for matching).
 function defaultAgentNameFromManifest(
     manifest: Record<string, unknown> | undefined,
+    field = "defaultAgentName",
 ): string | undefined {
     const typeagent = asRecord(manifest?.typeagent);
-    const name = typeagent?.defaultAgentName;
+    const name = typeagent?.[field];
     return typeof name === "string" && isLegalAgentName(name)
         ? name
         : undefined;
@@ -621,6 +637,7 @@ async function enumerateFeedAgentDescriptors(
     config: FeedSourceConfig,
     token: string,
     fetchFn: typeof fetch,
+    extensionKind: "agent" | "memory-view" = "agent",
 ): Promise<FeedAgentPackageInfo[]> {
     const registry = resolveFeedRegistry(config);
     if (registry === undefined) {
@@ -640,7 +657,15 @@ async function enumerateFeedAgentDescriptors(
         fetchFn,
     );
     const packuments = await Promise.all(
-        scoped.map((name) => fetchPackument(registry, name, token, fetchFn)),
+        scoped.map((name) =>
+            fetchPackument(
+                registry,
+                name,
+                token,
+                fetchFn,
+                extensionKind === "memory-view",
+            ),
+        ),
     );
     const descriptors: FeedAgentPackageInfo[] = [];
     for (let i = 0; i < scoped.length; i++) {
@@ -655,7 +680,15 @@ async function enumerateFeedAgentDescriptors(
         if (latest === undefined) {
             continue;
         }
-        if (!hasAgentKeywordForVersion(packument, latest)) {
+        if (
+            !hasAgentKeywordForVersion(
+                packument,
+                latest,
+                extensionKind === "memory-view"
+                    ? "typeagent-memory-view"
+                    : AGENT_KEYWORD,
+            )
+        ) {
             continue;
         }
         const manifest = packageManifestForVersion(packument, latest);
@@ -665,7 +698,12 @@ async function enumerateFeedAgentDescriptors(
             latestVersion?: string;
             description?: string;
         } = { packageName, latestVersion: latest };
-        const defaultAgentName = defaultAgentNameFromManifest(manifest);
+        const defaultAgentName = defaultAgentNameFromManifest(
+            manifest,
+            extensionKind === "memory-view"
+                ? "defaultMemoryViewName"
+                : "defaultAgentName",
+        );
         if (defaultAgentName !== undefined) {
             descriptor.defaultAgentName = defaultAgentName;
         }
@@ -696,6 +734,15 @@ export function createFeedSource(
     config: FeedSourceConfig,
     deps: FeedSourceDeps,
 ): InstallSource {
+    const extensionKind = deps.extensionKind ?? "agent";
+    const keyword =
+        extensionKind === "memory-view"
+            ? "typeagent-memory-view"
+            : AGENT_KEYWORD;
+    const defaultNameField =
+        extensionKind === "memory-view"
+            ? "defaultMemoryViewName"
+            : "defaultAgentName";
     const fetchFn = deps.fetchFn ?? fetch;
     const tokenRunner = deps.tokenRunner;
     const npmInstall = deps.npmInstall ?? defaultNpmInstall;
@@ -706,7 +753,10 @@ export function createFeedSource(
     const safeName = sanitizeLabel(config.name);
     const cacheFilePath =
         deps.cacheFilePath ??
-        path.join(deps.installDir, `.feed-cache-${safeName}.json`);
+        path.join(
+            deps.installDir,
+            `.feed-cache-${safeName}${extensionKind === "memory-view" ? ".memory-view" : ""}.json`,
+        );
 
     let memoryCache: FeedCache | undefined;
 
@@ -748,13 +798,20 @@ export function createFeedSource(
         try {
             const parsed = JSON.parse(fs.readFileSync(cacheFilePath, "utf8"));
             if (!isFeedCache(parsed)) {
+                if (extensionKind === "memory-view")
+                    throw new Error("Invalid memory-view feed metadata cache");
                 return undefined;
             }
             return {
                 fetchedAt: parsed.fetchedAt,
                 packages: toDescriptors(parsed.packages as unknown[]),
             };
-        } catch {
+        } catch (error) {
+            if (
+                extensionKind === "memory-view" &&
+                (error as NodeJS.ErrnoException).code !== "ENOENT"
+            )
+                throw error;
             return undefined;
         }
     }
@@ -763,7 +820,8 @@ export function createFeedSource(
         try {
             fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
             fs.writeFileSync(cacheFilePath, JSON.stringify(cache, null, 2));
-        } catch {
+        } catch (error) {
+            if (extensionKind === "memory-view") throw error;
             // best effort; the in-memory cache still serves this session
         }
     }
@@ -777,6 +835,7 @@ export function createFeedSource(
             config,
             token,
             fetchFn,
+            extensionKind,
         );
         memoryCache = { fetchedAt: now(), packages };
         writeDiskCache(memoryCache);
@@ -805,7 +864,8 @@ export function createFeedSource(
         // and continue source resolution.
         try {
             return await refreshDescriptors();
-        } catch {
+        } catch (error) {
+            if (extensionKind === "memory-view") throw error;
             return memoryCache?.packages ?? [];
         }
     }
@@ -838,12 +898,13 @@ export function createFeedSource(
                     moduleName,
                     token,
                     fetchFn,
+                    extensionKind === "memory-view",
                 );
                 if (packument !== undefined) {
                     version = resolveConcreteVersion(ref, packument);
                     if (
                         version !== undefined &&
-                        !hasAgentKeywordForVersion(packument, version)
+                        !hasAgentKeywordForVersion(packument, version, keyword)
                     ) {
                         return undefined;
                     }
@@ -858,10 +919,12 @@ export function createFeedSource(
                     if (version !== undefined) {
                         defaultAgentName = defaultAgentNameFromManifest(
                             packageManifestForVersion(packument, version),
+                            defaultNameField,
                         );
                     }
                 }
-            } catch {
+            } catch (error) {
+                if (extensionKind === "memory-view") throw error;
                 // offline / auth failure -> leave version unresolved
             }
         }
@@ -878,6 +941,7 @@ export function createFeedSource(
             version,
             packageName: moduleName,
             loaderConfig: { execMode: "separate" },
+            ...(extensionKind === "memory-view" ? { extensionKind } : {}),
         };
         if (defaultAgentName !== undefined) {
             candidate.defaultAgentName = defaultAgentName;
@@ -1196,6 +1260,7 @@ export function createFeedSource(
                 packageName: d.packageName,
                 defaultAgentName: d.defaultAgentName,
                 description: d.description,
+                ...(extensionKind === "memory-view" ? { extensionKind } : {}),
             }));
         },
     };

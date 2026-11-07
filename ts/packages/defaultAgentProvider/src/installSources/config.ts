@@ -79,7 +79,7 @@ export interface ResolvedCandidate {
  * discriminator shared by candidates, available rows, and installed records so
  * one `@package` command surface can manage both.
  */
-export type ExtensionKind = "agent" | "mcp";
+export type ExtensionKind = "agent" | "mcp" | "memory-view";
 
 /**
  * A normalized MCP artifact resolved by an install source. MCP candidates stay

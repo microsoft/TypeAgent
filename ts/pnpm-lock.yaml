@@ -5045,6 +5045,9 @@ importers:
       '@typeagent/memory-agent':
         specifier: workspace:*
         version: link:../agents/memory
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../memory/service
       '@typeagent/montage-agent':
         specifier: workspace:*
         version: link:../agents/montage

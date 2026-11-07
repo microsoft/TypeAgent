@@ -193,6 +193,7 @@ export async function listAvailableAgents(
 }
 
 export interface RegistryDeps {
+    extensionKind?: "agent" | "memory-view";
     // Shared npm root all feed sources install into.
     installDir: string;
     // Shared serialize-to-one limiter; the installer reuses it so the
@@ -220,12 +221,13 @@ function buildSource(
 ): InstallSource {
     switch (config.kind) {
         case "path":
-            return createPathSource(config);
+            return createPathSource(config, deps.extensionKind);
         case "catalog":
-            return createCatalogSource(config);
+            return createCatalogSource(config, deps.extensionKind);
         case "feed":
             return createFeedSource(config, {
                 installDir: deps.installDir,
+                extensionKind: deps.extensionKind ?? "agent",
             });
         case "mcp-config":
             return createMcpConfigSource(config);
@@ -528,7 +530,10 @@ export function createInstallSourceRegistry(
     ): string {
         let defaultAgentName = candidate.defaultAgentName;
         if (defaultAgentName === undefined && candidate.path !== undefined) {
-            defaultAgentName = readPackageMeta(candidate.path).defaultAgentName;
+            defaultAgentName = readPackageMeta(
+                candidate.path,
+                deps.extensionKind,
+            ).defaultAgentName;
         }
         if (defaultAgentName !== undefined) {
             return defaultAgentName;
