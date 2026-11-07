@@ -935,6 +935,12 @@ Retrying a failed View build selects its history head and target versions inside
 the admission writer rather than reusing that foreground inventory head.
 Explicit build requests still enforce the caller's `expectedHead`.
 
+With `frameProjections` enabled, a concurrent source or provider change can
+invalidate a frame snapshot. Background frame maintenance queues a fresh read
+instead of retaining that stale snapshot as a permanent failure. Receipt and
+authorization failures remain reported. Foreground frame reads still reject
+changed snapshots rather than returning stale rows.
+
 `topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
 3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.
 The deadline includes time paused at checkpoints; yielding does not reset it.
