@@ -26,10 +26,10 @@
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
-    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
-    "tsc": "tsc -b",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore"
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/common-utils": "workspace:*",
