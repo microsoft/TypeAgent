@@ -158,7 +158,7 @@ jobs:
       # a re-triggered run terminate instead of looping. README.md is never
       # touched.
       - name: Commit regenerated docs
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7.2.1
         with:
           commit_message: "docs: regenerate README.AUTOGEN.md, command reference, and action browser"
           commit_user_name: typeagent-bot

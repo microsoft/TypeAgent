@@ -19,6 +19,43 @@ job files at once. Filtering, ordering and pagination remain unchanged;
 unreadable or corrupt job files still fail explicitly rather than producing
 an apparently empty or complete result.
 
+## Installed memory-view packs
+
+A memory-view pack is an npm package exporting a static JSON manifest at
+`./memory/views/manifest` and a named-factory ESM module at
+`./memory/views/provider`. Use `.mjs`, or `.js` in a package with `type: "module"`;
+the package does not need to change the module type of unrelated assets.
+The manifest declares `schemaVersion: 1`, `packId`, `files` and
+`providers: [{ providerId, factory }]`. Include every implementation, schema,
+prompt and other required asset in `files`, including the provider module.
+Exports and assets must remain inside the package, including after symlink
+resolution. Inspection fingerprints package metadata, the manifest and listed
+assets without importing package code.
+
+The [package loader](src/viewPackages.ts), exported as
+`@typeagent/memory-service/view-packages`, provides
+`inspectMemoryViewPackage(root)` and
+`loadMemoryViewPackage(installation, [{ providerId, context }])`.
+Loading requires explicit selections and injected host capabilities and validates
+returned descriptors through the existing registry. This is trusted code
+activation, not a sandbox or a source grant. Changed assets require an explicit
+inventory update; changing an already imported root also requires host restart.
+
+The [shared manager](../../defaultAgentProvider/src/memoryViewPackages.ts),
+exported as `default-agent-provider/memory-view-packages`, owns acquisition and
+the separate locked inventory. It reuses configured path/catalog/feed sources.
+Catalogs declare `memoryViews` beside `agents`; npm metadata uses
+`typeagent.defaultMemoryViewName` and keyword `typeagent-memory-view`.
+Installation never constructs providers or starts models, jobs or publication.
+`@package memory-view available|list|install|update|uninstall` manages packs.
+Only install supports `--dry-run`/`--source`, available supports `--source`,
+and update supports `--range`. Uninstall removes the record, not retained Views
+or possibly active package roots. Existing agent/MCP commands and defaults
+are unchanged.
+
+For host adoption and validation boundaries, see the
+[cross-repository guide](../../../../../codeDocs/TypeAgent/forAgent/features/memory-view-packaging/README.md).
+
 ## Host-registered extension Views
 
 Hosts can inject `extensionProviders: ViewExtensionProvider[]` and explicitly
