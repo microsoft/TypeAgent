@@ -79,6 +79,10 @@ function generateJsonSchemaType(
                 type: "string",
                 enum: type.typeEnum,
             };
+        case "true":
+            return { type: "boolean", enum: [true] };
+        case "false":
+            return { type: "boolean", enum: [false] };
         case "type-union":
             return {
                 anyOf: type.types.map((t) =>
@@ -100,8 +104,12 @@ function generateJsonSchemaType(
         }
         case "any":
             return {};
-        default:
-            return { type: type.type };
+        case "string":
+            return { type: "string" };
+        case "number":
+            return { type: "number" };
+        case "boolean":
+            return { type: "boolean" };
     }
 }
 

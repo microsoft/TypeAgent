@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseActionSchemaSource } from "../src/parser.js";
+import {
+    generateActionActionFunctionJsonSchemas,
+    generateActionJsonSchema,
+    parseActionSchemaSource,
+    parseSchemaSource,
+    validateAction,
+    validateType,
+} from "../src/index.js";
 
 describe("Action Schema Strict Checks", () => {
     it("Error on action entry type not found", async () =>
@@ -88,4 +95,131 @@ describe("Action Schema Strict Checks", () => {
         ).rejects.toThrow(
             "Error parsing schema 'test': Schema Error: expected type reference in the entry type union",
         ));
+});
+
+describe.each([true, false])("boolean literal %s", (literal) => {
+    const parsed = parseActionSchemaSource(
+        `export type LiteralAction = {
+            actionName: "literal";
+            parameters: { value: ${literal} };
+        };`,
+        "literal",
+        "LiteralAction",
+    );
+    const action = parsed.actionSchemas.get("literal")!;
+    const group = { entry: action, actionSchemas: parsed.actionSchemas };
+    const types = parseSchemaSource(`
+        type Flag = ${literal};
+        type Flags = {
+            values: Flag[];
+            optional?: Flag;
+            choice: Flag | "other";
+        };
+    `);
+    const flag = types.get("Flag")!.type;
+    const flags = types.get("Flags")!.type;
+    const expectedJsonSchema = { type: "boolean", enum: [literal] };
+
+    it("validates matching action values and rejects the opposite literal", () => {
+        expect(() =>
+            validateAction(action, {
+                actionName: "literal",
+                parameters: { value: literal },
+            }),
+        ).not.toThrow();
+        expect(() =>
+            validateAction(action, {
+                actionName: "literal",
+                parameters: { value: !literal },
+            }),
+        ).toThrow(
+            `Field 'parameters.value' is not ${literal}, got boolean instead`,
+        );
+    });
+
+    it("validates standalone values without accepting other primitive types", () => {
+        expect(() => validateType(flag, literal)).not.toThrow();
+        expect(() => validateType(flag, !literal)).toThrow(
+            `Input is not ${literal}, got boolean instead`,
+        );
+        for (const value of [String(literal), 0, 1, undefined, null]) {
+            expect(() => validateType(flag, value)).toThrow();
+        }
+    });
+
+    it("validates aliases in arrays, optional fields and unions", () => {
+        expect(() =>
+            validateType(flags, { values: [literal], choice: "other" }),
+        ).not.toThrow();
+        expect(() =>
+            validateType(flags, {
+                values: [],
+                optional: literal,
+                choice: literal,
+            }),
+        ).not.toThrow();
+        expect(() =>
+            validateType(flags, { values: [!literal], choice: "other" }),
+        ).toThrow(`Field 'values.0' is not ${literal}, got boolean instead`);
+        expect(() =>
+            validateType(flags, {
+                values: [],
+                optional: !literal,
+                choice: "other",
+            }),
+        ).toThrow(`Field 'optional' is not ${literal}, got boolean instead`);
+        expect(() =>
+            validateType(flags, { values: [], choice: !literal }),
+        ).toThrow("Field 'choice' does not match any union type");
+    });
+
+    it("only coerces a string matching the literal when requested", () => {
+        const value = {
+            actionName: "literal",
+            parameters: { value: String(literal) },
+        };
+        validateAction(action, value, true);
+        expect(value.parameters.value).toBe(literal);
+        expect(() =>
+            validateAction(
+                action,
+                {
+                    actionName: "literal",
+                    parameters: { value: String(!literal) },
+                },
+                true,
+            ),
+        ).toThrow(
+            `Field 'parameters.value' is not ${literal}, got string instead`,
+        );
+    });
+
+    it("generates a constrained boolean in the response JSON schema", () => {
+        expect(generateActionJsonSchema(group).schema).toMatchObject({
+            properties: {
+                response: {
+                    properties: {
+                        parameters: {
+                            properties: { value: expectedJsonSchema },
+                        },
+                    },
+                },
+            },
+        });
+    });
+
+    it("generates a constrained boolean in the function JSON schema", () => {
+        expect(generateActionActionFunctionJsonSchemas(group)).toMatchObject([
+            {
+                type: "function",
+                function: {
+                    name: "literal",
+                    strict: true,
+                    parameters: {
+                        properties: { value: expectedJsonSchema },
+                    },
+                },
+            },
+        ]);
+    });
 });
