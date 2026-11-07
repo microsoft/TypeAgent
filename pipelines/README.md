@@ -14,7 +14,7 @@ This folder contains Azure DevOps pipelines for the TypeAgent repo.
 
 | Pipeline                            | Purpose                                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `azure-smoke-tests.yml`             | Required PR and merge-queue check. Existing CLI, shell, and optional live steps remain until the validated cutover.      |
+| `azure-smoke-tests.yml`             | Required PR and merge-queue check. CLI and shell tests only; broad live integration runs independently.                  |
 | `azure-live-tests.yml`              | Independent Linux live integration after relevant main changes, daily, and manually on main. Not a required merge check. |
 | `azure-build-docker-container.yml`  | Builds and pushes the TypeAgent Docker image to ACR (builds inside ACR).                                                 |
 | `azure-docs-aggregation-signal.yml` | Documentation signal pipeline.                                                                                           |
@@ -66,12 +66,13 @@ For defense in depth, optionally add an **Approvals & checks** gate on
 
 ## Independent live integration
 
-`azure-live-tests.yml` provides the replacement for broad provider-backed tests
-currently inside the required `TypeAgent Smoke Tests` check. That optional step
-can time out for an hour before the required check completes. The staged
-registration leaves smoke unchanged until the replacement is validated; only
-the subsequent removal delivers the latency improvement. Independent live
-failures fail their own pipeline. Required CLI and shell coverage is unchanged.
+`azure-live-tests.yml` runs broad provider-backed tests outside the required
+`TypeAgent Smoke Tests` check. Live failures fail their own pipeline rather than
+delaying smoke and being downgraded by `continueOnError`. Required CLI and shell
+coverage is unchanged.
+
+Register it as **TypeAgent Live Tests**, separate from required PR and
+merge-queue checks.
 
 The live pipeline:
 
@@ -93,8 +94,9 @@ The live pipeline:
 
 ### One-time registration and ordered rollout
 
-Adding YAML does not create an Azure Pipelines definition. Before deploying the
-removal of the live step from required smoke:
+Adding YAML does not create an Azure Pipelines definition. When provisioning
+another project or restoring this configuration, validate the replacement
+before deploying the smoke cutover:
 
 1. Publish the new live entry point separately, keeping the old smoke live step.
    To validate before merge, register from the reviewed candidate branch without
