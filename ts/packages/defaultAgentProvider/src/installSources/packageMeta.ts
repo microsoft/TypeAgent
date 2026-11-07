@@ -57,7 +57,9 @@ export interface PackageMeta {
 
 interface PackageJsonShape {
     name?: unknown;
-    typeagent?: { defaultAgentName?: unknown } | undefined;
+    typeagent?:
+        | { defaultAgentName?: unknown; defaultMemoryViewName?: unknown }
+        | undefined;
 }
 
 /**
@@ -68,7 +70,10 @@ interface PackageJsonShape {
  * `illegalDefaultAgentName` (not `defaultAgentName`) so it is reported and never
  * installed.
  */
-export function readPackageMeta(packageRoot: string): PackageMeta {
+export function readPackageMeta(
+    packageRoot: string,
+    extensionKind: "agent" | "memory-view" = "agent",
+): PackageMeta {
     let text: string;
     try {
         text = fs.readFileSync(path.join(packageRoot, "package.json"), "utf8");
@@ -85,7 +90,10 @@ export function readPackageMeta(packageRoot: string): PackageMeta {
     if (typeof parsed.name === "string" && parsed.name.length > 0) {
         meta.packageName = parsed.name;
     }
-    const declared = parsed.typeagent?.defaultAgentName;
+    const declared =
+        extensionKind === "memory-view"
+            ? parsed.typeagent?.defaultMemoryViewName
+            : parsed.typeagent?.defaultAgentName;
     if (typeof declared === "string" && declared.length > 0) {
         if (isLegalAgentName(declared)) {
             meta.defaultAgentName = declared;

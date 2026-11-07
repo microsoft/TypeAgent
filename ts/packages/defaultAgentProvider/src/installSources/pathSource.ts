@@ -16,7 +16,10 @@ import { expandHome } from "./paths.js";
 //   materialize = record data { path, source }, omitting `module` and `name`
 // `ref` is a filesystem path: absolute, home-relative (`~/...`), or (only when
 // a baseDir is configured) relative to that baseDir.
-export function createPathSource(config: PathSourceConfig): InstallSource {
+export function createPathSource(
+    config: PathSourceConfig,
+    extensionKind: "agent" | "memory-view" = "agent",
+): InstallSource {
     // A relative ref needs a base directory to anchor it. There is no implicit
     // default: this source may run in a different process (and CWD) than the
     // host app that issued the command (e.g. the agent server), so
@@ -49,7 +52,11 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         } catch {
             return undefined; // non-match: the ordered walk continues
         }
-        return { source: config.name, path: full };
+        return {
+            source: config.name,
+            path: full,
+            ...(extensionKind === "memory-view" ? { extensionKind } : {}),
+        };
     }
 
     return {
@@ -75,6 +82,8 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
             if (candidate.loaderConfig !== undefined) {
                 record.loaderConfig = candidate.loaderConfig;
             }
+            if (extensionKind === "memory-view")
+                record.extensionKind = extensionKind;
             return record;
         },
     };
