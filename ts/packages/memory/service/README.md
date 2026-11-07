@@ -41,8 +41,8 @@ returned descriptors through the existing registry. This is trusted code
 activation, not a sandbox or a source grant. Changed assets require an explicit
 inventory update; changing an already imported root also requires host restart.
 
-The [shared manager](../../defaultAgentProvider/src/memoryViewPackages.ts),
-exported as `default-agent-provider/memory-view-packages`, owns acquisition and
+The [shared manager](../../packageInstallation/src/memoryViewPackages.ts),
+exported by the publishable `@typeagent/package-installation` package, owns acquisition and
 the separate locked inventory. It reuses configured path/catalog/feed sources.
 Catalogs declare `memoryViews` beside `agents`; npm metadata uses
 `typeagent.defaultMemoryViewName` and keyword `typeagent-memory-view`.
@@ -52,6 +52,8 @@ Only install supports `--dry-run`/`--source`, available supports `--source`,
 and update supports `--range`. Uninstall removes the record, not retained Views
 or possibly active package roots. Existing agent/MCP commands and defaults
 are unchanged.
+The private `default-agent-provider/memory-view-packages` export remains a
+compatibility facade; external hosts do not need that private workspace package.
 
 For host adoption and validation boundaries, see the
 [cross-repository guide](../../../../../codeDocs/TypeAgent/forAgent/features/memory-view-packaging/README.md).
