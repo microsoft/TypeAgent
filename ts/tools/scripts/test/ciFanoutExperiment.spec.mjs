@@ -213,7 +213,7 @@ test("credential-shaped compiled outputs and empty discovery are rejected", () =
 
 function reports() {
     return ["linux", "win32", "darwin"].flatMap((platform) =>
-        ["v22.23.4", "v24.22.1", "v26.12.1"].flatMap((node) => {
+        ["v24.22.1", "v26.12.1"].flatMap((node) => {
             const expectedTests = [1, 2, 3, 4].map(
                 (number) => `test-${number}`,
             );
@@ -243,12 +243,12 @@ function reports() {
 test("qualification checks complete shard inventories and control assertion outcomes", () => {
     assert.deepEqual(
         qualify(reports(), sha).map((row) => row.slowestShardMs),
-        Array(9).fill(100),
+        Array(6).fill(100),
     );
 });
 
 test("target selection is explicit and rejects unknown or empty configurations", () => {
-    assert.deepEqual(fanoutNodes("all"), ["v22.23.4", "v24.22.1", "v26.12.1"]);
+    assert.deepEqual(fanoutNodes("all"), ["v24.22.1", "v26.12.1"]);
     assert.deepEqual(fanoutNodes("24-and-26"), ["v24.22.1", "v26.12.1"]);
     for (const value of ["", "unknown", "[]"])
         assert.throws(() => fanoutNodes(value), /Unknown/);
@@ -260,9 +260,7 @@ test("target selection is explicit and rejects unknown or empty configurations",
 
 const shardOptions = { nodeSet: "24-and-26", includeControls: false };
 function shardReports() {
-    return reports().filter(
-        (row) => row.node !== "v22.23.4" && row.group !== "control",
-    );
+    return reports().filter((row) => row.group !== "control");
 }
 
 test("selected-node shard-only qualification requires all six targets without claiming control equivalence", () => {
@@ -277,11 +275,7 @@ test("selected-node shard-only qualification requires all six targets without cl
         assert.equal(row.skippedAssertions, 0);
     }
     assert.equal(
-        qualify(
-            reports().filter((row) => row.node !== "v22.23.4"),
-            sha,
-            { nodeSet: "24-and-26" },
-        ).length,
+        qualify(reports(), sha, { nodeSet: "24-and-26" }).length,
         6,
         "Selected Nodes can still be qualified with controls",
     );
@@ -293,7 +287,7 @@ test("selected-node shard-only qualification requires all six targets without cl
             sha,
             { includeControls: false },
         ).length,
-        9,
+        6,
         "Control exclusion is independent of Node selection",
     );
     assert.throws(() =>
@@ -498,15 +492,14 @@ function matrixValue(expression, inputs, github = {}, required = "true") {
     });
 }
 
-test("manual Node and control choices reach matrices and every report collector", () => {
+test("all CI matrices and collectors use Node 24 and 26 with optional controls", () => {
     const main = workflow("build-ts");
     const experiment = workflow("ci-fanout-experiment");
     const target = workflow("ci-fanout-target");
     const inputs = main.on.workflow_dispatch.inputs;
-    assert.deepEqual(inputs.fanout_node_set.options, ["all", "24-and-26"]);
-    assert.equal(inputs.fanout_node_set.default, "all");
+    assert.equal(inputs.fanout_node_set, undefined);
     assert.equal(inputs.fanout_include_controls.default, false);
-    assert.equal(experiment.on.workflow_call.inputs.node_set.default, "all");
+    assert.equal(experiment.on.workflow_call.inputs.node_set, undefined);
     assert.equal(
         experiment.on.workflow_call.inputs.include_controls.default,
         false,
@@ -515,10 +508,7 @@ test("manual Node and control choices reach matrices and every report collector"
         target.on.workflow_call.inputs.include_controls.default,
         false,
     );
-    assert.equal(
-        main.jobs.fanout_experiment.with.node_set,
-        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_node_set || 'all' }}",
-    );
+    assert.equal(main.jobs.fanout_experiment.with.node_set, undefined);
     assert.equal(
         main.jobs.fanout_experiment.with.include_controls,
         "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}",
@@ -528,17 +518,20 @@ test("manual Node and control choices reach matrices and every report collector"
         "${{ inputs.include_controls }}",
     );
     assert.deepEqual(experiment.jobs.qualification.env, {
-        TYPEAGENT_FANOUT_NODE_SET: "${{ inputs.node_set }}",
         TYPEAGENT_FANOUT_INCLUDE_CONTROLS: "${{ inputs.include_controls }}",
         pnpm_config_verify_deps_before_run: "false",
     });
-    for (const nodeSet of ["all", "24-and-26"])
+    for (const matrix of [
+        main.jobs.build_ts.strategy.matrix,
+        main.jobs.build_ts_legacy.strategy.matrix,
+        experiment.jobs.targets.strategy.matrix,
+    ]) {
+        assert.deepEqual(matrix.version, ["24.22.1", "26.12.1"]);
         assert.deepEqual(
-            matrixValue(experiment.jobs.targets.strategy.matrix.version, {
-                node_set: nodeSet,
-            }),
-            fanoutNodes(nodeSet).map((node) => node.slice(1)),
+            matrix.version,
+            fanoutNodes("all").map((node) => node.slice(1)),
         );
+    }
     for (const includeControls of [true, false])
         assert.deepEqual(
             matrixValue(target.jobs.test.strategy.matrix.group, {
@@ -550,7 +543,39 @@ test("manual Node and control choices reach matrices and every report collector"
         );
 });
 
-test("sharded CI is the default with all supported targets and unchanged scheduled policy", () => {
+test("the default graph has 85 executable jobs across six OS/Node targets", () => {
+    const main = workflow("build-ts");
+    const experiment = workflow("ci-fanout-experiment");
+    const target = workflow("ci-fanout-target");
+    const matrix = experiment.jobs.targets.strategy.matrix;
+    let jobs = 3 + matrix.os.length * matrix.version.length;
+    for (const os of matrix.os) {
+        for (const version of matrix.version) {
+            const inputs = { os, version, include_controls: false };
+            for (const job of Object.values(target.jobs)) {
+                if (job.if && !vm.runInNewContext(job.if, { inputs })) {
+                    continue;
+                }
+                jobs += Object.values(job.strategy?.matrix ?? {}).reduce(
+                    (count, values) =>
+                        count *
+                        (Array.isArray(values)
+                            ? values
+                            : matrixValue(values, inputs)
+                        ).length,
+                    1,
+                );
+            }
+        }
+    }
+    assert.equal(jobs, 85);
+    assert.deepEqual(
+        main.jobs.build_ts.strategy.matrix.version,
+        matrix.version,
+    );
+});
+
+test("sharded CI defaults to Node 24 and 26 while retaining the macOS-only full-test schedule", () => {
     const main = workflow("build-ts");
     assert.equal(
         main.on.workflow_dispatch.inputs.fanout_experiment.default,
@@ -567,7 +592,7 @@ test("sharded CI is the default with all supported targets and unchanged schedul
         "workflow_dispatch",
     ]) {
         const github = { event_name: event };
-        const inputs = { fanout_experiment: true, fanout_node_set: "all" };
+        const inputs = { fanout_experiment: true };
         assert.equal(
             matrixValue(main.jobs.fanout_experiment.if, inputs, github),
             event !== "schedule",
@@ -576,39 +601,18 @@ test("sharded CI is the default with all supported targets and unchanged schedul
             matrixValue(main.jobs.build_ts_legacy.if, inputs, github),
             event === "schedule",
         );
-        assert.deepEqual(
-            matrixValue(
-                main.jobs.build_ts.strategy.matrix.version,
-                inputs,
-                github,
-            ),
-            ["22.23.4", "24.22.1", "26.12.1"],
-        );
+        assert.deepEqual(main.jobs.build_ts.strategy.matrix.version, [
+            "24.22.1",
+            "26.12.1",
+        ]);
         assert.deepEqual(
             matrixValue(main.jobs.build_ts.strategy.matrix.os, inputs, github),
             event === "schedule"
                 ? ["macos-latest"]
                 : ["ubuntu-latest", "windows-latest", "macos-latest"],
         );
-        assert.equal(
-            matrixValue(
-                main.jobs.fanout_experiment.with.node_set,
-                inputs,
-                github,
-            ),
-            "all",
-        );
     }
     const github = { event_name: "workflow_dispatch" };
-    const selected = { fanout_experiment: true, fanout_node_set: "24-and-26" };
-    assert.deepEqual(
-        matrixValue(
-            main.jobs.build_ts.strategy.matrix.version,
-            selected,
-            github,
-        ),
-        ["24.22.1", "26.12.1"],
-    );
     assert.equal(
         matrixValue(
             main.jobs.build_ts_legacy.if,
@@ -794,9 +798,7 @@ test("test runners install native dependencies but never rebuild shared product 
         'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
     );
     assert.deepEqual(
-        matrixValue(experiment.jobs.targets.strategy.matrix.version, {
-            node_set: "all",
-        }),
+        experiment.jobs.targets.strategy.matrix.version,
         workflow("build-ts").jobs.build_ts_legacy.strategy.matrix.version,
     );
     assert.equal(

@@ -269,7 +269,7 @@ test("whole-package profiling measures chained process boundaries rather than ov
 
 function reports() {
     return Object.entries(plans).flatMap(([platform, plan]) =>
-        ["v22.23.4", "v24.22.1", "v26.12.1"].flatMap((node) =>
+        ["v24.22.1", "v26.12.1"].flatMap((node) =>
             plan.groups.map(({ files }, i) => ({
                 sha,
                 platform,
@@ -287,12 +287,12 @@ function reports() {
 }
 
 test("remainder qualification requires every supported target, full script inventory and unique lane", () => {
-    assert.equal(qualifyLanes(reports(), sha, plans).length, 9);
+    assert.equal(qualifyLanes(reports(), sha, plans).length, 6);
     const scoped = reports();
     scoped[0].manifestHash = "c".repeat(64);
     assert.equal(
         qualifyLanes(scoped, sha, plans).length,
-        9,
+        6,
         "Consumer-scoped hashes may differ while the producer provenance must match",
     );
     const changes = [
@@ -323,16 +323,19 @@ test("remainder qualification requires every supported target, full script inven
     }
 });
 
-test("selected-node remainder aggregation requires all 18 lanes without accepting Node 22 substitutes", () => {
-    const rows = reports().filter((row) => row.node !== "v22.23.4");
+test("legacy Node-selection alias requires the same 18 lanes without accepting Node 22 substitutes", () => {
+    const rows = reports();
     assert.equal(rows.length, 18);
     assert.equal(qualifyLanes(rows, sha, plans, "24-and-26").length, 6);
-    assert.throws(() => qualifyLanes(rows, sha, plans));
-    assert.throws(() => qualifyLanes(reports(), sha, plans, "24-and-26"));
+    assert.deepEqual(
+        qualifyLanes(rows, sha, plans),
+        qualifyLanes(rows, sha, plans, "24-and-26"),
+    );
     assert.throws(() => qualifyLanes(rows.slice(1), sha, plans, "24-and-26"));
     const wrongNode = structuredClone(rows);
     wrongNode[0].node = "v22.23.4";
     assert.throws(() => qualifyLanes(wrongNode, sha, plans, "24-and-26"));
+    assert.throws(() => qualifyLanes([...rows, wrongNode[0]], sha, plans));
 });
 
 test("explicit workspace/root phases cannot silently drop or duplicate phases", () => {

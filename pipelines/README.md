@@ -150,16 +150,21 @@ gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch>
 ```
 
 The historical `fanout_experiment` input is retained for compatibility. Set it
-to false on a manual dispatch to roll back to the original full matrix.
-The nine protected `build_ts (OS, Node)` check names remain blocking: lightweight
+to false on a manual dispatch to use the unsharded full-test matrix, still
+restricted to Node 24 and 26.
+The six `build_ts (OS, Node)` check names for Node 24 and 26 remain blocking: lightweight
 compatibility jobs require the entire selected strategy to succeed, rejecting
 failed, cancelled, skipped or missing coverage. Only a successful explicit
-documentation-only path decision permits a no-op check. Branch protection is
-not changed. PR formatting and all four ratchets run once in sharded analysis.
+documentation-only path decision permits a no-op check. Remove only the three
+Node 22 `build_ts (OS, 22.23.4)` required checks from the branch ruleset when
+deploying this matrix change; retain all other required checks and rules.
+PR formatting and all four ratchets run once in sharded analysis.
 
 The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
 for each combination of Ubuntu, Windows and macOS with Node
-22.23.4, 24.22.1 and 26.12.1. This includes the client's compiled view protocol
+24.22.1 and 26.12.1. Node 22 is excluded from all CI matrices, including
+scheduled and manual legacy runs; package engines and installer runtime
+support are unchanged. Each target includes the client's compiled view protocol
 dynamically imported by memory-service tests. It fingerprints and uploads that
 small runtime closure and then finishes. It does not build the remaining
 workspace or run non-memory tests, and does not depend on those jobs.
@@ -219,19 +224,21 @@ Dependencies and credential files are not uploaded.
 
 Fresh test runners install their own native dependencies, restore only matching
 outputs, verify the manifest, and run memory-service Jest specs without rebuilding.
-Four file-level shards consume the same per-OS/Node artifact. All nine toolchain
-combinations must report, giving 36 memory-test reports. Artifact and result
+Four file-level shards consume the same per-OS/Node artifact. All six toolchain
+combinations must report, giving 24 memory-test reports. Artifact and result
 names include Node versions to prevent collisions. Actual organization/OS
 runner capacity can still queue jobs. Duplicate unsharded controls are disabled
 by default; set `fanout_include_controls=true` for a manual equivalence experiment,
-which requires 45 reports. `fanout_node_set=24-and-26` is a manual experiment only;
-production PR/push/merge-queue coverage always retains Node 22, 24 and 26.
+which requires 30 reports. The redundant `fanout_node_set` / reusable `node_set`
+workflow inputs have been removed: all dispatches qualify Node 24 and 26.
+Offline collectors still accept the historical `24-and-26` selection alias,
+which now has the same coverage as `all`; neither accepts Node 22 reports.
 Each memory group waits only for its matching target's memory producer.
 Likewise, workspace consumers wait only for their matching workspace producer:
 there are no cross-OS/Node producer barriers. A failed target blocks final
 qualification without skipping successful targets' independent measurements.
-Default full-scope validation has 126 executable jobs, including path selection
-and nine compatibility checks. Runner capacity and repeated native installations
+Default full-scope validation has 85 executable jobs, including path selection
+and six compatibility checks. Runner capacity and repeated native installations
 must be measured rather than assuming unlimited parallelism.
 
 Runner-local dependency installation retries visibly up to three times, with
@@ -247,8 +254,8 @@ once, preserve the provider's existing ignored suite, and fail if package script
 or lifecycle assumptions change. Consumers check the restored inventory against
 fresh discovery. Failed files get up to two serial, fresh-process, no-cache
 retries; all attempt JSON and new per-file timings are uploaded. Retry-only
-successes remain visible. Qualification requires all 48 package reports in
-addition to the 36 memory reports (45 with controls), 27 exact remainder reports and successful
+successes remain visible. Qualification requires all 32 package reports in
+addition to the 24 memory reports (30 with controls), 18 exact remainder reports and successful
 analysis, build, root and Linux UI jobs. Remainder reports preserve full script
 inventories, selected packages, artifact fingerprints and producer provenance.
 
@@ -339,8 +346,8 @@ The successful Node 24/26 shard-only baseline completed in 18m09s
 ([run 42272195529](https://github.com/microsoft/TypeAgent/actions/runs/42272195529)).
 An opt-in native-cache cold-population run passed in 20m34s; the populated-key
 17m55s follow-up failed memory tests and is not a qualified speedup.
-These six-target experiments do not establish a twenty-minute result for all
-nine production targets, nor for the separately required Azure/.NET checks.
+These historical six-target experiments do not qualify the current production
+graph or the separately required Azure/.NET checks.
 The first nine-target [PR run 42297124484](https://github.com/microsoft/TypeAgent/actions/runs/42297124484)
 took 23m52s and failed two Node 22 memory cases and two Windows installer
 fixtures. Qualification and all nine compatibility checks correctly failed.

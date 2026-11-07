@@ -16,6 +16,7 @@ const tsRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const repo = path.dirname(tsRoot);
 const pinnedBuildVersion = "24.22.1";
 const supportedVersions = ["22.23.4", pinnedBuildVersion, "26.12.1"];
+const ciVersions = supportedVersions.slice(1);
 const typesVersion = "22.20.5";
 const read = (file) => fs.readFileSync(path.join(repo, file), "utf8");
 const nodeRange = JSON.parse(read("ts/package.json")).engines.node;
@@ -158,7 +159,7 @@ test("SQLite dependencies and the prebuild installer support every supported Nod
     }
 });
 
-test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => {
+test("CI tests only Node 24 and 26 while single-version jobs pin Node 24", () => {
     const directory = path.join(repo, ".github", "workflows");
     for (const file of fs.readdirSync(directory)) {
         if (!file.endsWith(".yml")) {
@@ -168,6 +169,15 @@ test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => 
             fs.readFileSync(path.join(directory, file), "utf8"),
         );
         for (const job of Object.values(workflow.jobs ?? {})) {
+            if (job.strategy?.matrix?.version) {
+                assert.deepEqual(
+                    job.strategy.matrix.version,
+                    ["build-ts.yml", "ci-fanout-experiment.yml"].includes(file)
+                        ? ciVersions
+                        : [pinnedBuildVersion],
+                    file,
+                );
+            }
             for (const step of job.steps ?? []) {
                 if (!step.uses?.startsWith("actions/setup-node@")) {
                     continue;
@@ -179,7 +189,7 @@ test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => 
                         ["build-ts.yml", "ci-fanout-experiment.yml"].includes(
                             file,
                         )
-                            ? supportedVersions
+                            ? ciVersions
                             : [pinnedBuildVersion],
                         file,
                     );

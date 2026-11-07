@@ -10,8 +10,7 @@ export function fanoutNodes(
         ["all", "24-and-26"].includes(selection),
         `Unknown fan-out Node selection: ${selection}`,
     );
-    const nodes = ["v22.23.4", "v24.22.1", "v26.12.1"];
-    return selection === "all" ? nodes : nodes.slice(1);
+    return ["v24.22.1", "v26.12.1"];
 }
 
 export function fanoutIncludesControl(

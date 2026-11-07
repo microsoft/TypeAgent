@@ -128,7 +128,7 @@ test("persistent partition failures exhaust the existing two-retry budget", () =
 
 function reports() {
     return ["linux", "win32"].flatMap((platform) =>
-        ["v22.23.4", "v24.22.1", "v26.12.1"].flatMap((node) =>
+        ["v24.22.1", "v26.12.1"].flatMap((node) =>
             Object.keys(partitionPackages).flatMap((target) =>
                 ["1", "2", "3", "4"].map((group) => ({
                     platform,
@@ -150,25 +150,29 @@ function reports() {
     );
 }
 
-test("aggregation requires all 48 exact package partitions and reports first-pass failures", () => {
+test("aggregation requires all 32 exact package partitions and reports first-pass failures", () => {
     const rows = reports();
+    assert.equal(rows.length, 32);
     rows[0].firstPassSucceeded = false;
     const summary = qualifyPartitions(rows, "a".repeat(40));
-    assert.equal(summary.length, 12);
+    assert.equal(summary.length, 8);
     assert.equal(summary[0].firstPassFailures, 1);
 });
 
-test("selected-node package aggregation requires exactly 32 reports and rejects incomplete or extra targets", () => {
+test("legacy Node-selection alias requires the same 32 reports and rejects retired targets", () => {
     const sha = "a".repeat(40);
-    const rows = reports().filter((row) => row.node !== "v22.23.4");
+    const rows = reports();
     assert.equal(rows.length, 32);
     assert.equal(qualifyPartitions(rows, sha, "24-and-26").length, 8);
-    assert.throws(() => qualifyPartitions(rows, sha));
-    assert.throws(() => qualifyPartitions(reports(), sha, "24-and-26"));
+    assert.deepEqual(
+        qualifyPartitions(rows, sha),
+        qualifyPartitions(rows, sha, "24-and-26"),
+    );
     assert.throws(() => qualifyPartitions(rows.slice(1), sha, "24-and-26"));
     const wrongNode = structuredClone(rows);
     wrongNode[0].node = "v22.23.4";
     assert.throws(() => qualifyPartitions(wrongNode, sha, "24-and-26"));
+    assert.throws(() => qualifyPartitions([...rows, wrongNode[0]], sha));
 });
 
 for (const [name, change] of [
