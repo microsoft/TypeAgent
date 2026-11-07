@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { waitForTestState } from "./waitForTestState.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -218,54 +219,53 @@ export async function settleConsolidation(
                 : []),
         ].some((key) => key.startsWith(`${corpusId}:`));
     };
-    for (let attempt = 0; attempt < 1000; attempt++) {
-        const maintaining = hasRunnableMaintenance();
-        const jobs =
-            maintaining && attempt < 999
+    const result = await waitForTestState(
+        async () => {
+            const maintaining = hasRunnableMaintenance();
+            const jobs = maintaining
                 ? []
                 : await service.listViewBuilds(corpusId);
-        const decision =
-            allowDecision &&
-            jobs.some((job) =>
-                job.results.some((result) => result.state === "conflicted"),
-            );
-        const building = jobs.some((job) => job.state === "running");
-        // Avoid repeatedly materializing inventories while writers are still building them.
-        if (attempt < 999 && (maintaining || building)) {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-            continue;
-        }
-        // A committed read can finish on the snapshot from before an active writer.
-        const snapshot = await service.listViews(corpusId);
-        if (
-            !building &&
-            !maintaining &&
-            !hasRunnableMaintenance() &&
-            (!snapshot.wikiFamily?.enabled ||
-                !snapshot.wikiFamily.pending ||
-                decision) &&
-            (!snapshot.projectFamily?.enabled ||
-                !snapshot.projectFamily.pending)
-        )
-            return snapshot;
-        if (attempt === 999)
-            throw new Error(
-                `Offline consolidation did not settle: ${JSON.stringify({
-                    wiki: snapshot.wikiFamily,
-                    project: snapshot.projectFamily,
-                    maintenance: service.getMaintenanceStatus(),
-                    jobs: jobs.map(({ state, results }) => ({
+            const decision =
+                allowDecision &&
+                jobs.some((job) =>
+                    job.results.some((result) => result.state === "conflicted"),
+                );
+            const building = jobs.some((job) => job.state === "running");
+            // Avoid repeatedly materializing inventories while writers are still building them.
+            const snapshot =
+                maintaining || building
+                    ? undefined
+                    : await service.listViews(corpusId);
+            // A committed read can finish on the snapshot from before an active writer.
+            const settled =
+                snapshot !== undefined &&
+                !building &&
+                !maintaining &&
+                !hasRunnableMaintenance() &&
+                (!snapshot.wikiFamily?.enabled ||
+                    !snapshot.wikiFamily.pending ||
+                    decision) &&
+                (!snapshot.projectFamily?.enabled ||
+                    !snapshot.projectFamily.pending);
+            return {
+                settled,
+                snapshot,
+                maintenance: service.getMaintenanceStatus(),
+                jobs: jobs.map(({ state, results }) => ({
+                    state,
+                    results: results.map(({ state, reason }) => ({
                         state,
-                        results: results.map(({ state, reason }) => ({
-                            state,
-                            reason,
-                        })),
+                        reason,
                     })),
-                })}`,
-            );
-        await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    throw new Error("Offline consolidation did not settle");
+                })),
+            };
+        },
+        (value) => value.settled,
+        "Offline consolidation",
+    );
+    if (!result.snapshot)
+        throw new Error("Settled consolidation snapshot missing");
+    return result.snapshot;
 }
 export async function editPausedConsolidationDraft(
     service: Pick<

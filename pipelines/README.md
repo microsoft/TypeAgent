@@ -170,6 +170,12 @@ small runtime closure and then finishes. It does not build the remaining
 workspace or run non-memory tests, and does not depend on those jobs.
 Unrelated application bundles are not uploaded to memory-only consumers.
 
+Memory timeline and source-following fixtures poll background work until it
+settles, with a 60-second deadline below Jest's 90-second test timeout. They
+return immediately on completion and report the last state on timeout; failed
+or cancelled ingestion still fails the test. This accommodates slow hosted
+filesystem work without fixed sleeps, retries or reduced coverage.
+
 Within each target, an independent `workspace_build` job builds the workspace once
 and publishes a fingerprinted compiled-output artifact and partition plan.
 `remainder`, `package_partitions` and `roots` jobs consume matching outputs without rebuilding;
