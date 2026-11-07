@@ -69,6 +69,7 @@
     "@typeagent/music": "workspace:*",
     "@typeagent/music-local": "workspace:*",
     "@typeagent/os-notifications-agent": "workspace:*",
+    "@typeagent/package-installation": "workspace:*",
     "@typeagent/photo-agent": "workspace:*",
     "@typeagent/powershell-typeagent": "workspace:*",
     "@typeagent/screencapture-agent": "workspace:*",
