@@ -64,12 +64,30 @@ happens after someone with write access reviews and vouches for the fork code.
 For defense in depth, optionally add an **Approvals & checks** gate on
 `MSOCTO-ADO-Service-Connection`.
 
+## Smoke browser setup
+
+Required ADO smoke installs only Chromium, matching the shell's Playwright
+projects and Electron tests. Windows uses `playwright install chromium` without
+`--with-deps`: Playwright's Windows dependency installer enables Media Foundation
+on Server images, which these tests do not exercise. Linux retains
+`playwright install --with-deps chromium` for its native browser prerequisites.
+The full Windows shell suite, Linux smoke selection and CLI checks are unchanged.
+Broad live integration and the manually dispatched GitHub smoke workflow retain
+their existing browser prerequisites.
+
+Validate on a fresh hosted agent before relying on the savings. Compare browser
+installation, dependency installation, build, test and complete job durations
+separately, and verify the full test inventory still passes. Browser setup savings
+are not evidence of an equivalent reduction in total gate time.
+
 ## Independent live integration
 
 `azure-live-tests.yml` runs broad provider-backed tests outside the required
-`TypeAgent Smoke Tests` check. Live failures fail their own pipeline rather than
-delaying smoke and being downgraded by `continueOnError`. Required CLI and shell
-coverage is unchanged.
+`TypeAgent Smoke Tests` check. The moved live-test task retains
+`continueOnError: true`, matching its previous advisory behavior in smoke.
+Failures remain visible as issues in the independent run and can be investigated
+separately. Dependency setup, build, key provisioning and cleanup remain blocking;
+required CLI and shell coverage is unchanged.
 
 Register it as **TypeAgent Live Tests**, separate from required PR and
 merge-queue checks.
@@ -86,9 +104,11 @@ The live pipeline:
 - Reuses `include-prepare-repo.yml`, Node 24, Ubuntu 24.04, and the previous
   libsecret/Playwright prerequisites. It builds before running the same Linux
   `test:live` selection previously in smoke.
-- Takes its own federated `AzureCLI@2` login, provisions keys inside that step,
-  and fails if provisioning or tests fail. The live task retains a 60-minute
-  limit; the complete job has a 90-minute limit.
+- Provisions keys in a separate blocking `AzureCLI@2` task before the advisory
+  live-test task takes its own fresh federated login. The live task retains a
+  60-minute limit; the complete job has a 90-minute limit. Only the live-test
+  task has `continueOnError`; this does not suppress job cancellation or
+  infrastructure failures.
 - Removes generated `.env` and `config.local.yaml` on success, failure, or
   cancellation, with a five-minute cancellation cleanup budget.
 
@@ -111,9 +131,9 @@ before deploying the smoke cutover:
    this pipeline for those resources; do not broaden access to all pipelines.
 4. Choose a failure-notification owner/subscription and verify a main-branch run,
    including authentication, native dependencies, failure reporting, and cleanup.
-   The existing suite may expose teardown/authentication failures previously
-   downgraded to warnings; triage them rather than restoring `continueOnError`.
-5. After main activation and a successful main run, deploy the removal from
+   Existing live-test failures remain advisory; verify they are visible and
+   track their investigation separately from setup or infrastructure failures.
+5. After main activation and verified execution and cleanup, deploy the removal from
    required smoke. Preserve that pipeline's name,
    required check, PR/fork approval settings, and merge-queue triggers. Do not
    add **TypeAgent Live Tests** as a required PR/merge-queue check.
