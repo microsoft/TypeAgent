@@ -1269,7 +1269,7 @@ function verifyPromptLength(
     } else if (promptLength > MAX_PROMPT_LENGTH_DEFAULT) {
         // Approx 20K tokens
         const errorMsg = `LARGE REQUEST:\nTotal prompt length ${promptLength} chars. Set AZURE_OPENAI_MAX_CHARS env variable to block.`;
-        console.log(errorMsg);
+        console.warn(errorMsg);
         debugOpenAI(errorMsg);
     }
 }

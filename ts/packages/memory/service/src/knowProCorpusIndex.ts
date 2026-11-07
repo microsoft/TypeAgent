@@ -13,6 +13,7 @@ import {
     splitDocPartTextForEmbedding,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { maintenanceExtractionModel } from "./maintenanceConcurrency.js";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
 import { indexedTopicOccurrence } from "./topicIncidence.js";
 import {
@@ -30,7 +31,9 @@ import {
     indexedTextHash,
     parseIndexedLocator,
     selectIndexedFragments,
+    applyIndexedBlockPolicy,
     type IndexedBlock,
+    type IndexedFragmentPolicy,
 } from "./indexedFragments.js";
 import type {
     CorpusIndex,
@@ -462,7 +465,7 @@ function parseDocParts(document: IndexedDocument): DocPart[] {
     return parts;
 }
 
-function toDocParts(document: IndexedDocument): DocPart[] {
+export function toDocParts(document: IndexedDocument): DocPart[] {
     const temporal: kp.SourceTemporalContext = document.revision
         .temporalContext ?? {
         version: 1,
@@ -516,11 +519,13 @@ function parseSourceUri(
 export class KnowProCorpusIndex implements CorpusIndex {
     private memory: DocMemory | undefined;
     private activeRevisions = new Map<string, string>();
+    private messageSources = new Map<
+        number,
+        { sourceId: string; revisionId: string }
+    >();
 
     private eligible(ordinal: number): boolean {
-        const source = parseSourceUri(
-            this.memory?.messages.get(ordinal)?.metadata.sourceUrl,
-        );
+        const source = this.messageSources.get(ordinal);
         return (
             source !== undefined &&
             this.activeRevisions.get(source.sourceId) === source.revisionId
@@ -534,9 +539,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             this.memory && ordinal < this.memory.messages.length;
             ordinal++
         ) {
-            const source = parseSourceUri(
-                this.memory.messages.get(ordinal).metadata.sourceUrl,
-            );
+            const source = this.messageSources.get(ordinal);
             if (
                 !this.eligible(ordinal) ||
                 (sourceIds && (!source || !sourceIds.has(source.sourceId)))
@@ -618,6 +621,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
 
     private refreshSourceMessages(memory?: DocMemory): void {
         this.sourceMessages.clear();
+        this.messageSources.clear();
         for (
             let ordinal = 0;
             memory && ordinal < memory.messages.length;
@@ -627,6 +631,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 memory.messages.get(ordinal).metadata.sourceUrl,
             );
             if (!source) continue;
+            this.messageSources.set(ordinal, source);
             const messages = this.sourceMessages.get(source.sourceId) ?? [];
             messages.push({
                 revisionId: source.revisionId,
@@ -640,10 +645,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
         private readonly corpusId: string,
         private readonly indexDirectory: string,
         private readonly settingsFactory?: () => DocMemorySettings,
+        private readonly fragmentPolicy?: IndexedFragmentPolicy,
     ) {}
 
     private createSettings(): DocMemorySettings {
         const settings = this.settingsFactory?.() ?? createDocMemorySettings();
+        maintenanceExtractionModel(settings.languageModel);
         settings.conversationSettings.messageTextIndexSettings.splitText ??=
             splitDocPartTextForEmbedding;
         return settings;
@@ -933,6 +940,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         )
             this.addConversationNeighbors(memory, eligible, scores);
         const blocks = [...this.indexedBlocks(memory, scores)];
+        const policy = request.query ? this.fragmentPolicy : undefined;
         if (postingScores)
             this.fragmentScoreDiagnostics(
                 blocks,
@@ -942,7 +950,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 highest,
             );
         const selection = selectIndexedFragments(
-            blocks.sort((a, b) => b.score - a.score),
+            applyIndexedBlockPolicy(policy, request, blocks, () =>
+                [...this.indexedBlocks(memory)].filter(
+                    (block) =>
+                        block.messageOrdinal !== undefined &&
+                        eligible.has(block.messageOrdinal),
+                ),
+            ).sort((a, b) => b.score - a.score),
             {
                 ...request,
                 terms: request.query
@@ -956,6 +970,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                       ]
                     : request.terms,
             },
+            policy,
         );
         selection.limited ||= followed.limited;
         if (selection.diagnostics)
@@ -1286,6 +1301,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             parts,
             this.createSettings(),
         );
+        this.configurePreparedIndexing(memory, signal);
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
@@ -1365,6 +1381,22 @@ export class KnowProCorpusIndex implements CorpusIndex {
         });
     }
 
+    private configurePreparedIndexing(
+        memory: DocMemory,
+        signal: AbortSignal,
+    ): void {
+        const settings = memory.settings.conversationSettings;
+        if (process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING !== "1") {
+            delete settings.preparedIndexing;
+            return;
+        }
+        const workers = Math.max(
+            1,
+            settings.semanticRefIndexSettings.batchSize,
+        );
+        settings.preparedIndexing = { workers, window: workers, signal };
+    }
+
     public async append(
         documents: IndexedDocument[],
         signal: AbortSignal,
@@ -1421,6 +1453,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             return true;
         };
         const memory = this.memory;
+        this.configurePreparedIndexing(memory, signal);
         const result = await kp.timeSearchStage("knowpro.index.prepare", () =>
             memory.addToIndex({
                 onKnowledgeExtracted: () =>
@@ -1434,6 +1467,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
         }
+
         const indexingError =
             result.semanticRefs?.error ??
             result.secondaryIndexResults?.message?.error ??
@@ -1479,6 +1513,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         limit: number,
         tags?: string[],
         temporalContext?: kp.TemporalQueryContext,
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]> {
         return kp.timeSearchStage(
             "knowpro.index.search",
@@ -1487,6 +1522,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     temporalQuestion(query, temporalContext),
                     limit,
                     tags,
+                    sourceIds,
                 ),
             { limit, tagCount: tags?.length ?? 0 },
         );
@@ -1521,14 +1557,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]> {
+        if (sourceIds?.size === 0) return [];
         const matches = new Map<number, number>();
         const memory = this.memory;
         if (memory !== undefined) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = limit;
             options.maxKnowledgeMatches = limit;
-            options.messageRangesInScope = this.eligibleRanges();
+            options.messageRangesInScope = this.eligibleRanges(sourceIds);
             const result = await kp.timeSearchStage(
                 "knowpro.index.languageSearch",
                 () =>
@@ -2046,6 +2084,12 @@ export function createKnowProCorpusIndex(
     corpusId: string,
     indexDirectory: string,
     settingsFactory?: () => DocMemorySettings,
+    fragmentPolicy?: IndexedFragmentPolicy,
 ): CorpusIndex {
-    return new KnowProCorpusIndex(corpusId, indexDirectory, settingsFactory);
+    return new KnowProCorpusIndex(
+        corpusId,
+        indexDirectory,
+        settingsFactory,
+        fragmentPolicy,
+    );
 }

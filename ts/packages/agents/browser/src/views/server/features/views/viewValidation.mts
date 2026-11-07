@@ -15,6 +15,7 @@ import {
     viewArchiveRequestSchema,
     viewBuildRequestSchema,
     viewBuildJobRequestSchema,
+    viewBuildContinuationRequestSchema,
     viewConflictReadSchema,
     viewResolutionSchema,
     viewPublicationPolicyUpdateSchema,
@@ -96,6 +97,10 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryHubCancelUnderstanding: z.strictObject({
+        corpusId: text,
+        requestId: z.string().uuid(),
+    }),
     memoryHubUnderstand: protocolInput(understandingRequestSchema),
     memoryHubUnderstandingModule: protocolInput(
         understandingModuleRequestSchema,
@@ -164,6 +169,8 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryListViewBuilds: z.strictObject(corpus),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryContinueViewBuild: protocolInput(viewBuildContinuationRequestSchema),
+    memoryRefreshExtensionViews: protocolInput(knowledgeCorpusRequestSchema),
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
@@ -181,6 +188,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryHubSearch: z.strictObject({
+        intent: z.enum(["auto", "find", "ask"]).optional(),
         evidenceSnapshotId: z.string().uuid().optional(),
         prepareUnderstanding: boolean,
         query: text,
@@ -207,6 +215,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
                 "timeline",
                 "wiki",
                 "schemaView",
+                "extension",
             ])
             .array()
             .max(5)

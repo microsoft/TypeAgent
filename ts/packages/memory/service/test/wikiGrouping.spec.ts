@@ -16,6 +16,7 @@ import type { ViewBuildJob, ViewSynthesisAdapter } from "../src/viewTypes.js";
 import {
     compatibleSubjectIdentity,
     discoverInformationalDescriptors,
+    rankWikiCandidates,
     usefulWikiSubject,
 } from "../src/wikiGrouping.js";
 import type { CorpusIndex } from "../src/types.js";
@@ -41,6 +42,34 @@ async function finishBuild(service: FileMemoryService, admitted: ViewBuildJob) {
 }
 
 describe("conservative indexed grouping", () => {
+    test("visited identities do not skip unread candidates after ranking or discovery changes", () => {
+        const descriptors = [
+            {
+                viewId: "visited",
+                query: "capacity",
+                salience: 2,
+                sourceIds: ["s"],
+            },
+            {
+                viewId: "unread",
+                query: "acquisition",
+                salience: 3,
+                sourceIds: ["s"],
+            },
+            {
+                viewId: "discovered",
+                query: "incident",
+                salience: 4,
+                sourceIds: ["s"],
+            },
+        ];
+        expect(
+            rankWikiCandidates(descriptors, [], true, new Set(["visited"])).map(
+                (descriptor) => descriptor.viewId,
+            ),
+        ).toEqual(["discovered", "unread"]);
+    });
+
     test("usefulness preserves a one-source definition, rejects metadata and unsupported shells", () => {
         expect(
             usefulWikiSubject(

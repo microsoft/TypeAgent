@@ -40,6 +40,23 @@ In this directory:
 - Run `pnpm i`
 - Run `pnpm run build`
 
+### Dependency security checks
+
+The [workspace overrides](./pnpm-workspace.yaml) require MCP SDK 1.32.0 or
+later and keep Milkdown's Vue runtime and server renderer on the patched
+3.5.x line. Direct MCP consumers also declare the patched SDK minimum so
+standalone installs do not depend on workspace overrides. The shell uses
+Electron 45.1.0; the markdown editor requires ProseMirror View 1.42.3 or later.
+Memory previews use plain text when the client has not advertised HTML support,
+including when the SDK has no client capabilities available.
+The packaged HTML renderer preserves UTF-8 characters to stay within its
+resource-size limits without changing the displayed text.
+
+After dependency updates, run
+`node --test tools/scripts/test/dependencySecurity.spec.mjs`.
+This checks the lockfile's vulnerable version ranges, standalone SDK minimums,
+and SDK declaration and ESM import compatibility.
+
 ### Docker image
 
 The production [Dockerfile](./Dockerfile) uses Node 24.22.1 on Debian Bookworm,
@@ -126,7 +143,7 @@ Here is an example of the minimal `config.local.yaml` targeting OpenAI:
 openAI:
   default:
     organization: <organization id>
-    apiKey: <service key>
+    apiKey: <key>
     endpoint: https://api.openai.com/v1/chat/completions
     model: gpt-4o
     responseFormat: true
@@ -295,6 +312,22 @@ package is a standalone Jest suite.
 Shared and standalone Jest configurations use one worker when `CI=true`, and
 disable their Jest cache when `TYPEAGENT_JEST_NO_CACHE=true` during package
 retries. These settings do not change local worker defaults.
+
+Full-profile package tests normally run three workspaces at once. Set
+`TYPEAGENT_TEST_WORKSPACE_CONCURRENCY` to a positive integer to change that
+limit; `1` serializes packages without changing test selection or the root
+script phase. The publishing pipeline uses `1` on its hosted test agent to
+avoid memory contention between the larger suites. This does not change
+Jest's per-package worker settings or the macOS compatibility selection.
+
+Compiled [Coda test](./packages/coda/src/test/) output in
+`packages/coda/dist-test` is excluded from formatting. The TypeScript test
+sources remain checked.
+
+The Azure DevOps smoke pipeline uses Ubuntu 24.04, a supported image for the
+installed Playwright release, rather than following `ubuntu-latest` image
+changes. Ubuntu 26.04 reached that label before the pinned Playwright release
+supported it.
 
 #### macOS blocking and nightly coverage
 

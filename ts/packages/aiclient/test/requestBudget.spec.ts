@@ -6,8 +6,9 @@ import {
     runWithRequestBudget,
     reserveSerializedRequest,
     RequestAdmissionError,
+    runWithRequestAttemptObserver,
 } from "../src/requestBudget.js";
-import { callApi } from "../src/restClient.js";
+import { callApi, fetchWithRetry } from "../src/restClient.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import { discoverEndpointPool } from "../src/endpointPool.js";
 import { ModelType } from "../src/openai.js";
@@ -30,6 +31,116 @@ function budget(chatAttempts = 2) {
 }
 
 describe("serialized inference budget (mock transport)", () => {
+    test("durably reserves every physical retry before fetch and resumes without resetting capacity", async () => {
+        const original = globalThis.fetch;
+        const events: string[] = [];
+        const limits = budget(2);
+        const observer = {
+            async reserve(
+                event: import("../src/requestBudget.js").RequestAttemptReservation,
+            ) {
+                const id = String(event.reservations[0].attempt);
+                events.push(`reserve-${id}`);
+                return id;
+            },
+            async finish(
+                id: string,
+                outcome: import("../src/requestBudget.js").RequestAttemptOutcome,
+            ) {
+                events.push(`finish-${id}-${outcome.state}`);
+            },
+        };
+        try {
+            let sent = 0;
+            globalThis.fetch = async () => {
+                events.push(`fetch-${++sent}`);
+                return new Response("{}", { status: sent === 1 ? 503 : 200 });
+            };
+            await runWithRequestBudget(limits, () =>
+                runWithRequestAttemptObserver(observer, () =>
+                    fetchWithRetry(
+                        "https://synthetic.invalid/retry",
+                        {
+                            body: JSON.stringify({
+                                messages: [],
+                                max_tokens: 4000,
+                            }),
+                            method: "POST",
+                        },
+                        2,
+                        1,
+                    ),
+                ),
+            );
+            expect(events).toEqual([
+                "reserve-1",
+                "fetch-1",
+                "finish-1-returned",
+                "reserve-2",
+                "fetch-2",
+                "finish-2-returned",
+            ]);
+            const resumed = new RequestBudget(limits.limits, {
+                receipts: limits.receipts,
+                elapsedMs: limits.elapsedMs,
+            });
+            expect(() =>
+                resumed.reserve(JSON.stringify({ messages: [] }), 4000),
+            ).toThrow("exhausted");
+            const amended = new RequestBudget(
+                { ...limits.limits, chatAttempts: 3 },
+                { receipts: limits.receipts, elapsedMs: limits.elapsedMs },
+            );
+            amended.reserve(JSON.stringify({ messages: [] }), 4000);
+            expect(amended.receipts).toHaveLength(3);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
+
+    test("durable reservation failure blocks fetch and hidden retries", async () => {
+        const original = globalThis.fetch;
+        let sent = 0,
+            reservations = 0;
+        globalThis.fetch = async () => {
+            sent++;
+            return new Response("{}");
+        };
+        try {
+            await expect(
+                runWithRequestBudget(budget(), () =>
+                    runWithRequestAttemptObserver(
+                        {
+                            async reserve() {
+                                reservations++;
+                                throw new Error(
+                                    "Synthetic persistence failure",
+                                );
+                            },
+                            async finish() {},
+                        },
+                        () =>
+                            fetchWithRetry(
+                                "https://synthetic.invalid/blocked",
+                                {
+                                    body: JSON.stringify({
+                                        messages: [],
+                                        max_tokens: 4000,
+                                    }),
+                                    method: "POST",
+                                },
+                                3,
+                                1,
+                            ),
+                    ),
+                ),
+            ).rejects.toThrow("dispatch blocked");
+            expect(sent).toBe(0);
+            expect(reservations).toBe(1);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
     test("uncapped requests reserve known provider capacity and retain opt-in budget enforcement", async () => {
         const original = globalThis.fetch;
         let sent = 0;

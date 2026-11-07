@@ -10,7 +10,10 @@ import {
     createEmbeddingModel,
 } from "../src/openai.js";
 import { getRuntimeConfig, setRuntimeConfig } from "../src/runtimeConfig.js";
-import { checkSerializedRequestConstraints } from "../src/requestConstraints.js";
+import {
+    checkSerializedRequestConstraints,
+    type RequestConstraintReceipt,
+} from "../src/requestConstraints.js";
 import { RequestAdmissionError } from "../src/requestBudget.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import type { EndpointPool } from "../src/endpointPool.js";
@@ -81,11 +84,15 @@ test.each(["chat_completions", "responses", "messages"] as const)(
                     ),
                 );
                 expect(inspected.constraints.outputTokens).toBe(5000);
+                expect(inspected.constraints.declaredLimits).toEqual({
+                    inputTokens: 20000,
+                    contextTokens: 30000,
+                });
                 expect(inspected.tokenizer).toBe("o200k_base");
                 expect(inspected.estimatedInputTokens).toBe(
                     countTokens(inspected.serializedRequest),
                 );
-                if (wireApi === "chat_completions") {
+                if (wireApi !== "messages") {
                     expect(inspected.serializedRequest).toContain(
                         "Schema counts too",
                     );
@@ -254,6 +261,52 @@ const chat = (text = "bounded") =>
         messages: [{ role: "user", content: text }],
         response_format: { schema: { description: "schema counts too" } },
     });
+
+test("declared request ceilings remain optional, detached metadata without guessed defaults", () => {
+    const legacy: RequestConstraintReceipt = {
+        metadata: "configured",
+        tokenAccounting: "utf8-byte-upper-bound",
+        inputTokens: 10,
+        outputTokens: 100,
+        safetyTokens: 1000,
+    };
+    expect(legacy.declaredLimits).toBeUndefined();
+    expect(
+        checkSerializedRequestConstraints(chat()).declaredLimits,
+    ).toBeUndefined();
+    expect(
+        checkSerializedRequestConstraints(chat(), { outputTokens: 4000 })
+            .declaredLimits,
+    ).toEqual({});
+    const configured = {
+        inputTokens: 10000,
+        contextTokens: 20000,
+        outputTokens: 4000,
+    };
+    const receipt = checkSerializedRequestConstraints(chat(), configured);
+    expect(receipt.declaredLimits).toEqual({
+        inputTokens: 10000,
+        contextTokens: 20000,
+    });
+    configured.inputTokens = 1;
+    configured.contextTokens = 1;
+    expect(receipt.declaredLimits).toEqual({
+        inputTokens: 10000,
+        contextTokens: 20000,
+    });
+});
+
+test.each([
+    { inputTokens: 10000, outputTokens: 4000 },
+    { contextTokens: 20000, outputTokens: 4000 },
+])(
+    "partial declared input/context ceilings are exposed without filling the other: %j",
+    (constraints) => {
+        const receipt = checkSerializedRequestConstraints(chat(), constraints);
+        const { outputTokens: _outputTokens, ...limits } = constraints;
+        expect(receipt.declaredLimits).toEqual(limits);
+    },
+);
 
 test("missing provider metadata is explicit, not a guessed input or lifetime ceiling", () => {
     expect(

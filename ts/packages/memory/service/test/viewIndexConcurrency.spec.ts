@@ -364,6 +364,53 @@ describe("detached view index preparation", () => {
         await expect(readdir(directory)).rejects.toThrow();
     });
 
+    test("archive cleanup retries when the last reader releases before cleanup publication finishes", async () => {
+        const published = await publish();
+        if (published.error) throw published.error;
+        if (published.value?.indexState !== "ready")
+            throw new Error(JSON.stringify(published.value));
+        expect((await service.drainMaintenance(5000)).settled).toBe(true);
+        const snapshot = await service.listViews(corpusId);
+        if (!snapshot.head) throw new Error("Published view head is missing");
+        const view = snapshot.views[0];
+        const directory = path.dirname(service["viewIndexDirectory"](view));
+        const resumeMaintenance = service.deferMaintenance();
+        releases.push(resumeMaintenance);
+        await service.archiveView({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: snapshot.head,
+        });
+        const entered = deferred();
+        const resumeReader = deferred();
+        releases.push(resumeReader.resolve);
+        const reader = service["readCommitted"](corpusId, async () => {
+            entered.resolve();
+            await resumeReader.promise;
+        });
+        await within(entered.promise);
+        const cleanup = service["cleanCommittedReads"].bind(service);
+        let attempts = 0;
+        service["cleanCommittedReads"] = async (id: string) => {
+            await cleanup(id);
+            if (++attempts === 1) {
+                resumeReader.resolve();
+                await reader;
+            }
+        };
+        try {
+            resumeMaintenance();
+            expect((await service.drainMaintenance(5000)).settled).toBe(true);
+            expect(attempts).toBeGreaterThanOrEqual(2);
+            await expect(readdir(directory)).rejects.toThrow();
+        } finally {
+            resumeReader.resolve();
+            await reader;
+            service["cleanCommittedReads"] = cleanup;
+        }
+    });
+
     async function edit() {
         const snapshot = await service.listViews(corpusId);
         const current = snapshot.views[0];
@@ -576,7 +623,11 @@ describe("detached view index preparation", () => {
             1,
         );
         pending.resume.resolve();
-        expect((await publication).value?.indexState).toBe("ready");
+        const published = await publication;
+        expect(published.error).toBeUndefined();
+        expect(published.value).toEqual(
+            expect.objectContaining({ indexState: "ready" }),
+        );
         expect(await stagedFiles()).toEqual([]);
         expect(directories[0]).toContain("view-search-index-staging");
     });

@@ -7,6 +7,7 @@ import {
     outputReservation,
     decisionOutputReservation,
     isChatWireRequest,
+    outputTokenLimitField,
 } from "./requestBudget.js";
 
 export interface RequestConstraintReceipt {
@@ -15,6 +16,10 @@ export interface RequestConstraintReceipt {
     inputTokens: number;
     outputTokens: number;
     safetyTokens: number;
+    /** Declared provider ceilings, not measured usage or inferred model defaults. */
+    declaredLimits?: Readonly<
+        Pick<ModelRequestConstraints, "inputTokens" | "contextTokens">
+    >;
 }
 
 function tokenUpperBound(text: string): number {
@@ -89,7 +94,7 @@ export function checkSerializedRequestConstraints(
     const decision = !chat && "questions" in body;
     const outputTokens = decision
         ? decisionOutputReservation(body)
-        : chat && (constraints || "max_tokens" in body)
+        : chat && (constraints || outputTokenLimitField(body) !== undefined)
           ? outputReservation(body, constraints?.outputTokens)
           : 0;
     if (constraints) {
@@ -107,5 +112,17 @@ export function checkSerializedRequestConstraints(
         inputTokens,
         outputTokens,
         safetyTokens: chat || decision ? safetyTokens : 0,
+        ...(constraints
+            ? {
+                  declaredLimits: {
+                      ...(constraints.inputTokens !== undefined
+                          ? { inputTokens: constraints.inputTokens }
+                          : {}),
+                      ...(constraints.contextTokens !== undefined
+                          ? { contextTokens: constraints.contextTokens }
+                          : {}),
+                  },
+              }
+            : {}),
     };
 }

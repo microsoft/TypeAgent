@@ -45,6 +45,19 @@ test("view inventory queries accept bounded kind exclusions without changing def
     assert.deepEqual(viewSummaryRequestSchema.parse({ corpusId: "corpus" }), {
         corpusId: "corpus",
     });
+    const allKinds = [
+        "troubleshootingGuide",
+        "projectBrief",
+        "timeline",
+        "wiki",
+        "schemaView",
+        "extension",
+    ];
+    assert.deepEqual(
+        viewSummaryRequestSchema.parse({ ...request, excludeKinds: allKinds })
+            .excludeKinds,
+        allKinds,
+    );
     assert.equal(
         viewSummaryRequestSchema.safeParse({
             ...request,
@@ -55,7 +68,7 @@ test("view inventory queries accept bounded kind exclusions without changing def
     assert.equal(
         viewSummaryRequestSchema.safeParse({
             ...request,
-            excludeKinds: Array(6).fill("schemaView"),
+            excludeKinds: Array(7).fill("schemaView"),
         }).success,
         false,
     );

@@ -7,17 +7,22 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService, createKnowProCorpusIndex } from "../src/index.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type { AnswerEvidence } from "../src/types.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
-const knowledgeForText = (text: string) => ({
-    entities: text.includes("Zephyr")
-        ? [{ name: "Zephyr", type: ["service"] }]
-        : [{ name: "Orion", type: ["service"] }],
-    actions: [],
-    inverseActions: [],
-    topics: [text.includes("Zephyr") ? "Zephyr recovery" : "Orion billing"],
-});
+let knowledgeBarrier: Promise<void> | undefined;
+const knowledgeForText = async (text: string) => {
+    await knowledgeBarrier;
+    return {
+        entities: text.includes("Zephyr")
+            ? [{ name: "Zephyr", type: ["service"] }]
+            : [{ name: "Orion", type: ["service"] }],
+        actions: [],
+        inverseActions: [],
+        topics: [text.includes("Zephyr") ? "Zephyr recovery" : "Orion billing"],
+    };
+};
 
 let multipleSearches = false;
 const languageModel = {
@@ -59,17 +64,13 @@ const languageModel = {
 };
 
 async function waitForJob(service: FileMemoryService, jobId: string) {
-    for (let attempt = 0; attempt < 200; attempt++) {
-        const job = await service.getJob(jobId);
-        if (job?.state === "complete") {
-            return;
-        }
-        if (job?.state === "failed") {
-            throw new Error(job.error);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error(`Indexing job '${jobId}' timed out`);
+    const job = await waitForMemoryJob(service, jobId, {
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (job.state !== "complete")
+        throw new Error(
+            `Stubbed KnowPro indexing ${job.state}: ${job.error ?? jobId}`,
+        );
 }
 
 describe("synthesized answers over the KnowPro corpus index", () => {
@@ -80,6 +81,7 @@ describe("synthesized answers over the KnowPro corpus index", () => {
 
     beforeEach(async () => {
         multipleSearches = false;
+        knowledgeBarrier = undefined;
         generated.length = 0;
         root = await mkdtemp(
             path.join(os.tmpdir(), `typeagent-answer-knowpro-${randomUUID()}-`),
@@ -143,7 +145,7 @@ describe("synthesized answers over the KnowPro corpus index", () => {
                                 knowledgeForText(text),
                             extractWithRetry: async (text: string) => ({
                                 success: true as const,
-                                data: knowledgeForText(text),
+                                data: await knowledgeForText(text),
                             }),
                         };
                     settings.answerGenerator = {
@@ -178,6 +180,36 @@ describe("synthesized answers over the KnowPro corpus index", () => {
         } else {
             process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
         }
+    });
+
+    test("waits for slow offline indexing instead of an implicit two-second performance budget", async () => {
+        let release!: () => void;
+        knowledgeBarrier = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const { corpusId } = await service.createCorpus("Delayed indexing");
+        const ingested = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "zephyr",
+                sourceType: "text",
+                title: "Zephyr",
+                text: "Zephyr recovery.",
+            },
+        });
+        const waiting = waitForJob(service, ingested.jobId).then(
+            () => undefined,
+            (error: unknown) => error,
+        );
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 4100));
+            expect((await service.getJob(ingested.jobId))?.state).not.toBe(
+                "complete",
+            );
+        } finally {
+            release();
+        }
+        expect(await waiting).toBeUndefined();
     });
 
     test("retrieves with KnowPro and synthesizes the integrated answer with cited evidence", async () => {

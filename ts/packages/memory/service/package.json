@@ -18,7 +18,9 @@
     "./agent-edition-validation": "./dist/agentEditionValidation.js",
     "./procedure-markdown": "./dist/procedureMarkdown.js",
     "./procedureMarkdown": "./dist/procedureMarkdown.js",
-    "./view-text": "./dist/viewText.js"
+    "./view-text": "./dist/viewText.js",
+    "./view-types": "./dist/viewTypes.js",
+    "./view-packages": "./dist/viewPackages.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -38,6 +40,7 @@
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "isomorphic-git": "1.37.4",
     "node-diff3": "3.2.0",

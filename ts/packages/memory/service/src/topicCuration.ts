@@ -762,8 +762,11 @@ Each supplied node must appear EXACTLY once. Consolidate only when the original 
                 (completed === 1 ||
                     completed % 8 === 0 ||
                     packet.end === nodes.length)
-            )
+            ) {
                 await checkpoint(structuredClone(result));
+                return true;
+            }
+            return false;
         },
     );
     return result;

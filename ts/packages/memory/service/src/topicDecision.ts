@@ -21,6 +21,7 @@ import type { ViewCitation } from "./viewTypes.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
 import { viewHash } from "./viewMerge.js";
 import { TopicEvidenceIndex } from "./topicIndexes.js";
+import type { MaintenanceModelScheduler } from "./maintenanceConcurrency.js";
 
 export const topicDecisionRecipe = "curated-decision-v2";
 export const topicClusterValidationRecipe = "cluster-local-v1";
@@ -247,10 +248,22 @@ export function topicClusterSignature(
             : {}),
     });
 }
-export function configuredTopicDecisionModel(): DecisionModel {
+export function configuredTopicDecisionModel(
+    modelScheduler?: MaintenanceModelScheduler,
+): DecisionModel {
     const result = createDecisionModel();
     if (!result.success) throw new TopicDecisionError(result);
-    return result.data;
+    const model = result.data;
+    return modelScheduler
+        ? {
+              ...model,
+              decide: (request, options) =>
+                  modelScheduler(
+                      () => model.decide(request, options),
+                      options?.signal,
+                  ),
+          }
+        : model;
 }
 export function topicDecisionIdentity(
     model: DecisionModel,

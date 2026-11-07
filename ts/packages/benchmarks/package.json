@@ -22,6 +22,7 @@
   ],
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
+    "chunking-bench": "node dist/chunkingBench/cli.js",
     "clean": "node ./scripts/clean.mjs",
     "download-seal-tools": "pnpm run build && node dist/translationBench/public_datasets/Seal-Tools/index.js",
     "gen-action-parameters-grader": "pnpm run gen-policy",

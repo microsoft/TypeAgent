@@ -35,6 +35,8 @@ jobs:
         working-directory: .
         run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Install Linux prerequisites
         if: runner.os == 'Linux'
         shell: bash
@@ -56,8 +58,6 @@ jobs:
         run: |
           if (Test-Path $PROFILE) { . $PROFILE }
           pnpm run build @typeagent/memory-service
-      - name: Restore better-sqlite3 for Node.js
-        run: pnpm run postinstall:better-sqlite3-node-restore
       - name: Memory correctness tests
         timeout-minutes: 30
         run: pnpm --filter @typeagent/memory-service run test:local --runInBand --json --outputFile=memory-local-results.json

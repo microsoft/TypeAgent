@@ -13,6 +13,7 @@ import {
     configuredSourceSynopsisModel,
     sourceSynopsisRecipe,
     synopsisInputHash,
+    sourceSynopsisSchema,
     type SourceSynopsisModel,
 } from "../src/sourceSynopsis.js";
 import type {
@@ -23,6 +24,7 @@ import type {
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
 
 interface PromptEvidence {
     id: string;
@@ -30,6 +32,44 @@ interface PromptEvidence {
     end: number;
     excerpt: string;
 }
+
+test("synopsis structured output binds exact evidence IDs and host text bounds", () => {
+    const output = sourceSynopsisSchema([
+        "first-supplied-id",
+        "second-supplied-id",
+    ]);
+    expect(output.strict).toBe(true);
+    expect(output.schema).toMatchObject({
+        properties: {
+            preview: { minLength: 1, maxLength: 320 },
+            overview: { minLength: 1, maxLength: 6000 },
+            evidence: {
+                minItems: 1,
+                maxItems: 32,
+                items: {
+                    additionalProperties: false,
+                    properties: {
+                        id: {
+                            enum: ["first-supplied-id", "second-supplied-id"],
+                        },
+                    },
+                    required: ["id"],
+                },
+            },
+        },
+    });
+    expect(() => sourceSynopsisSchema([])).toThrow(
+        "requires supplied evidence",
+    );
+    const ids = Array.from({ length: 251 }, (_, index) =>
+        createHash("sha256").update(String(index)).digest("hex"),
+    );
+    expect(() => sourceSynopsisSchema(ids.slice(0, 250))).not.toThrow();
+    expect(() => sourceSynopsisSchema(ids)).toThrow(
+        "provider evidence enum capacity",
+    );
+    expect(() => sourceSynopsisSchema(Array(251).fill(ids[0]))).not.toThrow();
+});
 
 interface SynopsisPrompt {
     text: string;
@@ -143,6 +183,147 @@ const revision: SourceRevision = {
 };
 
 describe("source synopsis orchestration", () => {
+    test.each(["ollama", "copilot"])(
+        "configured synopsis rejects schema-unsupported native %s providers before inference",
+        (provider) => {
+            const originalConfig = getRuntimeConfig();
+            const originalCompatibility = process.env.OLLAMA_USE_OAI_ENDPOINT;
+            try {
+                if (provider === "ollama")
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = "0";
+                setRuntimeConfig(
+                    buildConfig(flatten({ modelProvider: provider })),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel(`${provider}:synthetic`),
+                ).toThrow(`${provider} provider does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+                if (originalCompatibility === undefined)
+                    delete process.env.OLLAMA_USE_OAI_ENDPOINT;
+                else
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = originalCompatibility;
+            }
+        },
+    );
+
+    test.each(["messages", "responses"])(
+        "configured synopsis rejects %s providers before inference instead of silently ignoring schemas",
+        (wireApi) => {
+            const originalConfig = getRuntimeConfig();
+            try {
+                setRuntimeConfig(
+                    buildConfig(
+                        flatten({
+                            modelProvider: "azure",
+                            azureOpenAI: {
+                                deployments: {
+                                    synopsis_test: [
+                                        {
+                                            endpoint:
+                                                "https://synthetic.invalid/synopsis",
+                                            region: "eastus",
+                                            auth: "synthetic-key",
+                                            wireApi,
+                                        },
+                                    ],
+                                },
+                            },
+                            modelRequestConstraints: {
+                                "azure:chat:synopsis_test": {
+                                    contextTokens: 10000,
+                                    outputTokens: 4000,
+                                },
+                            },
+                        }),
+                    ),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel("azure:synopsis_test"),
+                ).toThrow(`${wireApi} wire API does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+            }
+        },
+    );
+
+    test("assessment identity fingerprints effective endpoint configuration but not credentials", () => {
+        const originalConfig = getRuntimeConfig();
+        const identity = (endpoint: string, auth: string) => {
+            setRuntimeConfig(
+                buildConfig(
+                    flatten({
+                        modelProvider: "azure",
+                        azureOpenAI: {
+                            deployments: {
+                                identity_test: [
+                                    {
+                                        endpoint,
+                                        region: "eastus",
+                                        auth,
+                                    },
+                                ],
+                            },
+                        },
+                    }),
+                ),
+            );
+            return createConfiguredViewSynthesisAdapter("azure:identity_test")
+                .identity;
+        };
+        try {
+            const first = identity(
+                "https://synthetic.invalid/first",
+                "synthetic-key-one",
+            );
+            expect(
+                identity(
+                    "https://synthetic.invalid/first",
+                    "synthetic-key-two",
+                ),
+            ).toBe(first);
+            expect(
+                identity(
+                    "https://synthetic.invalid/second",
+                    "synthetic-key-two",
+                ),
+            ).not.toBe(first);
+        } finally {
+            setRuntimeConfig(originalConfig);
+        }
+    });
+
+    test("selection and composition split evidence before provider enum capacity is exceeded", async () => {
+        const content = Array.from(
+            { length: 320 },
+            (_, index) => `Observation ${index} remains limited.\n`,
+        ).join("");
+        const model = new DeterministicModel();
+        const compositions: number[] = [];
+        model.fits = (prompt) => {
+            const input = readPrompt(prompt);
+            return !!input.summaries || input.evidence.length <= 32;
+        };
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            const supplied = input.summaries
+                ? input.summaries.flatMap((summary) => summary.evidence)
+                : input.evidence;
+            const count = new Set(supplied.map(({ id }) => id)).size;
+            expect(count).toBeLessThanOrEqual(250);
+            if (input.summaries) compositions.push(count);
+            return selection(supplied.slice(0, 32).map(({ id }) => ({ id })));
+        };
+        await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(compositions.some((count) => count >= 200)).toBe(true);
+    });
+
     test("configured synopsis guides final response length without capping reasoning or returned content", async () => {
         const originalConfig = getRuntimeConfig();
         const originalFetch = globalThis.fetch;
@@ -185,6 +366,9 @@ describe("source synopsis orchestration", () => {
                 expect(body).not.toHaveProperty("max_output_tokens");
                 expect(body.messages[0].content).toContain(
                     "approximately 2000 tokens in the final JSON response, excluding reasoning",
+                );
+                expect(body.messages[0].content).toContain(
+                    "Use shorter complete sentences rather than unfinished clauses or whitespace padding",
                 );
                 const output = {
                     preview: content,
@@ -787,7 +971,7 @@ describe("source synopsis orchestration", () => {
     });
 
     test("one semantic fingerprint ignores index timestamps/generations but includes recipe, role, title and eligibility", () => {
-        expect(sourceSynopsisRecipe).toBe("source-synopsis-v6");
+        expect(sourceSynopsisRecipe).toBe("source-synopsis-v7");
         const hash = synopsisInputHash(source, revision, "model", true);
         const legacyV3Hash = createHash("sha256")
             .update(
@@ -854,8 +1038,14 @@ describe("inline synopsis production lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
     let model: DeterministicModel;
-    function open() {
+    function open(parallel: boolean | string = false) {
         return new FileMemoryService(root, {
+            performanceExperiments:
+                typeof parallel === "string"
+                    ? parallel
+                    : parallel
+                      ? "indexing-parallel"
+                      : "",
             viewDrafts: false,
             informationalViews: false,
             sourceSynopses: true,
@@ -877,11 +1067,12 @@ describe("inline synopsis production lifecycle", () => {
         corpusId: string,
         content: string,
         expected?: string,
+        sourceId = "worksheet",
     ) {
         const result = await service.ingestDocument({
             corpusId,
             source: {
-                sourceId: "worksheet",
+                sourceId,
                 sourceType: "markdown",
                 title: "Worksheet",
                 markdown: content,
@@ -902,17 +1093,95 @@ describe("inline synopsis production lifecycle", () => {
     async function synopsis(
         corpusId: string,
         status: SourceSynopsis["status"] = "ready",
+        sourceId = "worksheet",
     ) {
         for (let i = 0; i < 1000; i++) {
             const result = await service.getSourceSynopsis({
                 corpusId,
-                sourceId: "worksheet",
+                sourceId,
             });
             if (result.status === status) return result;
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         throw new Error(`Synopsis did not reach ${status}`);
     }
+    test.each([false, true, "synopsis-parallel"])(
+        "independent synopsis generation is bounded and opt-in: %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const defer = service.deferMaintenance();
+            const corpus = await service.createCorpus("Independent synopses");
+            const gates = Array.from({ length: 3 }, () => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const entered = gates.map(() => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const complete = model.complete.bind(model);
+            const starts: number[] = [];
+            model.complete = async (prompt) => {
+                const index = Number(
+                    /Source (\d)/.exec(readPrompt(prompt).text)![1],
+                );
+                starts.push(index);
+                entered[index].resolve();
+                await gates[index].promise;
+                return complete(prompt);
+            };
+            try {
+                for (let index = 0; index < 3; index++)
+                    await ingest(
+                        corpus.corpusId,
+                        `Source ${index} records independent evidence.`,
+                        undefined,
+                        `source-${index}`,
+                    );
+                defer();
+                await entered[0].promise;
+                if (parallel) await entered[1].promise;
+                expect(starts).toEqual(parallel ? [0, 1] : [0]);
+                gates[0].resolve();
+                if (parallel) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                    expect(starts).toEqual([0, 1]);
+                } else await entered[1].promise;
+                gates[1].resolve();
+                await entered[2].promise;
+                gates[2].resolve();
+                for (let index = 0; index < 3; index++)
+                    await synopsis(corpus.corpusId, "ready", `source-${index}`);
+                await service.close();
+                service = open(parallel);
+                await service.initialize();
+                for (let index = 0; index < 3; index++)
+                    expect(
+                        (
+                            await service.getSourceSynopsis({
+                                corpusId: corpus.corpusId,
+                                sourceId: `source-${index}`,
+                            })
+                        ).status,
+                    ).toBe("ready");
+            } finally {
+                defer();
+                for (const gate of gates) gate.resolve();
+            }
+        },
+    );
+
     test("nested foreground scopes defer synopses across corpora and drain the latest revisions", async () => {
         const release = service.deferMaintenance();
         const nested = service.deferMaintenance();
@@ -1039,47 +1308,55 @@ describe("inline synopsis production lifecycle", () => {
         expect(model.calls).toHaveLength(2);
     });
 
-    test("replacement rejects a late old-revision synopsis and restarts only the new semantic input", async () => {
-        const originalComplete = model.complete.bind(model);
-        let finish: (() => void) | undefined;
-        let start: (() => void) | undefined;
-        const started = new Promise<void>((resolve) => {
-            start = resolve;
-        });
-        model.complete = async (prompt) => {
-            const output = await originalComplete(prompt);
-            start?.();
-            return new Promise<string>((resolve) => {
-                finish = () => resolve(output);
+    test.each([false, true, "synopsis-parallel"])(
+        "replacement rejects a late old-revision synopsis with parallelism %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const originalComplete = model.complete.bind(model);
+            let finish: (() => void) | undefined;
+            let start: (() => void) | undefined;
+            const started = new Promise<void>((resolve) => {
+                start = resolve;
             });
-        };
-        const corpus = await service.createCorpus("replace");
-        const old = await ingest(
-            corpus.corpusId,
-            "Obsolete local median 38 ms.",
-        );
-        await started;
-        await ingest(
-            corpus.corpusId,
-            "Current sample withdrawn after duplicated tracing.",
-            old.revisionId,
-        );
-        model.complete = originalComplete;
-        finish?.();
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const current = await service.getSource(corpus.corpusId, "worksheet");
-        expect(
-            current?.revisions.find((r) => r.revisionId === old.revisionId)
-                ?.synopsis?.status,
-        ).not.toBe("ready");
-        await service.close();
-        service = open();
-        await service.initialize();
-        const output = await synopsis(corpus.corpusId);
-        expect(output.overview).toContain("withdrawn");
-        expect(output.overview).not.toContain("38 ms");
-        expect(output.revisionId).not.toBe(old.revisionId);
-    });
+            model.complete = async (prompt) => {
+                const output = await originalComplete(prompt);
+                start?.();
+                return new Promise<string>((resolve) => {
+                    finish = () => resolve(output);
+                });
+            };
+            const corpus = await service.createCorpus("replace");
+            const old = await ingest(
+                corpus.corpusId,
+                "Obsolete local median 38 ms.",
+            );
+            await started;
+            await ingest(
+                corpus.corpusId,
+                "Current sample withdrawn after duplicated tracing.",
+                old.revisionId,
+            );
+            model.complete = originalComplete;
+            finish?.();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const current = await service.getSource(
+                corpus.corpusId,
+                "worksheet",
+            );
+            expect(
+                current?.revisions.find((r) => r.revisionId === old.revisionId)
+                    ?.synopsis?.status,
+            ).not.toBe("ready");
+            await service.close();
+            service = open(parallel);
+            await service.initialize();
+            const output = await synopsis(corpus.corpusId);
+            expect(output.overview).toContain("withdrawn");
+            expect(output.overview).not.toContain("38 ms");
+            expect(output.revisionId).not.toBe(old.revisionId);
+        },
+    );
 
     test("authorized purge recovery discards an in-flight synopsis without failing shutdown", async () => {
         const complete = model.complete.bind(model);

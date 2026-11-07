@@ -1,5 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { randomUUID } from "node:crypto";
+import {
+    frameQueryRequestSchema,
+    frameCorpusRequestSchema,
+    frameQueryResultSchema,
+    frameSchemasSchema,
+    frameProjectionStatusSchema,
+    frameToolNames,
+} from "./frameProtocol.js";
+import type {
+    FrameQueryRequest,
+    FrameQueryResult,
+    FrameProjectionStatus,
+    FrameSchema,
+} from "@typeagent/memory-service";
 
 import {
     graphQueryRequestSchema,
@@ -8,6 +23,11 @@ import {
     graphSupportPageSchema,
     graphToolNames,
 } from "./graphProtocol.js";
+import { viewDetailPageSchema } from "./viewDetailProtocol.js";
+import type {
+    ViewDetailPage,
+    ViewDetailPageRequest,
+} from "@typeagent/memory-service";
 import {
     understandingToolNames,
     understandingRequestSchema,
@@ -310,9 +330,37 @@ export interface MemoryServiceClient
         request: InventoryPageRequest,
     ): Promise<MemoryPage<ViewBuildSummary>>;
     listViewSummaries(request: ViewSummaryRequest): Promise<ViewSummaryPage>;
+    listFrameSchemas(corpusId: string): Promise<FrameSchema[]>;
+    queryFrame(request: FrameQueryRequest): Promise<FrameQueryResult>;
+    getFrameProjectionStatus(corpusId: string): Promise<FrameProjectionStatus>;
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public async listFrameSchemas(corpusId: string): Promise<FrameSchema[]> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return frameSchemasSchema.parse(
+            await (this.service.listFrameSchemas?.(corpusId) ??
+                unsupportedCapability("dataframes")),
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        return frameQueryResultSchema.parse(
+            await (this.service.queryFrame?.(
+                frameQueryRequestSchema.parse(request),
+            ) ?? unsupportedCapability("dataframes")),
+        );
+    }
+    public async getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return frameProjectionStatusSchema.parse(
+            await (this.service.getFrameProjectionStatus?.(corpusId) ??
+                unsupportedCapability("dataframes")),
+        );
+    }
     public listQuestionSummaries(
         request: QuestionSummaryRequest,
     ): Promise<QuestionSummaryPage> {
@@ -504,6 +552,12 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
             unsupportedCapability("view drafts")
         );
     }
+    public getViewDetailPage(request: ViewDetailPageRequest) {
+        return (
+            this.service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail")
+        );
+    }
     public saveViewDraft(request: ViewSaveRequest) {
         return (
             this.service.saveViewDraft?.(request) ??
@@ -604,6 +658,20 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.cancelViewBuild?.(request) ??
             unsupportedCapability("view builds")
+        );
+    }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ) {
+        return (
+            this.service.continueViewBuild?.(request) ??
+            unsupportedCapability("accounted view continuation")
+        );
+    }
+    public refreshExtensionViews(request: { corpusId: string }) {
+        return (
+            this.service.refreshExtensionViews?.(request) ??
+            unsupportedCapability("extension refresh")
         );
     }
     public retryViewBuild(request: ViewBuildJobRequest) {
@@ -809,8 +877,8 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.search(request);
     }
 
-    public answer(request: MemoryAnswerRequest) {
-        return this.service.answer(request);
+    public answer(request: MemoryAnswerRequest, signal?: AbortSignal) {
+        return this.service.answer(request, signal);
     }
 
     public understand(
@@ -833,6 +901,27 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
             ) ??
             Promise.reject(
                 new Error("Memory understanding modules are not supported"),
+            )
+        );
+    }
+
+    public warmViewIndexes(corpusId?: string): Promise<void> {
+        return (
+            this.service.warmViewIndexes?.(corpusId) ??
+            Promise.reject(
+                new Error("Memory view-index warmup is not supported"),
+            )
+        );
+    }
+
+    public cancelUnderstanding(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean> {
+        return (
+            this.service.cancelUnderstanding?.(request) ??
+            Promise.reject(
+                new Error("Memory understanding cancellation is not supported"),
             )
         );
     }
@@ -921,6 +1010,33 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public async listFrameSchemas(corpusId: string): Promise<FrameSchema[]> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return this.invoke(
+            frameToolNames.listFrameSchemas,
+            { corpusId },
+            frameSchemasSchema,
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        return this.invoke(
+            frameToolNames.queryFrame,
+            frameQueryRequestSchema.parse(request),
+            frameQueryResultSchema,
+        );
+    }
+    public async getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return this.invoke(
+            frameToolNames.getFrameProjectionStatus,
+            { corpusId },
+            frameProjectionStatusSchema,
+        );
+    }
     public listQuestionSummaries(
         request: QuestionSummaryRequest,
     ): Promise<QuestionSummaryPage> {
@@ -1126,6 +1242,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewVersionSchema.nullable(),
         ).then((value) => value ?? undefined);
     }
+    public getViewDetailPage(
+        request: ViewDetailPageRequest,
+    ): Promise<ViewDetailPage | undefined> {
+        return this.invoke<ViewDetailPage | null>(
+            viewToolNames.getViewDetailPage,
+            request,
+            viewDetailPageSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
     public saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry> {
         return this.invoke(
             viewToolNames.saveViewDraft,
@@ -1267,6 +1392,24 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewToolNames.cancelViewBuild,
             request,
             viewBuildJobSchema,
+        );
+    }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.continueViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.refreshExtensionViews,
+            request,
+            viewBuildJobSchema.array(),
         );
     }
     public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
@@ -1581,11 +1724,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+    public answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult> {
         return this.invoke(
             memoryToolNames.answer,
             answerRequestSchema.parse(request),
             answerResultSchema,
+            signal === undefined ? {} : { signal },
         );
     }
 
@@ -1731,10 +1878,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
 function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
     if (config.kind === "http") {
+        const headers = new Headers(config.headers);
+        headers.set("X-TypeAgent-Client-Id", randomUUID());
         return new StreamableHTTPClientTransport(new URL(config.url), {
-            ...(config.headers === undefined
-                ? {}
-                : { requestInit: { headers: config.headers } }),
+            requestInit: { headers },
             ...(config.timeoutMs === undefined
                 ? {}
                 : {
@@ -1744,7 +1891,13 @@ function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
                               signal:
                                   init?.signal == null
                                       ? AbortSignal.timeout(config.timeoutMs!)
-                                      : AbortSignal.any([
+                                      : (
+                                            AbortSignal as typeof AbortSignal & {
+                                                any(
+                                                    signals: AbortSignal[],
+                                                ): AbortSignal;
+                                            }
+                                        ).any([
                                             init.signal,
                                             AbortSignal.timeout(
                                                 config.timeoutMs!,

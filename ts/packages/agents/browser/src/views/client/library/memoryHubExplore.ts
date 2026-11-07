@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     MemoryHubExploreResult,
     MemoryHubGraphSource,
@@ -45,15 +46,12 @@ export function mountMemoryHubExplore(
         "phase2-status",
     );
     status.setAttribute("role", "status");
-    const warning = text("div", undefined, "phase2-warning");
-    warning.hidden = true;
-    warning.setAttribute("role", "status");
     const counts = text("div", undefined, "phase2-counts");
     const note = text("div");
     const flyout = mountFlyout(host, "Knowledge detail");
     const graphDetails = mountGraphDetails(host, options);
     const lists = text("div", undefined, "phase2-lists");
-    root.append(status, warning, counts, note, lists);
+    root.append(status, counts, note, lists);
     host.append(root);
     const topics = mountTopicBrowser(root, {
         corpusId: options.scope,
@@ -199,10 +197,12 @@ export function mountMemoryHubExplore(
             (error) =>
                 `${error.corpusId} · ${error.operation}: ${error.message}`,
         );
-        warning.hidden = !errors.length;
-        warning.textContent = errors.length
-            ? `Partial overview: only responding corpora are included.\n${errors.join("\n")}`
-            : "";
+        hubNotifications.set("explore", {
+            title: "Explore",
+            page: "explore",
+            context: options.scope() ?? "All memory",
+            messages: errors,
+        });
         status.textContent = `${data.corpora.length} responding ${data.corpora.length === 1 ? "corpus" : "corpora"} · Previewing up to ${KNOWLEDGE_PREVIEW_SIZE} cards per collection${errors.length ? " · partial results" : ""}`;
         clearCollections();
         lists.replaceChildren();
@@ -332,7 +332,7 @@ export function mountMemoryHubExplore(
             counts.replaceChildren();
             lists.replaceChildren();
             note.replaceChildren();
-            warning.hidden = true;
+            hubNotifications.clear("explore");
             status.textContent =
                 "Scope changed. Open Overview to load this corpus.";
         },

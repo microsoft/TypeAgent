@@ -192,6 +192,179 @@ test("agent topic writes cannot masquerade as human-protected edits", async () =
     ).rejects.toThrow(/cannot become human-protected/);
 });
 
+test.each(["resume", "cancel", "forget", "deadline", "close"] as const)(
+    "a yielded native continuation preserves checkpoint ownership and recovery: %s",
+    async (action) => {
+        const directory = await mkdtemp(path.join(os.tmpdir(), "topic-yield-"));
+        const store = new TypedViewStore(directory);
+        const captured = input();
+        const shortInput: ViewBuildSnapshot = {
+            ...input(),
+            corpusId: "short",
+            pipeline: "timeline-v1",
+            definition: {
+                viewId: "empty-timeline",
+                kind: "timeline",
+                selector: { kind: "sources", sources: [] },
+            },
+        };
+        const admit = async (value: ViewBuildSnapshot) =>
+            (
+                await store.admitViewBuild(
+                    {
+                        corpusId: value.corpusId,
+                        expectedHead: null,
+                        targets: [
+                            {
+                                definition: value.definition,
+                                expectedVersion: 0,
+                            },
+                        ],
+                    },
+                    [value],
+                )
+            ).job;
+        const native = await admit(captured);
+        const short = await admit(shortInput);
+        let checkpointEntered!: () => void;
+        const checkpoint = new Promise<void>((resolve) => {
+            checkpointEntered = resolve;
+        });
+        let allowCheckpoint!: () => void;
+        const checkpointGate = new Promise<void>((resolve) => {
+            allowCheckpoint = resolve;
+        });
+        let shortEntered!: () => void;
+        const entered = new Promise<void>((resolve) => {
+            shortEntered = resolve;
+        });
+        let releaseShort!: () => void;
+        const shortGate = new Promise<void>((resolve) => {
+            releaseShort = resolve;
+        });
+        let calls = 0;
+        let finalWrites = 0;
+        let nativeUpdates = 0;
+        let durable = "";
+        let closing: Promise<void> | undefined;
+        const runner = new ViewBuildRunner(
+            adapter(async (value) => {
+                calls++;
+                return createTopicSnapshot(value, "offline");
+            }),
+            {
+                update: async (corpus, id, update) => {
+                    if (id === short.jobId) {
+                        shortEntered();
+                        await shortGate;
+                    } else nativeUpdates++;
+                    return store.updateViewBuild(corpus, id, update);
+                },
+                current: async () => undefined,
+                materialize: async () => {
+                    throw new Error("No article output");
+                },
+                materializeTopicIncidence: async (
+                    job,
+                    _result,
+                    value,
+                    signal,
+                ) => {
+                    checkpointEntered();
+                    await checkpointGate;
+                    signal.throwIfAborted();
+                    await store.materializeTopicBuild(
+                        job.corpusId,
+                        job.jobId,
+                        value,
+                        false,
+                    );
+                    durable = JSON.stringify(
+                        (
+                            await new TypedViewStore(directory).getTopicState(
+                                job.corpusId,
+                            )
+                        ).snapshot,
+                    );
+                },
+                materializeTopics: async (job, _result, value, signal) => {
+                    signal.throwIfAborted();
+                    finalWrites++;
+                    await store.materializeTopicBuild(
+                        job.corpusId,
+                        job.jobId,
+                        value,
+                    );
+                },
+            },
+            undefined,
+            undefined,
+            action === "deadline" ? 2500 : undefined,
+            1,
+            false,
+            1,
+            true,
+        );
+        try {
+            runner.start(native);
+            await checkpoint;
+            runner.start(short);
+            allowCheckpoint();
+            await entered;
+            expect(calls).toBe(0);
+            expect(durable).not.toBe("");
+            expect(
+                JSON.stringify(
+                    (
+                        await new TypedViewStore(directory).getTopicState(
+                            native.corpusId,
+                        )
+                    ).snapshot,
+                ),
+            ).toBe(durable);
+            const before = nativeUpdates;
+            if (action === "resume") releaseShort();
+            if (action === "cancel") runner.cancel(native.jobId);
+            if (action === "forget") runner.forget(native.corpusId);
+            if (action === "close") closing = runner.close();
+            await runner.wait(native.jobId, AbortSignal.timeout(10000));
+            const saved = (await store.listViewBuilds(native.corpusId))[0];
+            if (action === "resume") {
+                expect(saved.state).toBe("complete");
+                expect(calls).toBe(1);
+                expect(finalWrites).toBe(1);
+            } else {
+                expect(calls).toBe(0);
+                expect(finalWrites).toBe(0);
+                expect(
+                    JSON.stringify(
+                        (
+                            await new TypedViewStore(directory).getTopicState(
+                                native.corpusId,
+                            )
+                        ).snapshot,
+                    ),
+                ).toBe(durable);
+                if (action === "forget") expect(nativeUpdates).toBe(before);
+                else
+                    expect(saved.results[0].reason).toContain(
+                        action === "deadline"
+                            ? "2.5 second limit"
+                            : action === "close"
+                              ? "Service closing"
+                              : "cancellation",
+                    );
+            }
+        } finally {
+            allowCheckpoint();
+            releaseShort();
+            await runner.close();
+            await closing;
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+);
+
 test("existing runner jobs/results persist a complete topic snapshot without article side effects", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "topic-runner-"));
     const store = new TypedViewStore(directory);

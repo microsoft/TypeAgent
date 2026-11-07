@@ -8,9 +8,19 @@ export function createMemoryHubUnderstandingFunctions(
     getService: () => MemoryService,
 ): Pick<
     MemoryHubFunctions,
-    "memoryHubUnderstand" | "memoryHubUnderstandingModule"
+    | "memoryHubUnderstand"
+    | "memoryHubUnderstandingModule"
+    | "memoryHubCancelUnderstanding"
 > {
     return {
+        async memoryHubCancelUnderstanding(request) {
+            const service = getService();
+            if (!service.cancelUnderstanding)
+                throw new Error(
+                    "Memory understanding cancellation is not supported",
+                );
+            return service.cancelUnderstanding(request);
+        },
         async memoryHubUnderstand(request) {
             const service = getService();
             if (!service.understand)

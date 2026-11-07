@@ -13,6 +13,7 @@ import type {
     KnowledgeDiscoveryState,
     KnowledgeDiscoveryUpdate,
     KnowledgeFamily,
+    KnowledgeFamilyFailure,
     KnowledgeStatus,
     KnowledgeSource,
 } from "./knowledgeTypes.js";
@@ -24,6 +25,8 @@ export interface KnowledgeDocument extends KnowledgeSource {
     content: string;
 }
 export interface KnowledgeHost {
+    /** Host ceiling for scheduled discovery; explicit checkpoints remain available. */
+    automaticDiscovery?: boolean | undefined;
     begin?(corpusId: string): Promise<void>;
     end?(corpusId: string): void;
     reportFailure?(corpusId: string, error: unknown): Promise<void>;
@@ -61,10 +64,18 @@ export interface KnowledgeHost {
     maintain(
         checkpoint: KnowledgeCheckpoint,
         signal: AbortSignal,
+        reportFailure: (
+            failure: Omit<KnowledgeFamilyFailure, "observedAt">,
+        ) => Promise<void>,
     ): Promise<
         Pick<
             KnowledgeCheckpoint,
-            "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+            | "viewIds"
+            | "jobIds"
+            | "state"
+            | "reasons"
+            | "viewRevisions"
+            | "diagnostics"
         >
     >;
     enabledFamilies(): KnowledgeFamily[];
@@ -92,6 +103,10 @@ export class KnowledgeCoordinator {
     private readonly work = new Map<string, Promise<void>>();
     private readonly controllers = new Set<AbortController>();
     private readonly checkpoints = new Map<string, Promise<void>>();
+    private readonly failureSignals = new Map<
+        string,
+        { promise: Promise<void>; resolve: () => void }
+    >();
     private readonly checkpointCorpora = new Set<string>();
     private closed = false;
 
@@ -100,6 +115,7 @@ export class KnowledgeCoordinator {
     public schedule(corpusId: string): void {
         if (
             this.closed ||
+            this.host.automaticDiscovery === false ||
             this.host.activeImport(corpusId) ||
             this.checkpointCorpora.has(corpusId)
         )
@@ -120,6 +136,7 @@ export class KnowledgeCoordinator {
             this.dirtySince.delete(corpusId);
             if (
                 this.closed ||
+                this.host.automaticDiscovery === false ||
                 this.host.activeImport(corpusId) ||
                 this.checkpointCorpora.has(corpusId)
             )
@@ -504,10 +521,19 @@ export class KnowledgeCoordinator {
         const pendingTimer = this.timers.get(request.corpusId);
         if (pendingTimer) clearTimeout(pendingTimer);
         this.timers.delete(request.corpusId);
+        let notifyFailure!: () => void;
+        const failure = new Promise<void>((resolve) => {
+            notifyFailure = resolve;
+        });
+        this.failureSignals.set(checkpoint.checkpointId, {
+            promise: failure,
+            resolve: notifyFailure,
+        });
         const work = this.runCheckpoint(checkpoint, sources, timeoutMs);
         this.checkpoints.set(checkpoint.checkpointId, work);
         const finished = () => {
             this.checkpoints.delete(checkpoint.checkpointId);
+            this.failureSignals.delete(checkpoint.checkpointId);
             this.checkpointCorpora.delete(request.corpusId);
         };
         void work.then(finished, async (error: unknown) => {
@@ -533,7 +559,16 @@ export class KnowledgeCoordinator {
         );
         try {
             await this.host.begin?.(checkpoint.corpusId);
-            await this.change(checkpoint, { state: "running" });
+            await this.change(checkpoint, {
+                state: "running",
+                diagnostics: [
+                    {
+                        phase: "discovery",
+                        state: "running",
+                        code: "discovery-running",
+                    },
+                ],
+            });
             const unavailable = checkpoint.families.filter(
                 (family) => !this.host.enabledFamilies().includes(family),
             );
@@ -543,6 +578,12 @@ export class KnowledgeCoordinator {
                     reasons: [
                         `Required knowledge families are disabled: ${unavailable.join(", ")}`,
                     ],
+                    diagnostics: unavailable.map((family) => ({
+                        phase: "checkpoint",
+                        family,
+                        state: "blocked",
+                        code: "family-disabled",
+                    })),
                 });
                 return;
             }
@@ -556,6 +597,13 @@ export class KnowledgeCoordinator {
                 await this.change(checkpoint, {
                     state: "superseded",
                     reasons: ["Captured evidence changed before maintenance"],
+                    diagnostics: [
+                        {
+                            phase: "checkpoint",
+                            state: "superseded",
+                            code: "evidence-changed",
+                        },
+                    ],
                 });
                 return;
             }
@@ -563,10 +611,26 @@ export class KnowledgeCoordinator {
             await this.change(checkpoint, {
                 coverage: discovery.coverage,
                 discoveryFingerprints: discovery.fingerprints,
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        state: "running",
+                        code: "maintenance-running",
+                    },
+                ],
             });
+            if (discoveryErrors.length)
+                await this.requiredFailure(checkpoint, {
+                    family: "questions",
+                    state: "failed",
+                    reasons: discoveryErrors,
+                    viewIds: [],
+                    jobIds: [],
+                });
             const result = await this.host.maintain(
                 checkpoint,
                 controller.signal,
+                (failure) => this.requiredFailure(checkpoint, failure),
             );
             const stillCurrent = await this.current(checkpoint);
             await this.change(checkpoint, {
@@ -584,11 +648,52 @@ export class KnowledgeCoordinator {
                     ...discovery.reasons,
                     ...(!stillCurrent ? ["Captured evidence changed"] : []),
                 ],
+                diagnostics: [
+                    ...(result.diagnostics ?? []),
+                    ...(discoveryErrors.length
+                        ? [
+                              {
+                                  phase: "discovery" as const,
+                                  state: "failed" as const,
+                                  code: "discovery-failed" as const,
+                              },
+                          ]
+                        : []),
+                    ...(discovery.limited
+                        ? [
+                              {
+                                  phase: "discovery" as const,
+                                  state: "partial" as const,
+                                  code: "discovery-incomplete" as const,
+                              },
+                          ]
+                        : []),
+                    ...(!stillCurrent
+                        ? [
+                              {
+                                  phase: "checkpoint" as const,
+                                  state: "superseded" as const,
+                                  code: "evidence-changed" as const,
+                              },
+                          ]
+                        : []),
+                ],
             });
         } catch (error) {
             await this.change(checkpoint, {
                 state: this.closed ? "cancelled" : "failed",
                 reasons: [message(error)],
+                diagnostics: [
+                    {
+                        phase: "checkpoint",
+                        state: this.closed ? "cancelled" : "failed",
+                        code: this.closed
+                            ? "checkpoint-cancelled"
+                            : controller.signal.aborted
+                              ? "checkpoint-deadline"
+                              : "checkpoint-failed",
+                    },
+                ],
             });
         } finally {
             this.host.end?.(checkpoint.corpusId);
@@ -684,6 +789,33 @@ export class KnowledgeCoordinator {
         );
     }
 
+    private async requiredFailure(
+        checkpoint: KnowledgeCheckpoint,
+        failure: Omit<KnowledgeFamilyFailure, "observedAt">,
+    ): Promise<void> {
+        if (
+            !checkpoint.families.includes(failure.family) ||
+            !(await this.current(checkpoint))
+        )
+            return;
+        await this.host.write(checkpoint.corpusId, (status) => {
+            const stored = status.checkpoints.find(
+                (entry) => entry.checkpointId === checkpoint.checkpointId,
+            );
+            if (!stored) throw new Error("Knowledge checkpoint was removed");
+            if (stored.state === "superseded") return;
+            (stored.requiredFailures ??= []).push({
+                ...structuredClone(failure),
+                observedAt: new Date().toISOString(),
+            });
+            stored.reasons = [
+                ...new Set([...stored.reasons, ...failure.reasons]),
+            ];
+            stored.updatedAt = new Date().toISOString();
+        });
+        this.failureSignals.get(checkpoint.checkpointId)?.resolve();
+    }
+
     private async change(
         checkpoint: KnowledgeCheckpoint,
         update: Partial<KnowledgeCheckpoint>,
@@ -694,6 +826,23 @@ export class KnowledgeCoordinator {
             );
             if (!stored) throw new Error("Knowledge checkpoint was removed");
             if (stored.state === "superseded") return;
+            if (
+                stored.requiredFailures?.length &&
+                (update.state === "ready" || update.state === "partial")
+            )
+                update = { ...update, state: "failed" };
+            if (update.reasons && stored.requiredFailures?.length)
+                update = {
+                    ...update,
+                    reasons: [
+                        ...new Set([
+                            ...stored.requiredFailures.flatMap(
+                                (failure) => failure.reasons,
+                            ),
+                            ...update.reasons,
+                        ]),
+                    ],
+                };
             Object.assign(stored, update, {
                 updatedAt: new Date().toISOString(),
             });
@@ -725,6 +874,14 @@ export class KnowledgeCoordinator {
         ) {
             const update = {
                 state: "superseded" as const,
+                diagnostics: [
+                    ...(checkpoint.diagnostics ?? []),
+                    {
+                        phase: "checkpoint" as const,
+                        state: "superseded" as const,
+                        code: "checkpoint-superseded" as const,
+                    },
+                ],
                 reasons: [
                     ...checkpoint.reasons,
                     "Captured source or maintained view revision changed",
@@ -742,8 +899,15 @@ export class KnowledgeCoordinator {
         if (
             Object.keys(request).some(
                 (key) =>
-                    !["corpusId", "checkpointId", "timeoutMs"].includes(key),
-            )
+                    ![
+                        "corpusId",
+                        "checkpointId",
+                        "timeoutMs",
+                        "failOnRequiredFailure",
+                    ].includes(key),
+            ) ||
+            (request.failOnRequiredFailure !== undefined &&
+                typeof request.failOnRequiredFailure !== "boolean")
         )
             throw new Error("Invalid knowledge wait request");
         const deadline =
@@ -753,7 +917,11 @@ export class KnowledgeCoordinator {
             checkpointId: request.checkpointId,
         };
         const initial = await this.get(reference);
-        if (terminal(initial)) return initial;
+        if (
+            terminal(initial) ||
+            (request.failOnRequiredFailure && initial.requiredFailures?.length)
+        )
+            return initial;
         const work = this.checkpoints.get(request.checkpointId);
         if (work) {
             const controller = new AbortController();
@@ -767,7 +935,13 @@ export class KnowledgeCoordinator {
                 Math.max(0, deadline - Date.now()),
             );
             try {
-                await abortable(work, controller.signal);
+                const failure = request.failOnRequiredFailure
+                    ? this.failureSignals.get(request.checkpointId)?.promise
+                    : undefined;
+                await abortable(
+                    failure ? Promise.race([work, failure]) : work,
+                    controller.signal,
+                );
                 return this.get(reference);
             } finally {
                 clearTimeout(timer);
@@ -776,7 +950,12 @@ export class KnowledgeCoordinator {
         while (Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 500));
             const checkpoint = await this.get(reference);
-            if (terminal(checkpoint)) return checkpoint;
+            if (
+                terminal(checkpoint) ||
+                (request.failOnRequiredFailure &&
+                    checkpoint.requiredFailures?.length)
+            )
+                return checkpoint;
         }
         throw new Error(
             "Timed out waiting for knowledge checkpoint; work continues",

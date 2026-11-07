@@ -93,7 +93,10 @@ On failure:
 
 - **429** → parse `Retry-After`, mark the member as cooling for `max(Retry-After, base × 2^consecutive_429s)`, capped at 120 s. Rotate to the next healthy member.
 - **5xx / timeout / network error** → floor cooldown of 5 s. Rotate.
-- **Non-transient 4xx** (e.g. 401) → return immediately without rotating. The error isn't going to get better on another endpoint.
+- **Capacity-related 400/413/422** → retry once on the same endpoint with the
+  advertised lower output capacity, or half the current reservation when no
+  capacity is reported. Other non-transient 4xx (e.g. 401) return immediately
+  without rotating.
 
 After 3 consecutive successes the 429 multiplier resets, so a transient blip doesn't leave an endpoint penalised for the rest of the process's life.
 
@@ -131,7 +134,7 @@ See [`ts/tools/scripts/README.md`](../../tools/scripts/README.md) for the multi-
 
 ## Completion limits and reasoning
 
-OpenAI-compatible chat completions and Responses requests omit optional
+Initial OpenAI-compatible chat completions and Responses requests omit optional
 `max_completion_tokens`, legacy `max_tokens`, and `max_output_tokens` limits.
 Completion settings no longer accept those fields; old JavaScript settings
 produce a migration error rather than being silently ignored. There is no
@@ -147,6 +150,30 @@ elapsed time, and aggregate safeguards remain separate from wire generation.
 Anthropic Messages is the protocol exception: its mandatory native `max_tokens`
 field is populated from verified provider output capacity. It is not the removed
 legacy OpenAI setting; a Messages request without known capacity fails explicitly.
+
+The default Luna output capacity is 128,000 tokens. Application output and
+cumulative reservation budgets must accommodate it. A smaller endpoint may
+reject a request with a capacity-related 400, 413 or 422. The REST client retries
+that logical request at most once, using a reported positive lower capacity
+when available, otherwise halving the reservation (128,000 to 64,000).
+Only this recovery adds a protocol-native output limit; it does not restore
+removed caller completion settings. A reported total context limit leaves
+room for the serialized prompt and a conservative safety margin, without
+truncating input.
+
+Learned limits remain specific to the endpoint, model and wire format within
+the configured client lifetime; other pool members retain their own capacity.
+Larger subsequent prompts are checked against learned context capacity.
+Cancellation, elapsed time, aggregate tokens and physical-attempt accounting
+remain enforced on every dispatch, including the capacity retry. This one
+capacity retry is independent of the transient HTTP retry setting. Invalid
+schemas, authentication failures, throttling, server errors and unsupported
+parameters do not trigger capacity halving. A failed retry returns the ordinary
+endpoint error, not a fabricated answer. A provider-reported token-limit stop
+or incomplete response also fails explicitly, including during streaming;
+already emitted stream fragments do not establish a complete answer.
+Enable `typeagent:rest:retry` to inspect
+bounded capacity-retry diagnostics without exporting response bodies.
 
 ## Trademarks
 

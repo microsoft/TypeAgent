@@ -13,6 +13,15 @@ import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
 import { validateProjectSelector } from "./informationalProject.js";
 import { emptySchemaView } from "./schemaView.js";
+import { validateExtensionDefinition } from "./viewExtensions.js";
+
+export function resolveTopicBuildTimeout(value = 3_000_000): number {
+    if (!Number.isSafeInteger(value) || value < 1 || value > 3_600_000)
+        throw new Error(
+            "Topic build timeout must be 1 to 3600000 milliseconds",
+        );
+    return value;
+}
 
 export function parseViewDraftCapability(
     value: string | undefined,
@@ -21,6 +30,35 @@ export function parseViewDraftCapability(
     if (value === undefined || value === "true" || value === "1") return true;
     if (value === "false" || value === "0") return false;
     throw new Error(`${setting} must be true or false`);
+}
+
+function validateExtensionBuildTarget(
+    target: ViewBuildRequest["targets"][number],
+): void {
+    validateExtensionDefinition(target.definition);
+    assertViewIdentifier("view ID", target.definition.viewId);
+    if (
+        !Number.isSafeInteger(target.expectedVersion) ||
+        target.expectedVersion < 0
+    )
+        throw new Error("Invalid extension target version");
+    const selector = target.definition.selector;
+    const maximum = selector.kind === "sourceManifest" ? 4096 : 32;
+    if (
+        !["sources", "sourceManifest"].includes(selector.kind) ||
+        !Array.isArray(selector.sources) ||
+        !selector.sources.length ||
+        selector.sources.length > maximum ||
+        new Set(selector.sources.map((source) => source.sourceId)).size !==
+            selector.sources.length
+    )
+        throw new Error(
+            "Invalid or overflowing complete extension source selection",
+        );
+    for (const source of selector.sources) {
+        assertViewIdentifier("source ID", source.sourceId);
+        assertViewIdentifier("revision ID", source.revisionId);
+    }
 }
 
 export function validateBuildRequest(request: ViewBuildRequest): void {
@@ -63,6 +101,13 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             )
         )
             throw new Error("Unsupported build target");
+        if (target.definition?.kind === "extension") {
+            validateExtensionBuildTarget(target);
+            if (ids.has(target.definition.viewId))
+                throw new Error("Duplicate build target");
+            ids.add(target.definition.viewId);
+            continue;
+        }
         validateProjectSelector(target.definition);
         validateViewDraft({
             corpusId: request.corpusId,

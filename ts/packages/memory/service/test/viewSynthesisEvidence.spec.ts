@@ -248,6 +248,41 @@ describe("actual configured evidence-first adapter and durable service", () => {
             query: "Inspect pressure",
             freshness: "current",
         });
+    test("collection warmup acknowledges before loading and the next search reuses its reader", async () => {
+        await build();
+        let enter!: () => void;
+        let release!: () => void;
+        const entered = new Promise<void>((resolve) => {
+            enter = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const initialize = ControlledIndex.prototype.initialize;
+        const initialization = jest
+            .spyOn(ControlledIndex.prototype, "initialize")
+            .mockImplementation(async function (this: ControlledIndex) {
+                enter();
+                await gate;
+                await initialize.call(this);
+            });
+        let acknowledged = false;
+        try {
+            const scheduling = service.warmViewIndexes(corpusId).then(() => {
+                acknowledged = true;
+            });
+            await entered;
+            expect(acknowledged).toBe(true);
+            release();
+            await scheduling;
+            expect(await search()).toHaveLength(1);
+            expect(initialization).toHaveBeenCalledTimes(1);
+        } finally {
+            release();
+            initialization.mockRestore();
+        }
+    });
+
     test("default-on publishes exact validated artifact, survives restart, and disabled capability never retrieves stored publication", async () => {
         const job = await build();
         expect(job.results[0].state).toBe("searchable");

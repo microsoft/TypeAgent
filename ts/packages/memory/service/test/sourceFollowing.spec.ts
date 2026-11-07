@@ -11,10 +11,7 @@ import {
     settleConsolidation,
     replaceOriginal,
 } from "./sourceFollowingFixtures.js";
-import {
-    authoredRelationships,
-    derivedDefinitionInput,
-} from "../src/viewRelationships.js";
+import { editPausedConsolidationDraft } from "./wikiConsolidationFixtures.js";
 import { createMemoryServiceRpcFacade } from "../src/rpcFacade.js";
 import type { ViewVersion, ViewBuildJob } from "../src/viewTypes.js";
 
@@ -33,12 +30,13 @@ async function initial(root: string) {
     const host = sourceFollowingHost(root);
     const service = host.open();
     const { corpusId } = await service.createCorpus("Real KnowPro C5");
-    await service.maintainViews({
-        corpusId,
-        family: "topics",
-        operation: "pause",
-        expectedHead: (await service.listViews(corpusId)).head,
-    });
+    for (const family of ["topics", "projects"] as const)
+        await service.maintainViews({
+            corpusId,
+            family,
+            operation: "pause",
+            expectedHead: (await service.listViews(corpusId)).head,
+        });
     await changeFamily(service, corpusId, "pause");
     await sourceFollowingStage(service, corpusId, "initial");
     await changeFamily(service, corpusId, "resume");
@@ -211,20 +209,17 @@ test("source following preserves authenticated human title/note units during act
     const { service, corpusId, old } = await initial(root);
     try {
         await changeFamily(service, corpusId, "pause");
-        const content = structuredClone(old.content);
-        if (content.kind !== "wiki")
-            throw new Error("Expected actual Wiki content");
-        content.title = "My overlap navigation";
-        content.sections[0].details.note = "Keep my scope annotation";
-        await service.saveViewDraft({
+        await editPausedConsolidationDraft(
+            service,
             corpusId,
-            viewId: old.viewId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            expectedVersion: old.version,
-            definition: derivedDefinitionInput(old),
-            content,
-            relationships: authoredRelationships(old),
-        });
+            old.viewId,
+            (content) => {
+                if (content.kind !== "wiki")
+                    throw new Error("Expected actual Wiki content");
+                content.title = "My overlap navigation";
+                content.sections[0].details.note = "Keep my scope annotation";
+            },
+        );
         await sourceFollowingStage(service, corpusId, "t1");
         await changeFamily(service, corpusId, "resume");
         await settleConsolidation(service, corpusId);

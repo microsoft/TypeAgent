@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type { MemoryHubExploreResult } from "@typeagent/browser-control-rpc/viewRpc";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { invokeView } from "./viewClient";
@@ -229,9 +230,13 @@ test("partial overview counts and transport failures are distinguished from heal
         }),
     );
     await mounted.show();
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "only responding corpora",
-    );
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("unavailable");
     expect(host.textContent).toContain("not a complete empty result");
     mounted.scopeChanged();
     invoke.mockRejectedValueOnce(new Error("offline"));

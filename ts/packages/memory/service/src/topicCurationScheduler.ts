@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
+import { yieldMaintenanceBuild } from "./maintenanceConcurrency.js";
 
 export interface OrderedTopicPacket {
     start: number;
@@ -19,7 +20,7 @@ export async function runOrderedTopicBatches<P extends OrderedTopicPacket, T>(
     signal: AbortSignal,
     prepare: (start: number, ordinal: number) => P,
     execute: (packet: P, signal: AbortSignal) => Promise<T>,
-    commit: (packet: P, value: T, ordinal: number) => Promise<void>,
+    commit: (packet: P, value: T, ordinal: number) => Promise<void | boolean>,
 ): Promise<void> {
     const pending = new Map<
         number,
@@ -106,11 +107,16 @@ export async function runOrderedTopicBatches<P extends OrderedTopicPacket, T>(
                 ordinal,
                 outstanding: pending.size,
             });
-            await timeSearchStage(
+            const checkpointed = await timeSearchStage(
                 "topic.curation.commit",
                 () => commit(packet, outcome.value, ordinal),
                 { ordinal },
             );
+            if (checkpointed)
+                await yieldMaintenanceBuild(signal, async () => {
+                    await Promise.all(started);
+                    checkFailure();
+                });
             pending.delete(position);
             position = packet.end;
             ordinal++;

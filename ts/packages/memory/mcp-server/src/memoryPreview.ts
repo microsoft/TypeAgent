@@ -97,6 +97,9 @@ export function previewToolResult(
     const summary =
         preview.summary?.text ?? "Requested supporting evidence is ready.";
     const essential = {
+        ...(preview.modules.some((module) => module.kind === "derivedViews")
+            ? { corpusId: preview.corpusId, snapshotId: preview.snapshotId }
+            : {}),
         schemaVersion: 1,
         status: preview.status,
         title: preview.title,
@@ -181,15 +184,67 @@ export function compactModule(
     return result;
 }
 
+function derivedModuleText(result: UnderstandingModuleResult): string {
+    const lines = [
+        `Derived views: ${result.status}. Exact snapshot ${result.snapshotId}.`,
+    ];
+    for (const view of result.derivedViews ?? []) {
+        lines.push(
+            `## ${view.title}\n${view.viewId} @ ${view.revisionId}; layout ${view.presentation.layout.id}. Derived, not independent corroboration.`,
+        );
+        if (view.sourceFragment) {
+            const source = view.sourceFragment;
+            lines.push(
+                `### Pinned original ${source.role} [${source.citationId}]\n${source.source.sourceId} @ ${source.source.revisionId} ${source.source.locator}\n${source.text}\nOriginal text ${source.offset + 1}–${source.offset + source.text.length} of ${source.totalChars}.${source.nextOffset !== undefined ? ` Next citationBodyOffset ${source.nextOffset}.` : ""}`,
+            );
+        }
+        for (const block of view.blocks) {
+            const entry = `### ${block.heading} [${block.id}]\n${block.body}\n${block.citations
+                .map(
+                    (citation) =>
+                        `[${citation.id}] ${citation.role}: ${citation.source.sourceId} @ ${citation.source.revisionId} ${citation.source.locator}`,
+                )
+                .join("\n")}`;
+            if (
+                Buffer.byteLength([...lines, entry].join("\n\n"), "utf8") > 6000
+            ) {
+                lines.push(
+                    "Additional exact claims and citations exceed this compact text response; expand the same view/revision/block scope.",
+                );
+                break;
+            }
+            lines.push(entry);
+            if (block.nextBodyOffset !== undefined)
+                lines.push(
+                    `Claim text fragment; next bodyOffset ${block.nextBodyOffset} of ${block.bodyTotalChars}.`,
+                );
+            if (block.nextCitationOffset !== undefined)
+                lines.push(
+                    `Original citations omitted; next citationOffset ${block.nextCitationOffset}.`,
+                );
+        }
+        if (view.nextOffset !== undefined)
+            lines.push(
+                `Additional stored blocks: next offset ${view.nextOffset}.`,
+            );
+    }
+    return lines.join("\n\n");
+}
+
 export function expansionToolResult(
     input: UnderstandingModuleResult,
+    html = true,
 ): CallToolResult {
     const result = compactModule(input);
+    const text =
+        result.kind === "derivedViews"
+            ? derivedModuleText(result)
+            : `${result.kind}: ${result.status}${result.reason ? ` — ${result.reason}` : ""}`;
     const response: CallToolResult = {
         content: [
             {
                 type: "text",
-                text: `${result.kind}: ${result.status}${result.reason ? ` — ${result.reason}` : ""}`,
+                text,
             },
         ],
         structuredContent: {
@@ -197,10 +252,23 @@ export function expansionToolResult(
                 kind: result.kind,
                 status: result.status,
                 ...(result.reason ? { reason: result.reason } : {}),
+                ...(result.kind === "derivedViews"
+                    ? {
+                          schemaVersion: 1,
+                          corpusId: result.corpusId,
+                          snapshotId: result.snapshotId,
+                          viewIds: result.derivedViews?.map((view) => ({
+                              viewId: view.viewId,
+                              revisionId: view.revisionId,
+                          })),
+                          omittedViews: result.omittedViews,
+                      }
+                    : {}),
             },
         },
         _meta: { [previewMetaKey]: { module: result } },
     };
+    if (result.kind === "derivedViews" && !html) delete response._meta;
     assertBytes(response, 64 * 1024);
     return response;
 }
@@ -211,6 +279,10 @@ export function registerMemoryPreview(
     supportsHtml?: () => boolean,
 ): void {
     const ui = { resourceUri: previewResourceUri };
+    const clientUiCapability = () => {
+        const extensions = server.server.getClientCapabilities()?.extensions;
+        return getUiCapability(extensions ? { extensions } : {});
+    };
     const safe = async (
         operation: () => Promise<CallToolResult>,
     ): Promise<CallToolResult> => {
@@ -246,9 +318,7 @@ export function registerMemoryPreview(
                 if (!service.understand)
                     throw new Error("Memory understanding is not supported");
                 const result = await service.understand(request);
-                const capable = getUiCapability(
-                    server.server.getClientCapabilities(),
-                );
+                const capable = clientUiCapability();
                 return previewToolResult(
                     result,
                     supportsHtml
@@ -276,6 +346,11 @@ export function registerMemoryPreview(
                     );
                 return expansionToolResult(
                     await service.understandingModule(request),
+                    supportsHtml
+                        ? supportsHtml()
+                        : clientUiCapability()?.mimeTypes?.includes(
+                              RESOURCE_MIME_TYPE,
+                          ) === true,
                 );
             }),
     );

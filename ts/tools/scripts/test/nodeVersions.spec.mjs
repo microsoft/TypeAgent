@@ -16,6 +16,7 @@ const tsRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const repo = path.dirname(tsRoot);
 const pinnedBuildVersion = "24.22.1";
 const supportedVersions = ["22.23.4", pinnedBuildVersion, "26.12.1"];
+const ciVersions = supportedVersions.slice(1);
 const typesVersion = "22.20.5";
 const read = (file) => fs.readFileSync(path.join(repo, file), "utf8");
 const nodeRange = JSON.parse(read("ts/package.json")).engines.node;
@@ -128,7 +129,7 @@ test("SQLite dependencies and the prebuild installer support every supported Nod
         if (dependency) {
             assert.deepEqual(
                 dependency,
-                { specifier: "12.11.1", version: "12.11.1" },
+                { specifier: "13.0.3", version: "13.0.3" },
                 importer,
             );
         }
@@ -152,13 +153,13 @@ test("SQLite dependencies and the prebuild installer support every supported Nod
         assert.ok(
             semver.satisfies(
                 version,
-                lock.packages["better-sqlite3@12.11.1"].engines.node,
+                lock.packages["better-sqlite3@13.0.3"].engines.node,
             ),
         );
     }
 });
 
-test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => {
+test("CI tests only Node 24 and 26 while single-version jobs pin Node 24", () => {
     const directory = path.join(repo, ".github", "workflows");
     for (const file of fs.readdirSync(directory)) {
         if (!file.endsWith(".yml")) {
@@ -168,6 +169,15 @@ test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => 
             fs.readFileSync(path.join(directory, file), "utf8"),
         );
         for (const job of Object.values(workflow.jobs ?? {})) {
+            if (job.strategy?.matrix?.version) {
+                assert.deepEqual(
+                    job.strategy.matrix.version,
+                    ["build-ts.yml", "ci-fanout-experiment.yml"].includes(file)
+                        ? ciVersions
+                        : [pinnedBuildVersion],
+                    file,
+                );
+            }
             for (const step of job.steps ?? []) {
                 if (!step.uses?.startsWith("actions/setup-node@")) {
                     continue;
@@ -176,8 +186,10 @@ test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => 
                 if (version === "${{ matrix.version }}") {
                     assert.deepEqual(
                         job.strategy.matrix.version,
-                        file === "build-ts.yml"
-                            ? supportedVersions
+                        ["build-ts.yml", "ci-fanout-experiment.yml"].includes(
+                            file,
+                        )
+                            ? ciVersions
                             : [pinnedBuildVersion],
                         file,
                     );

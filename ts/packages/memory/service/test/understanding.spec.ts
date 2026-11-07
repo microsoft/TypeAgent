@@ -8,6 +8,8 @@ import {
     type ChatModel,
 } from "@typeagent/aiclient";
 import { answerIntegratedEvidence } from "../src/integratedAnswer.js";
+import { readIntegratedEvidence } from "../src/integratedAnswerReader.js";
+import { runWithSearchCancellation } from "@typeagent/knowpro";
 import {
     MemoryUnderstanding,
     assertUnderstandingBytes,
@@ -15,9 +17,14 @@ import {
 import {
     parseUnderstanding,
     readUnderstanding,
+    UnderstandingReaderUnavailable,
 } from "../src/understandingReader.js";
 import { UnderstandingStore } from "../src/understandingStore.js";
-import type { AnswerEvidence, MemoryEvidence } from "../src/types.js";
+import type {
+    AnswerEvidence,
+    MemoryEvidence,
+    MemoryAnswerRequest,
+} from "../src/types.js";
 import type {
     UnderstandingCandidates,
     UnderstandingHost,
@@ -94,6 +101,392 @@ function graph(): MemoryGraphQueryResult {
         },
     };
 }
+test("Explain counts large view construction scopes without sending opaque lineage IDs", async () => {
+    const influencingSourceIds = [
+        "original",
+        ...Array.from({ length: 164 }, (_, index) =>
+            index.toString(16).padStart(64, "0"),
+        ),
+    ];
+    const evidence: AnswerEvidence[] = [
+        { kind: "source", id: "s0", source: source() },
+        ...Array.from(
+            { length: 4 },
+            (_, index): AnswerEvidence => ({
+                kind: "derived",
+                id: `d${index}`,
+                reference: {
+                    viewId: `view${index}`,
+                    revisionId: "v1",
+                    sectionId: "claim",
+                    state: "selected",
+                },
+                text: "The user reported six projects.",
+                influencingSourceIds,
+                supportingSources: [
+                    {
+                        sourceId: "original",
+                        revisionId: "r1",
+                        locator: "lines:1-2",
+                    },
+                ],
+                opposingSources: [],
+                supportingEvidenceIds: ["s0"],
+                opposingEvidenceIds: [],
+                authorship: "informational",
+                review: "unreviewed",
+                freshness: "current",
+                coverage: "evaluated current retained sources",
+            }),
+        ),
+    ];
+    expect(JSON.stringify(evidence).length).toBeGreaterThan(32000);
+    let calls = 0;
+    const model: ChatModel = {
+        completionSettings: {},
+        async complete(prompt, _options, jsonSchema) {
+            calls++;
+            if (typeof prompt === "string")
+                throw new Error("Expected structured understanding prompt");
+            expect(
+                JSON.stringify({ messages: prompt, jsonSchema }).length,
+            ).toBeLessThanOrEqual(32000);
+            const envelope = JSON.parse(
+                String(prompt.find((item) => item.role === "user")!.content),
+            );
+            const views = envelope.evidence.filter(
+                (item: { kind: string }) => item.kind === "derived",
+            );
+            expect(views).toHaveLength(4);
+            for (const view of views) {
+                expect(view).not.toHaveProperty("influencingSourceIds");
+                expect(view).toHaveProperty("influencingSourceCount", 165);
+            }
+            return {
+                success: true,
+                data: JSON.stringify(response(["s0", "d0", "d1", "d2", "d3"])),
+            };
+        },
+    };
+    const result = await readUnderstanding({
+        question: request.question,
+        evidence,
+        candidates: empty,
+        allowRefinement: false,
+        model,
+    });
+    expect(result.status).toBe("answered");
+    expect(calls).toBe(1);
+    expect(evidence[1]).toHaveProperty(
+        "influencingSourceIds",
+        influencingSourceIds,
+    );
+});
+
+describe("bounded original-citation repair", () => {
+    const evidence: AnswerEvidence[] = [
+        { id: "s0", kind: "source", source: source() },
+        { id: "s1", kind: "source", source: source("opposition") },
+        {
+            id: "d0",
+            kind: "derived",
+            reference: { viewId: "view", revisionId: "v1", state: "selected" },
+            text: "The reports disagree.",
+            influencingSourceIds: ["original", "opposition"],
+            supportingSources: [],
+            opposingSources: [],
+            supportingEvidenceIds: ["s0"],
+            opposingEvidenceIds: ["s1"],
+            authorship: "informational",
+            review: "unreviewed",
+            freshness: "current",
+            coverage: "current retained sources",
+        },
+    ];
+    const modes = ["Ask", "Explain summary", "Explain section"] as const;
+    function resultFor(mode: (typeof modes)[number], ids: string[]) {
+        if (mode === "Ask")
+            return {
+                status: "answered",
+                answer: "The reports disagree.",
+                evidenceIds: ids,
+                retrievalQueries: [],
+            };
+        if (mode === "Explain summary") return response(ids);
+        const result = response(["s0"]);
+        result.sections = [
+            {
+                title: "Disagreement",
+                claims: [
+                    {
+                        text: "The reports disagree.",
+                        role: "memory",
+                        evidenceIds: ids,
+                    },
+                ],
+            },
+        ];
+        return result;
+    }
+    function read(mode: (typeof modes)[number], model: ChatModel) {
+        return mode === "Ask"
+            ? readIntegratedEvidence(request, evidence, { model })
+            : readUnderstanding({
+                  question: request.question,
+                  evidence,
+                  candidates: empty,
+                  allowRefinement: false,
+                  model,
+              });
+    }
+    test.each(modes)(
+        "%s regenerates one incomplete citation bundle from unchanged evidence",
+        async (mode) => {
+            const packets: string[] = [];
+            let calls = 0;
+            const model: ChatModel = {
+                completionSettings: {},
+                async complete(prompt, _options, jsonSchema) {
+                    calls++;
+                    if (typeof prompt === "string")
+                        throw new Error("Expected structured reader prompt");
+                    expect(JSON.stringify(prompt)).toContain(
+                        "treat that view as the requested artifact",
+                    );
+                    expect(JSON.stringify(prompt)).toContain(
+                        "If no matching view was supplied",
+                    );
+                    packets.push(
+                        String(
+                            prompt.find((item) => item.role === "user")!
+                                .content,
+                        ),
+                    );
+                    const packet = JSON.parse(packets[packets.length - 1]);
+                    expect(
+                        packet.evidence.find(
+                            (item: { id: string }) => item.id === "d0",
+                        ).requiredEvidenceIds,
+                    ).toEqual(["d0", "s0", "s1"]);
+                    expect(
+                        JSON.stringify({ messages: prompt, jsonSchema }).length,
+                    ).toBeLessThanOrEqual(32000);
+                    if (calls === 2) {
+                        expect(JSON.stringify(prompt)).toContain(
+                            "supportingEvidenceIds",
+                        );
+                        expect(JSON.stringify(prompt)).toContain(
+                            "opposingEvidenceIds",
+                        );
+                        expect(JSON.stringify(prompt)).toContain(
+                            "references: s1",
+                        );
+                    }
+                    return {
+                        success: true,
+                        data: JSON.stringify(
+                            resultFor(
+                                mode,
+                                calls === 1 ? ["d0", "s0"] : ["d0", "s0", "s1"],
+                            ),
+                        ),
+                    };
+                },
+            };
+            const result = await read(mode, model);
+            expect(result.status).toBe("answered");
+            expect(calls).toBe(2);
+            expect(packets[1]).toBe(packets[0]);
+            expect(JSON.stringify(result)).toContain('"s1"');
+        },
+    );
+    test.each(modes)(
+        "%s rejects a repeated citation omission after one repair",
+        async (mode) => {
+            let calls = 0;
+            await expect(
+                read(mode, {
+                    completionSettings: {},
+                    async complete() {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify(resultFor(mode, ["d0", "s0"])),
+                        };
+                    },
+                }),
+            ).rejects.toThrow("original support or opposition");
+            expect(calls).toBe(2);
+        },
+    );
+    test.each(modes)(
+        "%s rejects an unknown reference without citation repair",
+        async (mode) => {
+            let calls = 0;
+            await expect(
+                read(mode, {
+                    completionSettings: {},
+                    async complete() {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify(
+                                resultFor(mode, ["d0", "s0", "invented"]),
+                            ),
+                        };
+                    },
+                }),
+            ).rejects.toThrow(/unknown|unsupported/);
+            expect(calls).toBe(1);
+        },
+    );
+});
+
+describe("Understanding operation cancellation", () => {
+    test("opt-in transient refinement recovery retains only revalidated initial content", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const answer = host.answer;
+        const id = "00000000-0000-4000-8000-000000000002";
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async (...args) => ({
+            ...(await answer(...args)),
+            evidenceSnapshotId: id,
+            refinementPending: true,
+        });
+        const initial = await engine.understand({
+            ...request,
+            phase: "initial",
+        });
+        host.answer = async () => {
+            throw new UnderstandingReaderUnavailable(
+                new Error("offline transient"),
+            );
+        };
+        const retained = await engine.understand({
+            ...request,
+            phase: "refine",
+            evidenceSnapshotId: id,
+        });
+        expect(retained.snapshotId).toBe(initial.snapshotId);
+        expect(retained.answer?.summary).toEqual(initial.answer?.summary);
+        expect(retained.answer?.status).toBe("partial");
+        expect(retained.refinementPending).toBe(false);
+        expect(retained.refinementFailed).toBe(true);
+        expect(retained.warnings.join(" ")).toContain(
+            "refinement is incomplete",
+        );
+        host.validate = async () => false;
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: id,
+            }),
+        ).rejects.toThrow("changed or was forgotten");
+        engine.close();
+    });
+
+    test("generic errors and malformed model output never become successful refinement fallbacks", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async () => {
+            throw new Error("scope mismatch");
+        };
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: "00000000-0000-4000-8000-000000000002",
+            }),
+        ).rejects.toThrow("scope mismatch");
+        engine.close();
+        model.complete = async () => ({ success: true, data: "invalid JSON" });
+        await expect(
+            readUnderstanding({
+                question: request.question,
+                evidence: [{ id: "s0", kind: "source", source: source() }],
+                candidates: empty,
+                allowRefinement: false,
+                model,
+            }),
+        ).rejects.not.toBeInstanceOf(UnderstandingReaderUnavailable);
+    });
+
+    test("cancel reaches the active reader and does not cross collection scope", async () => {
+        const { engine, model } = fixture();
+        const original = model.complete;
+        const requestId = "00000000-0000-4000-8000-000000000001";
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        model.complete = async (
+            _prompt,
+            _settings,
+            _schema,
+            _callback,
+            signal,
+        ) => {
+            if (!signal) throw new Error("Reader cancellation signal missing");
+            entered();
+            return new Promise<Awaited<ReturnType<ChatModel["complete"]>>>(
+                (_resolve, reject) => {
+                    signal.addEventListener(
+                        "abort",
+                        () => reject(signal.reason),
+                        { once: true },
+                    );
+                },
+            );
+        };
+        const pending = engine.understand({ ...request, requestId });
+        const rejected = expect(pending).rejects.toThrow("cancelled");
+        await started;
+        await expect(
+            engine.understand({ ...request, requestId }),
+        ).rejects.toThrow("already active");
+        expect(() =>
+            engine.cancel({ corpusId: request.corpusId, requestId: "invalid" }),
+        ).toThrow("UUID");
+        expect(engine.cancel({ corpusId: "other", requestId })).toBe(false);
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            true,
+        );
+        await rejected;
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            false,
+        );
+        model.complete = original;
+        expect(
+            (await engine.understand({ ...request, requestId })).answer?.status,
+        ).toBe("answered");
+        engine.close();
+    });
+
+    test("batched validation receives all influencing evidence and source-set identity", async () => {
+        const { engine, host } = fixture();
+        let validations = 0;
+        host.validateSnapshot = async (input, evidence, indexVersion) => {
+            validations++;
+            expect(input.corpusId).toBe(request.corpusId);
+            expect(evidence.length).toBeGreaterThan(0);
+            expect(indexVersion).toBe("index1");
+            return true;
+        };
+        await engine.understand(request);
+        expect(validations).toBeGreaterThan(0);
+        engine.close();
+    });
+});
+
 function fixture(originals = [source()]) {
     const calls: {
         evidence: AnswerEvidence[];
@@ -146,9 +539,258 @@ function fixture(originals = [source()]) {
 }
 
 describe("strict understanding reader", () => {
+    test("document explanation and follow-ons retain a single exact revision and reject scope drift", async () => {
+        const { engine, host, calls } = fixture([source(), source("other")]);
+        host.validateSource = async () => true;
+        const answer = host.answer;
+        const requests: Parameters<UnderstandingHost["answer"]>[0][] = [];
+        host.answer = (input, reader) => {
+            requests.push(input);
+            return answer(input, reader);
+        };
+        const input = {
+            ...request,
+            source: { sourceId: "original", revisionId: "r1" },
+            retrievalPolicy: "sourcesOnly" as const,
+        };
+        const first = await engine.understand(input);
+        expect(requests[0].sourceIds).toEqual(["original"]);
+        expect(first.citations).toHaveLength(1);
+        const citation = first.citations[0];
+        expect(citation.kind).toBe("source");
+        if (citation.kind !== "source")
+            throw new Error("Expected source citation");
+        expect(citation.source).toMatchObject(input.source);
+        await engine.understand({
+            ...input,
+            question: "Was it verified?",
+            parentSnapshotId: first.snapshotId,
+            parentTurnId: first.turnId,
+        });
+        expect(
+            requests.every((item) => item.sourceIds?.[0] === "original"),
+        ).toBe(true);
+        await expect(
+            engine.understand({
+                ...input,
+                source: { sourceId: "other", revisionId: "r1" },
+                parentSnapshotId: first.snapshotId,
+                parentTurnId: first.turnId,
+            }),
+        ).rejects.toThrow("scope");
+        host.validateSource = async () => false;
+        await expect(
+            engine.module({
+                corpusId: "corpus",
+                snapshotId: first.snapshotId,
+                kind: "sources",
+            }),
+        ).rejects.toThrow("exact document revision");
+        expect(calls).toHaveLength(2);
+        engine.close();
+    });
+
+    test("document source preview forwards source filters and rejects out-of-scope evidence", async () => {
+        const { engine, host, calls } = fixture();
+        host.validateSource = async () => true;
+        const previews: MemoryAnswerRequest[] = [];
+        host.preview = async (input) => {
+            previews.push(input);
+            return [source()];
+        };
+        const input = {
+            ...request,
+            phase: "preview" as const,
+            source: { sourceId: "original", revisionId: "r1" },
+        };
+        await engine.understand(input);
+        expect(previews[0]).toMatchObject({
+            sourceIds: ["original"],
+            retrievalPolicy: "sourcesOnly",
+        });
+        host.preview = async () => [source("different")];
+        await expect(engine.understand(input)).rejects.toThrow(
+            "outside its exact source",
+        );
+        expect(calls).toHaveLength(0);
+        engine.close();
+    });
+
+    test("document explanations never silently broaden unsupported or stale requests", async () => {
+        const { engine, host, calls } = fixture([
+            { ...source(), revisionId: "r2" },
+        ]);
+        const input = {
+            ...request,
+            source: { sourceId: "original", revisionId: "r1" },
+        };
+        await expect(engine.understand(input)).rejects.toThrow("not supported");
+        host.validateSource = async () => true;
+        await expect(engine.understand(input)).rejects.toThrow(
+            "outside its exact source",
+        );
+        await expect(
+            engine.understand({ ...input, retrievalPolicy: "sourcesAndViews" }),
+        ).rejects.toThrow("sources-only");
+        await expect(
+            engine.understand({
+                ...input,
+                source: { sourceId: "", revisionId: "r1" },
+            }),
+        ).rejects.toThrow("exact source and revision");
+        expect(calls).toHaveLength(0);
+        engine.close();
+    });
     const evidence: AnswerEvidence[] = [
         { id: "s0", kind: "source", source: source() },
     ];
+    test.each(["integrated", "understanding"])(
+        "%s regenerates one inconsistent abstention with unchanged evidence",
+        async (kind) => {
+            const prompts: string[] = [];
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    const ids = prompts.length === 1 ? ["s0"] : [];
+                    const data =
+                        kind === "integrated"
+                            ? {
+                                  status: "noAnswer",
+                                  answer: "The requested measurement is not recorded.",
+                                  evidenceIds: ids,
+                                  retrievalQueries: [],
+                              }
+                            : {
+                                  ...response(ids),
+                                  status: "noAnswer",
+                              };
+                    return { success: true, data: JSON.stringify(data) };
+                },
+            };
+            const result =
+                kind === "integrated"
+                    ? await readIntegratedEvidence(request, evidence, {
+                          model,
+                      })
+                    : await readUnderstanding({
+                          question: request.question,
+                          evidence,
+                          candidates: empty,
+                          allowRefinement: true,
+                          model,
+                      });
+            expect(result.status).toBe("noAnswer");
+            expect(prompts).toHaveLength(2);
+            expect(prompts[1]).toContain("Regenerate from the same");
+            expect(prompts[1]).toContain("User reported six gallery projects");
+            expect(prompts[0]).toContain("Match every requested event");
+        },
+    );
+    test.each(["status", "unknown citation", "malformed JSON", "cancelled"])(
+        "integrated repair is bounded and does not recover %s by weakening validation",
+        async (failure) => {
+            let calls = 0;
+            const controller = new AbortController();
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async () => {
+                    calls++;
+                    if (failure === "cancelled")
+                        controller.abort(new Error("reader cancelled"));
+                    return {
+                        success: true,
+                        data:
+                            failure === "malformed JSON"
+                                ? "{"
+                                : JSON.stringify({
+                                      status: "noAnswer",
+                                      answer: "Not established.",
+                                      evidenceIds: [
+                                          failure === "unknown citation"
+                                              ? "unknown"
+                                              : "s0",
+                                      ],
+                                      retrievalQueries: [],
+                                  }),
+                    };
+                },
+            };
+            await expect(
+                runWithSearchCancellation(controller.signal, () =>
+                    readIntegratedEvidence(request, evidence, { model }),
+                ),
+            ).rejects.toThrow();
+            expect(calls).toBe(failure === "status" ? 2 : 1);
+        },
+    );
+    test("repair feedback cannot exceed the serialized reader request budget", async () => {
+        let initialChars = 0;
+        const valid: ChatModel = {
+            completionSettings: {},
+            complete: async (messages, _options, jsonSchema) => {
+                initialChars = JSON.stringify({ messages, jsonSchema }).length;
+                return {
+                    success: true,
+                    data: JSON.stringify({
+                        status: "answered",
+                        answer: "Six projects.",
+                        evidenceIds: ["s0"],
+                        retrievalQueries: [],
+                    }),
+                };
+            },
+        };
+        await readIntegratedEvidence(request, evidence, { model: valid });
+        let calls = 0;
+        await expect(
+            readIntegratedEvidence(request, evidence, {
+                maxRequestChars: initialChars,
+                model: {
+                    completionSettings: {},
+                    complete: async () => {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify({
+                                status: "noAnswer",
+                                answer: "Not established.",
+                                evidenceIds: ["s0"],
+                                retrievalQueries: [],
+                            }),
+                        };
+                    },
+                },
+            }),
+        ).rejects.toThrow("serialized request budget");
+        expect(calls).toBe(1);
+    });
+    test("brief initial reading preserves strict output and injected-model precedence", async () => {
+        let instructions = "";
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (prompt) => {
+                instructions = JSON.stringify(prompt);
+                return { success: true, data: JSON.stringify(response()) };
+            },
+        };
+        expect(
+            (
+                await readUnderstanding({
+                    question: request.question,
+                    evidence,
+                    candidates: empty,
+                    allowRefinement: true,
+                    brief: true,
+                    model,
+                    endpoint: "unconfigured-must-not-be-used",
+                })
+            ).summary.evidenceIds,
+        ).toEqual(["s0"]);
+        expect(instructions).toContain("at most 700 output tokens");
+        expect(instructions).toContain("Preserve uncertainty");
+        expect(instructions).toContain("retrievalQueries");
+    });
     test("uses the production factory and structured schema without rejected completion limits", async () => {
         const runtimeConfig = getRuntimeConfig();
         const fetch = globalThis.fetch;
@@ -577,6 +1219,50 @@ describe("understanding lifecycle and orchestration", () => {
 });
 
 describe("snapshot and wire budgets", () => {
+    test("retains shared evidence once without discarding any lineage or accepting distinct oversized data", () => {
+        const store = new UnderstandingStore<{
+            corpusId: string;
+            envelopes: { influencingSourceIds: string[] }[];
+        }>();
+        const evidence = {
+            influencingSourceIds: Array.from(
+                { length: 4000 },
+                (_, index) => `${index}-` + "x".repeat(60),
+            ),
+        };
+        const shared = {
+            corpusId: "corpus",
+            envelopes: [evidence, evidence, evidence],
+        };
+        expect(
+            Buffer.byteLength(JSON.stringify(shared), "utf8"),
+        ).toBeGreaterThan(512 * 1024);
+        store.put("shared", shared, 0);
+        expect(store.get("shared")).toBe(shared);
+        expect(store.get("shared").envelopes[2].influencingSourceIds).toEqual(
+            evidence.influencingSourceIds,
+        );
+        expect(() =>
+            store.put(
+                "distinct",
+                {
+                    corpusId: "corpus",
+                    envelopes: shared.envelopes.map((item) =>
+                        structuredClone(item),
+                    ),
+                },
+                0,
+            ),
+        ).toThrow("byte budget");
+        const cyclic: { influencingSourceIds: string[]; self?: object } = {
+            influencingSourceIds: ["original"],
+        };
+        cyclic.self = cyclic;
+        expect(() =>
+            store.put("cyclic", { corpusId: "corpus", envelopes: [cyclic] }, 0),
+        ).toThrow(/circular/i);
+        store.close();
+    });
     test("empty retrieval is explicitly noAnswer and never spends a prose completion", async () => {
         const { engine, calls } = fixture([]);
         const result = await engine.understand(request);

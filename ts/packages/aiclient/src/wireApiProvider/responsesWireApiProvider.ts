@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Result, success } from "typechat";
+import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import {
     createApiHeaders,
+    incompleteOutputMessage,
     splitSystemMessages,
     usageFromInputOutput,
 } from "./shared.js";
@@ -32,6 +33,7 @@ type ResponsesUsage = {
 };
 
 type ResponsesResult = {
+    status?: string;
     output_text?: string;
     output?: ResponsesOutputItem[];
     usage?: ResponsesUsage;
@@ -72,6 +74,23 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
         if (cs.reasoning_effort !== undefined) {
             body.reasoning = { effort: cs.reasoning_effort };
         }
+        if (
+            request.jsonSchema !== undefined &&
+            !Array.isArray(request.jsonSchema)
+        ) {
+            if (request.disableResponseFormat)
+                throw new Error(
+                    `Json schema not supported by model '${request.modelName}'`,
+                );
+            body.text = {
+                format: { ...request.jsonSchema, type: "json_schema" },
+            };
+        } else if (
+            cs.response_format?.type === "json_object" &&
+            !request.disableResponseFormat
+        ) {
+            body.text = { format: { type: "json_object" } };
+        }
         if (request.stream) {
             body.stream = true;
         }
@@ -80,6 +99,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
 
     parseResponse(data: unknown, _request: ModelRequest): Result<string> {
         const res = data as ResponsesResult;
+        if (res.status === "incomplete") {
+            return error(incompleteOutputMessage);
+        }
         if (typeof res.output_text === "string") {
             return success(res.output_text);
         }
@@ -114,6 +136,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     };
                 };
                 const piece: StreamPiece = {};
+                if (evt.type === "response.incomplete") {
+                    throw new Error(incompleteOutputMessage);
+                }
                 if (
                     evt.type === "response.output_text.delta" &&
                     typeof evt.delta === "string"

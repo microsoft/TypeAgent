@@ -6,7 +6,6 @@ import { BooleanOp } from "../compileLib.js";
 import { isPropertyTerm } from "../searchLib.js";
 import {
     DataFrameCollection,
-    DataFrameSearchTerm,
     DataFrameTermGroup,
     IDataFrame,
 } from "./dataFrame.js";
@@ -14,7 +13,6 @@ import {
     PropertySearchTerm,
     SearchTerm,
     SearchTermGroup,
-    Term,
 } from "../interfaces.js";
 import * as q from "../query.js";
 
@@ -87,7 +85,6 @@ export class DataFrameCompiler {
         if (dfTermGroups === undefined || dfTermGroups.length === 0) {
             return undefined;
         }
-        this.validateAndPrepareGroups(dfTermGroups);
         const termExpressions: MatchDataFrameTermsExpr[] = [];
         for (const dfTermGroup of dfTermGroups) {
             termExpressions.push(new MatchDataFrameTermsExpr(dfTermGroup));
@@ -104,33 +101,7 @@ export class DataFrameCompiler {
         if (dfTermGroups === undefined || dfTermGroups.length === 0) {
             return undefined;
         }
-        this.validateAndPrepareGroups(dfTermGroups);
         return new TextRangeFromDataFrameExpr(dfTermGroups);
-    }
-
-    private validateAndPrepareGroups(dfGroups: DataFrameTermGroup[]): boolean {
-        for (const dfGroup of dfGroups) {
-            if (!this.validateAndPrepareTerms(dfGroup.terms)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private validateAndPrepareTerms(dfTerms: DataFrameSearchTerm[]): boolean {
-        for (const dfTerm of dfTerms) {
-            if (!this.validateAndPrepareTerm(dfTerm.columnValue.term)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private validateAndPrepareTerm(term: Term | undefined): boolean {
-        if (term) {
-            term.text = term.text.toLowerCase();
-        }
-        return true;
     }
 }
 
@@ -173,6 +144,9 @@ export function getDataFrameTermGroups(
             dfGroup.terms.push({
                 columnName,
                 columnValue,
+                ...(isPropertyTerm(term) && term.compareOp !== undefined
+                    ? { compareOp: term.compareOp }
+                    : {}),
             });
         }
     }

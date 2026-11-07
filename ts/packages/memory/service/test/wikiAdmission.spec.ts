@@ -7,6 +7,12 @@ import {
     reusableWikiAssessment,
     wikiPurposeRules,
     WikiAssessmentRejection,
+    wikiAssessmentKey,
+    wikiUtilityDeferralKey,
+    evidenceOnlyWikiDeferral,
+    wikiAssessmentSchema,
+    wikiProseWitnesses,
+    resolveWikiAssessmentWitnesses,
 } from "../src/wikiAdmission.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
@@ -33,6 +39,10 @@ import {
     createConfiguredViewSynthesisAdapter,
     prepareWikiContribution,
 } from "../src/viewSynthesis.js";
+import {
+    changeFamily,
+    editPausedConsolidationDraft,
+} from "./wikiConsolidationFixtures.js";
 
 function input(viewId = "candidate"): ViewBuildSnapshot {
     const citation = {
@@ -102,6 +112,73 @@ function page(viewId = "canonical"): ViewVersion {
         provenance: "generated",
     };
 }
+
+test.each(["head", "exhausted", "other"] as const)(
+    "paused consolidation draft edits handle %s conflicts without changing the original version",
+    async (mode) => {
+        const current = page();
+        const original = current.content.summary;
+        const saved = structuredClone(current);
+        saved.content.summary += " Editorial edit.";
+        let attempts = 0;
+        let releases = 0;
+        const failure = new Error(
+            mode === "other"
+                ? "Synthetic validation failure"
+                : "View history head conflict",
+        );
+        const service: Parameters<typeof editPausedConsolidationDraft>[0] = {
+            deferMaintenance: () => () => {
+                releases++;
+            },
+            getMaintenanceStatus: () => ({
+                mode: "automatic",
+                paused: true,
+                settled: false,
+                pending: ["corpus:committed-read-cleanup"],
+                running: [],
+                failures: [],
+                deferred: [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => [],
+            listViews: async () => ({
+                head: `head-${attempts}`,
+                views: [current],
+                wikiFamily: { enabled: false, pending: false },
+            }),
+            saveViewDraft: async (request) => {
+                expect(request.expectedHead).toBe(`head-${attempts}`);
+                expect(request.expectedVersion).toBe(current.version);
+                expect(request.content.summary).toBe(saved.content.summary);
+                attempts++;
+                if (mode !== "head" || attempts === 1) throw failure;
+                return { commitId: "saved", version: saved };
+            },
+        };
+        const result = editPausedConsolidationDraft(
+            service,
+            "corpus",
+            current.viewId,
+            (content) => {
+                content.summary += " Editorial edit.";
+            },
+        );
+        if (mode === "head") {
+            await expect(result).resolves.toEqual({
+                commitId: "saved",
+                version: saved,
+            });
+            expect(attempts).toBe(2);
+        } else {
+            await expect(result).rejects.toBe(failure);
+            expect(attempts).toBe(mode === "exhausted" ? 20 : 1);
+        }
+        expect(current.content.summary).toBe(original);
+        expect(releases).toBe(1);
+    },
+);
+
 function covered(): WikiSubjectAssessment {
     return {
         disposition: "covered",
@@ -120,6 +197,41 @@ function covered(): WikiSubjectAssessment {
         ],
     };
 }
+
+test("assessment dependencies ignore unrelated publication but retain all nominated context", () => {
+    const frozen = input();
+    const canonical = page();
+    const contexts = nominateWikiPages(frozen, [canonical], new Map());
+    const key = wikiAssessmentKey(frozen, contexts, "policy");
+    const unrelated = page("unrelated");
+    unrelated.definition.wiki!.query = "unrelated astronomy";
+    unrelated.content.title = "Astronomy";
+    unrelated.content.citations = unrelated.content.citations.map(
+        (citation) => ({
+            ...citation,
+            sourceId: "unrelated-source",
+        }),
+    );
+    expect(
+        wikiAssessmentKey(
+            frozen,
+            nominateWikiPages(frozen, [canonical, unrelated], new Map()),
+            "policy",
+        ),
+    ).toBe(key);
+    expect(wikiAssessmentKey(frozen, contexts, "new-policy")).not.toBe(key);
+    const changed = structuredClone(frozen);
+    changed.inputs[0].content += " New useful evidence.";
+    expect(wikiAssessmentKey(changed, contexts, "policy")).not.toBe(key);
+    const updatedPages = structuredClone(contexts);
+    updatedPages[0].revisionId = "new-revision";
+    expect(wikiAssessmentKey(frozen, updatedPages, "policy")).not.toBe(key);
+    expect(wikiAssessmentKey(frozen, [], "policy")).not.toBe(key);
+    const restart = JSON.parse(JSON.stringify({ frozen, contexts }));
+    expect(wikiAssessmentKey(restart.frozen, restart.contexts, "policy")).toBe(
+        key,
+    );
+});
 
 test("canonical coverage checks mandatory distinctions without suppressing unrelated retrieval context", () => {
     const frozen = input();
@@ -166,6 +278,174 @@ test("canonical coverage checks mandatory distinctions without suppressing unrel
     ).toThrow("invalid-distinction-evidence");
 });
 
+test("evidence-only utility dependencies retain source, subject, model and policy changes", () => {
+    const frozen = input();
+    const key = wikiUtilityDeferralKey(frozen, "policy");
+    const restart: ViewBuildSnapshot = JSON.parse(JSON.stringify(frozen));
+    expect(wikiUtilityDeferralKey(restart, "policy")).toBe(key);
+    expect(wikiUtilityDeferralKey(frozen, "new-policy")).not.toBe(key);
+    const mutations: Array<(snapshot: ViewBuildSnapshot) => void> = [
+        (snapshot) => {
+            snapshot.model = "new-model";
+        },
+        (snapshot) => {
+            snapshot.inputs[0].revisionId = "new-revision";
+        },
+        (snapshot) => {
+            snapshot.inputs[0].passages![0].excerpt += " New evidence.";
+        },
+        (snapshot) => {
+            snapshot.inputs = [];
+        },
+        (snapshot) => {
+            snapshot.definition.wiki!.query = "new subject";
+        },
+        (snapshot) => {
+            snapshot.definition.wiki!.aliases = ["new alias"];
+        },
+    ];
+    for (const mutate of mutations) {
+        const changed = structuredClone(frozen);
+        mutate(changed);
+        expect(wikiUtilityDeferralKey(changed, "policy")).not.toBe(key);
+    }
+});
+
+test("only explicit typed evidence deferrals are independent of canonical context", () => {
+    const value: WikiSubjectAssessment = {
+        disposition: "defer",
+        purpose: "Passing reference",
+        reason: "Sparse original evidence",
+        canonicalViewId: "",
+        sharedFragmentIds: [],
+        ambiguousViewIds: [],
+        essentialDistinctions: [],
+    };
+    expect(evidenceOnlyWikiDeferral(parseWikiAssessment(value, []))).toBe(
+        false,
+    );
+    expect(
+        evidenceOnlyWikiDeferral(
+            parseWikiAssessment(
+                {
+                    ...value,
+                    deferBasis: "canonical-context",
+                },
+                [],
+            ),
+        ),
+    ).toBe(false);
+    expect(
+        evidenceOnlyWikiDeferral(
+            parseWikiAssessment(
+                {
+                    ...value,
+                    deferBasis: "evidence",
+                },
+                [],
+            ),
+        ),
+    ).toBe(true);
+    expect(parseWikiAssessment({ ...value, deferBasis: "" }, [])).toEqual(
+        value,
+    );
+    expect(() =>
+        parseWikiAssessment({ ...value, deferBasis: "guessed" }, []),
+    ).toThrow();
+    expect(() =>
+        parseWikiAssessment(
+            {
+                ...value,
+                disposition: "distinct",
+                deferBasis: "evidence",
+            },
+            [],
+        ),
+    ).toThrow("deferral-basis-without-defer");
+    const schema = wikiAssessmentSchema([]).schema;
+    expect(schema.required).toContain("deferBasis");
+});
+
+test("native prose witnesses preserve all text and exact selected-page bindings", () => {
+    const text = `${"Reference 😀.\n".repeat(200)}Final qualification.`;
+    const witnesses = wikiProseWitnesses(text);
+    expect(witnesses.length).toBeGreaterThan(1);
+    expect(witnesses.map((witness) => witness.text).join("")).toBe(text);
+    expect(witnesses.every((witness) => witness.text.length <= 2000)).toBe(
+        true,
+    );
+    expect(witnesses.map((witness) => witness.id)).toEqual(
+        witnesses.map((_, index) => `w${index}`),
+    );
+    const contexts = nominateWikiPages(input(), [page()], new Map());
+    const value = covered();
+    const native = {
+        ...value,
+        essentialDistinctions: value.essentialDistinctions.map((item) => ({
+            ...item,
+            canonicalExcerpt: "",
+            canonicalWitnessId: "w0",
+        })),
+    };
+    const bound = parseWikiAssessment(
+        resolveWikiAssessmentWitnesses(native, contexts),
+        contexts,
+    );
+    expect(bound.essentialDistinctions[0].canonicalExcerpt).toBe(
+        contexts[0].prose,
+    );
+    expect(bound.essentialDistinctions[0]).not.toHaveProperty(
+        "canonicalWitnessId",
+    );
+    for (const invalid of ["w1", "invented"]) {
+        expect(() =>
+            resolveWikiAssessmentWitnesses(
+                {
+                    ...native,
+                    essentialDistinctions: [
+                        {
+                            ...native.essentialDistinctions[0],
+                            canonicalWitnessId: invalid,
+                        },
+                    ],
+                },
+                contexts,
+            ),
+        ).toThrow("canonical-witness-not-supplied");
+    }
+    expect(() =>
+        resolveWikiAssessmentWitnesses(
+            {
+                ...native,
+                essentialDistinctions: [
+                    {
+                        ...native.essentialDistinctions[0],
+                        canonicalExcerpt: "fabricated quotation",
+                    },
+                ],
+            },
+            contexts,
+        ),
+    ).toThrow("invalid-canonical-witness-binding");
+    expect(() =>
+        parseWikiAssessment(
+            resolveWikiAssessmentWitnesses(
+                {
+                    ...native,
+                    essentialDistinctions: [
+                        {
+                            ...native.essentialDistinctions[0],
+                            canonicalWitnessId: "",
+                        },
+                    ],
+                },
+                contexts,
+            ),
+            contexts,
+        ),
+    ).toThrow("incomplete-prose-coverage");
+});
+
 test.each([
     "covered",
     "repaired",
@@ -210,8 +490,13 @@ test.each([
                     expect(String(messages[0].content)).toContain(
                         "not standalone admission or redundancy screening",
                     );
+                    expect(String(messages[0].content)).not.toContain(
+                        "FIRST assess independent standalone utility",
+                    );
                     checks++;
-                    const prose = payload.pages[0].prose as string;
+                    const prose = payload.pages[0].proseWitnesses
+                        .map((witness: { text: string }) => witness.text)
+                        .join("") as string;
                     const complete = prose.includes("review remains open");
                     return {
                         success: true,
@@ -225,15 +510,22 @@ test.each([
                                     statement:
                                         frozen.wikiContribution!
                                             .essentialDistinctions[0].statement,
-                                    canonicalExcerpt: complete
-                                        ? "The review remains open."
-                                        : "",
+                                    canonicalExcerpt: "",
+                                    canonicalWitnessId: complete ? "w0" : "",
                                 },
                             ],
                         }),
                     };
                 }
                 constructions++;
+                if (constructions === 1) {
+                    expect(String(messages[0].content)).not.toContain(
+                        "FIRST assess independent standalone utility",
+                    );
+                    expect(String(messages[0].content)).toContain(
+                        "Standalone admission is already complete",
+                    );
+                }
                 if (constructions === 2) {
                     expect(payload.fragments[0].text).toBe(evidence);
                     expect(String(messages[0].content)).toContain(
@@ -656,6 +948,114 @@ test("first-page utility can defer without inventing a canonical page", () => {
     ).toThrow();
 });
 
+test.each(["sparse-first-page", "sparse-overlap", "useful-ambiguity"] as const)(
+    "native Wiki utility-first admission handoff: %s",
+    async (mode) => {
+        const frozen = input();
+        const contexts = nominateWikiPages(
+            frozen,
+            mode === "sparse-first-page" ? [] : [page("one"), page("two")],
+            new Map(),
+        );
+        const ambiguous = mode === "useful-ambiguity";
+        const value: WikiSubjectAssessment = {
+            disposition: ambiguous ? "ambiguous" : "defer",
+            ...(!ambiguous && { deferBasis: "evidence" as const }),
+            purpose: ambiguous
+                ? "Independent readiness explanation"
+                : "Passing readiness mention",
+            reason: ambiguous
+                ? "Two supplied pages explain the same useful scoped purpose"
+                : "Insufficient standalone explanation, even with repeated incidental coverage",
+            canonicalViewId: "",
+            sharedFragmentIds: [],
+            essentialDistinctions: [],
+            ambiguousViewIds: ambiguous
+                ? contexts.map((context) => context.viewId)
+                : [],
+        };
+        let calls = 0;
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (messages) => {
+                if (typeof messages === "string")
+                    throw new Error("Expected labeled messages");
+                calls++;
+                const instructions = String(messages[0].content);
+                expect(instructions).toContain(
+                    "This utility decision takes precedence over canonical coverage and ambiguity",
+                );
+                expect(instructions).toContain(
+                    "A sparse candidate still returns",
+                );
+                expect(instructions).toContain(
+                    "If an independently useful candidate has multiple supplied existing pages",
+                );
+                expect(instructions).toContain(
+                    "independently of pages or page-derived identities",
+                );
+                const payload = JSON.parse(String(messages[1].content));
+                expect(payload.pages).toEqual(
+                    contexts.map(({ prose, ...page }) => ({
+                        ...page,
+                        proseWitnesses: wikiProseWitnesses(prose),
+                    })),
+                );
+                expect(payload.fragments[0].text).toBe(
+                    frozen.inputs[0].passages![0].excerpt,
+                );
+                return { success: true, data: JSON.stringify(value) };
+            },
+        };
+        const env = process.env;
+        const config = getRuntimeConfig();
+        try {
+            process.env = {
+                ...env,
+                OPENAI_ENDPOINT_WIKI_UTILITY:
+                    "http://127.0.0.1:1/chat/completions",
+                OPENAI_API_KEY_WIKI_UTILITY:
+                    "synthetic-test-token-not-a-secret",
+                OPENAI_MODEL_WIKI_UTILITY: "synthetic-test-model",
+                OPENAI_ORGANIZATION_WIKI_UTILITY: "synthetic-test",
+                OPENAI_RESPONSE_FORMAT_WIKI_UTILITY: "1",
+            };
+            initRuntimeConfigFromProcessEnv();
+            const adapter = createConfiguredViewSynthesisAdapter(
+                "openai:WIKI_UTILITY",
+                4000,
+                model,
+            );
+            expect(
+                await adapter.assessWikiSubject!(
+                    frozen,
+                    contexts,
+                    new AbortController().signal,
+                ),
+            ).toEqual(value);
+            expect(calls).toBe(1);
+            if (ambiguous) {
+                expect(() =>
+                    parseWikiAssessment(
+                        { ...value, ambiguousViewIds: ["invented", "one"] },
+                        contexts,
+                    ),
+                ).toThrow();
+            } else {
+                expect(() =>
+                    parseWikiAssessment(
+                        { ...value, ambiguousViewIds: ["one", "two"] },
+                        contexts,
+                    ),
+                ).toThrow();
+            }
+        } finally {
+            process.env = env;
+            setRuntimeConfig(config);
+        }
+    },
+);
+
 test("disjoint-source comparisons retain exact incoming evidence and canonical prose checks", () => {
     const canonical = page();
     canonical.content.citations[0].sourceId = "independent-source";
@@ -978,58 +1378,75 @@ test("sequential admission skips covered or low-value first pages and blocks inv
     }
 });
 
-test("automatic family compares earlier same-job page, persists skip and replays zero-model on unchanged cold restart", async () => {
-    class PurposeIndex extends FakeSemanticCorpusIndex {
-        async listSubjects(offset: number) {
-            return {
-                total: 2,
-                items: offset
-                    ? []
-                    : ["cache propagation", "review remains open"].map(
-                          (term) => ({
-                              term,
-                              postingCount: 1,
-                              sourceIds: ["source"],
-                          }),
-                      ),
-            };
-        }
-        override async getKnowledgeGraph() {
-            return {
-                entities: [],
-                relationships: [],
-                topics: [
-                    {
-                        name: "cache propagation",
-                        sourceIds: ["source"],
-                        mentionCount: 1,
-                    },
-                    {
-                        name: "review remains open",
-                        sourceIds: ["source"],
-                        mentionCount: 1,
-                    },
-                ],
-            };
-        }
-        async readFragments(_request: IndexedFragmentRequest) {
-            const document = this.documents[0];
-            if (!document) throw new Error("Offline indexed document missing");
-            return {
-                fragments: [
-                    {
-                        sourceId: document.source.sourceId,
-                        revisionId: document.revision.revisionId,
-                        snippet: document.content,
-                        locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
-                        score: 1,
-                    },
-                ],
-                readChars: document.content.length,
-                limited: false,
-            };
-        }
+class PurposeIndex extends FakeSemanticCorpusIndex {
+    async resolveIndexedLocator(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ) {
+        const document = this.documents.find(
+            (entry) =>
+                entry.source.sourceId === sourceId &&
+                entry.revision.revisionId === revisionId,
+        );
+        if (
+            !document ||
+            locator !==
+                `indexed:0:${document.revision.contentHash}:0-${document.content.length}`
+        )
+            throw new Error("Offline indexed-text anchor unavailable");
+        return document.content;
     }
+
+    async listSubjects(offset: number) {
+        return {
+            total: 2,
+            items: offset
+                ? []
+                : ["cache propagation", "review remains open"].map((term) => ({
+                      term,
+                      postingCount: 1,
+                      sourceIds: ["source"],
+                  })),
+        };
+    }
+    override async getKnowledgeGraph() {
+        return {
+            entities: [],
+            relationships: [],
+            topics: [
+                {
+                    name: "cache propagation",
+                    sourceIds: ["source"],
+                    mentionCount: 1,
+                },
+                {
+                    name: "review remains open",
+                    sourceIds: ["source"],
+                    mentionCount: 1,
+                },
+            ],
+        };
+    }
+    async readFragments(_request: IndexedFragmentRequest) {
+        const document = this.documents[0];
+        if (!document) throw new Error("Offline indexed document missing");
+        return {
+            fragments: [
+                {
+                    sourceId: document.source.sourceId,
+                    revisionId: document.revision.revisionId,
+                    snippet: document.content,
+                    locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
+                    score: 1,
+                },
+            ],
+            readChars: document.content.length,
+            limited: false,
+        };
+    }
+}
+test("automatic family compares earlier same-job page, persists skip and replays zero-model on unchanged cold restart", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "wiki-purpose-family-"));
     let generated = 0;
     let assessed = 0;
@@ -1165,3 +1582,143 @@ test("automatic family compares earlier same-job page, persists skip and replays
         await rm(root, { recursive: true, force: true });
     }
 });
+
+test.each(["evidence", "canonical-context", "legacy"] as const)(
+    "utility deferral retention across canonical edits and cold restart (%s)",
+    async (basis) => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-utility-reuse-"),
+        );
+        let assessed = 0;
+        let model = "offline-utility-reuse-v1";
+        const adapter = {
+            checkEditorial: async () => ({ safe: true, failures: [] }),
+            assessWikiSubject: async (
+                snapshot: ViewBuildSnapshot,
+            ): Promise<WikiSubjectAssessment> => {
+                const sparse =
+                    snapshot.definition.wiki?.query === "cache propagation";
+                if (sparse) assessed++;
+                return {
+                    disposition: sparse ? "defer" : "distinct",
+                    ...(sparse && basis !== "legacy"
+                        ? { deferBasis: basis }
+                        : {}),
+                    purpose: sparse
+                        ? "Passing cache reference"
+                        : "Open review explanation",
+                    reason: sparse
+                        ? "Insufficient standalone utility"
+                        : "Substantive scoped reference",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    ambiguousViewIds: [],
+                    essentialDistinctions: [],
+                };
+            },
+            generate: async (snapshot: ViewBuildSnapshot) =>
+                hydrateInformational(snapshot, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
+                    title: "Open review",
+                    prose: snapshot.inputs[0].content,
+                    limits: "Selected evidence",
+                    citationIds: ["f0"],
+                }),
+            validate: async () => {
+                throw new Error("Legacy validation must not run");
+            },
+        };
+        const open = () =>
+            new FileMemoryService(root, {
+                indexFactory: (_id, directory) => new PurposeIndex(directory),
+                eventIndexFactory: (_id, directory) =>
+                    new FakeSemanticCorpusIndex(directory),
+                viewSynthesisAdapter: {
+                    ...adapter,
+                    identity: model,
+                },
+            });
+        let service = open();
+        const finish = async (job: ViewBuildJob | undefined) => {
+            if (!job) return;
+            let current = job;
+            for (let i = 0; current.state === "running" && i < 300; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+                current = (await service.getViewBuild({
+                    corpusId: job.corpusId,
+                    jobId: job.jobId,
+                }))!;
+            }
+            expect(current.state).toBe("complete");
+        };
+        try {
+            const { corpusId } =
+                await service.createCorpus("Utility retention");
+            const maintain = async (
+                operation: "pause" | "resume" | "update",
+            ) => {
+                const result = await changeFamily(service, corpusId, operation);
+                await finish(result.job);
+            };
+            await maintain("pause");
+            await service.maintainViews({
+                corpusId,
+                family: "projects",
+                operation: "pause",
+                expectedHead: (await service.listViews(corpusId)).head,
+            });
+            const source = {
+                sourceId: "source",
+                sourceType: "text" as const,
+                title: "Local reference",
+                text: "Cache propagation is mentioned. The review remains open pending an independent approval.",
+            };
+            const ingest = async (text: string) => {
+                const job = await service.ingestDocument({
+                    corpusId,
+                    source: { ...source, text },
+                });
+                expect((await waitForMemoryJob(service, job.jobId)).state).toBe(
+                    "complete",
+                );
+            };
+            await ingest(source.text);
+            await maintain("resume");
+            await maintain("pause");
+            const beforeEdit = assessed;
+            expect(beforeEdit).toBeGreaterThan(0);
+            const canonical = (await service.listViews(corpusId)).views[0];
+            await editPausedConsolidationDraft(
+                service,
+                corpusId,
+                canonical.viewId,
+                (content) => {
+                    content.summary += " Human editorial qualification.";
+                },
+            );
+            await service.close();
+            service = open();
+            await maintain("resume");
+            await maintain("pause");
+            expect(assessed).toBe(beforeEdit + Number(basis !== "evidence"));
+            const afterEdit = assessed;
+            await service.close();
+            model = "offline-utility-reuse-v2";
+            service = open();
+            await maintain("resume");
+            await maintain("pause");
+            expect(assessed).toBeGreaterThan(afterEdit);
+            const afterModel = assessed;
+            await ingest(
+                `${source.text} New indexed evidence records a second review condition.`,
+            );
+            await maintain("resume");
+            await maintain("pause");
+            expect(assessed).toBeGreaterThan(afterModel);
+        } finally {
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+);

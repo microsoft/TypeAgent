@@ -29,6 +29,31 @@ describe("search timing", () => {
         console.warn = originalWarn;
     });
 
+    test("nested stage IDs retain parent relationships without logging exception text", async () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        await expect(
+            runWithSearchTiming("trace", "test", () =>
+                timeSearchStage("parent", () =>
+                    timeSearchStage("child", async () => {
+                        throw new TypeError("private response body");
+                    }),
+                ),
+            ),
+        ).rejects.toThrow("private response body");
+        const entries = logs.map(
+            (line) =>
+                JSON.parse(line.replace("[memory-search-timing] ", "")) as {
+                    stage: string;
+                    spanId: string;
+                    parentSpanId?: string;
+                },
+        );
+        const child = entries.find((entry) => entry.stage === "child")!;
+        const parent = entries.find((entry) => entry.stage === "parent")!;
+        expect(child.parentSpanId).toBe(parent.spanId);
+        expect(logs.join("")).not.toContain("private response body");
+    });
+
     test("disabled tracing performs no clocks or logs and preserves return values", async () => {
         delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
         const clock = performance.now;

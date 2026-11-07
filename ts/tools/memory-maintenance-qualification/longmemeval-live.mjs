@@ -29,13 +29,24 @@ import {
     executeMemoryCase,
     judgePrompt,
     officialJudgeTemplates,
+    preflightRetainedKnowledge,
 } from "./longmemeval-runner.mjs";
+import {
+    finishIndexingCase,
+    measureIndexingCase,
+    startIndexingCase,
+} from "./longmemeval-indexing-lifecycle.mjs";
+import {
+    assertPilotProviderConfiguration,
+    indexingTreatments,
+} from "./longmemeval-indexing-contract.mjs";
 
 const datasetSha256 =
     "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442";
 const datasetRevision = "98d7416c24c778c2fee6e6f3006e7a073259d48f";
-const workAllowanceMs = 65 * 60 * 1000;
 const cleanupReserveMs = 5 * 60 * 1000;
+const maximumWorkMinutes = 360;
+const workAllowanceMs = maximumWorkMinutes * 60000 + cleanupReserveMs;
 const seed = "typeagent-longmemeval-full-2026-10-20";
 const productFactory =
     "packages\\agentServer\\server\\dist\\durableMemoryService.js";
@@ -50,7 +61,15 @@ export async function createBenchmarkMemoryService(
     return createDurableMemoryService(rootDirectory);
 }
 
-export function recordBenchmarkArm(state, capabilities, resume) {
+export async function createRetainedKnowledgeReader(load, rootDirectory) {
+    const { TypedViewStore } = await load(
+        "packages\\memory\\service\\dist\\viewStore.js",
+    );
+    const store = new TypedViewStore(rootDirectory);
+    return (corpusId) => store.getKnowledgeState(corpusId);
+}
+
+export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
     const arm = {
         name: "TypeAgent production document-backed conversation memory",
         productFactory,
@@ -59,7 +78,33 @@ export function recordBenchmarkArm(state, capabilities, resume) {
         ),
         ingestion:
             "One Markdown source per original session position; dates, roles and turn text preserved",
+        topicCuration: {
+            inputTokenTarget:
+                process.env.TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS ?? null,
+            concurrency: process.env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY ?? null,
+            priorContextFraction:
+                process.env.TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION ?? null,
+        },
+        wikiAssessmentConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY ?? 1,
+        ),
+        maintenanceBuildConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY ?? 1,
+        ),
+        nativeTimingEnabled: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
+        questionViewInputAdmission: "configured-complete-request-v1",
         answerMode: "default",
+        preparedIndexing:
+            process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
+        indexingParallel: (process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
+            .split(",")
+            .some((name) => name.trim() === "indexing-parallel"),
+        indexingTreatments: indexingTreatments(),
+        searchTrace: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
+        indexingLifecycle: options.indexingPilot === true,
+        caseStoreIsolation: options.indexingPilot
+            ? "fresh-store-per-case"
+            : "shared-run-store",
         readerProvenance:
             "Opt-in public diagnostics identify actual indexed reader fragments and selection; citations identify supplied evidence, not independent entailment.",
         answerLimit: "product-default",
@@ -119,6 +164,35 @@ function validateBenchmarkSpec(spec) {
         "Knowledge readiness timeout must be between one and sixty minutes",
     );
     assert.equal(typeof spec.resume, "boolean");
+    if (spec.indexingPilot) {
+        assert.equal(
+            spec.resume,
+            false,
+            "Pilot arms require fresh case stores",
+        );
+        assert.ok(
+            !spec.continuation,
+            "Pilot arms do not permit warm continuations",
+        );
+        assert.ok(
+            spec.questionIds?.length === 3 ||
+                (["indexing-parallel", "indexing-ablation"].includes(
+                    spec.indexingComparison,
+                ) &&
+                    spec.questionIds?.length === 1),
+            "Indexing pilot requires three questions, or one complete parallel-comparison history",
+        );
+        assert.match(spec.expectedConfigurationHash ?? "", /^[a-f0-9]{64}$/);
+        assert.match(spec.expectedDependencyHash ?? "", /^[a-f0-9]{64}$/);
+        assert.match(
+            spec.expectedEmbeddingConfigurationHash ?? "",
+            /^[a-f0-9]{64}$/,
+        );
+        assert.match(
+            spec.expectedRuntimeConfigurationHash ?? "",
+            /^[a-f0-9]{64}$/,
+        );
+    }
     if (spec.continuation) {
         assert.equal(spec.resume, false, "Continuation requires a fresh run");
         assert.ok(path.isAbsolute(spec.continuation.parentRunDirectory));
@@ -144,8 +218,10 @@ export function benchmarkInvocationAllowance(value) {
     if (value === "unlimited") return null;
     const minutes = Number(value);
     assert.ok(
-        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 60,
-        "Invocation work minutes must be an integer from 1 to 60, or unlimited",
+        Number.isSafeInteger(minutes) &&
+            minutes >= 1 &&
+            minutes <= maximumWorkMinutes,
+        `Invocation work minutes must be an integer from 1 to ${maximumWorkMinutes}, or unlimited`,
     );
     return minutes * 60000 + cleanupReserveMs;
 }
@@ -191,6 +267,11 @@ export async function acknowledgeStopAfterQuestion(
 export function benchmarkFailure(error) {
     return {
         ...safeFailure(error),
+        ...(error?.code === "EREPLAYNONDETERMINISTIC"
+            ? { category: "REPLAY_CAPTURE_INCONSISTENT_OUTPUT" }
+            : error?.code === "EREPLAYMISS"
+              ? { category: "REPLAY_INPUT_NOT_CAPTURED" }
+              : {}),
         ...(/^E[A-Z0-9_]+$/.test(error?.code ?? "")
             ? { code: error.code }
             : {}),
@@ -207,10 +288,44 @@ export function benchmarkFailure(error) {
     };
 }
 
-async function engineIdentity() {
+export function recordBenchmarkAttemptFailure(
+    state,
+    attempt,
+    error,
+    signal,
+    activeQuestionId,
+) {
+    const bounded = signal.aborted || error.name === "TimeoutError";
+    state.outcome = bounded ? "PARTIAL_BOUNDED_WORK" : "FAILED_REAL_BENCHMARK";
+    attempt.error = benchmarkFailure(error);
+    const record =
+        activeQuestionId === undefined
+            ? undefined
+            : state.cases[activeQuestionId];
+    if (record && record.status !== "complete") {
+        record.status = bounded ? "interrupted" : "failed";
+        record.error = benchmarkFailure(error);
+    }
+}
+
+export function createBenchmarkStateWriter(file, state, write = writeJson) {
+    let tail = Promise.resolve();
+    return () => {
+        const snapshot = structuredClone(state);
+        tail = tail.then(() => write(file, snapshot));
+        return tail;
+    };
+}
+
+export async function engineIdentity(
+    readSource = (file) => readFile(new URL(file, import.meta.url)),
+) {
     const files = [
         "longmemeval-live.mjs",
+        "longmemeval-indexing-lifecycle.mjs",
+        "longmemeval-indexing-contract.mjs",
         "longmemeval-runner.mjs",
+        "knowledge-observer.mjs",
         "quality-adapters.mjs",
         "live-resume.mjs",
     ];
@@ -219,14 +334,14 @@ async function engineIdentity() {
             await Promise.all(
                 files.map(async (file) => [
                     file,
-                    digest(await readFile(new URL(file, import.meta.url))),
+                    digest(await readSource(file)),
                 ]),
             ),
         ),
     );
 }
 
-async function loadPrepared(spec) {
+export async function loadPrepared(spec) {
     const bytes = await readFile(spec.datasetPath);
     assert.equal(
         digest(bytes),
@@ -259,6 +374,15 @@ export function benchmarkConfiguration(settings) {
     };
 }
 
+export function benchmarkProviderConfiguration(client) {
+    return {
+        ...benchmarkConfiguration(client.openai.getChatModelSettings()),
+        poolMembers: client.openai
+            .getChatModelPool()
+            .members.map(({ settings }) => benchmarkConfiguration(settings)),
+    };
+}
+
 export function observedJudgeModel(events, firstRequest) {
     const model = events
         .slice(firstRequest)
@@ -273,18 +397,26 @@ export async function closeBenchmarkService(
     attempt,
     persist,
     failure,
+    restoreObserver = () => {},
 ) {
     attempt.outcome = state.outcome;
     attempt.closeStartedEpochMs = Date.now();
-    await persist();
     try {
-        await service.close();
-        attempt.supportedClose = "COMPLETE";
-    } catch (error) {
-        attempt.supportedClose = failure(error);
-        state.outcome = "FAILED_SUPPORTED_CLOSE";
+        try {
+            await persist();
+        } finally {
+            try {
+                await service.close();
+                attempt.supportedClose = "COMPLETE";
+            } catch (error) {
+                attempt.supportedClose = failure(error);
+                state.outcome = "FAILED_SUPPORTED_CLOSE";
+            }
+        }
+        await persist();
+    } finally {
+        restoreObserver();
     }
-    await persist();
 }
 
 export function selectConstructionCases(construction, selection) {
@@ -464,6 +596,12 @@ async function loadBenchmarkWorkerState(spec, manifestHash) {
     assertCheckpoint(hashes, spec.expectedCheckpoint);
     const compiledDigest = digest(JSON.stringify(hashes));
     const dependencies = await liveDependencyCheckpoint(spec.productRoot);
+    if (spec.expectedDependencyHash)
+        assert.equal(
+            digest(JSON.stringify(dependencies)),
+            spec.expectedDependencyHash,
+            "Approved dependencies changed",
+        );
     const engineHash = await engineIdentity();
     const statePath = path.join(spec.runDirectory, "benchmark-state.json");
     const seeded = spec.resume || !!spec.continuation;
@@ -524,7 +662,7 @@ async function runWorker(spec) {
     );
     const { state, statePath, seeded, compiledDigest } =
         await loadBenchmarkWorkerState(spec, prepared.manifest.sha256);
-    const persist = () => writeJson(statePath, state);
+    const persist = createBenchmarkStateWriter(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -551,8 +689,8 @@ async function runWorker(spec) {
     const client = await load("packages\\aiclient\\dist\\index.js");
     config.loadConfigSync();
     client.initRuntimeConfigFromProcessEnv();
-    const settings = client.openai.getChatModelSettings();
-    const configuration = benchmarkConfiguration(settings);
+    const configuration = benchmarkProviderConfiguration(client);
+    assertPilotProviderConfiguration(spec, client, config, configuration);
     if (seeded)
         assert.deepEqual(
             state.configuration,
@@ -575,11 +713,17 @@ async function runWorker(spec) {
                   Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
               );
     let role = "benchmark-startup";
-    const restoreObserver = observeProvider(state.providerRequests, () => role);
-    const service = await createBenchmarkMemoryService(
-        load,
-        path.join(spec.runDirectory, "isolated-store"),
-        (receipt) =>
+    const { currentSearchTraceId } = await load(
+        "packages\\knowPro\\dist\\index.js",
+    );
+    const restoreObserver = observeProvider(
+        state.providerRequests,
+        () => role,
+        currentSearchTraceId,
+    );
+    let serviceStore = path.join(spec.runDirectory, "isolated-store");
+    const openService = (root) =>
+        createBenchmarkMemoryService(load, root, (receipt) =>
             appendFileSync(
                 path.join(spec.runDirectory, "topic-operations.jsonl"),
                 `${JSON.stringify({
@@ -589,7 +733,8 @@ async function runWorker(spec) {
                 })}\n`,
                 { encoding: "utf8", flag: "a" },
             ),
-    );
+        );
+    let service = await openService(serviceStore);
     const judge = async (reference, hypothesis, abortSignal) => {
         const firstRequest = state.providerRequests.length;
         const result = await model.complete(
@@ -608,9 +753,28 @@ async function runWorker(spec) {
         const actual = observedJudgeModel(state.providerRequests, firstRequest);
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
+    let activeQuestionId;
     try {
+        if (Object.values(state.cases).some((record) => record?.corpusId)) {
+            const readRetainedKnowledgeStatus =
+                await createRetainedKnowledgeReader(
+                    load,
+                    path.join(spec.runDirectory, "isolated-store"),
+                );
+            await preflightRetainedKnowledge(service, state.cases, {
+                persist,
+                signal,
+                failure: benchmarkFailure,
+                readRetainedKnowledgeStatus,
+            });
+        }
         await service.initialize();
-        recordBenchmarkArm(state, await service.getCapabilities(), seeded);
+        recordBenchmarkArm(
+            state,
+            await service.getCapabilities(),
+            seeded,
+            spec,
+        );
         await persist();
         const admittedEpochMs = Date.now();
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
@@ -637,6 +801,7 @@ async function runWorker(spec) {
         );
         let completedThisBatch = 0;
         for (const construction of constructionCases) {
+            activeQuestionId = undefined;
             signal.throwIfAborted();
             if (
                 await acknowledgeStopAfterQuestion(
@@ -654,6 +819,16 @@ async function runWorker(spec) {
                 "A real benchmark failure requires review before retry",
             );
             state.currentQuestionId = id;
+            activeQuestionId = id;
+            role = `case-startup:${id}`;
+            const isolated = await startIndexingCase(service, {
+                enabled: spec.indexingPilot,
+                store: serviceStore,
+                runDirectory: spec.runDirectory,
+                open: openService,
+            });
+            service = isolated.service;
+            serviceStore = isolated.store;
             const name = `LongMemEval ${state.runId} ${id}`;
             const matches = (await service.listCorpora()).filter(
                 (corpus) => corpus.name === name,
@@ -668,25 +843,38 @@ async function runWorker(spec) {
                 status: "ingesting",
                 operations: [],
                 mappings: {},
+                storeDirectory: path.relative(spec.runDirectory, serviceStore),
             });
             await persist();
-            await executeMemoryCase(
-                service,
-                construction,
-                readers.get(id),
-                references.get(id),
-                record,
-                {
-                    persist,
-                    signal,
-                    waitForMemoryJob,
-                    judge,
-                    role: (value) => {
-                        role = value;
+            await measureIndexingCase(record, spec.indexingPilot, () =>
+                executeMemoryCase(
+                    service,
+                    construction,
+                    readers.get(id),
+                    references.get(id),
+                    record,
+                    {
+                        persist,
+                        signal,
+                        waitForMemoryJob,
+                        judge,
+                        role: (value) => {
+                            role = value;
+                        },
+                        knowledgeTimeoutMs: state.knowledgeTimeoutMs,
                     },
-                    knowledgeTimeoutMs: state.knowledgeTimeoutMs,
-                },
+                ),
             );
+            service = await finishIndexingCase(service, {
+                enabled: spec.indexingPilot,
+                store: serviceStore,
+                runDirectory: spec.runDirectory,
+                open: openService,
+                record,
+                question: readers.get(id).question,
+                signal,
+                persist,
+            });
             if (
                 await acknowledgeStopAfterQuestion(
                     spec.runDirectory,
@@ -699,16 +887,13 @@ async function runWorker(spec) {
         }
         state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
-        const bounded = signal.aborted || error.name === "TimeoutError";
-        state.outcome = bounded
-            ? "PARTIAL_BOUNDED_WORK"
-            : "FAILED_REAL_BENCHMARK";
-        attempt.error = benchmarkFailure(error);
-        const record = state.cases[state.currentQuestionId];
-        if (record && record.status !== "complete") {
-            record.status = bounded ? "interrupted" : "failed";
-            record.error = benchmarkFailure(error);
-        }
+        recordBenchmarkAttemptFailure(
+            state,
+            attempt,
+            error,
+            signal,
+            activeQuestionId,
+        );
     } finally {
         state.scorecard = benchmarkScorecard(
             prepared,
@@ -721,8 +906,8 @@ async function runWorker(spec) {
             attempt,
             persist,
             safeFailure,
+            restoreObserver,
         );
-        restoreObserver();
         attempt.finishedEpochMs = Date.now();
         attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
         attempt.outcome = state.outcome;
@@ -773,6 +958,12 @@ export async function main(args = process.argv.slice(2)) {
             "work-minutes": { type: "string", default: "30" },
             "question-ids": { type: "string" },
             "knowledge-minutes": { type: "string", default: "10" },
+            "indexing-pilot": { type: "boolean" },
+            "indexing-comparison": { type: "string" },
+            "expected-configuration-hash": { type: "string" },
+            "expected-dependency-hash": { type: "string" },
+            "expected-embedding-configuration-hash": { type: "string" },
+            "expected-runtime-configuration-hash": { type: "string" },
         },
     });
     if (values.spec) {
@@ -842,6 +1033,19 @@ export async function main(args = process.argv.slice(2)) {
         knowledgeTimeoutMs: benchmarkKnowledgeTimeout(
             values["knowledge-minutes"],
         ),
+        ...(values["indexing-pilot"]
+            ? {
+                  indexingPilot: true,
+                  indexingComparison: values["indexing-comparison"],
+                  expectedConfigurationHash:
+                      values["expected-configuration-hash"],
+                  expectedDependencyHash: values["expected-dependency-hash"],
+                  expectedEmbeddingConfigurationHash:
+                      values["expected-embedding-configuration-hash"],
+                  expectedRuntimeConfigurationHash:
+                      values["expected-runtime-configuration-hash"],
+              }
+            : {}),
         ...(values["question-ids"] === undefined
             ? {}
             : { questionIds: values["question-ids"].split(",") }),

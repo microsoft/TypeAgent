@@ -231,7 +231,7 @@ describe("real in-memory MCP registration and negotiation", () => {
     let server: McpServer;
     let client: Client;
     let calls: number;
-    async function connect(html: boolean) {
+    async function connect(html: boolean, observeCapability = true) {
         calls = 0;
         server = new McpServer({ name: "memory-preview-test", version: "1" });
         const service: Pick<
@@ -245,7 +245,11 @@ describe("real in-memory MCP registration and negotiation", () => {
             understandingModule: async () => moduleResult(),
         };
         let supportsUi = () => false;
-        registerMemoryPreview(server, service, () => supportsUi());
+        registerMemoryPreview(
+            server,
+            service,
+            observeCapability ? () => supportsUi() : undefined,
+        );
         registerUnderstandingTools(
             server,
             service,
@@ -289,6 +293,49 @@ describe("real in-memory MCP registration and negotiation", () => {
     afterEach(async () => {
         await client?.close();
         await server?.close();
+    });
+    test.each([true, false])(
+        "uses SDK capabilities for HTML=%s without a transport observer",
+        async (html) => {
+            await connect(html, false);
+            const result = await client.callTool({
+                name: "memory_preview",
+                arguments: { corpusId: "corpus", question: "gallery" },
+            });
+            expect(result.isError).not.toBe(true);
+            expect(!!result._meta?.[previewMetaKey]).toBe(html);
+        },
+    );
+    test("falls back to plain text when SDK client capabilities are unavailable", async () => {
+        await connect(false, false);
+        const capabilities = (
+            import.meta as ImportMeta & { jest: typeof jest }
+        ).jest
+            .spyOn(server.server, "getClientCapabilities")
+            .mockReturnValue(undefined);
+        try {
+            const result = await client.callTool({
+                name: "memory_preview",
+                arguments: { corpusId: "corpus", question: "gallery" },
+            });
+            expect(result.isError).not.toBe(true);
+            expect(result).not.toHaveProperty("_meta");
+            expect(result.content).toContainEqual({
+                type: "text",
+                text: expect.stringContaining("six projects"),
+            });
+            const expansion = await client.callTool({
+                name: "memory_preview_expand",
+                arguments: {
+                    corpusId: "corpus",
+                    snapshotId: answer().snapshotId,
+                    kind: "sources",
+                },
+            });
+            expect(expansion.isError).not.toBe(true);
+        } finally {
+            capabilities.mockRestore();
+        }
     });
     test.each([true, false])(
         "negotiates HTML=%s without changing native service envelope",

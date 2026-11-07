@@ -18,8 +18,10 @@ function supportsHtml(params: unknown): boolean {
     const capabilities = object(object(params)?.capabilities);
     const extensions = object(capabilities?.extensions);
     if (!extensions) return false;
+    const extension = object(extensions[EXTENSION_ID]);
+    if (!extension) return false;
     const ui = getUiCapability({
-        extensions: { [EXTENSION_ID]: extensions[EXTENSION_ID] },
+        extensions: { [EXTENSION_ID]: extension },
     });
     return (
         Array.isArray(ui?.mimeTypes) &&

@@ -90,6 +90,10 @@ azureOpenAI:
           capacity: 115
         - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
 
+    embedding_3_large:
+      endpoints:
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2024-10-21
+
     gpt_image_1_5:
       defaultCapacity: 30
       endpoints:
@@ -396,6 +400,7 @@ reasoning:
 # defaultEmbeddingModel: local-minilm
 # defaultEmbeddingModel: local-embeddinggemma
 # defaultEmbeddingModel: azure-ada
+# defaultEmbeddingModel: azure-large-1536
 # defaultEmbeddingModel: none
 # No selector preserves existing embedding endpoint/provider inference.
 embeddingModels:
@@ -405,6 +410,14 @@ embeddingModels:
     model: text-embedding-ada-002 # must match the actual deployment
     size: 1536
     modalities: [text]
+  azure-large-1536:
+    provider: azure
+    deployment: embedding_3_large # configure this Azure deployment pool first
+    model: text-embedding-3-large # must match every deployment in the pool
+    size: 1536 # sent as dimensions; requires an API supporting embedding-3
+    modalities: [text]
+  # Equal dimensions do not make Ada and embedding-3 vectors compatible.
+  # Rebuild existing indexes explicitly; never reuse or truncate old vectors.
   local-minilm:
     provider: local
     runtime: minilm

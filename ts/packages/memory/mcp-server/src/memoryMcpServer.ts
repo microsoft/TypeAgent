@@ -70,6 +70,7 @@ import type {
 import { z } from "zod";
 import { registerViewTools } from "./viewTools.js";
 import { registerGraphTools } from "./graphTools.js";
+import { registerFrameTools } from "./frameTools.js";
 import { registerAgentSessionTools } from "./agentSessionTools.js";
 import { registerUnderstandingTools } from "./understandingTools.js";
 import { registerMemoryPreview } from "./memoryPreview.js";
@@ -124,11 +125,13 @@ export function memoryPreviewsEnabled(): boolean {
 export class MemoryMcpServer {
     public readonly server: McpServer;
     private supportsUi = () => false;
+    private readonly requestSignal: AbortSignal | undefined;
 
     public constructor(
         private readonly service: MemoryService,
-        options: { previews?: boolean } = {},
+        options: { previews?: boolean; requestSignal?: AbortSignal } = {},
     ) {
+        this.requestSignal = options.requestSignal;
         this.server = new McpServer({
             name: "typeagent-memory",
             version: "0.0.1",
@@ -142,6 +145,9 @@ export class MemoryMcpServer {
                 this.supportsUi(),
             );
         registerGraphTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerFrameTools(this.server, service, (operation) =>
             this.run(operation),
         );
         registerViewTools(this.server, service, (operation) =>
@@ -346,12 +352,22 @@ export class MemoryMcpServer {
                 annotations: { destructiveHint: false },
             },
             async (request, extra) =>
-                this.run(() =>
-                    this.service.ingestDocument(
-                        request as unknown as DocumentIngestRequest,
-                        extra.signal,
-                    ),
-                ),
+                this.run(async () => {
+                    const admission = new AbortController();
+                    const cancel = () => admission.abort(extra.signal.reason);
+                    extra.signal.addEventListener("abort", cancel, {
+                        once: true,
+                    });
+                    if (extra.signal.aborted) cancel();
+                    try {
+                        return await this.service.ingestDocument(
+                            request as unknown as DocumentIngestRequest,
+                            admission.signal,
+                        );
+                    } finally {
+                        extra.signal.removeEventListener("abort", cancel);
+                    }
+                }),
         );
         this.server.registerTool(
             memoryToolNames.sourceReplace,
@@ -610,10 +626,31 @@ export class MemoryMcpServer {
                 outputSchema: outputSchema(answerResultSchema),
                 annotations: { readOnlyHint: true },
             },
-            async (request) =>
-                this.run(() =>
-                    this.service.answer(request as MemoryAnswerRequest),
-                ),
+            async (request, extra) => {
+                const controller = new AbortController();
+                const signals = this.requestSignal
+                    ? [extra.signal, this.requestSignal]
+                    : [extra.signal];
+                const cancel = () => controller.abort();
+                for (const signal of signals) {
+                    if (signal.aborted) cancel();
+                    else
+                        signal.addEventListener("abort", cancel, {
+                            once: true,
+                        });
+                }
+                try {
+                    return await this.run(() =>
+                        this.service.answer(
+                            request as MemoryAnswerRequest,
+                            controller.signal,
+                        ),
+                    );
+                } finally {
+                    for (const signal of signals)
+                        signal.removeEventListener("abort", cancel);
+                }
+            },
         );
         this.server.registerTool(
             memoryToolNames.knowledgeGraphGet,

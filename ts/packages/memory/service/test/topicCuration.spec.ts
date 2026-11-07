@@ -186,6 +186,49 @@ test("context packing exceeds 24 raw nodes and accounts for all tail nodes", asy
     validateTopicSnapshot(value);
 });
 
+test("context-sized concurrent packets preserve all nodes when completions finish out of order", async () => {
+    const value = snapshot(105);
+    const sizes: number[] = [];
+    let active = 0;
+    let maxActive = 0;
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+    });
+    value.curation = await curateTopics(
+        value,
+        (node) => node.citations,
+        async (_rules, payload) => {
+            const batch = payload as { nodes: { id: string }[] };
+            const ordinal = sizes.length;
+            sizes.push(batch.nodes.length);
+            maxActive = Math.max(maxActive, ++active);
+            if (ordinal === 0) await first;
+            else releaseFirst();
+            active--;
+            return {
+                concepts: [],
+                deferred: batch.nodes.map(({ id }) => ({
+                    nodeId: id,
+                    reason: "Synthetic offline disposition",
+                })),
+            };
+        },
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        { ...contextOptions(), concurrency: 2 },
+    );
+    expect(maxActive).toBe(2);
+    expect(Math.max(...sizes)).toBeGreaterThan(24);
+    expect(value.curation.deferred).toHaveLength(105);
+    expect(
+        new Set(value.curation.deferred.map((entry) => entry.nodeId)).size,
+    ).toBe(105);
+    validateTopicSnapshot(value);
+});
+
 test("context packing rejects an oversized item or insufficient output capacity before dispatch", async () => {
     const value = snapshot(1);
     const complete = import.meta.jest.fn();

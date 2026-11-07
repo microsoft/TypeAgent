@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { waitForTestState } from "./waitForTestState.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -12,6 +13,10 @@ import {
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
+import {
+    authoredRelationships,
+    derivedDefinitionInput,
+} from "../src/viewRelationships.js";
 import type { FileMemoryService } from "../src/fileMemoryService.js";
 import type {
     IndexedFragmentRequest,
@@ -19,6 +24,7 @@ import type {
 } from "../src/types.js";
 import type {
     ViewSynthesisAdapter,
+    ViewVersion,
     WikiSubjectAssessment,
 } from "../src/viewTypes.js";
 import type { WikiConsolidationScope } from "../src/wikiConsolidation.js";
@@ -193,45 +199,123 @@ export async function ingestFixture(
     expect((await waitForMemoryJob(service, job.jobId)).state).toBe("complete");
 }
 export async function settleConsolidation(
-    service: FileMemoryService,
+    service: Pick<
+        FileMemoryService,
+        "listViewBuilds" | "listViews" | "getMaintenanceStatus"
+    >,
     corpusId: string,
     allowDecision = false,
 ) {
-    for (let attempt = 0; attempt < 1000; attempt++) {
-        const jobs = await service.listViewBuilds(corpusId);
-        const snapshot = await service.listViews(corpusId);
-        const decision =
-            allowDecision &&
-            jobs.some((job) =>
-                job.results.some((result) => result.state === "conflicted"),
-            );
-        if (
-            !jobs.some((job) => job.state === "running") &&
-            (!snapshot.wikiFamily?.enabled ||
-                !snapshot.wikiFamily.pending ||
-                decision) &&
-            (!snapshot.projectFamily?.enabled ||
-                !snapshot.projectFamily.pending)
-        )
-            return snapshot;
-        if (attempt === 999)
-            throw new Error(
-                `Offline consolidation did not settle: ${JSON.stringify({
-                    wiki: snapshot.wikiFamily,
-                    project: snapshot.projectFamily,
-                    maintenance: service.getMaintenanceStatus(),
-                    jobs: jobs.map(({ state, results }) => ({
+    const hasRunnableMaintenance = () => {
+        const status = service.getMaintenanceStatus();
+        const parked = new Set([
+            ...status.deferred.map(({ key }) => key),
+            ...status.failures.map(({ key }) => key),
+        ]);
+        return [
+            ...status.running,
+            ...(status.mode === "automatic" && !status.paused
+                ? status.pending.filter((key) => !parked.has(key))
+                : []),
+        ].some((key) => key.startsWith(`${corpusId}:`));
+    };
+    const result = await waitForTestState(
+        async () => {
+            const maintaining = hasRunnableMaintenance();
+            const jobs = maintaining
+                ? []
+                : await service.listViewBuilds(corpusId);
+            const decision =
+                allowDecision &&
+                jobs.some((job) =>
+                    job.results.some((result) => result.state === "conflicted"),
+                );
+            const building = jobs.some((job) => job.state === "running");
+            // Avoid repeatedly materializing inventories while writers are still building them.
+            const snapshot =
+                maintaining || building
+                    ? undefined
+                    : await service.listViews(corpusId);
+            // A committed read can finish on the snapshot from before an active writer.
+            const settled =
+                snapshot !== undefined &&
+                !building &&
+                !maintaining &&
+                !hasRunnableMaintenance() &&
+                (!snapshot.wikiFamily?.enabled ||
+                    !snapshot.wikiFamily.pending ||
+                    decision) &&
+                (!snapshot.projectFamily?.enabled ||
+                    !snapshot.projectFamily.pending);
+            return {
+                settled,
+                snapshot,
+                maintenance: service.getMaintenanceStatus(),
+                jobs: jobs.map(({ state, results }) => ({
+                    state,
+                    results: results.map(({ state, reason }) => ({
                         state,
-                        results: results.map(({ state, reason }) => ({
-                            state,
-                            reason,
-                        })),
+                        reason,
                     })),
-                })}`,
+                })),
+            };
+        },
+        (value) => value.settled,
+        "Offline consolidation",
+    );
+    if (!result.snapshot)
+        throw new Error("Settled consolidation snapshot missing");
+    return result.snapshot;
+}
+export async function editPausedConsolidationDraft(
+    service: Pick<
+        FileMemoryService,
+        | "deferMaintenance"
+        | "listViews"
+        | "listViewBuilds"
+        | "getMaintenanceStatus"
+        | "saveViewDraft"
+    >,
+    corpusId: string,
+    viewId: string,
+    edit: (content: ViewVersion["content"]) => void,
+) {
+    const release = service.deferMaintenance();
+    try {
+        if ((await service.listViews(corpusId)).wikiFamily?.enabled !== false)
+            throw new Error("Pause the Wiki family before editing its fixture");
+        for (let attempt = 0; attempt < 20; attempt++) {
+            const snapshot = await settleConsolidation(service, corpusId);
+            const current = snapshot.views.find(
+                (view) => view.viewId === viewId,
             );
-        await new Promise((resolve) => setTimeout(resolve, 20));
+            if (!current) throw new Error("Expected paused Wiki draft");
+            const content = structuredClone(current.content);
+            edit(content);
+            try {
+                return await service.saveViewDraft({
+                    corpusId,
+                    viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: current.version,
+                    definition: derivedDefinitionInput(current),
+                    content,
+                    relationships: authoredRelationships(current),
+                });
+            } catch (error) {
+                if (
+                    !(error instanceof Error) ||
+                    error.message !== "View history head conflict" ||
+                    attempt === 19
+                )
+                    throw error;
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        }
+        throw new Error("Offline Wiki draft edit did not settle");
+    } finally {
+        release();
     }
-    throw new Error("Offline consolidation did not settle");
 }
 export async function changeFamily(
     service: FileMemoryService,
