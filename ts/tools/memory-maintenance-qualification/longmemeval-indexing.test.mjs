@@ -9,6 +9,7 @@ import {
     mkdtemp,
     rm,
     readFile,
+    readdir,
     symlink,
     writeFile,
 } from "node:fs/promises";
@@ -23,10 +24,12 @@ import {
     encode,
     freezePilot,
     openPilot,
+    readJson,
     replayTape,
     runtimeConfigurationHash,
     selectPilot,
     validateApproval,
+    writeNew,
 } from "./longmemeval-indexing-contract.mjs";
 import {
     capturePreparation,
@@ -1034,6 +1037,39 @@ test("companion startup failures retain sanitized accounting and restore the pro
         );
         assert.equal(metrics.status, "failed");
         assert.ok(!encode(metrics).includes("untrusted-provider-payload"));
+    }));
+
+test("exclusive JSON publication never exposes a partially written admission", async () =>
+    temporary(async (root) => {
+        const file = path.join(root, "admitted.json");
+        const value = {
+            receiptId: "owned",
+            content: "x".repeat(4 * 1024 * 1024),
+        };
+        const writing = writeNew(file, value);
+        const reading = (async () => {
+            for (let attempt = 0; attempt < 1000; attempt++) {
+                try {
+                    return await readJson(file);
+                } catch (error) {
+                    if (error.code !== "ENOENT") throw error;
+                }
+                await new Promise((resolve) => setImmediate(resolve));
+            }
+            throw new Error("Admission was not published");
+        })();
+        const [written, observed] = await Promise.allSettled([
+            writing,
+            reading,
+        ]);
+        assert.equal(written.status, "fulfilled");
+        assert.equal(observed.status, "fulfilled", observed.reason?.message);
+        assert.deepEqual(observed.value, value);
+        await assert.rejects(writeNew(file, { receiptId: "replacement" }), {
+            code: "EEXIST",
+        });
+        assert.deepEqual(await readJson(file), value);
+        assert.deepEqual(await readdir(root), ["admitted.json"]);
     }));
 
 for (const workMinutes of [1, null]) {

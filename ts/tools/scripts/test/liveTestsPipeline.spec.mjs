@@ -36,7 +36,7 @@ const cleanup = liveJob.steps.find(
     (step) => step.displayName === "Clean up Keys",
 );
 
-test("staged live registration preserves required smoke and its existing live step", () => {
+test("required smoke preserves CLI and shell coverage without broad live integration", () => {
     assert.deepEqual(smoke.trigger.branches.include, [
         "main",
         "gh-readonly-queue/main/*",
@@ -52,12 +52,22 @@ test("staged live registration preserves required smoke and its existing live st
     ]) {
         assert.ok(smokeJob.steps.some((step) => step.displayName === name));
     }
-    const previousLive = smokeJob.steps.find(
-        (step) => step.displayName === "Live Tests (Linux)",
-    );
-    assert.ok(previousLive);
-    assert.equal(previousLive.continueOnError, true);
-    assert.match(previousLive.inputs.inlineScript, /npm run test:live/);
+    for (const job of smoke.jobs) {
+        for (const step of job.steps) {
+            assert.notEqual(step.displayName, "Live Tests (Linux)");
+            const command = [
+                step.inputs?.inlineScript,
+                step.inputs?.script,
+                step.script,
+                step.pwsh,
+                step.bash,
+            ].join("\n");
+            assert.doesNotMatch(
+                command,
+                /\b(?:npm|pnpm)\s+(?:run\s+)?test:live\b/,
+            );
+        }
+    }
 });
 
 test("automatic live integration selects only main and never PRs", () => {

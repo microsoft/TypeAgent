@@ -453,9 +453,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             corpusId,
             source: { sourceId, sourceType: "text", title: sourceId, text },
         });
-        expect((await waitForMemoryJob(service, receipt.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, receipt.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
     }
 
     test("exact native wiki reads can disable corpus-wide contextual expansion without changing the default", async () => {
@@ -3218,7 +3222,9 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 text: "Synthetic admission probe",
             },
         });
-        const job = await waitForMemoryJob(service, result.jobId);
+        const job = await waitForMemoryJob(service, result.jobId, {
+            pollIntervalMs: 10,
+        });
         MockIndexedCorpus.prototype.rebuild = original;
         expect(job.state).toBe("failed");
         expect(job.error).toContain("exceeds configured");
