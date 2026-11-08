@@ -702,8 +702,12 @@ test.each(["intent", "index"] as const)(
                 ...request,
                 expectedHead: (await service.listViews(request.corpusId)).head!,
             });
-            expect(repaired.indexState).toBe("ready");
-            expect(repaired.indexedRevisionId).toBe(result.view.revisionId);
+            if (repaired.indexState !== "ready")
+                throw new Error(`Index retry failed: ${repaired.reason}`);
+            expect(repaired).toMatchObject({
+                indexState: "ready",
+                indexedRevisionId: result.view.revisionId,
+            });
             if (point === "index")
                 expect(repaired.intent).toEqual(pending.intent);
             expect(reopened.counters.article).toBe(0);
