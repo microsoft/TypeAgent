@@ -285,8 +285,8 @@ test("acquisition permits pinned named training identities but not all/validatio
 test("CLI preflight rejects dangerous paths before reading assets or creating output", async (t) => {
     const f = await workspace(t);
     for (const options of [
-        { ...f.options, output: "..\\outside" },
-        { ...f.options, output: "packages\\data" },
+        { ...f.options, output: path.join("..", "outside") },
+        { ...f.options, output: path.join("packages", "data") },
         { ...f.options, input: "quality-fixtures" },
         { ...f.options, plan: "holdout.json" },
         { ...f.options, plan: "evaluator-only.json" },
@@ -299,6 +299,22 @@ test("CLI preflight rejects dangerous paths before reading assets or creating ou
         await assert.rejects(
             runPreparation(options, { projectRoot: f.root }),
             /Path must be below|Output must be|Frozen\/evaluator\/profile paths/,
+        );
+    }
+    assert.deepEqual((await readdir(f.root)).sort(), ["assets", "plan.json"]);
+});
+
+test("CLI preflight rejects backslash traversal before reading assets or creating output", async (t) => {
+    const f = await workspace(t);
+    for (const field of ["input", "output"]) {
+        await assert.rejects(
+            runPreparation(
+                { ...f.options, [field]: "..\\outside" },
+                { projectRoot: f.root },
+            ),
+            path.sep === "\\"
+                ? /Path must be below/
+                : /Asset paths must be relative without traversal/,
         );
     }
     assert.deepEqual((await readdir(f.root)).sort(), ["assets", "plan.json"]);

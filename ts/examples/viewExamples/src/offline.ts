@@ -25,7 +25,10 @@ export async function offlineOptions(): Promise<{
     };
     const root = fileURLToPath(new URL("../../../", import.meta.url));
     const options = await createOfflineOptions(
-        (relative) => import(pathToFileURL(path.join(root, relative)).href),
+        (relative) =>
+            import(
+                pathToFileURL(path.join(root, ...relative.split(/[\\/]/))).href
+            ),
         counters,
     );
     return { options, counters };

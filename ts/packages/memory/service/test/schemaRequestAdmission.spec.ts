@@ -172,7 +172,7 @@ test("configured schema generation above 120K retains every full source and insp
     await f.adapter.schemaRequestAdmission!.validate(input);
     const output = await f.adapter.generate(input, signal());
     await f.adapter.validate(input, output, signal());
-    expect(f.adapter.identity).toContain("evidence-first-v22");
+    expect(f.adapter.identity).toContain("evidence-first-v23");
     expect(f.calls).toHaveLength(2);
     expect(f.inspections).toHaveLength(3);
     expect(f.inspections[0].result.serializedRequest).toBe(

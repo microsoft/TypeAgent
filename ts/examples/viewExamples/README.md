@@ -34,6 +34,9 @@ and external/profile paths are refused. The runner never discovers a production
 store or deletes an existing run. Retain receipts; clean up only specifically
 identified owned run directories after closing the service.
 
+Run-root paths use the host operating system's path syntax. Offline regression
+fixture modules resolve portably on Windows, Linux and macOS.
+
 To use already prepared external construction data, pass
 `--input <construction.json> --case <case-id>`. The runner never opens its
 adjacent evaluator packet. The packet must carry `schemaVersion: 1`,
