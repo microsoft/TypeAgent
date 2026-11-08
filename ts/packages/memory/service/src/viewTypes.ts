@@ -725,6 +725,12 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         signal: AbortSignal,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    repairProjectSummary?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     generateTopics?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,

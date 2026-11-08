@@ -10,6 +10,7 @@ import { projectBriefRoles, parseProjectBriefDetails } from "./projectBrief.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
 import { assertViewIdentifier, viewSourceKey } from "./viewContent.js";
 import { factStatuses } from "./viewInventory.js";
+import { projectBriefSectionHeading } from "./viewText.js";
 import {
     evidenceArray,
     evidenceRecord,
@@ -315,7 +316,7 @@ export function hydrateProjectSummary(
         sections: projectBriefRoles.map((role) => ({
             id: `${input.definition.viewId}:${role}`,
             role,
-            heading: role,
+            heading: projectBriefSectionHeading(role),
             body: evidenceText(raw[role]),
             details: details[role],
         })),

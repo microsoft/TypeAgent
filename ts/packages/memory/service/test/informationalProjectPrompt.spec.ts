@@ -142,6 +142,52 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
     expect(instructions).toContain(
         "Preserve required evidence even when that needs a longer answer",
     );
+    const rejected = {
+        content: {
+            kind: "projectBrief" as const,
+            construction: "informational-project-summary-v1" as const,
+            title: "Atlas rollout",
+            summary: "REJECTED_UNTRUSTED_DIAGNOSTIC",
+            sections: [],
+            citations: [],
+        },
+        relationships: [],
+        outcome: "projectSummary" as const,
+        missingEvidence: [],
+    };
+    const assessment = { safe: false, failures: ["scope-state" as const] };
+    const adapter = createConfiguredViewSynthesisAdapter("test");
+    await expect(
+        adapter.repairProjectSummary!(
+            input,
+            rejected,
+            assessment,
+            new AbortController().signal,
+        ),
+    ).rejects.toThrow("Controlled provider failure");
+    expect(request).toEqual({
+        query: "Atlas rollout",
+        aliases: [],
+        rejectedOutput: rejected.content,
+        assessment,
+        fragments: blocks.map((block, position) => ({
+            id: `f${position}`,
+            sourceId: block.sourceId,
+            revisionId: block.revisionId,
+            text: block.text,
+        })),
+    });
+    expect(instructions).toContain("unchanged original indexed fragments");
+    expect(instructions).toContain("untrusted diagnostics");
+    expect(instructions).toContain("another rejection is final");
+    await expect(
+        adapter.repairProjectSummary!(
+            { ...input, pipeline: "informational-wiki-v1" },
+            rejected,
+            assessment,
+            new AbortController().signal,
+        ),
+    ).rejects.toThrow("requires an informational project target");
 });
 
 test("wiki prompt keeps retrieval identity independent of labels and separates prose from retrieval coverage limits", async () => {
