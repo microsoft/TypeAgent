@@ -3,17 +3,24 @@
   "version": "0.0.1",
   "private": true,
   "description": "Owned-store informational wiki and project-brief examples.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/viewExamples"
+  },
   "license": "MIT",
+  "author": "Microsoft",
   "type": "module",
   "scripts": {
     "build": "npm run tsc",
-    "tsc": "tsc -b",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "wiki-views": "node dist/cli.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "test": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
     "test:local": "pnpm test",
-    "prettier": "prettier --check . --ignore-path ../../.prettierignore"
+    "tsc": "tsc -b",
+    "wiki-views": "node dist/cli.js"
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
