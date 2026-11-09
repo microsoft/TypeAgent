@@ -163,11 +163,36 @@ The daily schedule retains the legacy macOS-only full-test matrix. Local test
 defaults are unchanged. Documentation-only PRs keep their fast path; changes
 to TypeScript or the sharded workflows/action require complete validation.
 
+Scheduled full macOS runs and explicit manual macOS qualifications have a
+180-minute workspace-test budget shared by the first pass and any retries, inside
+a 240-minute job limit. The workspace budget does not apply to ordinary PRs,
+other manual rollbacks, or local runs unless explicitly
+set through `TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS` (positive integer milliseconds).
+On expiry the harness reports the deadline and owned process PID, terminates
+that process tree, preserves captured assertion failures as blocking, and runs
+the independent root-script phase. A deadline is an infrastructure failure,
+not a recovered flaky test. Cancellation also cleans up the owned process tree.
+These limits do not replace fixing test resource leaks or failed assertions.
+
 From GitHub Actions, manually run **build-ts** with its default inputs, or use:
 
 ```powershell
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch>
 ```
+
+For an isolated full macOS qualification on a feature branch, use:
+
+```powershell
+gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f macos_qualification=true
+```
+
+This opt-in overrides `fanout_experiment` and runs only the full macOS Node 24/26
+legacy jobs and their matching aggregate checks, with the same deadlines as the
+nightly schedule. Verify the resulting run's `headSha` against the published
+candidate commit. GitHub cron schedules execute from the default branch; this
+manual branch dispatch queues a one-off qualification without changing cron.
+Qualify reliability fixes before adding build optimizations so failures and
+timing changes remain attributable.
 
 The historical `fanout_experiment` input is retained for compatibility. Set it
 to false on a manual dispatch to use the unsharded full-test matrix, still

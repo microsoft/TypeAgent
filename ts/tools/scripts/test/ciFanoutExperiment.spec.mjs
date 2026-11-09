@@ -638,6 +638,46 @@ test("sharded CI defaults to Node 24 and 26 while retaining the macOS-only full-
     assert.equal(main.jobs.build_ts["runs-on"], "ubuntu-latest");
 });
 
+test("manual macOS qualification selects only the full nightly matrix and its matching aggregate", () => {
+    const main = workflow("build-ts");
+    assert.equal(
+        main.on.workflow_dispatch.inputs.macos_qualification.default,
+        false,
+    );
+    const github = { event_name: "workflow_dispatch" };
+    for (const fanout of [true, false]) {
+        const inputs = {
+            fanout_experiment: fanout,
+            macos_qualification: true,
+        };
+        assert.equal(
+            matrixValue(main.jobs.fanout_experiment.if, inputs, github),
+            false,
+        );
+        assert.equal(
+            matrixValue(main.jobs.build_ts_legacy.if, inputs, github),
+            true,
+        );
+        for (const job of [main.jobs.build_ts, main.jobs.build_ts_legacy]) {
+            assert.deepEqual(
+                matrixValue(job.strategy.matrix.os, inputs, github),
+                ["macos-latest"],
+            );
+            assert.deepEqual(job.strategy.matrix.version, [
+                "24.22.1",
+                "26.12.1",
+            ]);
+        }
+        const aggregate = main.jobs.build_ts.steps.find(
+            (step) => step.name === "Require successful complete CI coverage",
+        );
+        assert.equal(
+            matrixValue(aggregate.env.CI_USE_LEGACY, inputs, github),
+            true,
+        );
+    }
+});
+
 for (const legacy of [false, true]) {
     for (const result of ["success", "failure", "cancelled", "skipped", ""]) {
         test(`required matrix checks fail closed: legacy=${legacy}, result=${result || "missing"}`, () => {

@@ -8,6 +8,10 @@ name: build-ts
 on:
   workflow_dispatch:
     inputs:
+      macos_qualification:
+        description: Run only full macOS Node 24/26 coverage with nightly deadlines
+        type: boolean
+        default: false
       fanout_experiment:
         description: Use sharded CI (disable for a manual legacy-matrix rollback)
         type: boolean
@@ -81,7 +85,7 @@ jobs:
 
   fanout_experiment:
     needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.fanout_experiment) }}
+    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || (inputs.fanout_experiment && !inputs.macos_qualification)) }}
     permissions:
       contents: read
     uses: ./.github/workflows/ci-fanout-experiment.yml
@@ -99,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        os: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification)) && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
         version: ["24.22.1", "26.12.1"]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -109,7 +113,7 @@ jobs:
         env:
           CI_CHANGES_RESULT: ${{ needs.changes.result }}
           CI_COVERAGE_REQUIRED: ${{ needs.changes.outputs.required }}
-          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment) }}
+          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.macos_qualification || !inputs.fanout_experiment)) }}
           CI_SHARDED_RESULT: ${{ needs.fanout_experiment.result }}
           CI_LEGACY_RESULT: ${{ needs.build_ts_legacy.result }}
         run: |
@@ -122,14 +126,15 @@ jobs:
 
   build_ts_legacy:
     needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment)) }}
+    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.macos_qualification || !inputs.fanout_experiment))) }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        os: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification)) && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
         version: ["24.22.1", "26.12.1"]
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification)) && 240 || 360 }}
     steps:
       - if: runner.os == 'Linux'
         run: |
@@ -241,6 +246,7 @@ jobs:
         env:
           TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
           TYPEAGENT_TEST_PROFILE: ${{ runner.os == 'macOS' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && 'macos-compat' || 'full' }}
+          TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification)) && '10800000' || '' }}
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
           node tools/scripts/runTestLocalWithSummary.mjs 2>&1 | Tee-Object -FilePath $log

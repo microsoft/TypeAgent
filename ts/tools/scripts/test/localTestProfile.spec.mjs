@@ -32,11 +32,12 @@ test("legacy rollback retains Node 24/26 and full nightly/manual test coverage",
     assert.equal(workflow.on.schedule[0].cron, "17 8 * * *");
     const job = workflow.jobs.build_ts_legacy;
     const step = job.steps.find((step) => step.name === "Test");
-    const evaluate = (expression, event, os) =>
+    const evaluate = (expression, event, os, inputs = {}) =>
         vm.runInNewContext(expression.slice(3, -2), {
             github: { event_name: event },
             runner: { os },
             fromJSON: JSON.parse,
+            inputs,
         });
     for (const event of [
         "pull_request",
@@ -65,6 +66,63 @@ test("legacy rollback retains Node 24/26 and full nightly/manual test coverage",
     assert.deepEqual(job.strategy.matrix.version, ["24.22.1", "26.12.1"]);
     assert.equal(step.shell, "pwsh");
     assert.match(step.run, /exit \$LASTEXITCODE/);
+    assert.equal(evaluate(job["timeout-minutes"], "schedule"), 240);
+    assert.equal(evaluate(job["timeout-minutes"], "workflow_dispatch"), 360);
+    assert.equal(
+        evaluate(step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS, "schedule"),
+        "10800000",
+    );
+    assert.equal(
+        evaluate(
+            step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS,
+            "workflow_dispatch",
+        ),
+        "",
+    );
+    for (const fanout of [true, false]) {
+        const inputs = {
+            fanout_experiment: fanout,
+            macos_qualification: true,
+        };
+        assert.deepEqual(
+            Array.from(
+                evaluate(
+                    job.strategy.matrix.os,
+                    "workflow_dispatch",
+                    "macOS",
+                    inputs,
+                ),
+            ),
+            ["macos-latest"],
+        );
+        assert.equal(
+            evaluate(
+                job["timeout-minutes"],
+                "workflow_dispatch",
+                "macOS",
+                inputs,
+            ),
+            240,
+        );
+        assert.equal(
+            evaluate(
+                step.env.TYPEAGENT_TEST_PROFILE,
+                "workflow_dispatch",
+                "macOS",
+                inputs,
+            ),
+            "full",
+        );
+        assert.equal(
+            evaluate(
+                step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS,
+                "workflow_dispatch",
+                "macOS",
+                inputs,
+            ),
+            "10800000",
+        );
+    }
 });
 
 test("full profile preserves the existing workspace selection and concurrency", () => {

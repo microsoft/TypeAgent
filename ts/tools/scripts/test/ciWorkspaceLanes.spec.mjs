@@ -338,11 +338,11 @@ test("legacy Node-selection alias requires the same 18 lanes without accepting N
     assert.throws(() => qualifyLanes([...rows, wrongNode[0]], sha, plans));
 });
 
-test("explicit workspace/root phases cannot silently drop or duplicate phases", () => {
+test("explicit workspace/root phases cannot silently drop or duplicate phases", async () => {
     for (const phase of ["workspace", "scripts"]) {
         const calls = [];
         assert.equal(
-            runLocalTestPhases(
+            await runLocalTestPhases(
                 () => {
                     calls.push("workspace");
                     return 1;
@@ -357,7 +357,7 @@ test("explicit workspace/root phases cannot silently drop or duplicate phases", 
         );
         assert.deepEqual(calls, [phase]);
     }
-    assert.throws(
+    await assert.rejects(
         () =>
             runLocalTestPhases(
                 () => assert.fail(),
