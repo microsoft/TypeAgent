@@ -92,6 +92,62 @@ test("automatic live integration selects only main and never PRs", () => {
     assert.equal(integration.resources, undefined);
 });
 
+test("smoke build scope defaults to full and only changes build coverage, not tests or authentication", () => {
+    const parameter = smoke.parameters.find(
+        (item) => item.name === "smokeBuildScope",
+    );
+    assert.equal(parameter.type, "string");
+    assert.equal(parameter.default, "full");
+    assert.deepEqual(parameter.values, ["full", "smoke-closure"]);
+    const build = smokeJob.steps.find((step) => step.displayName === "Build");
+    assert.match(
+        build.pwsh,
+        /if \('\$\{\{ parameters.smokeBuildScope \}\}' -eq 'full'\)/,
+    );
+    assert.match(build.pwsh, /pnpm run build --timer --logtime/);
+    assert.match(
+        build.pwsh,
+        /pnpm exec fluid-build '\^\(agent-cli\|agent-shell\)\$' -t build --dep --timer --logtime/,
+    );
+    assert.match(build.pwsh, /exit \$status/);
+    assert.ok(!build.continueOnError);
+    assert.deepEqual(Object.keys(smokeJob.strategy.matrix).sort(), [
+        "linux",
+        "windows",
+    ]);
+    const usages = JSON.stringify(smoke).match(/parameters\.smokeBuildScope/g);
+    assert.equal(
+        usages.length,
+        2,
+        "Build scope must not affect test or credential gates",
+    );
+    for (const step of smokeJob.steps.filter(
+        (step) => step.task === "AzureCLI@2",
+    )) {
+        assert.equal(step.inputs.azureSubscription, "$(azureSubscription)");
+        assert.ok(!step.continueOnError);
+    }
+});
+
+test("shared pnpm bootstrap uses the pinned standalone version without enabling Corepack", () => {
+    const setup = pipeline("include-install-pnpm");
+    const install = setup.steps.find(
+        (step) => step.displayName === "Install and configure pnpm",
+    );
+    assert.match(install.bash, /^set -euo pipefail/);
+    assert.match(
+        install.bash,
+        /require\('\.\/package\.json'\)\.packageManager/,
+    );
+    assert.match(
+        install.bash,
+        /npm install --global --force --userconfig "\$PWD\/\.npmrc" "pnpm@\$\{BASH_REMATCH\[1\]\}"/,
+    );
+    assert.doesNotMatch(install.bash, /\bcorepack\b/);
+    assert.match(install.bash, /pnpm config set store-dir "\$storePath"/);
+    assert.match(install.bash, /pnpm config set -g workspace-concurrency 0/);
+});
+
 test("smoke installs only Chromium and provisions OS dependencies only on Linux", () => {
     for (const [platform, agentOS, command] of [
         ["Windows", "Windows_NT", "pnpm exec playwright install chromium"],

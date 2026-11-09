@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { localTestCommands } from "./runLocalTestPackages.mjs";
 import { partitionPackages } from "./lib/ciTestPartitions.mjs";
 import { fanoutIncludesControl, fanoutNodes } from "./lib/ciFanoutTargets.mjs";
+import { profileSyncStage } from "./lib/ciProfile.mjs";
 
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
@@ -119,6 +120,12 @@ export function createManifest(
     scope = "memory",
     directories,
 ) {
+    return profileSyncStage("artifact-preparation", () =>
+        createManifestCore(root, sha, tests, scope, directories),
+    );
+}
+
+function createManifestCore(root, sha, tests, scope, directories) {
     assert.ok(
         ["memory", "workspace", "packages", "remainder"].includes(scope),
         "Unknown artifact scope",
@@ -167,6 +174,12 @@ export function verifyManifest(
     scope = "memory",
     producer = false,
 ) {
+    return profileSyncStage("artifact-verification", () =>
+        verifyManifestCore(root, sha, manifest, scope, producer),
+    );
+}
+
+function verifyManifestCore(root, sha, manifest, scope, producer) {
     assert.ok(
         ["memory", "workspace", "packages", "remainder"].includes(scope),
         "Unknown artifact scope",
@@ -218,6 +231,12 @@ export function verifyManifest(
 }
 
 export function stageArtifact(root, manifest, directory) {
+    return profileSyncStage("artifact-staging", () =>
+        stageArtifactCore(root, manifest, directory),
+    );
+}
+
+function stageArtifactCore(root, manifest, directory) {
     assert.ok(
         !fs.existsSync(directory),
         "Artifact staging directory must be new",

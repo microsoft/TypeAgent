@@ -27,6 +27,8 @@ permissions:
 
 env:
   CI: "true"
+  TYPEAGENT_CI_PROFILE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+  TYPEAGENT_NATIVE_CACHE: ${{ inputs.native_cache }}
   NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:

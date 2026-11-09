@@ -835,7 +835,7 @@ test("test runners install native dependencies but never rebuild shared product 
         target.jobs.build.steps.find((step) =>
             step.name?.startsWith("Build memory service"),
         ).run,
-        'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
+        'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep --timer --logtime',
     );
     assert.deepEqual(
         experiment.jobs.targets.strategy.matrix.version,

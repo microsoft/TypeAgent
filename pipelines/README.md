@@ -214,6 +214,58 @@ commands or convert infrastructure failures into assertion successes. Diagnose
 fixture setup failures independently from product assertions and qualification
 collector failures.
 
+### Paired setup and smoke measurements
+
+Manual sharded dispatches emit `TYPEAGENT_CI_PROFILE` JSON records for dependency
+installation, native verification, and artifact preparation/staging/verification.
+Each observation identifies the exact SHA, Node/ABI, runner image, entry point,
+restore state, install attempt, and outcome. Failed attempts remain visible.
+Ordinary PR/push runs do not enable these nested observations. Producer builds
+also print fluid-build task timings. Task timings overlap; their sum is not a
+dependency-graph critical path. Artifact staging includes its nested verification.
+Exclude test-fixture entry points (`*.spec.mjs`) from operational comparisons.
+
+Compare two branch refs pointing to the **same commit**, with otherwise identical
+inputs. Separate refs prevent the manual workflow concurrency policy from
+cancelling one arm:
+
+```powershell
+gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <control-ref> -f fanout_native_cache=false
+gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-ref> -f fanout_native_cache=true
+gh run view <run-id> --repo microsoft/TypeAgent --log > <local-run-log>
+node tools/scripts/ciProfile.mjs report --log <local-run-log>
+```
+
+Keep the independent memory producer, complete OS/Node matrix, full workspace
+builds, test inventories, build-cache policy, compression, and artifact format
+unchanged. Native-cache restore state does not establish whether the ordinary
+package-store cache was cold. Use ordinary step timings from the duration report
+for transfers, combined setup, and post-job cache work; do not add nested
+observations again. The existing native cache remains off by default.
+
+Azure Smoke Tests accepts `smokeBuildScope=full` (unchanged production coverage)
+or the opt-in `smoke-closure` candidate. The latter builds `agent-cli`,
+`agent-shell`, and their transitive build dependencies using fluid-build; it does
+not remove CLI/shell tests, browser setup, fresh AzureCLI login, secret cleanup,
+or external fork-approval controls. Both variants print task timings and a
+`smoke-build` stage observation. The shared pnpm bootstrap installs the exact
+`packageManager` version with standalone npm/pnpm and the authenticated project
+npmrc; it does not enable Corepack or change the disabled Azure store-cache policy.
+
+Queue both smoke variants at the same exact source SHA. Retrieve their build
+metadata and Azure task timelines using existing authorized tooling, then run:
+
+```powershell
+node tools/scripts/ciProfile.mjs report --azure-build <build-json> --azure-timeline <timeline-json>
+```
+
+The report keeps skipped/incomplete durations null, failed tasks and attempts
+visible, and wall time separate from parallel task totals. Compare checkout,
+dependency/browser setup, build, authentication, CLI, shell, and teardown costs
+independently. Report Azure required-check latency separately from GitHub wall
+time/runner-minutes. One matched pair is qualification, not a p50/p95 speedup
+claim. Broad live integration is independent and is not part of this dispatch.
+
 The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
 for each combination of Ubuntu, Windows and macOS with Node
 24.22.1 and 26.12.1. Node 22 is excluded from all CI matrices, including
