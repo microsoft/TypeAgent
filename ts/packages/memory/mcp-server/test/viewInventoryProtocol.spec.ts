@@ -161,6 +161,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
         const installed: string[] = [];
         const open = () =>
             new FileMemoryService(root, {
+                discoveryPolicy: "off",
                 viewDrafts: true,
                 sourceSynopses: false,
                 informationalViews: kind === "projectBrief",

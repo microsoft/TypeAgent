@@ -7,6 +7,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { viewReadProjectionEntry } from "../src/viewReadProjection.js";
 import { automaticallyConsolidatable } from "../src/wikiConsolidation.js";
 import type { ViewVersion } from "../src/viewTypes.js";
 import {
@@ -21,8 +22,12 @@ describe("operation-scoped committed view snapshots", () => {
     let root: string;
     let store: TypedViewStore;
     let reads: number;
-    const operationReads = new AsyncLocalStorage<{ count: number }>();
+    const operationReads = new AsyncLocalStorage<{
+        count: number;
+        projectionReads?: number;
+    }>();
     const original = ViewHistory.prototype.read;
+    const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
 
     beforeEach(async () => {
         root = await mkdtemp(path.join(process.cwd(), ".snapshot-reuse-"));
@@ -37,7 +42,9 @@ describe("operation-scoped committed view snapshots", () => {
     });
 
     afterEach(async () => {
+        clock.restoreAllMocks();
         ViewHistory.prototype.read = original;
+        store.closeReadCaches();
         await rm(root, { recursive: true, force: true });
     });
 
@@ -116,6 +123,7 @@ describe("operation-scoped committed view snapshots", () => {
     });
 
     test("work retained after scope completion cannot reuse the expired snapshot", async () => {
+        const entryRead = clock.spyOn(ViewHistory.prototype, "readEntry");
         let resume!: () => void;
         const gate = new Promise<void>((resolve) => {
             resume = resolve;
@@ -133,10 +141,14 @@ describe("operation-scoped committed view snapshots", () => {
             cursor: 7,
             descriptors: [],
         });
+        const head = await store.getCommittedHead("corpus");
         reads = 0;
+        entryRead.mockClear();
         resume();
         expect(await late).toBe(7);
-        expect(reads).toBe(1);
+        expect(reads).toBe(0);
+        expect(entryRead).toHaveBeenCalledTimes(1);
+        expect(entryRead).toHaveBeenCalledWith(viewReadProjectionEntry, head);
     });
 
     test("privacy writes expire reuse and the next read operation is fresh", async () => {
@@ -231,7 +243,17 @@ describe("operation-scoped committed view snapshots", () => {
         await store.withReadSnapshot("corpus", () => store.listViews("corpus"));
     });
 
-    test("actual repeated consolidation nomination hydrates once with historical guard parity", async () => {
+    test("actual repeated consolidation nomination reuses immutable projections with historical guard parity", async () => {
+        const readEntry = ViewHistory.prototype.readEntry;
+        clock
+            .spyOn(ViewHistory.prototype, "readEntry")
+            .mockImplementation(function (this: ViewHistory<unknown>, ...args) {
+                const operation = operationReads.getStore();
+                if (operation && args[0] === viewReadProjectionEntry)
+                    operation.projectionReads =
+                        (operation.projectionReads ?? 0) + 1;
+                return readEntry.apply(this, args);
+            });
         const { adapter } = offlineConsolidationAdapter();
         const service = new FileMemoryService(root, {
             sourceSynopses: false,
@@ -260,6 +282,7 @@ describe("operation-scoped committed view snapshots", () => {
             await changeFamily(service, corpusId, "resume");
             const snapshot = await settleConsolidation(service, corpusId);
             await changeFamily(service, corpusId, "pause");
+            expect((await service.drainMaintenance(15_000)).settled).toBe(true);
             const target = snapshot.views.find(
                 (view) => view.definition.wiki?.query === "lease-budget review",
             )!;
@@ -268,12 +291,16 @@ describe("operation-scoped committed view snapshots", () => {
                 corpusId,
                 viewId: target.viewId,
             });
-            reads = 0;
-            const historical = await store.getViewHistory({
-                corpusId,
-                viewId: target.viewId,
-            });
-            const historicalReads = reads;
+            const historicalOperation = { count: 0 };
+            const historical = await operationReads.run(
+                historicalOperation,
+                () =>
+                    store.getViewHistory({
+                        corpusId,
+                        viewId: target.viewId,
+                    }),
+            );
+            const historicalReads = historicalOperation.count;
             expect(historicalReads).toBe(0);
             expect(versions).toEqual(historical.map((entry) => entry.version));
             expect(
@@ -300,25 +327,30 @@ describe("operation-scoped committed view snapshots", () => {
                         (entry) => entry.version,
                     );
                 };
-                reads = 0;
+                const operation = { count: 0 };
                 const started = performance.now();
-                historicalPairs = await nomination.readConsolidationPairs(
-                    corpusId,
-                    target.viewId,
+                historicalPairs = await operationReads.run(operation, () =>
+                    nomination.readConsolidationPairs(corpusId, target.viewId),
                 );
                 historicalNominationMs = performance.now() - started;
-                historicalNominationReads = reads;
+                historicalNominationReads = operation.count;
             } finally {
                 TypedViewStore.prototype.getViewVersions = currentVersions;
             }
-            expect(historicalNominationReads).toBe(1);
+            expect(historicalNominationReads).toBe(0);
             const nominationMs: number[] = [];
             for (let attempt = 0; attempt < 2; attempt++) {
-                const operation = { count: 0 };
+                const operation = { count: 0, projectionReads: 0 };
                 const started = performance.now();
-                const pairs = await operationReads.run(operation, () =>
-                    nomination.readConsolidationPairs(corpusId, target.viewId),
-                );
+                const [pairs] = await Promise.all([
+                    operationReads.run(operation, () =>
+                        nomination.readConsolidationPairs(
+                            corpusId,
+                            target.viewId,
+                        ),
+                    ),
+                    store.listViews(corpusId),
+                ]);
                 nominationMs.push(performance.now() - started);
                 expect(pairs).toEqual(historicalPairs);
                 expect(pairs.length).toBeGreaterThan(0);
@@ -327,20 +359,22 @@ describe("operation-scoped committed view snapshots", () => {
                         pair.some((view) => view.viewId === target.viewId),
                     ),
                 ).toBe(true);
-                expect(operation.count).toBe(1);
+                expect(operation.count).toBe(0);
+                expect(operation.projectionReads).toBe(0);
             }
-            const operation = { count: 0 };
+            const operation = { count: 0, projectionReads: 0 };
             await operationReads.run(operation, () =>
                 service.listViews(corpusId),
             );
-            expect(operation.count).toBe(1);
+            expect(operation.count).toBe(0);
+            expect(operation.projectionReads).toBe(0);
             console.warn(
                 JSON.stringify({
                     snapshotReuse: {
                         historicalReads,
                         historicalNominationReads,
                         historicalNominationMs,
-                        nominationReads: 1,
+                        nominationReads: 0,
                         nominationMs,
                     },
                 }),

@@ -74,7 +74,7 @@ test("consequential topic rejection clears unsupported prose without stopping ot
         .spyOn(console, "error")
         .mockImplementation(() => {});
     try {
-        const snapshot = await createConfiguredTopicGenerator(undefined, model)(
+        const snapshot = await createConfiguredTopicGenerator({ model: model })(
             input,
             new AbortController().signal,
         );

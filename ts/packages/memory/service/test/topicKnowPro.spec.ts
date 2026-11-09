@@ -131,6 +131,54 @@ describe("complete real KnowPro topic incidence with offline extraction", () => 
             "Resource",
         ]);
         expect(occurrences.map((entry) => entry.ordinal)).toEqual([0, 1]);
+        const graph = await index.getKnowledgeGraph();
+        expect(
+            graph.topics.find(
+                (topic) => topic.name.toLowerCase() === "resource",
+            )?.mentionCount,
+        ).toBe(1);
+    });
+    test("user-led subjects outrank assistant echoes without discarding assistant reference material", async () => {
+        const salience = new Map<string, number>();
+        for (const [role, content] of [
+            ["user", "User: Harbor ownership matters."],
+            ["assistant", "Assistant: Harbor ownership matters."],
+            ["document", "Harbor ownership matters."],
+            [
+                "echo",
+                "User: Harbor ownership matters.\n\nAssistant: Harbor ownership matters.\n\nAssistant: Harbor ownership matters.",
+            ],
+        ] as const) {
+            const index = new KnowProCorpusIndex(
+                "test",
+                path.join(directory, role),
+                () => settings(["Harbor"]),
+            );
+            const source = document("one", "r1", content);
+            source.source.sourceType = "text";
+            source.pipeline.maxCharsPerChunk = 45;
+            await index.rebuild(
+                [source],
+                new AbortController().signal,
+                async () => {},
+            );
+            const subject = (await index.listSubjects(0, 10, new Set(["one"])))
+                .items[0];
+            expect(subject).toBeDefined();
+            salience.set(role, subject.salience ?? subject.postingCount);
+            if (role === "echo") {
+                expect(subject.postingCount).toBe(1);
+                expect(
+                    (await index.getKnowledgeGraph()).topics[0].mentionCount,
+                ).toBe(1);
+            }
+        }
+        expect(salience.get("user")).toBeGreaterThan(salience.get("document")!);
+        expect(salience.get("document")).toBeGreaterThan(
+            salience.get("assistant")!,
+        );
+        expect(salience.get("assistant")).toBeGreaterThan(0);
+        expect(salience.get("echo")).toBe(salience.get("user"));
     });
     const fixtureRoot = process.env.TYPEAGENT_TOPIC_FIXTURES;
     if (fixtureRoot) {

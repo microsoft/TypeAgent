@@ -52,6 +52,8 @@ import {
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
@@ -502,6 +504,9 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
+    if (settings.modelType === ModelType.Decision)
+        throw new Error("Native decisions cannot be used as chat models");
+
     for (const member of pool.members)
         applyChatModelRequestDefaults(member.settings);
 
@@ -592,7 +597,7 @@ function createAzureOpenAIChatModel(
     }
 
     const defaultParams =
-        settings.provider === "azure"
+        settings.provider === "azure" && settings.modelName === undefined
             ? {}
             : {
                   model: settings.modelName,
@@ -606,6 +611,26 @@ function createAzureOpenAIChatModel(
     const model: ChatModelWithStreaming = {
         completionSettings,
         completionCallback,
+        inspectRequest(prompt, jsonSchema) {
+            const messages =
+                typeof prompt === "string"
+                    ? [{ role: "user" as const, content: prompt }]
+                    : prompt;
+            const serializedRequest = JSON.stringify(
+                adapter.buildRequestBody(
+                    makeModelRequest(messages, jsonSchema, false),
+                ),
+            );
+            return {
+                serializedRequest,
+                estimatedInputTokens: countTokens(serializedRequest),
+                tokenizer: "o200k_base",
+                constraints: checkSerializedRequestConstraints(
+                    serializedRequest,
+                    settings.requestConstraints,
+                ),
+            };
+        },
         complete,
         completeStream,
     };
@@ -902,9 +927,13 @@ export type AzureChatModelName =
     | "GPT_5_NANO"
     | "GPT_5_CHAT"
     | "GPT_4_1"
-    | "GPT_6_LUNA";
+    | "GPT_6_LUNA"
+    | "GPT_6_1_SOL"
+    | "GPT_6_1_TERRA";
 
 export const GPT_6_LUNA: AzureChatModelName = "GPT_6_LUNA";
+export const GPT_6_1_SOL: AzureChatModelName = "GPT_6_1_SOL";
+export const GPT_6_1_TERRA: AzureChatModelName = "GPT_6_1_TERRA";
 export const GPT_4_1: AzureChatModelName = "GPT_4_1";
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";
@@ -1240,7 +1269,7 @@ function verifyPromptLength(
     } else if (promptLength > MAX_PROMPT_LENGTH_DEFAULT) {
         // Approx 20K tokens
         const errorMsg = `LARGE REQUEST:\nTotal prompt length ${promptLength} chars. Set AZURE_OPENAI_MAX_CHARS env variable to block.`;
-        console.log(errorMsg);
+        console.warn(errorMsg);
         debugOpenAI(errorMsg);
     }
 }

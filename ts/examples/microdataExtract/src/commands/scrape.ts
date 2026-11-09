@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Command, Flags } from "@oclif/core";
-import puppeteer, { TimeoutError } from "puppeteer";
+import puppeteer, { TimeoutError, type Browser, type Page } from "puppeteer";
 import * as fs from "fs-extra";
 import * as path from "path";
 import { homedir } from "os";
@@ -163,7 +163,7 @@ export default class Scrape extends Command {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
-    async getRestaurantLinks(page: puppeteer.Page): Promise<string[]> {
+    async getRestaurantLinks(page: Page): Promise<string[]> {
         return await page.evaluate(() => {
             const links = Array.from(
                 document.querySelectorAll('a[href*="/Restaurant_Review-"]'),
@@ -178,7 +178,7 @@ export default class Scrape extends Command {
         });
     }
 
-    async extractJsonLdData(page: puppeteer.Page): Promise<any | null> {
+    async extractJsonLdData(page: Page): Promise<any | null> {
         try {
             const jsonLd = await page.$$eval(
                 'script[type="application/ld+json"]',
@@ -205,10 +205,7 @@ export default class Scrape extends Command {
         return null;
     }
 
-    async scrapePage(
-        browser: puppeteer.Browser,
-        url: string,
-    ): Promise<any | null> {
+    async scrapePage(browser: Browser, url: string): Promise<any | null> {
         const page = await browser.newPage();
         try {
             await page.goto(url, { waitUntil: "load" });
@@ -238,7 +235,7 @@ export default class Scrape extends Command {
     }
 
     async runDiscoveryMode(
-        browser: puppeteer.Browser,
+        browser: Browser,
         baseUrl: string,
         numPages: number,
         outputFile: string,
@@ -309,7 +306,7 @@ export default class Scrape extends Command {
     }
 
     async runDirectMode(
-        browser: puppeteer.Browser,
+        browser: Browser,
         inputFile: string,
         outputFile: string,
     ): Promise<void> {

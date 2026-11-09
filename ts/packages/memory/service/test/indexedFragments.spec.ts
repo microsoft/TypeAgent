@@ -89,6 +89,61 @@ test("late table cells outrank repeated early individual query words and keep as
     ).toBe(true);
 });
 
+test("a rare factual selector outranks repeated generic terms in a long conversation", () => {
+    const report = "I reduced the gallery script from 140 lines to 95 lines.";
+    const text = `${"The JavaScript gallery is discussed here. ".repeat(600)}\n\n${report}`;
+    const selected = select(text, ["javascript", "gallery", "reduced"], {
+        query: "How much was the gallery JavaScript reduced?",
+        maxFragments: 1,
+    });
+    expect(selected.fragments[0].snippet).toContain(report);
+});
+
+test("query coverage ranks matches beyond the first, middle and last occurrences", () => {
+    const report = "The script reduced from 140 lines to 95 lines.";
+    const padding = "Unrelated background. ".repeat(40);
+    const text = Array.from({ length: 9 }, (_, index) =>
+        index === 2
+            ? `${report}\n\n${padding}`
+            : `script ${padding}\n\nlines ${padding}\n\nreduced ${padding}`,
+    ).join("\n\n");
+    const selected = select(text, ["script", "reduced", "lines"], {
+        query: "How much was the script reduced?",
+        maxCharsPerFragment: 200,
+        maxReadChars: 1200,
+        maxFragments: 1,
+    });
+    expect(selected.fragments[0].snippet).toContain(report);
+});
+
+test("two-letter query terms participate in block selection", () => {
+    const blocks: IndexedBlock[] = [
+        {
+            sourceId: "unrelated",
+            revisionId: "current",
+            blockOrdinal: 0,
+            text: "JSON background without the requested language.",
+            score: 1,
+        },
+        {
+            sourceId: "matching",
+            revisionId: "current",
+            blockOrdinal: 0,
+            text: "The JS implementation uses a shared event handler.",
+            score: 1,
+        },
+    ];
+    const selected = selectIndexedFragments(blocks, {
+        query: "Explain JS",
+        terms: ["js"],
+        sourceIds: blocks.map((block) => block.sourceId),
+        maxFragments: 1,
+    });
+    expect(selected.fragments).toHaveLength(1);
+    expect(selected.fragments[0].sourceId).toBe("matching");
+    expect(selected.fragments[0].snippet).toContain("JS implementation");
+});
+
 test("repeated early literal matches cannot hide a late literal clarification", () => {
     const late =
         "Budget review correction: the former denominator is withdrawn; only this current cohort is supported.";

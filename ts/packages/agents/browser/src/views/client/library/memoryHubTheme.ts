@@ -48,6 +48,8 @@ export function applyTheme(
     button.title = text;
     const glyph = button.querySelector("i");
     if (glyph) glyph.className = `fa-solid ${icon}`;
+    const caption = button.querySelector("[data-theme-label]");
+    if (caption) caption.textContent = text;
 }
 
 export function mountThemeToggle(

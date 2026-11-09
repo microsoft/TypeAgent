@@ -20,7 +20,7 @@ const debug = registerDebug("kp:answer");
 
 /** Default character budget for the evidence block in the prompt. */
 const DEFAULT_CHAR_BUDGET = 12_000;
-const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
+const DEFAULT_MODEL = "copilot:gpt-6.1-sol";
 
 export interface AnswerGeneratorConfig {
     model?: string;

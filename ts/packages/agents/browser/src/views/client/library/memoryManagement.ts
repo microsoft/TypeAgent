@@ -19,7 +19,7 @@ import { renderMarkdown } from "./utils/markdownRenderer";
 import { renderMermaidIn } from "./utils/mermaidView";
 import { renderMathIn } from "./utils/mathView";
 import { canEditWysiwyg } from "./utils/wysiwygEligibility";
-import { iconButton } from "./memoryHubUi";
+import { icon, iconButton, setIconButton } from "./memoryHubUi";
 
 const PAGE_SIZE = 25;
 const CONTENT_PAGE_SIZE = 12_000;
@@ -107,7 +107,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     const buildSelected = document.createElement("button");
     buildSelected.type = "button";
     buildSelected.className = "primary";
-    buildSelected.textContent = "Build views from selection";
+    buildSelected.append(icon("fa-plus"), "Build views");
     buildSelected.onclick = () => {
         void run(async () => {
             const selected = [...buildSelection.values()];
@@ -123,7 +123,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     };
     const clearSelected = document.createElement("button");
     clearSelected.type = "button";
-    clearSelected.textContent = "Clear selection";
+    setIconButton(clearSelected, "fa-xmark", "Clear selection");
     clearSelected.onclick = () => {
         buildSelection.clear();
         renderSources();
@@ -155,6 +155,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         items: [],
         total: 0,
     };
+    let sourceInventoryLoaded = false;
     let sourceTokens: Array<string | undefined> = [undefined];
     let sourcePageIndex = 0;
     let contentPage: MemoryCenterContent | undefined;
@@ -371,13 +372,22 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             } else sourceList.appendChild(button);
         }
         if (sourcePage.items.length === 0) {
-            setEmpty(sourceList, "No sources in this corpus.");
+            setEmpty(
+                sourceList,
+                sourceInventoryLoaded
+                    ? "No sources in this corpus."
+                    : "Source list not loaded. Open Sources to browse.",
+            );
         } else {
             sourceList.classList.remove("empty");
         }
-        sourceCount.textContent = `${sourcePage.total} total`;
+        sourceCount.textContent = sourceInventoryLoaded
+            ? `${sourcePage.total} total`
+            : "Not loaded";
         selectionBar.hidden = buildSelection.size === 0;
-        selectionCount.textContent = `${buildSelection.size} of 32 sources selected · one collection per build`;
+        selectionCount.textContent = `${buildSelection.size} selected`;
+        selectionCount.title =
+            "Up to 32 sources from one collection per build.";
         element<HTMLSpanElement>("sourcePageLabel").textContent =
             `Page ${sourcePageIndex + 1}`;
         element<HTMLButtonElement>("sourcePrevious").disabled =
@@ -407,9 +417,10 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         const hasSource = selectedSource !== undefined;
         element<HTMLButtonElement>("reindexSourceButton").disabled = !hasSource;
         element<HTMLButtonElement>("forgetSourceButton").disabled = !hasSource;
-        element<HTMLButtonElement>("replaceSourceButton").disabled = !hasSource;
+        element<HTMLButtonElement>("replaceSourceButton").disabled =
+            !hasSource || !contentPage;
         element<HTMLButtonElement>("showSourceActivity").disabled = !hasSource;
-        contentEditor.disabled = !hasSource;
+        contentEditor.disabled = !hasSource || !contentPage;
         sourceMetadata.replaceChildren();
         revisionList.replaceChildren();
 
@@ -599,6 +610,9 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     }
 
     function renderContent(): void {
+        contentEditor.disabled = !selectedSource || !contentPage;
+        element<HTMLButtonElement>("replaceSourceButton").disabled =
+            !selectedSource || !contentPage;
         if (!contentPage) {
             contentEditor.value = "";
             originalPageContent = contentEditor.value;
@@ -941,6 +955,11 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         await Promise.all([loadSources(), loadJobs(), loadActivity()]);
     }
 
+    function cancelSourceSelection(): void {
+        requestVersion++;
+        contentPreview.removeAttribute("aria-busy");
+    }
+
     async function loadSources(): Promise<void> {
         const params = {
             pageSize: PAGE_SIZE,
@@ -955,6 +974,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         if (version !== sourceLoadVersion || scopeVersion !== requestVersion)
             return;
         sourcePage = result;
+        sourceInventoryLoaded = true;
         if (sourcePage.nextContinuationToken) {
             sourceTokens[sourcePageIndex + 1] =
                 sourcePage.nextContinuationToken;
@@ -962,40 +982,68 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         renderSources();
     }
 
-    async function selectSource(sourceId: string): Promise<void> {
-        if (!activeCorpus) return;
+    async function selectSource(
+        sourceId: string,
+        corpusId = activeCorpus?.corpusId,
+    ): Promise<void> {
+        if (!corpusId) return;
         if (!discardChanges()) return;
-        requestVersion++;
-        const corpusId = activeCorpus.corpusId;
+        const version = ++requestVersion;
+        if (activeCorpus?.corpusId !== corpusId) activeCorpus = undefined;
         selectedSource = undefined;
         contentPage = undefined;
         renderSource();
         renderContent();
-        selectedSource = await invoke("memoryGetSource", {
-            corpusId,
-            sourceId,
-        });
-        if (!selectedSource) {
-            throw new Error(`Source '${sourceId}' no longer exists`);
-        }
-        contentOffsets = [0];
-        contentPageIndex = 0;
-        showContentMode("write");
         renderSources();
-        renderSource();
-        contentPage = await invoke("memoryGetSourceContent", {
-            corpusId,
-            sourceId,
-            revisionId: selectedSource.activeRevisionId,
-            offset: 0,
-            maxChars: CONTENT_PAGE_SIZE,
-        });
-        renderContent();
-        await loadSourceSynopsis(
-            corpusId,
-            sourceId,
-            selectedSource.activeRevisionId,
-        );
+        renderKnowledge();
+        sourceTitle.textContent = "Loading source...";
+        showContentMode("preview");
+        contentPreview.textContent = "Loading source details...";
+        contentPreview.removeAttribute("role");
+        contentPreview.setAttribute("aria-busy", "true");
+        try {
+            const [corpus, source] = await Promise.all([
+                activeCorpus ?? invoke("memoryGetCorpus", { corpusId }),
+                invoke("memoryGetSource", { corpusId, sourceId }),
+            ]);
+            if (version !== requestVersion) return;
+            if (!source)
+                throw new Error(`Source '${sourceId}' no longer exists`);
+            activeCorpus = corpus;
+            selectedSource = source;
+            contentOffsets = [0];
+            contentPageIndex = 0;
+            renderSources();
+            renderCorpora();
+            renderCorpusStatus();
+            renderSource();
+            const content = await invoke("memoryGetSourceContent", {
+                corpusId,
+                sourceId,
+                revisionId: selectedSource.activeRevisionId,
+                offset: 0,
+                maxChars: CONTENT_PAGE_SIZE,
+            });
+            if (version !== requestVersion) return;
+            contentPage = content;
+            renderContent();
+            void loadSourceSynopsis(
+                corpusId,
+                sourceId,
+                selectedSource.activeRevisionId,
+            );
+        } catch (error) {
+            if (version !== requestVersion) return;
+            const message =
+                error instanceof Error ? error.message : String(error);
+            showContentMode("preview");
+            contentPreview.textContent = `Source details unavailable: ${message}`;
+            contentPreview.setAttribute("role", "alert");
+            throw error;
+        } finally {
+            if (version === requestVersion)
+                contentPreview.setAttribute("aria-busy", "false");
+        }
     }
 
     async function loadSourceSynopsis(
@@ -1545,6 +1593,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     return {
         selectCorpus,
         selectSource,
+        cancelSourceSelection,
         refresh: refreshActiveCorpus,
         clearBuildSelection(): void {
             buildSelection.clear();

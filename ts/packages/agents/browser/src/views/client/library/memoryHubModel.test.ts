@@ -38,6 +38,13 @@ test("deep links round-trip reserved characters without losing identity", () => 
         objectId: "source:# ?/1",
     };
     expect(parseRoute(routeHash(source))).toEqual(source);
+    const question = {
+        page: "questions" as const,
+        corpusId: "corpus/a",
+        objectId: "view:# ?/1",
+        questionSlotId: "slot/a ?",
+    };
+    expect(parseRoute(routeHash(question))).toEqual(question);
     const inbox = { page: "inbox" as const, objectId: "job:c/a" };
     expect(parseRoute(routeHash(inbox))).toEqual(inbox);
     expect(parseRoute("#/unknown")).toEqual({
@@ -79,6 +86,8 @@ test("view and build links preserve exact revision and operation identities", ()
             corpusId: "corpus/a",
             objectId: "wiki:#1",
             viewRevisionId: "revision/old",
+            viewPageId: "claim/one",
+            viewLayoutId: "role lanes",
         },
         {
             page: "activity" as const,

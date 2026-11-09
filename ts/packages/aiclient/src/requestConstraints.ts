@@ -5,7 +5,9 @@ import type { ModelRequestConstraints } from "@typeagent/config";
 import {
     RequestAdmissionError,
     outputReservation,
+    decisionOutputReservation,
     isChatWireRequest,
+    outputTokenLimitField,
 } from "./requestBudget.js";
 
 export interface RequestConstraintReceipt {
@@ -14,6 +16,10 @@ export interface RequestConstraintReceipt {
     inputTokens: number;
     outputTokens: number;
     safetyTokens: number;
+    /** Declared provider ceilings, not measured usage or inferred model defaults. */
+    declaredLimits?: Readonly<
+        Pick<ModelRequestConstraints, "inputTokens" | "contextTokens">
+    >;
 }
 
 function tokenUpperBound(text: string): number {
@@ -52,7 +58,12 @@ function enforceEmbeddingItemBudget(
     constraints: ModelRequestConstraints,
 ): void {
     const embeddingItemTokens = constraints.embeddingItemTokens;
-    if (!("input" in body) || embeddingItemTokens === undefined) return;
+    if (
+        "questions" in body ||
+        !("input" in body) ||
+        embeddingItemTokens === undefined
+    )
+        return;
     const inputs = Array.isArray(body.input) ? body.input : [body.input];
     for (const input of inputs) {
         if (typeof input !== "string")
@@ -80,10 +91,12 @@ export function checkSerializedRequestConstraints(
             "Inference request must be a serialized object",
         );
     const chat = isChatWireRequest(body);
-    const outputTokens =
-        chat && (constraints || "max_tokens" in body)
-            ? outputReservation(body, constraints?.outputTokens)
-            : 0;
+    const decision = !chat && "questions" in body;
+    const outputTokens = decision
+        ? decisionOutputReservation(body)
+        : chat && (constraints || outputTokenLimitField(body) !== undefined)
+          ? outputReservation(body, constraints?.outputTokens)
+          : 0;
     if (constraints) {
         enforceRequestBudget(
             constraints,
@@ -98,6 +111,18 @@ export function checkSerializedRequestConstraints(
         tokenAccounting: "utf8-byte-upper-bound",
         inputTokens,
         outputTokens,
-        safetyTokens: chat ? safetyTokens : 0,
+        safetyTokens: chat || decision ? safetyTokens : 0,
+        ...(constraints
+            ? {
+                  declaredLimits: {
+                      ...(constraints.inputTokens !== undefined
+                          ? { inputTokens: constraints.inputTokens }
+                          : {}),
+                      ...(constraints.contextTokens !== undefined
+                          ? { contextTokens: constraints.contextTokens }
+                          : {}),
+                  },
+              }
+            : {}),
     };
 }

@@ -68,7 +68,7 @@ cat stream_of_consciousness.txt | thoughts > organized.md
 -o, --output <file>        Output file (or "-" for stdout, default: stdout)
 --instructions <text>      Additional formatting instructions
 -t, --tags <tags>          Comma-separated tags/keywords (e.g., "meeting,q1-2026,planning")
--m, --model <model>        LLM endpoint to use (default: copilot:gpt-5.6-sol)
+-m, --model <model>        LLM endpoint to use (default: copilot:gpt-6.1-sol)
 -h, --help                 Show help message
 ```
 
@@ -142,7 +142,7 @@ Convert raw text into markdown:
 {
   "rawText": "your raw notes here...",
   "instructions": "Format as meeting notes", // optional
-  "model": "copilot:gpt-5.6-sol" // optional
+  "model": "copilot:gpt-6.1-sol" // optional
 }
 ```
 

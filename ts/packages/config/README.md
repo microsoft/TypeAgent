@@ -138,6 +138,35 @@ values are nonsecret; credentials remain in the hosted provider sections.
 
 ## Usage
 
+### Native decision configuration
+
+```yaml
+decision:
+  provider: inherit # inherit | azure | copilot
+  azure:
+    deploymentKey: decision_1
+    deploymentName: decision-1
+  copilot:
+    model: gpt-6-luna-decisions
+```
+
+These fields round-trip through `buildConfig`, `configToEnv`, and YAML serialization.
+Flat names are `TYPEAGENT_DECISION_PROVIDER`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME`, and
+`TYPEAGENT_DECISION_COPILOT_MODEL`. Unsupported decision providers and empty names
+are rejected. The Azure deployment key references the existing
+`azureOpenAI.deployments` endpoint/auth pool; it is not the wire model name.
+Use HTTPS native systemone endpoints serving the configured wire deployment name.
+
+`inherit` follows the active in-memory provider override, then the explicitly
+supplied config's `modelProvider`, then Azure. Explicit factory or decision provider
+selection takes precedence. Inherited OpenAI/Ollama reports unavailable.
+Request constraints may use `azure:decision:<deploymentKey>` or
+`copilot:decision:<model>` keys, independently of chat constraints.
+
+### Chat model defaults
+
 Implicit chat selection (`createChatModel()`, `DEFAULT`, or
 `apiSettingsFromEnv()`) uses the named Azure `gpt_6_luna` deployment and its
 regional pool, even when the legacy bare endpoint points to an older model.
@@ -211,7 +240,10 @@ including unused profiles. Selection never inherits another alias's fields.
 `TYPEAGENT_DEFAULT_EMBEDDING_MODEL` overrides selection and
 `TYPEAGENT_EMBEDDING_MODELS` supplies a JSON catalog layer. YAML, flat env, typed
 config, shim and importer preserve the full catalog, not just the selected entry.
-Do not combine a selector with legacy `embedding:` fields or
-`TYPEAGENT_EMBEDDING_*` single-model overrides: migrate those fields into a named
-definition and remove the old overrides. Provider connection settings may coexist.
+When a selector is set, legacy `embedding:` fields and
+`TYPEAGENT_EMBEDDING_*` single-model overrides produce a warning and do not affect
+the selected definition, including `none`. Migrate those fields into a named
+definition and remove the old overrides. Without a selector, legacy behavior is
+unchanged. Invalid catalogs and unknown selectors still fail explicitly.
+Provider connection settings may coexist.
 Switching the selected model requires a server restart.

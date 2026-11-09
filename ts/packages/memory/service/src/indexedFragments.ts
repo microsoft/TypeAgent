@@ -21,6 +21,64 @@ export interface IndexedBlock {
     preferenceBoost?: number;
 }
 
+export interface IndexedFragmentPolicy {
+    selectBlocks?(input: {
+        request: IndexedFragmentRequest;
+        nativeBlocks: readonly IndexedBlock[];
+        eligibleBlocks: readonly IndexedBlock[];
+    }): IndexedBlock[];
+    rankWindows?(input: {
+        request: IndexedFragmentRequest;
+        windows: readonly IndexedWindowCandidate[];
+        windowChars: number;
+    }): IndexedWindowCandidate[];
+}
+
+export function applyIndexedBlockPolicy(
+    policy: IndexedFragmentPolicy | undefined,
+    request: IndexedFragmentRequest,
+    nativeBlocks: IndexedBlock[],
+    eligibleBlocks: () => IndexedBlock[],
+): IndexedBlock[] {
+    if (!policy?.selectBlocks) return nativeBlocks;
+    const sourceIds = new Set(request.sourceIds);
+    const eligible = eligibleBlocks().filter((block) =>
+        sourceIds.has(block.sourceId),
+    );
+    const key = (block: IndexedBlock) =>
+        JSON.stringify([
+            block.sourceId,
+            block.revisionId,
+            block.blockOrdinal,
+            block.messageOrdinal,
+        ]);
+    const native = new Map(nativeBlocks.map((block) => [key(block), block]));
+    const allowed = new Map(
+        eligible.map((block) => [
+            key(block),
+            { ...block, ...native.get(key(block)) },
+        ]),
+    );
+    const seen = new Set<string>();
+    return policy
+        .selectBlocks({ request, nativeBlocks, eligibleBlocks: eligible })
+        .map((block) => {
+            const identity = key(block);
+            const original = allowed.get(identity);
+            if (
+                !original ||
+                original.text !== block.text ||
+                !Number.isFinite(block.score) ||
+                seen.has(identity)
+            )
+                throw new Error(
+                    "Indexed block policy escaped its eligible pool",
+                );
+            seen.add(identity);
+            return { ...original, score: block.score };
+        });
+}
+
 const queryStopWords = new Set([
     "what",
     "which",
@@ -216,11 +274,34 @@ function queryBlocks(
 const contextualHeading =
     /^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat|counterexample|scope|observation|measurement)/im;
 
-interface WindowCandidate {
-    block: IndexedBlock;
-    offset: number;
-    matched?: boolean;
-    context?: boolean;
+export interface IndexedWindowCandidate {
+    readonly block: IndexedBlock;
+    readonly offset: number;
+    readonly matched?: boolean;
+    readonly context?: boolean;
+}
+
+type WindowCandidate = IndexedWindowCandidate;
+
+function policyWindows(
+    windows: WindowCandidate[][],
+    request: IndexedFragmentRequest,
+    windowChars: number,
+    policy: IndexedFragmentPolicy | undefined,
+): WindowCandidate[][] {
+    if (!policy?.rankWindows) return windows;
+    const pool: WindowCandidate[] = [];
+    for (let index = 0; windows.some((items) => index < items.length); index++)
+        for (const items of windows) if (items[index]) pool.push(items[index]);
+    const ranked = policy.rankWindows({ request, windows: pool, windowChars });
+    const allowed = new Set(pool);
+    if (
+        ranked.length !== pool.length ||
+        new Set(ranked).size !== pool.length ||
+        ranked.some((item) => !allowed.has(item))
+    )
+        throw new Error("Indexed window policy must permute the existing pool");
+    return ranked.map((item) => [item]);
 }
 
 function representativeMatches(text: string, pattern: RegExp) {
@@ -253,15 +334,16 @@ function matchedWindows(
             .split(/\s+/)
             .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
             .join("\\s+");
-        return representativeMatches(
-            block.text,
-            new RegExp(
-                wholeWords
-                    ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
-                    : pattern,
-                "giu",
-            ),
-        ).map((match) => ({
+        const expression = new RegExp(
+            wholeWords
+                ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
+                : pattern,
+            "giu",
+        );
+        const matches = wholeWords
+            ? [...block.text.matchAll(expression)]
+            : representativeMatches(block.text, expression);
+        return matches.map((match) => ({
             block,
             offset: passageOffset(block.text, match.index, window),
             matched: true,
@@ -300,18 +382,40 @@ function candidateWindows(
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
         const passages = matchedWindows(block, selectors, window, wholeWords);
         const words = matchedWindows(block, terms, window, wholeWords);
-        const primary = passages.length ? passages : words;
+        let primary = passages.length ? passages : words;
         if (wholeWords) {
-            const coverage = (candidate: WindowCandidate) => {
+            const frequencies = new Map<string, number>();
+            for (const word of block.text
+                .toLocaleLowerCase()
+                .match(/[\p{L}\p{N}-]+/gu) ?? [])
+                frequencies.set(word, (frequencies.get(word) ?? 0) + 1);
+            const coverage = (candidate: WindowCandidate, length: number) => {
                 const text = block.text
-                    .slice(candidate.offset, candidate.offset + window)
+                    .slice(candidate.offset, candidate.offset + length)
                     .toLocaleLowerCase();
                 const words = new Set<string>(
                     text.match(/[\p{L}\p{N}-]+/gu) ?? [],
                 );
-                return terms.filter((term) => words.has(term)).length;
+                return terms.reduce(
+                    (score, term) =>
+                        score +
+                        (words.has(term)
+                            ? 1 / Math.sqrt(frequencies.get(term) ?? 1)
+                            : 0),
+                    0,
+                );
             };
-            primary.sort((a, b) => coverage(b) - coverage(a));
+            const ranked = primary.map((candidate) => ({
+                candidate,
+                coverage: coverage(candidate, window),
+                leadingCoverage: coverage(candidate, Math.ceil(window / 2)),
+            }));
+            ranked.sort(
+                (a, b) =>
+                    b.coverage - a.coverage ||
+                    b.leadingCoverage - a.leadingCoverage,
+            );
+            primary = ranked.map((item) => item.candidate);
         }
         const qualifications = representativeMatches(
             block.text,
@@ -559,6 +663,7 @@ function readCandidate(
 export function selectIndexedFragments(
     blocks: Iterable<IndexedBlock>,
     request: IndexedFragmentRequest,
+    policy?: IndexedFragmentPolicy,
 ): IndexedFragmentSelection {
     const maxFragments = bound(request.maxFragments, 12, 12);
     const window = bound(request.maxCharsPerFragment, 2000, 2000);
@@ -576,7 +681,7 @@ export function selectIndexedFragments(
                     term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
             ),
         ),
-    ].filter((term) => term.length > 2);
+    ].filter((term) => term.length > (request.query !== undefined ? 1 : 2));
     const eligible = new Set(request.sourceIds);
     const state: FragmentSelectionState = {
         fragments: [],
@@ -593,12 +698,17 @@ export function selectIndexedFragments(
         ? queryBlocks(candidates, terms, maxFragments)
         : diverseBlocks(candidates, Math.max(2, Math.floor(maxFragments / 3)));
     state.limited = candidates.length > selected.length;
-    const windows = candidateWindows(
-        selected,
-        terms,
-        request.terms,
+    const windows = policyWindows(
+        candidateWindows(
+            selected,
+            terms,
+            request.terms,
+            window,
+            request.query !== undefined,
+        ),
+        request,
         window,
-        request.query !== undefined,
+        policy,
     );
     // Interleave sources so an earlier long block cannot hide a newly indexed correction.
     for (

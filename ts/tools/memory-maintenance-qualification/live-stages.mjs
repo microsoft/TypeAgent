@@ -112,9 +112,30 @@ export async function liveDependencyCheckpoint(root) {
     return result;
 }
 
+function providerRequestType(pathname, decisionQuestions) {
+    if (decisionQuestions) return "decision";
+    if (/\/chat\/completions$/.test(pathname)) return "chat";
+    if (/\/embeddings$/.test(pathname)) return "embedding";
+    return "other-production-request";
+}
+
+async function observeProviderBody(response, item) {
+    if (!response.headers.get("content-type")?.includes("json")) return;
+    const body = await response.clone().json();
+    if (response.ok) {
+        item.model = body.model;
+        item.usage = body.usage;
+    } else {
+        item.errorCode = body.error?.code;
+        item.errorType = body.error?.type;
+        item.errorParameter = body.error?.param;
+    }
+}
+
 export function observeProvider(
     events,
     currentRole = () => "production-default",
+    currentTrace = () => undefined,
 ) {
     const original = globalThis.fetch;
     globalThis.fetch = async function (...args) {
@@ -124,19 +145,25 @@ export function observeProvider(
         );
         const started = performance.now();
         const role = roles.getStore() ?? currentRole();
+        const startedEpochMs = Date.now();
         const request =
             typeof args[1]?.body === "string"
                 ? JSON.parse(args[1].body)
                 : undefined;
-        const response = await Reflect.apply(original, this, args);
+        const decisionQuestions = request?.questions;
         const item = {
+            startedEpochMs,
+            endpointId: hash(`${url.origin}${url.pathname}`),
+            traceId: currentTrace(),
             role,
-            type: /\/chat\/completions$/.test(url.pathname)
-                ? "chat"
-                : "other-production-request",
-            status: response.status,
-            durationMs: performance.now() - started,
-            retryAfter: response.headers.get("retry-after"),
+            type: providerRequestType(url.pathname, decisionQuestions),
+            requestSchemaId: request?.response_format?.json_schema?.name
+                ? hash(request.response_format.json_schema.name)
+                : undefined,
+            requestedModel: request?.model,
+            decisionQuestionCount: decisionQuestions
+                ? Object.keys(decisionQuestions).length
+                : undefined,
             serializedRequestCharacters:
                 typeof args[1]?.body === "string"
                     ? args[1].body.length
@@ -145,19 +172,22 @@ export function observeProvider(
                 request?.max_completion_tokens ?? request?.max_tokens,
             requestedTools: request?.tools?.length ?? 0,
         };
-        if (response.headers.get("content-type")?.includes("json")) {
-            const body = await response.clone().json();
-            if (response.ok) {
-                item.model = body.model;
-                item.usage = body.usage;
-            } else {
-                item.errorCode = body.error?.code;
-                item.errorType = body.error?.type;
-                item.errorParameter = body.error?.param;
-            }
-        }
         events.push(item);
-        return response;
+        try {
+            const response = await Reflect.apply(original, this, args);
+            item.responseEpochMs = Date.now();
+            item.status = response.status;
+            item.durationMs = performance.now() - started;
+            item.retryAfter = response.headers.get("retry-after");
+            await observeProviderBody(response, item);
+            return response;
+        } catch (error) {
+            item.observationFailed = true;
+            throw error;
+        } finally {
+            item.bodyObservedEpochMs = Date.now();
+            item.bodyObservedDurationMs = performance.now() - started;
+        }
     };
     return () => {
         globalThis.fetch = original;
@@ -224,7 +254,9 @@ export async function loadLiveContract(load) {
     };
     const contract = {};
     for (const [file, names] of Object.entries(imports)) {
-        const module = await load(`packages\\memory\\service\\dist\\${file}`);
+        const module = await load(
+            path.join("packages", "memory", "service", "dist", file),
+        );
         for (const name of names) {
             assert.equal(
                 typeof module[name],
@@ -235,13 +267,22 @@ export async function loadLiveContract(load) {
         }
     }
     for (const [file, names] of [
-        ["packages\\config\\dist\\index.js", ["loadConfigSync"]],
         [
-            "packages\\aiclient\\dist\\index.js",
+            path.join("packages", "config", "dist", "index.js"),
+            ["loadConfigSync"],
+        ],
+        [
+            path.join("packages", "aiclient", "dist", "index.js"),
             ["initRuntimeConfigFromProcessEnv"],
         ],
         [
-            "packages\\memory\\conversation\\dist\\memory.js",
+            path.join(
+                "packages",
+                "memory",
+                "conversation",
+                "dist",
+                "memory.js",
+            ),
             ["createMemorySettings"],
         ],
     ]) {

@@ -8,6 +8,7 @@ import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
 import { createTopicSnapshot } from "../src/topicGeneration.js";
+import { waitForTestState } from "./waitForTestState.js";
 import {
     changeFamily,
     offlineConsolidationAdapter,
@@ -155,13 +156,22 @@ export async function replaceOriginal(
               corpusId,
               source: { ...input, sourceId: "handoff" },
           });
-    for (let tick = 0; tick < 1000; tick++) {
-        const current = await service.getJob(job.jobId);
-        if (current?.state === "failed") throw new Error(current.error);
-        if (current?.state === "complete") return;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error("Actual P0 original indexing did not settle");
+    const current = await waitForTestState(
+        async () => {
+            const value = await service.getJob(job.jobId);
+            if (!value) throw new Error(`Unknown memory job '${job.jobId}'`);
+            return value;
+        },
+        (value) =>
+            ["complete", "partial", "failed", "cancelled"].includes(
+                value.state,
+            ),
+        "Actual P0 original indexing",
+    );
+    if (current.state !== "complete")
+        throw new Error(
+            `Actual P0 original indexing failed: ${JSON.stringify(current)}`,
+        );
 }
 
 export async function sourceFollowingStage(

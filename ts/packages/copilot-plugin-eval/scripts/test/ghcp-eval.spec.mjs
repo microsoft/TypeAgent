@@ -30,13 +30,13 @@ import {
 } from "../ghcp-eval-corpus.mjs";
 
 const fixtures = path.resolve("fixtures");
-test("evaluation pins Luna 5.6 and rejects another model before paid work", () => {
-    assert.equal(evalModel, "gpt-5.6-luna");
+test("evaluation pins Luna 6 and rejects historical models before paid work", () => {
+    assert.equal(evalModel, "gpt-6-luna");
     assert.doesNotThrow(() => validateEvalLedger({ model: evalModel }));
-    for (const model of ["gpt-5.6-sol", undefined, ""]) {
+    for (const model of ["gpt-5.6-sol", "gpt-5.6-luna", undefined, ""]) {
         assert.throws(
             () => validateEvalLedger({ model }),
-            /Evaluation requires a ledger for gpt-5.6-luna/,
+            /Evaluation requires a ledger for gpt-6-luna/,
         );
     }
 });

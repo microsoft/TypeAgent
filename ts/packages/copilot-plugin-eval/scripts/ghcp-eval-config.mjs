@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export const evalModel = "gpt-5.6-luna";
+export const evalModel = "gpt-6-luna";
 
 export function validateEvalLedger(ledger) {
     if (ledger?.model !== evalModel) {

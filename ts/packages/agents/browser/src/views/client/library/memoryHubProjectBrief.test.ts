@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type { ProjectBriefContent } from "@typeagent/memory-service";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { mountMemoryHubViews } from "./memoryHubViews";
@@ -142,7 +144,9 @@ async function settle() {
 }
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing project control: ${label}`);
     button.click();
@@ -162,6 +166,9 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
     const editor = createProjectBriefEditor(content, changed, original);
     document.body.replaceChildren(editor.element);
     expect(editor.element.querySelectorAll("fieldset")).toHaveLength(7);
+    expect(editor.element.querySelector("legend")!.textContent).toBe(
+        "Goals and Scope",
+    );
     expect(editor.element.textContent).toContain(
         "Project knowledge as-of: Unknown",
     );
@@ -171,7 +178,7 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
     change(editor.element, "Project brief title", "Edited project brief");
     change(
         editor.element,
-        "Goals and scope narrative and checked facts",
+        "Goals and Scope narrative and checked facts",
         "Human context note",
     );
     expect(editor.read().title).toBe("Edited project brief");
@@ -208,56 +215,63 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         errors = [];
         invoke.mockReset();
         evidence.mockReset();
-        invoke.mockImplementation(async (method) => {
-            switch (method) {
-                case "memoryViewCapabilities":
-                    return {
-                        derivedViews: {
-                            builds: true,
-                            kinds: ["troubleshootingGuide", "projectBrief"],
-                        },
-                    };
-                case "memoryListCorpora":
-                    return [{ corpusId: "payments", name: "Payments" }];
-                case "memoryListViews":
-                    return { head, views: [view] };
-                case "memoryListViewBuilds":
-                    return [];
-                case "memoryGetViewPublicationPolicy":
-                    return { revision: 0, autoPublish: true, views: {} };
-                case "memoryGetViewPublication":
-                    return {
-                        viewId: view.viewId,
-                        indexState: "absent",
-                        reason: "Draft only",
-                    };
-                case "memoryListSources":
-                    return {
-                        items: [
-                            {
-                                sourceId: "status",
-                                title: "Status evidence",
-                                activeRevisionId: "current",
-                                revisions: [
-                                    { revisionId: "current", state: "ready" },
-                                ],
+        invoke.mockImplementation(
+            inventoryFixture(async (method) => {
+                switch (method) {
+                    case "memoryViewCapabilities":
+                        return {
+                            derivedViews: {
+                                builds: true,
+                                kinds: ["troubleshootingGuide", "projectBrief"],
                             },
-                        ],
-                        total: 1,
-                    };
-                case "memoryBuildViews":
-                    return {
-                        corpusId: "payments",
-                        jobId: "build",
-                        state: "complete",
-                        results: [],
-                    };
-                case "memorySaveViewDraft":
-                    return { commitId: head, version: view };
-                default:
-                    throw new Error(`Unexpected project operation ${method}`);
-            }
-        });
+                        };
+                    case "memoryListCorpora":
+                        return [{ corpusId: "payments", name: "Payments" }];
+                    case "memoryListViews":
+                        return { head, views: [view] };
+                    case "memoryListViewBuilds":
+                        return [];
+                    case "memoryGetViewPublicationPolicy":
+                        return { revision: 0, autoPublish: true, views: {} };
+                    case "memoryGetViewPublication":
+                        return {
+                            viewId: view.viewId,
+                            indexState: "absent",
+                            reason: "Draft only",
+                        };
+                    case "memoryListSources":
+                        return {
+                            items: [
+                                {
+                                    sourceId: "status",
+                                    title: "Status evidence",
+                                    activeRevisionId: "current",
+                                    revisions: [
+                                        {
+                                            revisionId: "current",
+                                            state: "ready",
+                                        },
+                                    ],
+                                },
+                            ],
+                            total: 1,
+                        };
+                    case "memoryBuildViews":
+                        return {
+                            corpusId: "payments",
+                            jobId: "build",
+                            state: "complete",
+                            results: [],
+                        };
+                    case "memorySaveViewDraft":
+                        return { commitId: head, version: view };
+                    default:
+                        throw new Error(
+                            `Unexpected project operation ${method}`,
+                        );
+                }
+            }),
+        );
         panel = mountMemoryHubViews(host, {
             scope: () => scope,
             onError: (error) => errors.push(error),
@@ -267,6 +281,132 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         panel.dispose();
         jest.restoreAllMocks();
     });
+    test.each([
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: undefined,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: undefined,
+            coverageNote: undefined,
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "goalsScope",
+            expectedGoalHeading: "Goals and Scope",
+        },
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals and Scope",
+            expectedGoalHeading: "Goals and Scope",
+        },
+    ])(
+        "brief sidecard separates overview and metadata without losing sections or evidence: %o",
+        async ({ goalHeading, expectedGoalHeading, ...overview }) => {
+            const original = invoke.getMockImplementation()!;
+            const briefContent: ProjectBriefContent = {
+                ...content,
+                ...overview,
+                status: "partial",
+                sections: content.sections.map((section) =>
+                    section.role === "goalsScope"
+                        ? { ...section, heading: goalHeading }
+                        : section,
+                ),
+            };
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryListViews"
+                        ? Promise.resolve({
+                              head,
+                              views: [
+                                  {
+                                      ...view,
+                                      content: briefContent,
+                                      createdAt: "2026-10-27T19:08:34.209Z",
+                                  },
+                              ],
+                          })
+                        : original(method, params),
+                ),
+            );
+            await panel.refresh();
+            click(host, "Payments reliability");
+            await settle();
+            const article = host.querySelector(".hub-view-document")!;
+            const flow = article.querySelector(".hub-view-reading-flow")!;
+            const sidecard = flow.querySelector(
+                'aside[aria-label="About this brief"]',
+            )!;
+            expect(sidecard.querySelector("h3")!.textContent).toBe(
+                overview.summary ? "Synopsis" : "About this brief",
+            );
+            expect(
+                sidecard.querySelector(".hub-view-infobox-label")!.textContent,
+            ).toBe("Brief overview");
+            expect(
+                sidecard.querySelector(".hub-view-lead")?.textContent.trim(),
+            ).toBe(overview.summary);
+            expect(sidecard.querySelector(".hub-view-note")?.textContent).toBe(
+                overview.coverageNote
+                    ? "Coverage: Selected evidence only"
+                    : undefined,
+            );
+            expect(sidecard.textContent).toContain("Version 1");
+            expect(sidecard.textContent).toContain("Completeness: partial");
+            expect(sidecard.querySelector("time")!.dateTime).toBe(
+                "2026-10-27T19:08:34.209Z",
+            );
+            expect(
+                [...flow.querySelectorAll(".hub-view-section")].map(
+                    (section) => ({
+                        heading: section.querySelector("h3")!.textContent,
+                        body: section
+                            .querySelector(".markdown-preview")!
+                            .textContent.trim(),
+                    }),
+                ),
+            ).toEqual(
+                briefContent.sections.map((section) => ({
+                    heading:
+                        section.role === "goalsScope"
+                            ? expectedGoalHeading
+                            : section.heading,
+                    body: section.body,
+                })),
+            );
+            expect(sidecard.querySelector(".hub-view-section")).toBeNull();
+            expect(
+                article.querySelector(":scope > details > summary")!
+                    .textContent,
+            ).toBe("Sources (1)");
+            expect(
+                article.querySelector(
+                    'button[aria-label="Open exact evidence status"]',
+                ),
+            ).not.toBeNull();
+            click(host, "Edit");
+            expect(
+                host.querySelector(
+                    '[aria-label="Project brief fixed template"]',
+                ),
+            ).not.toBeNull();
+            expect(errors).toEqual([]);
+        },
+    );
+
     test("kind picker builds indexed project summaries and fixed-template edits retain the query selector", async () => {
         await panel.refresh();
         click(host, "Build views");
@@ -297,6 +437,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
             }),
         );
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         expect(
             host.querySelector('[aria-label="Project brief fixed template"]'),
@@ -326,6 +467,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         async (summary) => {
             await panel.refresh();
             click(host, "Payments reliability");
+            await settle();
             click(host, "Edit");
             change(host, "Project brief summary", summary);
             click(host, "Save explicit edits");
@@ -350,6 +492,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
     test("dirty project editor blocks builds without losing changes", async () => {
         await panel.refresh();
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         change(host, "Project brief title", "Unsaved project brief");
         jest.spyOn(window, "confirm").mockReturnValue(false);
@@ -374,6 +517,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         );
         await panel.refresh();
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         click(host, "status @ current chars:0-12");
         await settle();
@@ -386,20 +530,23 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         });
         await settle();
         expect(host.textContent).not.toContain("Do not leak across scope");
-        expect(host.textContent).toContain("across your collections");
+        expect(host.textContent).toContain("Collection: Payments");
+        expect(host.querySelectorAll(".hub-view-card")).toHaveLength(1);
         expect(host.querySelector('[aria-label="View kind"]')).toBeNull();
     });
     test("older capabilities do not advertise or open an unsupported project kind", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryViewCapabilities"
-                ? Promise.resolve({
-                      derivedViews: {
-                          builds: true,
-                          kinds: ["troubleshootingGuide"],
-                      },
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryViewCapabilities"
+                    ? Promise.resolve({
+                          derivedViews: {
+                              builds: true,
+                              kinds: ["troubleshootingGuide"],
+                          },
+                      })
+                    : original(method, params),
+            ),
         );
         await panel.refresh();
         expect(host.textContent).not.toContain("Payments reliability");

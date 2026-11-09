@@ -2,6 +2,22 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryInventoryService } from "./inventoryTypes.js";
+import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
+import type {
+    MemoryKnowledgeService,
+    CorpusQuestionInput,
+    CorpusQuestionProposal,
+} from "./knowledgeTypes.js";
+export type * from "./knowledgeTypes.js";
+export type * from "./acquisitionTypes.js";
+import type {
+    MemorySchemaViewService,
+    QuestionDetails,
+    SchemaViewContent,
+    SchemaViewDefinition,
+} from "./schemaViewTypes.js";
+export type * from "./schemaViewTypes.js";
 import type { MemoryTopicService } from "./topicTypes.js";
 import type { ProcedureSourceCitation } from "./types.js";
 import type {
@@ -21,12 +37,20 @@ import type {
 } from "./viewMaintenanceTypes.js";
 export type * from "./viewMaintenanceTypes.js";
 export type * from "./topicTypes.js";
+export type * from "./viewExtensionTypes.js";
+import type {
+    ExtensionViewContent,
+    ViewExtensionDefinition,
+    ViewEligibilityReceipt,
+} from "./viewExtensionTypes.js";
 
 export type ViewKind =
     | "troubleshootingGuide"
     | "projectBrief"
     | "timeline"
-    | "wiki";
+    | "wiki"
+    | "schemaView"
+    | "extension";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -45,28 +69,46 @@ export interface TimelineEvidenceSelector {
 }
 export type ViewSourceSelector =
     | ViewDocumentSelector
-    | TimelineEvidenceSelector;
+    | TimelineEvidenceSelector
+    | {
+          kind: "sourceManifest";
+          sources: Array<{ sourceId: string; revisionId: string }>;
+          manifest: {
+              sourceId: string;
+              revisionId: string;
+              contentHash: string;
+          };
+          events?: never;
+      };
+export const viewDocumentSectionRoles = [
+    "description",
+    "prerequisites",
+    "diagnostic",
+    "guard",
+    "verification",
+    "recovery",
+    "context",
+    "goalsScope",
+    "owners",
+    "status",
+    "milestones",
+    "decisions",
+    "risks",
+] as const;
 export interface ViewSection {
     id: string;
     role:
-        | "description"
-        | "prerequisites"
-        | "diagnostic"
-        | "guard"
-        | "verification"
-        | "recovery"
-        | "context"
-        | "goalsScope"
-        | "owners"
-        | "status"
-        | "milestones"
-        | "decisions"
-        | "risks"
+        | (typeof viewDocumentSectionRoles)[number]
         | "event"
-        | "page";
+        | "page"
+        | "question";
     heading: string;
     body: string;
-    details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
+    details?:
+        | ProjectBriefDetails
+        | TimelineRecordDetails
+        | WikiPageDetails
+        | QuestionDetails;
 }
 export interface InformationalWikiPageDetails {
     kind: "page";
@@ -80,6 +122,7 @@ export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
 };
+export type InformationalCompletenessStatus = "partial" | "sufficient";
 export interface WikiIndexEntry {
     pageId: string;
     title: string;
@@ -88,6 +131,8 @@ export interface WikiIndexEntry {
 export interface WikiContent {
     kind: "wiki";
     construction: "informational-wiki-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
@@ -173,6 +218,7 @@ export type ProjectBriefDetails =
               id: string;
               status: "open" | "blocked" | "resolved" | "unknown";
           }>;
+          openQuestions?: string[];
       }
     | {
           kind: "context";
@@ -186,6 +232,8 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 export interface ProjectBriefContent {
     kind: "projectBrief";
     construction: "informational-project-summary-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
@@ -196,7 +244,9 @@ export type DerivedViewContent =
     | TroubleshootingGuideContent
     | ProjectBriefContent
     | TimelineContent
-    | WikiContent;
+    | WikiContent
+    | SchemaViewContent
+    | ExtensionViewContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | {
@@ -255,6 +305,8 @@ export interface ViewDefinitionInput {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    schemaView?: SchemaViewDefinition;
+    extension?: ViewExtensionDefinition;
     wiki?: {
         construction: "informational-wiki-v1";
         query: string;
@@ -274,6 +326,8 @@ export interface ViewDefinition {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    schemaView?: SchemaViewDefinition;
+    extension?: ViewExtensionDefinition;
     wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
@@ -363,12 +417,21 @@ export interface ViewReadRequest {
     corpusId: string;
     viewId: string;
     revisionId?: string;
+    includeContext?: boolean;
 }
 export interface ViewHistoryEntry {
     commitId: string;
     version: ViewVersion;
 }
-export interface MemoryViewService extends Partial<MemoryTopicService> {
+export interface MemoryViewService
+    extends Partial<MemoryInventoryService>,
+        Partial<MemoryTopicService>,
+        Partial<MemorySchemaViewService>,
+        Partial<MemoryKnowledgeService>,
+        Partial<MemoryAcquisitionService> {
+    getViewDetailPage?(
+        request: import("./viewDetail.js").ViewDetailPageRequest,
+    ): Promise<import("./viewDetail.js").ViewDetailPage | undefined>;
     updateViewMaintenance(
         request: ViewMaintenanceUpdate,
     ): Promise<ViewHistoryEntry>;
@@ -406,6 +469,12 @@ export interface MemoryViewService extends Partial<MemoryTopicService> {
     listViewBuilds(corpusId: string): Promise<ViewBuildJob[]>;
     cancelViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
     retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    continueViewBuild(
+        request: ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob>;
+    refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]>;
     getViewConflict(
         request: ViewConflictReadRequest,
     ): Promise<ViewMergeConflict | undefined>;
@@ -441,6 +510,11 @@ export interface ViewRetainedInput {
     evidence?: { kind: "event"; eventId: string };
     passages?: ViewCitation[];
     records?: TimelineEvidenceRecord[];
+    assertionLineage?: {
+        owner?: string;
+        independenceKey?: string;
+        derivedFrom: string[];
+    };
 }
 export interface ViewBuildSnapshot {
     corpusId: string;
@@ -452,6 +526,7 @@ export interface ViewBuildSnapshot {
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
     influenceSources?: Array<{ sourceId: string; revisionId: string }>;
+    influenceEvents?: import("./topicTypes.js").TopicEventReference[];
     selectionFingerprint?: string;
     informationalRetrieval?: {
         readonly indexGeneration: string;
@@ -468,7 +543,9 @@ export interface ViewBuildSnapshot {
         | "timeline-v1"
         | "informational-wiki-v1"
         | "informational-project-summary-v1"
-        | "topics-v1";
+        | "topics-v1"
+        | "schema-defined-v1"
+        | "extension-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -479,6 +556,7 @@ export interface ViewBuildSnapshot {
         query: string;
         purpose: string;
         essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
+        priorProse?: string;
     };
 }
 export interface ViewSynthesisOutput {
@@ -489,7 +567,9 @@ export interface ViewSynthesisOutput {
         | "verifiedRecovery"
         | "projectSummary"
         | "chronology"
-        | "knowledgePages";
+        | "knowledgePages"
+        | "schemaAnswers"
+        | "extensionArtifact";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
@@ -594,6 +674,32 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    /** Inspect complete configured schema-generation wire requests, without inference.
+     * Implementations must also inspect every schema audit and repair before dispatch.
+     */
+    schemaRequestAdmission?: {
+        kind: "configured-complete-request-v1";
+        validate(input: ViewBuildSnapshot): void | Promise<void>;
+    };
+    repairSchemaAnswers?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        report: ViewSupportReport,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
+    discoverCorpusQuestions?(
+        input: CorpusQuestionInput,
+        signal: AbortSignal,
+        reserveRepair?: () => Promise<void>,
+    ): Promise<CorpusQuestionProposal[]>;
+    proposeSchema?(
+        specification: string,
+        signal: AbortSignal,
+    ): Promise<SchemaViewDefinition>;
+    discoverSchemaQuestions?(
+        input: ViewBuildSnapshot,
+        signal: AbortSignal,
+    ): Promise<import("./schemaViewTypes.js").QuestionSlot[]>;
     assessWikiConsolidation?(
         input: ViewBuildSnapshot,
         survivor: ViewVersion,
@@ -605,16 +711,37 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
         signal: AbortSignal,
+        original?: ViewSynthesisOutput,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    repairWikiConsolidation?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
+        verification: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     checkEditorial?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
         signal: AbortSignal,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    repairProjectSummary?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     generateTopics?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
+        checkpoint?: import("./topicGeneration.js").TopicGenerationCheckpoint,
     ): Promise<import("./topicTypes.js").TopicSnapshot>;
+    generateTopicSummary?(
+        concept: import("./topicTypes.js").TopicConcept,
+        signal: AbortSignal,
+    ): Promise<
+        Pick<import("./topicTypes.js").TopicConcept, "summary" | "citations">
+    >;
     assessWikiSubject?(
         input: ViewBuildSnapshot,
         pages: WikiPagePurposeContext[],
@@ -633,6 +760,12 @@ export interface ViewSynthesisAdapter {
         input: ViewBuildSnapshot,
         signal: AbortSignal,
         inventory?: ViewFactInventory,
+    ): Promise<ViewSynthesisOutput>;
+    repairWikiContribution?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: WikiSubjectAssessment,
+        signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
     validate(
         input: ViewBuildSnapshot,
@@ -656,7 +789,8 @@ export interface WikiPagePurposeContext {
     sourceOverlap: { shared: number; union: number; subset: boolean };
 }
 export interface WikiSubjectAssessment {
-    disposition: "distinct" | "covered" | "contribute" | "ambiguous";
+    disposition: "distinct" | "covered" | "contribute" | "ambiguous" | "defer";
+    deferBasis?: "evidence" | "canonical-context";
     purpose: string;
     reason: string;
     /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */
@@ -687,6 +821,42 @@ export type ViewBuildResultState =
     | "cancelled"
     | "interrupted";
 export interface ViewBuildTargetResult {
+    eligibility?: ViewEligibilityReceipt;
+    providerAttempts?: Array<{
+        stage: string;
+        state: "started" | "returned" | "failed";
+        promptFingerprint: string;
+        reason?: string;
+        schemaFingerprint?: string;
+        output?: string;
+        usage?: import("./viewExtensionTypes.js").ViewJsonValue;
+    }>;
+    providerCheckpoints?: import("./viewExtensionTypes.js").ViewProviderCheckpoint[];
+    providerCandidates?: import("./viewExtensionTypes.js").ViewProviderCandidate[];
+    providerRequests?: Array<{
+        id: string;
+        stage: string;
+        outerAttempt: number;
+        state: "started" | "returned" | "failed";
+        requestFingerprint: string;
+        reservation: import("@typeagent/aiclient").RequestBudgetReceipt;
+        at: string;
+        finishedAt?: string;
+        elapsedMs?: number;
+        status?: number;
+    }>;
+    providerLimits?: import("./viewExtensionTypes.js").ViewJsonValue;
+    providerBudgetElapsedMs?: number;
+    providerBudgetAmendments?: Array<{
+        at: string;
+        previous: import("./viewExtensionTypes.js").ViewJsonValue;
+        current: import("./viewExtensionTypes.js").ViewJsonValue;
+    }>;
+    continuations?: Array<{
+        at: string;
+        actor: string;
+        previousState: ViewBuildJob["state"];
+    }>;
     wikiConsolidation?: WikiConsolidationReceipt;
     viewId: string;
     snapshot: ViewBuildSnapshot;
@@ -788,6 +958,9 @@ export interface ViewSearchMatch {
 export interface ViewBuildJobRequest {
     corpusId: string;
     jobId: string;
+}
+export interface ViewBuildContinuationRequest extends ViewBuildJobRequest {
+    expectedHead: string | null;
 }
 export interface ViewEditOperation {
     id: string;

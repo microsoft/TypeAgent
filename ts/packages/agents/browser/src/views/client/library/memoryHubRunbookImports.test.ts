@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { TextEncoder, TextDecoder } from "node:util";
 import type { MemoryBatchImport } from "@typeagent/memory-service";
 import type {
@@ -500,14 +501,26 @@ test("Activity reads durable interrupted/partial/duplicate acquisition states af
     );
     expect(host.textContent).toContain("duplicate of 0");
     expect(host.textContent).toContain("Member 0: Guide");
-    expect(host.textContent).toContain(
-        "Acquisition warning for Guide: Referenced image missing.png was not selected",
+    expect(host.textContent).not.toContain(
+        "Referenced image missing.png was not selected",
     );
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("Guide: Referenced image missing.png was not selected");
     expect(host.textContent).toContain("ingestion-job");
     expect(host.textContent).toContain(batchId);
-    expect(host.textContent).toContain(
+    expect(host.textContent).not.toContain(
         "Orphan selected image was not attached",
     );
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("Orphan selected image was not attached");
     expect(host.textContent).toContain("Archive extraction unavailable");
     expect(host.textContent).toContain(
         "Acquisition rejections were not imported",

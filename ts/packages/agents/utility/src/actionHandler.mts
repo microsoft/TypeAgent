@@ -28,7 +28,7 @@ import type { UtilityAction } from "./utilitySchema.mjs";
 
 (puppeteer as any).use(StealthPlugin());
 
-const DEFAULT_LLM_MODEL = "copilot:gpt-5.6-sol";
+const DEFAULT_LLM_MODEL = "copilot:gpt-6.1-sol";
 
 export type UtilityAgentContext = {
     // Lazily-launched browser instance. Held here so closeAgentContext() can

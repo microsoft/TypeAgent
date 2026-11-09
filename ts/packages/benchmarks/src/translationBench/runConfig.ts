@@ -80,7 +80,7 @@ export interface ResolvedRunConfig {
 
 const DEFAULT_BATCH = "eval";
 const DEFAULT_HEADROOM = 0.85;
-const DEFAULT_GENERATOR_MODEL = "azure/gpt-5.4";
+const DEFAULT_GENERATOR_MODEL = "azure/gpt-6.1-sol";
 const DEFAULT_CASE_COUNT = 1000;
 const DEFAULT_GEN_CASES = 2;
 const DEFAULT_MAX_ATTEMPTS = 5;

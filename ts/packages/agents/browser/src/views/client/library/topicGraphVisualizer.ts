@@ -31,6 +31,7 @@ export class TopicGraphVisualizer {
     private container: HTMLElement;
     protected currentLayout: string = "dagre";
     private topicClickCallback: ((topic: TopicData) => void) | null = null;
+    private edgeClickCallback: ((edgeId: string) => void) | undefined;
 
     private currentTopic: string | null = null;
     private topicGraphData: TopicGraphLayoutData | null = null;
@@ -177,7 +178,7 @@ export class TopicGraphVisualizer {
 
         // Focus on center topic if specified
         if (data.centerTopic) {
-            const node = instance.$(`#${data.centerTopic}`);
+            const node = instance.getElementById(data.centerTopic);
             if (node.length > 0) {
                 instance.center(node);
                 instance.zoom(1.5);
@@ -322,15 +323,20 @@ export class TopicGraphVisualizer {
 
             // Edge types with simplified styling for performance
             {
-                selector: ".edge-parent-child",
+                selector:
+                    '.edge-parent-child, edge[type="parent"], edge[type="parent-child"]',
                 style: {
+                    "curve-style": "bezier",
                     "line-color": "#A4C8F0",
+                    "target-arrow-color": "#A4C8F0",
+                    "target-arrow-shape": "triangle",
                     width: 2,
-                    opacity: 0.5,
+                    opacity: 0.8,
                 },
             },
             {
-                selector: ".edge-co_occurs",
+                selector:
+                    '.edge-co_occurs, edge[type="co_occurs"], edge[type="co-occurrence"]',
                 style: {
                     "line-color": "#C8F0A0",
                     width: 1,
@@ -338,11 +344,13 @@ export class TopicGraphVisualizer {
                 },
             },
             {
-                selector: ".edge-related-to",
+                selector:
+                    '.edge-related-to, edge[type="related"], edge[type="related-to"]',
                 style: {
                     "line-color": "#C8F0A0",
+                    "line-style": "dashed",
                     width: 1,
-                    opacity: 0.3,
+                    opacity: 0.6,
                 },
             },
             {
@@ -431,6 +439,9 @@ export class TopicGraphVisualizer {
 
             this.selectTopic(node.id());
         });
+        this.cy.on("tap", "edge", (event: cytoscape.EventObject) => {
+            this.edgeClickCallback?.(event.target.id());
+        });
     }
 
     /**
@@ -488,6 +499,10 @@ export class TopicGraphVisualizer {
      */
     public onTopicClick(callback: (topic: TopicData) => void): void {
         this.topicClickCallback = callback;
+    }
+
+    public onEdgeClick(callback: (edgeId: string) => void): void {
+        this.edgeClickCallback = callback;
     }
 
     /**

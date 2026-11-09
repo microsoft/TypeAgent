@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4c97b372aeb20ee28fb8cdaf948d6af8ba2e8c2fe1656c66ca378e13eae78c32 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c35be1119d75d05bf56bb7eb0fdd8aceb0d0ee362e8d45c12c8b51da132596a6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -51,12 +51,18 @@ _None._
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
-- [./src/core/fileJson.ts](./src/core/fileJson.ts)
-- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- _…and 83 more under `./src/`._
+- [./src/chunkingBench/cli.ts](./src/chunkingBench/cli.ts)
+- [./src/chunkingBench/datasets.ts](./src/chunkingBench/datasets.ts)
+- _…and 97 more under `./src/`._
+
+### Environment variables
+
+_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TB_PICKER_MODEL`
 
 ---
 
-_Auto-generated against commit `73fbbd085b9f687f05f7b8036f0e2c66ac7f0355` on `2026-10-24T18:29:20.864Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `d02797d2124bca889e9c5f72f136a72602875db1` on `2026-11-03T18:34:45.428Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

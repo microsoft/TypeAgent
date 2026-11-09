@@ -123,7 +123,13 @@ export function parseProjectBriefDetails(value: unknown): ProjectBriefDetails {
                 })),
             };
             break;
-        case "risks":
+        case "risks": {
+            const openQuestions =
+                raw.openQuestions === undefined
+                    ? undefined
+                    : evidenceArray(raw.openQuestions, 128).map((entry) =>
+                          evidenceText(entry),
+                      );
             result = {
                 kind,
                 items: items(["id", "status"]).map((entry) => ({
@@ -135,8 +141,10 @@ export function parseProjectBriefDetails(value: unknown): ProjectBriefDetails {
                         "unknown",
                     ] as const),
                 })),
+                ...(openQuestions !== undefined ? { openQuestions } : {}),
             };
             break;
+        }
         case "context":
             result = {
                 kind,
@@ -161,8 +169,9 @@ export function emptyProjectBrief(): ProjectBriefContent {
     return {
         kind: "projectBrief",
         construction: "informational-project-summary-v1",
+        status: "partial",
         title: "Build validation",
-        summary: "Limited summary: selected indexed fragments only; validation",
+        summary: "Build validation summary",
         citations: [],
         sections: projectBriefRoles.map((role) => ({
             id: role,

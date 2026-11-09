@@ -94,6 +94,14 @@ function snapshot(
 }
 
 describe("complete scoped topic snapshots", () => {
+    test("raw evidence validation does not scan all occurrences for every node", () => {
+        const value = snapshot();
+        const filter = import.meta.jest.spyOn(value.occurrences, "filter");
+        validateTopicSnapshot(value);
+        expect(filter).not.toHaveBeenCalled();
+        filter.mockRestore();
+    });
+
     test("same-name nominations within one original block do not prove equivalence", () => {
         const block = {
             sourceId: "source",
@@ -370,6 +378,45 @@ describe("topic persistence in existing view history", () => {
     });
     afterEach(async () => {
         await rm(directory, { recursive: true, force: true });
+    });
+    test("partial curation survives restart without becoming finished curated knowledge", async () => {
+        const store = new TypedViewStore(directory);
+        const captured = input([
+            occurrence("source", "review"),
+            occurrence("other", "routing"),
+        ]);
+        const { job } = await store.admitViewBuild(
+            {
+                corpusId: "test",
+                expectedHead: null,
+                targets: [
+                    { definition: captured.definition, expectedVersion: 0 },
+                ],
+            },
+            [captured],
+        );
+        const partial = createTopicSnapshot(captured, captured.model);
+        partial.curationProgress = {
+            concepts: [],
+            deferred: [
+                { nodeId: partial.nodes[0].id, reason: "Incidental mention" },
+            ],
+        };
+        await store.materializeTopicBuild("test", job.jobId, partial, false);
+        const restored = new TypedViewStore(directory);
+        const state = await restored.getTopicState("test");
+        expect(state.snapshot!.curationProgress).toEqual(
+            partial.curationProgress,
+        );
+        const page = await restored.queryTopics({
+            corpusId: "test",
+            curated: true,
+        });
+        expect(page.totalConcepts).toBe(0);
+        expect(page.concepts).toEqual([]);
+        await expect(
+            restored.materializeTopicBuild("test", job.jobId, partial, true),
+        ).rejects.toThrow("Incomplete topic curation cannot finish a build");
     });
     test("existing job result commits one snapshot; restart and no-op preserve history; privacy purges influence", async () => {
         const store = new TypedViewStore(directory);

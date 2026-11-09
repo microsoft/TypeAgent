@@ -68,6 +68,8 @@ describe("canonical source temporal context", () => {
         ["2023-05-27", "calendar", "2023-05-27"],
         ["2023-05", "calendar", "2023-05"],
         ["2023", "calendar", "2023"],
+        ["March-15-2024", "calendar", "2024-03-15"],
+        ["Apr-10-2024", "calendar", "2024-04-10"],
         ["2023-05-27T23:30:00-07:00", "instant", "2023-05-27T23:30:00"],
         ["Tue, 13 Oct 2026 18:00:00 -0700", "instant", "2026-10-13T18:00:00"],
         ["Tue, 13 Oct 2026 18:00:00", "floating", "2026-10-13T18:00:00"],
@@ -88,6 +90,8 @@ describe("canonical source temporal context", () => {
         "2024-01-01T24:00",
         "2024-01-01T10:00+14:01",
         "not a date",
+        "March-32-2024",
+        "Unknown-15-2024",
     ])("rejects invalid structured source dates: %s", (raw) =>
         expect(() => parseTemporalValue(raw)).toThrow(),
     );
@@ -135,6 +139,45 @@ describe("canonical source temporal context", () => {
                     },
                 ],
             });
+        },
+    );
+
+    test.each(["\n", "\r\n"])(
+        "benchmark turn headers preserve session dates and source scope with %j line endings",
+        (newline) => {
+            const first =
+                "[Session 0; date March-15-2024; turn 0; speaker user]";
+            const second =
+                "[Session 1; date April-10-2024; turn 1; speaker assistant]";
+            const text = [
+                first,
+                "Earlier request",
+                second,
+                "Later advice",
+            ].join(newline);
+            const context = temporalContextFromHeaders(text);
+            expect(context?.scopes).toMatchObject([
+                {
+                    start: 0,
+                    end: text.indexOf(second),
+                    messageTime: {
+                        raw: "March-15-2024",
+                        localDateTime: "2024-03-15",
+                        precision: "day",
+                    },
+                },
+                {
+                    start: text.indexOf(second),
+                    end: text.length,
+                    messageTime: {
+                        raw: "April-10-2024",
+                        localDateTime: "2024-04-10",
+                    },
+                },
+            ]);
+            expect(
+                temporalContextFromHeaders("Captured on March-15-2024"),
+            ).toBeUndefined();
         },
     );
 

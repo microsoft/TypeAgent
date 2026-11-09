@@ -124,10 +124,10 @@ honor it, and report modes ignore it:
 
 Four code-quality steps run in
 [`build-ts.yml`](../../../../.github/workflows/build-ts.yml), **on pull requests
-only**, sequenced after `Build` and before `Test`. They are skipped entirely
-unless the PR touches `ts/**` or the workflow file itself (a `dorny/paths-filter`
-guard), and — like the rest of the job — they run on every matrix cell
-(`ubuntu`/`windows`/`macos` × Node 22.23.4/24.22.1/26.12.1).
+only**, once in the sharded analysis job. They are skipped entirely unless the
+PR touches TypeScript or the sharded workflows/action (a `dorny/paths-filter`
+guard). Test qualification covers Ubuntu, Windows and macOS with Node
+24.22.1 and 26.12.1; Node 22 is not part of the CI matrix.
 
 Each step is a **changed-files diff against the PR's base branch**: it first
 `git fetch --no-tags origin <base_ref>`, then passes `--base origin/<base_ref>`

@@ -723,6 +723,77 @@ test("commands retain corpus and answer evidence", async () => {
     expect(displayText(explanation)).toContain('"sourceId": "source-1"');
 });
 
+test("frame actions and commands forward exact schema revisions", async () => {
+    const service = createFakeService();
+    const queryFrame = jest.fn(async () => ({
+        version: 1 as const,
+        snapshot: "1".repeat(64),
+        owners: [],
+        coverage: { ready: 0, pending: 0, failed: 0, unavailableValues: 0 },
+        schema: {
+            id: "source",
+            revision: 1,
+            description: "Sources",
+            fields: { title: { type: "string" as const } },
+        },
+        predicate: { and: [] },
+        rows: [],
+    }));
+    service.queryFrame = queryFrame;
+    service.listFrameSchemas = async () => [(await queryFrame()).schema];
+    service.getFrameProjectionStatus = async () => await queryFrame();
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    state.activeCorpusId = "corpus-1";
+    const context = actionContext(state);
+    const result = await agent.executeCommand?.(
+        ["frames", "query"],
+        commandParams(
+            { schemaId: "source", query: "Title is Notes" },
+            { schemaRevision: 3, limit: 5 },
+        ),
+        context,
+    );
+    expect(displayText(result)).toContain('"rows": []');
+    expect(queryFrame).toHaveBeenLastCalledWith({
+        corpusId: "corpus-1",
+        schemaId: "source",
+        schemaRevision: 3,
+        query: "Title is Notes",
+        limit: 5,
+        includeUnconfirmed: false,
+    });
+    await agent.executeAction?.(
+        {
+            schemaName: "memory",
+            actionName: "queryMemoryFrame",
+            parameters: {
+                schemaId: "source",
+                schemaRevision: 2,
+                query: "Title is Notes",
+                sourceIds: ["source-one"],
+                repository: "example",
+                commit: "abc",
+                environment: "test",
+            },
+        },
+        context,
+    );
+    expect(queryFrame).toHaveBeenLastCalledWith({
+        corpusId: "corpus-1",
+        schemaId: "source",
+        schemaRevision: 2,
+        query: "Title is Notes",
+        sourceIds: ["source-one"],
+        repository: "example",
+        commit: "abc",
+        environment: "test",
+        limit: undefined,
+    });
+});
+
 test("explicit session command forwards optional scope on every chunk and finalization", async () => {
     const path = resolve(scratch, "scoped-session.jsonl");
     await writeFile(path, "{}\n".repeat(1001));

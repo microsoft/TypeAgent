@@ -44,6 +44,7 @@ import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 
 import fs from "node:fs";
 import path from "node:path";
+import { createMemoryViewPackageManager } from "./memoryViewPackages.js";
 import {
     getInstanceConfigProvider,
     getInstallDir,
@@ -419,6 +420,10 @@ export function createDefaultInstalledAgentSource(
         );
     }
     const resolvedInstallDir = installDir;
+    const memoryViews = createMemoryViewPackageManager({
+        directory: path.join(installDir, "memory-views"),
+        sources: () => getResolvedInstallSources(instanceConfigs),
+    });
     const sources = getResolvedInstallSources(instanceConfigs);
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall.
@@ -1732,6 +1737,7 @@ export function createDefaultInstalledAgentSource(
             const packageProvider = createPackageAppAgentProvider({
                 appAgentProviderSetController: controller,
                 source,
+                memoryViews,
                 ...(mcpSource === undefined ? {} : { mcpSource }),
                 ...(agentGroups === undefined ? {} : { agentGroups }),
                 ...(agentGroupsError === undefined ? {} : { agentGroupsError }),

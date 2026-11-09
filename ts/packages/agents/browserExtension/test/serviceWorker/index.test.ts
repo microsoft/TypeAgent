@@ -50,6 +50,7 @@ let reconnectWebSocket: jest.Mock;
 let showBadgeError: jest.Mock;
 let initializeContextMenu: jest.Mock;
 let initContextMenuSettings: jest.Mock;
+let getWebSocket: jest.Mock;
 
 describe("Service Worker initialization", () => {
     beforeEach(() => {
@@ -66,6 +67,7 @@ describe("Service Worker initialization", () => {
                 websocketModule.ensureWebsocketConnected as jest.Mock;
             reconnectWebSocket =
                 websocketModule.reconnectWebSocket as jest.Mock;
+            getWebSocket = websocketModule.getWebSocket as jest.Mock;
             showBadgeError = uiModule.showBadgeError as jest.Mock;
             initializeContextMenu =
                 contextMenuModule.initializeContextMenu as jest.Mock;
@@ -137,5 +139,181 @@ describe("Service Worker initialization", () => {
         expect(reconnectWebSocket).toHaveBeenCalled();
         expect(showBadgeError).toHaveBeenCalled();
         expect(initializeContextMenu).toHaveBeenCalled();
+    });
+
+    it("does not expose private decision replies or accept private methods through the page port", async () => {
+        await initialize();
+        const socket = new EventTarget() as EventTarget & {
+            readyState: number;
+            send: jest.Mock;
+        };
+        socket.readyState = WebSocket.OPEN;
+        socket.send = jest.fn();
+        getWebSocket.mockReturnValue(socket);
+        const onMessage = { addListener: jest.fn() };
+        const port = {
+            name: "typeagent",
+            sender: {
+                tab: { id: 7, title: "Puzzle", url: "https://example.com" },
+                frameId: 2,
+            },
+            onMessage,
+            onDisconnect: { addListener: jest.fn() },
+            postMessage: jest.fn(),
+            disconnect: jest.fn(),
+        };
+        const onConnect = (
+            chrome.runtime.onConnect.addListener as jest.Mock
+        ).mock.calls.at(-1)![0];
+        await onConnect(port);
+        const sendFromPage = onMessage.addListener.mock.calls[0][0];
+        for (const method of [
+            "resolveCrosswordClue",
+            "getCrosswordDecisionCapabilities",
+            "cancelCrosswordDecision",
+        ]) {
+            sendFromPage({
+                source: "webAgent",
+                method: "webAgent/message",
+                params: {
+                    type: "builtInRpc",
+                    id: "page",
+                    method,
+                    params: { origin: { tabId: 99 } },
+                },
+            });
+        }
+        expect(socket.send).not.toHaveBeenCalled();
+        socket.dispatchEvent(
+            new MessageEvent("message", {
+                data: JSON.stringify({
+                    source: "dispatcher",
+                    method: "crosswordDecision/response",
+                    type: "builtInRpcResponse",
+                    id: "private",
+                    result: { candidateId: "c1" },
+                }),
+            }),
+        );
+        await Promise.resolve();
+        expect(port.postMessage).not.toHaveBeenCalled();
+        socket.dispatchEvent(
+            new MessageEvent("message", {
+                data: JSON.stringify({
+                    source: "dispatcher",
+                    method: "webAgent/message",
+                    params: {},
+                }),
+            }),
+        );
+        await Promise.resolve();
+        expect(port.postMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("routes runtime decisions using sender identity and replies only to the originating frame", async () => {
+        await initialize();
+        Object.defineProperty(chrome.runtime, "id", {
+            configurable: true,
+            value: "test-extension",
+        });
+        Object.defineProperty(chrome, "permissions", {
+            configurable: true,
+            value: { contains: jest.fn().mockResolvedValue(true) },
+        });
+        const socket = new EventTarget() as EventTarget & {
+            readyState: number;
+            send: jest.Mock;
+        };
+        socket.readyState = WebSocket.OPEN;
+        socket.send = jest.fn();
+        getWebSocket.mockReturnValue(socket);
+        let sequence = 0;
+        Object.defineProperty(crypto, "randomUUID", {
+            configurable: true,
+            value: () => `runtime-${++sequence}`,
+        });
+        const listener = (
+            chrome.runtime.onMessage.addListener as jest.Mock
+        ).mock.calls.at(-1)![0];
+        const params = {
+            origin: { tabId: 999, frameId: 999, documentId: "spoof" },
+            clueNumber: 1,
+            clueDirection: "across",
+            snapshot: {
+                snapshotId: "s1",
+                documentToken: "token",
+                puzzleId: "puzzle",
+                revision: 0,
+                modeGeneration: 0,
+                createdAt: Date.now(),
+                collectorVersion: 1,
+                complete: true,
+                candidates: [{ id: "c1", text: "Clue", context: "Across" }],
+            },
+        };
+        const first = jest.fn();
+        const second = jest.fn();
+        const sender = {
+            id: chrome.runtime.id,
+            tab: { id: 7 },
+            frameId: 0,
+            documentId: "top-document",
+            url: "https://example.com/puzzle",
+        };
+        const message = {
+            type: "crosswordDecisionRpc",
+            method: "resolveCrosswordClue",
+            params,
+        };
+        expect(listener(message, sender, first)).toBe(true);
+        expect(
+            listener(
+                message,
+                { ...sender, frameId: 2, documentId: "iframe-document" },
+                second,
+            ),
+        ).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sent = socket.send.mock.calls.map(([value]: [string]) =>
+            JSON.parse(value),
+        );
+        expect(sent[0].params.params.origin).toEqual({
+            tabId: 7,
+            frameId: 0,
+            documentId: "top-document",
+        });
+        expect(sent[1].params.params.origin).toEqual({
+            tabId: 7,
+            frameId: 2,
+            documentId: "iframe-document",
+        });
+        const result = {
+            ...params.snapshot,
+            candidates: undefined,
+            status: "resolved",
+            candidateId: "c1",
+            configGeneration: "1",
+        };
+        const reply = (id: string) =>
+            socket.dispatchEvent(
+                new MessageEvent("message", {
+                    data: JSON.stringify({
+                        source: "dispatcher",
+                        method: "crosswordDecision/response",
+                        type: "builtInRpcResponse",
+                        id,
+                        result,
+                    }),
+                }),
+            );
+        reply(sent[1].params.id);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(second).toHaveBeenCalledTimes(1);
+        expect(first).not.toHaveBeenCalled();
+        reply(sent[0].params.id);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(first).toHaveBeenCalledTimes(1);
+        expect(chrome.tabs.query).not.toHaveBeenCalled();
+        expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
     });
 });

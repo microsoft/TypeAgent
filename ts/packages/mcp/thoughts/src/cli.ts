@@ -85,7 +85,7 @@ Options:
                              Examples: "meeting,q1-2026,action-items"
                                        "project-alpha,design,brainstorm"
   -m, --model <model>        LLM endpoint to use
-                             Default: copilot:gpt-5.6-sol
+                             Default: copilot:gpt-6.1-sol
   -h, --help                 Show this help message
 
 Environment Variables:

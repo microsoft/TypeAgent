@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { retryFilesystemPublication } from "./filesystemPublication.js";
 import {
@@ -14,6 +15,12 @@ import {
     viewRecordsPath,
     writeViewRecords,
 } from "./viewHistoryRecords.js";
+import {
+    readViewStatePayloads,
+    selectViewStateField,
+    viewStatePayloadPath,
+    writeViewStatePayloads,
+} from "./viewHistoryPayloads.js";
 
 const ref = "refs/heads/typeagent-history";
 
@@ -103,7 +110,23 @@ export class ViewHistory<T> {
         return git.resolveRef({ ...this.options(), ref });
     }
 
+    public async readHead(): Promise<string | null> {
+        await this.assertReadable();
+        const head = await this.head();
+        await this.assertReadable();
+        return head;
+    }
+
     public async read(
+        oid?: string,
+        bypassGate = false,
+    ): Promise<HistorySnapshot<T>> {
+        return timeSearchStage("view.history.read", () =>
+            this.readSnapshot(oid, bypassGate),
+        );
+    }
+
+    private async readSnapshot(
         oid?: string,
         bypassGate = false,
     ): Promise<HistorySnapshot<T>> {
@@ -116,6 +139,19 @@ export class ViewHistory<T> {
                 state,
                 stateBytes: 0,
             };
+        }
+        const { tree } = await git.readTree({ ...this.options(), oid: head });
+        const payloads = tree.find(
+            (entry) =>
+                entry.path === viewStatePayloadPath && entry.type === "tree",
+        );
+        if (payloads) {
+            const snapshot = await readViewStatePayloads<T>(
+                this.options(),
+                payloads,
+            );
+            if (!bypassGate) await this.assertReadable();
+            return { head, ...snapshot };
         }
         const blob = await git.readBlob({
             ...this.options(),
@@ -137,6 +173,35 @@ export class ViewHistory<T> {
             );
     }
 
+    public async readEntry<R>(
+        name: string,
+        oid?: string,
+    ): Promise<{ head: string | null; value: R | undefined }> {
+        await this.assertReadable();
+        const head = oid ?? (await this.head());
+        if (!head) return { head, value: undefined };
+        const { tree } = await git.readTree({ ...this.options(), oid: head });
+        if (
+            name === "state.json" &&
+            tree.some(
+                (entry) =>
+                    entry.path === viewStatePayloadPath &&
+                    entry.type === "tree",
+            )
+        ) {
+            const snapshot = await this.read(head);
+            return { head, value: snapshot.state as unknown as R };
+        }
+        const entry = tree.find((entry) => entry.path === name);
+        if (!entry) return { head, value: undefined };
+        const blob = await git.readBlob({ ...this.options(), oid: entry.oid });
+        await this.assertReadable();
+        return {
+            head,
+            value: JSON.parse(Buffer.from(blob.blob).toString("utf8")) as R,
+        };
+    }
+
     public async assertHead(expected: string | null): Promise<void> {
         await this.assertReadable();
         if ((await this.head()) !== expected)
@@ -144,7 +209,45 @@ export class ViewHistory<T> {
         await this.assertReadable();
     }
 
+    public async readField<R>(
+        keys: readonly string[],
+        oid?: string,
+    ): Promise<{ head: string | null; value: R | undefined }> {
+        await this.assertReadable();
+        const head = oid ?? (await this.head());
+        if (!head) return { head, value: undefined };
+        const { tree } = await git.readTree({ ...this.options(), oid: head });
+        const entry = tree.find(
+            (entry) =>
+                entry.path === viewStatePayloadPath && entry.type === "tree",
+        );
+        if (entry) {
+            const { state } = await readViewStatePayloads<R | undefined>(
+                this.options(),
+                entry,
+                keys,
+            );
+            await this.assertReadable();
+            return { head, value: state };
+        }
+        const value = selectViewStateField((await this.read(head)).state, keys);
+        await this.assertReadable();
+        return { head, value: value as R | undefined };
+    }
+
     public async commit(
+        expectedHead: string | null,
+        state: T,
+        views: Record<string, string>,
+        actor: string,
+        message: string,
+    ): Promise<string> {
+        return timeSearchStage("view.history.commit", () =>
+            this.publish(expectedHead, state, views, actor, message),
+        );
+    }
+
+    private async publish(
         expectedHead: string | null,
         state: T,
         views: Record<string, string>,
@@ -182,13 +285,32 @@ export class ViewHistory<T> {
                 previous.map((entry) => [entry.path, entry]),
             );
             const entries = [];
+            const blobsStarted = performance.now();
+            const previousPayloads = previousByPath.get(viewStatePayloadPath);
+            const payloads = ["state.json", viewStatePayloadPath].some((name) =>
+                Object.prototype.hasOwnProperty.call(views, name),
+            )
+                ? undefined
+                : await writeViewStatePayloads(
+                      this.options(),
+                      state,
+                      previousPayloads?.type === "tree"
+                          ? previousPayloads
+                          : undefined,
+                  );
+            if (payloads) entries.push(payloads);
+            const stateText = payloads ? undefined : JSON.stringify(state);
+            let viewBytes = 0;
             for (const [name, text] of Object.entries({
-                "state.json": JSON.stringify(state),
+                ...(payloads ? {} : { "state.json": stateText! }),
                 ...views,
             })) {
+                const blob = Buffer.from(text, "utf8");
+                if (Object.prototype.hasOwnProperty.call(views, name))
+                    viewBytes += blob.byteLength;
                 const oid = await git.writeBlob({
                     ...this.options(),
-                    blob: Buffer.from(text, "utf8"),
+                    blob,
                 });
                 const previousEntry = previousByPath.get(name);
                 const unchanged =
@@ -204,8 +326,25 @@ export class ViewHistory<T> {
             }
             if (this.records)
                 entries.push(
-                    await writeViewRecords(this.options(), this.records(state)),
+                    await writeViewRecords(
+                        this.options(),
+                        this.records(state),
+                        previousByPath.get(viewRecordsPath),
+                    ),
                 );
+            recordSearchTiming(
+                "view.history.blobs.write",
+                performance.now() - blobsStarted,
+                {
+                    legacySerializedBytes:
+                        stateText === undefined
+                            ? 0
+                            : Buffer.byteLength(stateText),
+                    viewBytes,
+                    viewFiles: Object.keys(views).length,
+                    incrementalState: !!payloads,
+                },
+            );
             await this.checkpoint?.("blob");
             const tree = await git.writeTree({
                 ...this.options(),
@@ -264,11 +403,12 @@ export class ViewHistory<T> {
     public async historyForRecord<R>(
         id: string,
         expectedHead?: string | null,
+        validateHead = true,
     ): Promise<Array<{ commitId: string; record: R | undefined }>> {
         await this.assertReadable();
         const head =
             expectedHead === undefined ? await this.head() : expectedHead;
-        await this.assertHead(head);
+        if (validateHead) await this.assertHead(head);
         if (!head) return [];
         const commits = await git.log({ ...this.options(), ref: head });
         const records = new Map<string, Promise<R>>();
@@ -294,7 +434,10 @@ export class ViewHistory<T> {
             recordTrees.push(
                 recordEntry
                     ? readTree(recordEntry.oid)
-                    : await this.legacyRecordTree(entry.oid, head),
+                    : await this.legacyRecordTree(
+                          entry.oid,
+                          validateHead ? head : undefined,
+                      ),
             );
         }
         const result = await Promise.all(
@@ -308,13 +451,14 @@ export class ViewHistory<T> {
                 ),
             })),
         );
-        await this.assertHead(head);
+        if (validateHead) await this.assertHead(head);
+        else await this.assertReadable();
         return result;
     }
 
     private async legacyRecordTree(
         commitId: string,
-        expectedHead: string,
+        expectedHead?: string,
     ): Promise<TreeEntry[]> {
         const cache = path.join(this.gitdir, "view-record-index", commitId);
         const cached = await this.cachedRecordTree(cache);
@@ -323,7 +467,8 @@ export class ViewHistory<T> {
         // records once, inside the repository removed by the privacy swap.
         const release = await this.lock(true);
         try {
-            await this.assertHead(expectedHead);
+            if (expectedHead === undefined) await this.assertReadable();
+            else await this.assertHead(expectedHead);
             const cached = await this.cachedRecordTree(cache);
             if (cached) return cached;
             if (!this.records)

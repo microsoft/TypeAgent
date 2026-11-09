@@ -48,6 +48,8 @@ import {
     UpdateResult,
 } from "./config.js";
 import { type AgentGroupCatalog, findAgentGroup } from "./agentGroups.js";
+import type { MemoryViewPackageManager } from "../memoryViewPackages.js";
+import { buildMemoryViewCommandTable } from "./memoryViewCommands.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -202,6 +204,7 @@ export interface InstalledAgentSourceApi {
  * closures. So a handler can never reach back into dispatcher internals.
  */
 export interface PackageAgentContext {
+    readonly memoryViews?: MemoryViewPackageManager;
     readonly appAgentProviderSetController: AppAgentProviderSetController;
     readonly source: InstalledAgentSourceApi;
     readonly mcpSource?: McpServerSourceApi;
@@ -211,7 +214,7 @@ export interface PackageAgentContext {
 
 type PackageActionContext = ActionContext<PackageAgentContext>;
 type PackageSessionContext = SessionContext<PackageAgentContext>;
-type PackageType = ExtensionKind | "all";
+type PackageType = Exclude<ExtensionKind, "memory-view"> | "all";
 
 export type AgentPackageState =
     | "bundled"
@@ -2437,6 +2440,7 @@ export function buildPackageCommandTable(
             update: new UpdateCommandHandler(),
             uninstall: new UninstallCommandHandler(),
             mcp: buildMcpCommandTable(),
+            "memory-view": buildMemoryViewCommandTable(),
             source: sourceCommands,
         },
     };

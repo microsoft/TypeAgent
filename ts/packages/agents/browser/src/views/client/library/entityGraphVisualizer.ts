@@ -6,6 +6,7 @@ import cytoscape from "cytoscape";
 import { escapeWebText } from "./memoryHubWebExploreRoot";
 
 interface EntityData {
+    id?: string;
     name: string;
     type: string;
     confidence: number;
@@ -37,6 +38,7 @@ export class EntityGraphVisualizer {
     protected cy: any = null;
     private container: HTMLElement;
     private entityClickCallback: ((entity: EntityData) => void) | null = null;
+    private edgeClickCallback: ((edgeId: string) => void) | undefined;
 
     // View mode and data management
     private viewMode: ViewMode = "global";
@@ -837,6 +839,7 @@ export class EntityGraphVisualizer {
         instance.on("tap", "node", (evt: any) => {
             const node = evt.target;
             const entityData: EntityData = {
+                id: node.id(),
                 name: node.data("name"),
                 type: node.data("type"),
                 confidence: node.data("confidence"),
@@ -875,7 +878,8 @@ export class EntityGraphVisualizer {
         this.cy.on("tap", "edge", (evt: any) => {
             const edge = evt.target;
             this.highlightEdgePath(edge);
-            this.showEdgeDetails(edge, evt.renderedPosition);
+            if (this.edgeClickCallback) this.edgeClickCallback(edge.id());
+            else this.showEdgeDetails(edge, evt.renderedPosition);
         });
 
         // Edge hover
@@ -1627,6 +1631,10 @@ export class EntityGraphVisualizer {
      */
     onEntityClick(callback: (entity: EntityData) => void): void {
         this.entityClickCallback = callback;
+    }
+
+    onEdgeClick(callback: (edgeId: string) => void): void {
+        this.edgeClickCallback = callback;
     }
 
     /**

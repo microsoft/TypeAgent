@@ -141,10 +141,9 @@ if (fixtureRoot) {
                 fingerprint: `input${index}`,
                 topicInput: { occurrences: [occurrence] },
             };
-            const generated = await createConfiguredTopicGenerator(
-                undefined,
-                model,
-            )(captured, new AbortController().signal);
+            const generated = await createConfiguredTopicGenerator({
+                model: model,
+            })(captured, new AbortController().signal);
             expect(generated.nodes[0].summaryState).toBe("ready");
             expect(generated.nodes[0].summary).toContain(
                 "Governing tail exception:",

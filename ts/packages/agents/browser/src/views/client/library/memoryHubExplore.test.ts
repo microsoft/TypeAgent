@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type { MemoryHubExploreResult } from "@typeagent/browser-control-rpc/viewRpc";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { invokeView } from "./viewClient";
@@ -96,6 +97,7 @@ test("Overview mounts production topic browsing with the selected corpus RPC sco
     await settle();
     expect(invoke).toHaveBeenCalledWith("memoryQueryTopics", {
         corpusId: "a",
+        curated: true,
         search: "",
         pageSize: 24,
     });
@@ -122,10 +124,12 @@ afterEach(() => {
 
 test("overview retains counts and corpus-qualified provenance without plotting a combined graph", async () => {
     await mounted.show();
+    expect(host.querySelector('[aria-label="Refresh overview"]')).toBeNull();
     expect(invoke).toHaveBeenCalledWith("memoryHubExplore", {
         corpusId: "a",
         maxNodes: 6,
     });
+
     expect(host.querySelector(".phase2-counts")!.textContent).toContain(
         "120 sources",
     );
@@ -151,6 +155,34 @@ test("overview retains counts and corpus-qualified provenance without plotting a
         .click();
     expect(onSource).toHaveBeenLastCalledWith("b", "same");
     expect(host.querySelector("a")).toBeNull();
+});
+
+test("event-aware Overview cards open lazy graph support instead of fake document sources", async () => {
+    const data = result();
+    const support = {
+        corpusId: "a",
+        generation: "g1",
+        nodeId: "graph:a:entity:1",
+    };
+    data.entities[0]!.sources = [];
+    data.entities[0]!.graphSupport = support;
+    data.sourceInventory = "documents";
+    invoke.mockImplementation((method) => {
+        if (method === "memoryHubExplore") return Promise.resolve(data);
+        if (method === "memoryHubGraphSupport")
+            return Promise.resolve({ generation: "g1", total: 0, items: [] });
+        throw new Error(`Unexpected event overview call: ${method}`);
+    });
+    await mounted.show();
+    click("<b>Worker</b> · 7 mentions");
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubGraphSupport", {
+        ...support,
+        pageSize: 50,
+    });
+    expect(onSource).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Document sources");
+    expect(onError).not.toHaveBeenCalled();
 });
 
 test("bounded previews retain real totals and cached navigation avoids refetch", async () => {
@@ -198,9 +230,13 @@ test("partial overview counts and transport failures are distinguished from heal
         }),
     );
     await mounted.show();
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "only responding corpora",
-    );
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("unavailable");
     expect(host.textContent).toContain("not a complete empty result");
     mounted.scopeChanged();
     invoke.mockRejectedValueOnce(new Error("offline"));

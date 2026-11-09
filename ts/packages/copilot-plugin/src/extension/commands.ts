@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import type { CommandDefinition } from "@github/copilot-sdk";
-import { getConfigPath, getModeLabel } from "../shared/plugin-config.js";
+import {
+    getConfigPath,
+    getMacroToolAvailability,
+    getMode,
+    getModeLabel,
+} from "../shared/plugin-config.js";
 import {
     getModeDescription,
     handleModeSetting,
@@ -70,7 +75,10 @@ function statusText(): string {
         "TypeAgent configuration",
         `Mode: ${getModeLabel()}`,
         `Routing: ${getModeDescription()}`,
-        "Ordinary prompts: local recipes, then Copilot",
+        getMode() === "bypass"
+            ? "Ordinary prompts: Copilot (no local recipe matching)"
+            : "Ordinary prompts: local recipes, then Copilot",
+        `Macro tools: ${getMacroToolAvailability()}`,
         `Server: ws://${host}:${port}`,
         `Config: ${getConfigPath()}`,
         "Mode settings are shared by sessions using this config.",

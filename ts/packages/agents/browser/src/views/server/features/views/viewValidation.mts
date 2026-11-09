@@ -3,12 +3,19 @@
 
 import { z } from "zod";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
+import { questionSchemas } from "./questionSchemas.mjs";
 import {
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    viewPublicationBatchRequestSchema,
+    graphQueryRequestSchema,
+    graphSupportRequestSchema,
     viewReadRequestSchema,
     viewSaveRequestSchema,
     viewArchiveRequestSchema,
     viewBuildRequestSchema,
     viewBuildJobRequestSchema,
+    viewBuildContinuationRequestSchema,
     viewConflictReadSchema,
     viewResolutionSchema,
     viewPublicationPolicyUpdateSchema,
@@ -20,6 +27,13 @@ import {
     viewMaintenanceReadSchema,
     sourceSynopsisRequestSchema,
     topicQueryRequestSchema,
+    knowledgeCorpusRequestSchema,
+    knowledgeDiscoveryUpdateSchema,
+    knowledgeCheckpointRequestSchema,
+    knowledgeCheckpointReadSchema,
+    knowledgeCheckpointWaitSchema,
+    understandingRequestSchema,
+    understandingModuleRequestSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -83,6 +97,51 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryHubCancelUnderstanding: z.strictObject({
+        corpusId: text,
+        requestId: z.string().uuid(),
+    }),
+    memoryHubUnderstand: protocolInput(understandingRequestSchema),
+    memoryHubUnderstandingModule: protocolInput(
+        understandingModuleRequestSchema,
+    ),
+    memoryHubGraph: protocolInput({
+        safeParse(value: unknown) {
+            if (!value || typeof value !== "object" || Array.isArray(value))
+                return graphQueryRequestSchema.safeParse(value);
+            const input = value as Record<string, unknown>;
+            const paged =
+                input.continuationToken !== undefined ||
+                input.expectedGeneration !== undefined;
+            return graphQueryRequestSchema.safeParse({
+                ...input,
+                corpusId:
+                    input.corpusId === undefined && !paged
+                        ? "all-memory"
+                        : input.corpusId,
+            });
+        },
+    }),
+    memoryHubGraphSupport: protocolInput(graphSupportRequestSchema),
+    memoryHubGraphEvent: z.strictObject({
+        corpusId: text,
+        eventId: text,
+        offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    }),
+    memoryListViewSummaries: protocolInput(viewSummaryRequestSchema),
+    memoryListViewBuildSummaries: protocolInput(inventoryPageRequestSchema),
+    memoryGetViewPublications: protocolInput(viewPublicationBatchRequestSchema),
+    memoryGetKnowledgeStatus: protocolInput(knowledgeCorpusRequestSchema),
+    memoryUpdateKnowledgeDiscovery: protocolInput(
+        knowledgeDiscoveryUpdateSchema,
+    ),
+    memoryCreateKnowledgeCheckpoint: protocolInput(
+        knowledgeCheckpointRequestSchema,
+    ),
+    memoryGetKnowledgeCheckpoint: protocolInput(knowledgeCheckpointReadSchema),
+    memoryWaitForKnowledgeCheckpoint: protocolInput(
+        knowledgeCheckpointWaitSchema,
+    ),
     memoryViewCapabilities: empty,
     memoryQueryTopics: protocolInput(topicQueryRequestSchema),
     memoryRebuildTopics: z.strictObject({
@@ -110,9 +169,12 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryListViewBuilds: z.strictObject(corpus),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryContinueViewBuild: protocolInput(viewBuildContinuationRequestSchema),
+    memoryRefreshExtensionViews: protocolInput(knowledgeCorpusRequestSchema),
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
+    ...questionSchemas,
     memoryHubViewUsedBy: z.strictObject({ ...source, ...page }),
     memoryHubSourceOriginal: z.strictObject({
         ...source,
@@ -126,10 +188,18 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryHubSearch: z.strictObject({
+        intent: z.enum(["auto", "find", "ask"]).optional(),
+        evidenceSnapshotId: z.string().uuid().optional(),
+        prepareUnderstanding: boolean,
         query: text,
         corpusId: optionalText,
         limit: z.number().int().min(1).max(100).optional(),
         generateAnswer: boolean,
+        retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
+        knowledgeCheckpointId: z
+            .string()
+            .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)
+            .optional(),
         sourceTypes: z
             .array(z.enum(["web", "markdown", "text", "html", "vtt"]))
             .max(5)
@@ -139,9 +209,16 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+            .enum([
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+                "schemaView",
+                "extension",
+            ])
             .array()
-            .max(4)
+            .max(5)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [

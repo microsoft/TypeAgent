@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryGraphService } from "./graphTypes.js";
+import type { MemoryUnderstandingService } from "./understandingTypes.js";
 import type {
     AgentMemorySearchRequest,
     AgentMemorySearchResult,
@@ -142,6 +144,17 @@ export interface SourceSynopsisRequest {
 
 export interface MemorySource extends SourceDocument {
     revisions: SourceRevision[];
+}
+
+export interface MemorySourceAuthorizationRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    /** SourceRevision.contentHash, which may be supplied by the ingestion owner. */
+    contentHash: string;
+    /** Digest of the actual retained text, using the core derived-view digest contract. */
+    retainedContentHash: string;
+    operation: "read" | "retrieve" | "expand" | "reader" | "build" | "publish";
 }
 
 export interface IngestionSource {
@@ -317,6 +330,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    retrievalPolicy?: AnswerRetrievalPolicy;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
@@ -330,6 +344,10 @@ export interface MemorySearchRequest {
     dateFrom?: string;
     dateTo?: string;
     indexedFragments?: boolean;
+    frameFilter?: Omit<
+        import("./frameTypes.js").FrameQueryRequest,
+        "corpusId" | "limit" | "cursor"
+    >;
 }
 
 export interface MemoryEvidence {
@@ -350,6 +368,8 @@ export interface MemoryEvidence {
 }
 
 export interface MemorySearchResult {
+    derivedViews?: AnswerViewEvidence[];
+    omittedViewCandidates?: number;
     indexedSelection?: IndexedSelectionDiagnostics;
     query: string;
     matches: MemoryEvidence[];
@@ -360,7 +380,92 @@ export interface MemorySearchResult {
 
 export type AnswerMode = "synthesized" | "extractive";
 
+export type AnswerRetrievalPolicy = "sourcesOnly" | "sourcesAndViews";
+
+export interface AnswerSourceReference {
+    sourceId: string;
+    revisionId: string;
+    locator?: string;
+    evidenceId?: string;
+}
+
+export interface AnswerDerivedReference {
+    extension?: import("./viewExtensionTypes.js").ViewProviderIdentity;
+    viewId: string;
+    revisionId: string;
+    sectionId?: string;
+    itemId?: string;
+    state: "selected" | "unknown" | "conflicted";
+    contractVersion?: string;
+    rubricVersion?: string;
+}
+
+export interface AnswerAssertionReference extends AnswerDerivedReference {
+    candidateId: string;
+    assertionOrigin: string;
+}
+
+interface AnswerViewEvidenceBase {
+    text: string;
+    selectedValue?: import("./schemaViewTypes.js").SchemaValue;
+    alternatives?: import("./schemaViewTypes.js").SchemaValue[];
+    /** Complete influence scope, not just the references displayed by a view. */
+    influencingSourceIds: string[];
+    supportingSources: AnswerSourceReference[];
+    opposingSources: AnswerSourceReference[];
+    review: string;
+    freshness: string;
+    coverage: string;
+}
+
+export interface AnswerDerivedEvidence extends AnswerViewEvidenceBase {
+    kind: "derived";
+    reference: AnswerDerivedReference;
+    authorship: "informational";
+}
+
+export interface AnswerUserAssertionEvidence extends AnswerViewEvidenceBase {
+    kind: "userAssertion";
+    reference: AnswerAssertionReference;
+}
+
+export type AnswerViewEvidence =
+    | AnswerDerivedEvidence
+    | AnswerUserAssertionEvidence;
+
+export type AnswerEvidence =
+    | { kind: "source"; id: string; source: MemoryEvidence }
+    | (AnswerViewEvidence & {
+          id: string;
+          supportingEvidenceIds: string[];
+          opposingEvidenceIds: string[];
+      });
+
+export interface IntegratedAnswerDiagnostics {
+    influencingEvidence?: AnswerEvidence[];
+    sourceSelection?: IndexedSelectionDiagnostics;
+    refinement?: {
+        queries: string[];
+        initialEvidence: AnswerEvidence[];
+        selections: IndexedSelectionDiagnostics[];
+    };
+    retrievalPolicy: AnswerRetrievalPolicy | "default";
+    retrievalMode: "sourcesOnly" | "sourcesAndViews" | "degraded";
+    suppliedEvidence: AnswerEvidence[];
+    selectedEvidenceIds: string[];
+    omittedViewCandidates: number;
+    omittedSourceFragments: number;
+    omittedViewBlocks: number;
+    warnings: string[];
+    reconstructionCount: number;
+}
+
 export interface MemoryAnswerRequest {
+    evidenceSnapshotId?: string;
+    prepareOnly?: boolean;
+    deferRefinement?: boolean;
+    resumeRefinement?: boolean;
+    knowledgeCheckpointId?: string;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     corpusId: string;
@@ -369,19 +474,25 @@ export interface MemoryAnswerRequest {
     maxResponseChars?: number;
     sourceIds?: string[];
     /**
-     * `synthesized` uses the configured product answer path: bounded indexed
-     * evidence when informational views are enabled, otherwise the corpus
-     * index's answer generator. `extractive` returns ranked snippets verbatim.
+     * `synthesized` uses the configured product answer path; retrievalPolicy
+     * independently controls source/view retrieval on supporting hosts.
+     * `extractive` returns ranked snippets verbatim.
      * Omission selects synthesis when supported, otherwise extraction.
      */
     answerMode?: AnswerMode;
+    /** Omission enables integrated retrieval on hosts supporting it, with visible degradation. */
+    retrievalPolicy?: AnswerRetrievalPolicy;
 }
 
 export interface MemoryAnswerResult {
+    evidenceSnapshotId?: string;
+    refinementPending?: boolean;
     question: string;
     answer: string;
     mode: AnswerMode;
     citations: MemoryEvidence[];
+    derivedReferences?: AnswerDerivedReference[];
+    assertionReferences?: AnswerAssertionReference[];
     grounded: true;
     indexVersion: string;
     warnings: string[];
@@ -553,8 +664,14 @@ export interface SourceKnowledgeSuppressionRequest
 
 export interface MemoryServiceCapabilities {
     derivedViews?: {
+        extension?: import("./viewExtensionTypes.js").ViewExtensionCapabilities;
         kinds: Array<
-            "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+            | "troubleshootingGuide"
+            | "projectBrief"
+            | "timeline"
+            | "wiki"
+            | "schemaView"
+            | "extension"
         >;
         drafts: true;
         history: true;
@@ -565,6 +682,8 @@ export interface MemoryServiceCapabilities {
         maintenance?: true;
         informationalWiki?: true;
         informationalProjects?: true;
+        knowledge?: boolean;
+        integratedAnswering?: boolean;
     };
     chatProvider?: string;
     embeddingProvider?: string;
@@ -576,7 +695,11 @@ export interface MemoryServiceCapabilities {
         exactSearch: boolean;
         management: boolean;
         groundedAnswer: boolean;
+        scopedKnowledgeGraphs?: boolean;
+        memoryUnderstanding?: boolean;
+        memoryDocumentUnderstanding?: boolean;
         sourceSynopses?: boolean;
+        dataFrames?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
@@ -618,10 +741,17 @@ export interface ProcedureVersion {
     previousVersion?: number;
 }
 
-export interface MemoryService {
+export interface MemoryService
+    extends MemoryGraphService,
+        MemoryUnderstandingService {
+    listFrameSchemas?: import("./frameTypes.js").MemoryFrameService["listFrameSchemas"];
+    queryFrame?: import("./frameTypes.js").MemoryFrameService["queryFrame"];
+    getFrameProjectionStatus?: import("./frameTypes.js").MemoryFrameService["getFrameProjectionStatus"];
     initialize?(): Promise<void>;
+    warmViewIndexes?(corpusId?: string): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
+    deferTopicMaintenance?(corpusId: string): () => void;
     getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
     drainMaintenance?(
         timeoutMs?: number,
@@ -729,7 +859,10 @@ export interface MemoryService {
         request: MemoryEventForgetRequest,
     ): Promise<MemoryEventForgetResult>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
-    answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
+    answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }
@@ -762,7 +895,8 @@ export interface CorpusIndexAnswer {
 }
 
 export interface AnswerContextDiagnostics {
-    answerPath?: "indexed-fragments" | "knowpro";
+    answerPath?: "indexed-fragments" | "knowpro" | "sources-and-views";
+    integratedAnswer?: IntegratedAnswerDiagnostics;
     indexedAnswer?: {
         selection?: IndexedSelectionDiagnostics;
         refinement?: {
@@ -804,6 +938,7 @@ export interface AnswerContextDiagnostics {
 export interface IndexedSubject {
     term: string;
     postingCount: number;
+    salience?: number;
     sourceIds: string[];
     initiative?: boolean;
     identity?: IndexedSubjectIdentity;
@@ -862,6 +997,11 @@ export interface IndexedSelectionDiagnostics {
 }
 
 export interface CorpusIndex {
+    readKnowledgeGraph?(
+        sourceIds: ReadonlySet<string>,
+        kind: "entities" | "topics",
+        excludedNamesBySource?: ReadonlyMap<string, ReadonlySet<string>>,
+    ): Promise<MemoryKnowledgeGraph>;
     rebuildRetained?(
         previous: CorpusIndex,
         documents: IndexedDocument[],
@@ -902,6 +1042,7 @@ export interface CorpusIndex {
         limit: number,
         tags?: string[],
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]>;
     answer?(
         query: string,

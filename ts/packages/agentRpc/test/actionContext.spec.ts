@@ -14,10 +14,108 @@ import {
 import { createAgentRpcServer } from "../src/server.js";
 import {
     ChoiceManager,
+    createActionResultFromTextDisplay,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 
 describe("agent action context RPC", () => {
+    test.each([false, true])(
+        "closing a context preserves surviving option callbacks (shared options: %s)",
+        async (shared) => {
+            let clientProvider: ChannelProviderAdapter;
+            let serverProvider: ChannelProviderAdapter;
+            clientProvider = createChannelProviderAdapter(
+                "options-client",
+                (message, callback) => {
+                    queueMicrotask(() =>
+                        serverProvider.notifyMessage(
+                            JSON.parse(JSON.stringify(message)),
+                        ),
+                    );
+                    callback?.(null);
+                },
+            );
+            serverProvider = createChannelProviderAdapter(
+                "options-server",
+                (message, callback) => {
+                    queueMicrotask(() =>
+                        clientProvider.notifyMessage(
+                            JSON.parse(JSON.stringify(message)),
+                        ),
+                    );
+                    callback?.(null);
+                },
+            );
+            const deletedChannels: string[] = [];
+            const deleteChannel = clientProvider.deleteChannel;
+            clientProvider.deleteChannel = (name) => {
+                deletedChannels.push(name);
+                deleteChannel(name);
+            };
+            type Options = { read(): string; fail?: boolean };
+            const agent: AppAgent = {
+                initializeAgentContext: async (settings) => {
+                    const options = settings?.options as Options;
+                    if (options.fail) throw new Error("Initialization failed");
+                    return options;
+                },
+                closeAgentContext: async () => {},
+                executeAction: async (_, context: ActionContext<Options>) =>
+                    createActionResultFromTextDisplay(
+                        await context.sessionContext.agentContext.read(),
+                    ),
+            };
+            const server = createAgentRpcServer(
+                "retained-options",
+                agent,
+                serverProvider,
+            );
+            const client = await createAgentRpcClient(
+                "retained-options",
+                clientProvider,
+                server.agentInterface,
+            );
+            const first = { read: () => "first" };
+            const second = shared ? first : { read: () => "second" };
+            let sessionId = 0;
+            const initialize = async (options: Options) =>
+                ({
+                    sessionContextId: `options-${++sessionId}`,
+                    agentContext: await client.initializeAgentContext!({
+                        options,
+                    }),
+                }) as SessionContext<unknown>;
+            const read = (sessionContext: SessionContext<unknown>) =>
+                client.executeAction!(
+                    { schemaName: "test", actionName: "read" },
+                    { sessionContext } as ActionContext<unknown>,
+                );
+            try {
+                const a = await initialize(first);
+                const b = await initialize(second);
+                await expect(
+                    initialize({ read: () => "", fail: true }),
+                ).rejects.toThrow("Initialization failed");
+                await client.closeAgentContext!(a);
+                expect(deletedChannels).toEqual([]);
+                await expect(read(b)).resolves.toMatchObject({
+                    displayContent: shared ? "first" : "second",
+                });
+                await client.closeAgentContext!(b);
+                expect(deletedChannels).toContain("options:retained-options");
+                const c = await initialize(first);
+                await expect(read(c)).resolves.toMatchObject({
+                    displayContent: "first",
+                });
+                await client.closeAgentContext!(c);
+            } finally {
+                server.closeFn();
+                clientProvider.notifyDisconnected();
+                serverProvider.notifyDisconnected();
+            }
+        },
+    );
+
     test("invokes nested initialization option methods with their receiver", async () => {
         let clientProvider: ChannelProviderAdapter;
         let serverProvider: ChannelProviderAdapter;

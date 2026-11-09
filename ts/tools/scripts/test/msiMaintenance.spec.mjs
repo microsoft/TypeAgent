@@ -90,7 +90,8 @@ Write-Output "RECOVERY_CALLER_EXITED"
         const result = spawnSync(
             "powershell.exe",
             ["-NoProfile", "-NonInteractive", "-Command", script],
-            { encoding: "utf8", timeout: 15000 },
+            // Include cold PowerShell/CIM startup; a leaked output pipe never closes.
+            { encoding: "utf8", timeout: 60_000 },
         );
         assert.ifError(result.error);
         assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);

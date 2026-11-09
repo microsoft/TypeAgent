@@ -1,5 +1,5 @@
 azure-functions
-azure-functions-durable
+azure-functions-durable<2
 requests==2.34.2
 urllib3==2.8.0
 warcio==1.8.1

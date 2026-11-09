@@ -28,7 +28,8 @@ const schemaInfo: SchemaInfo = {
 };
 
 describe("grammar model selection", () => {
-    it("defaults to Copilot GPT-5.6 Sol and preserves explicit Claude", () => {
+    it("defaults to Copilot GPT-6.1 Sol and preserves explicit Claude", () => {
+        expect(defaultGrammarModel).toBe("gpt-6.1-sol");
         expect(resolveGrammarModel({})).toEqual({
             provider: "copilot",
             model: defaultGrammarModel,

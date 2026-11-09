@@ -159,8 +159,8 @@ describe("translationBench runConfig", () => {
 
     it("applies built-in defaults for an empty config", () => {
         const resolved = resolveRunConfig({});
-        expect(resolved.generatorModel).toBe("azure/gpt-5.4");
-        expect(resolved.reviewerModel).toBe("azure/gpt-5.4");
+        expect(resolved.generatorModel).toBe("azure/gpt-6.1-sol");
+        expect(resolved.reviewerModel).toBe("azure/gpt-6.1-sol");
         expect(resolved.caseCount).toBe(1000);
         expect(resolved.genCases).toBe(2);
         expect(resolved.evalModels).toEqual([]);

@@ -96,7 +96,7 @@ describe("browser lifecycle", () => {
             } as any,
         );
 
-        expect(createChatModelMock).toHaveBeenCalledWith("copilot:gpt-5.6-sol");
+        expect(createChatModelMock).toHaveBeenCalledWith("copilot:gpt-6.1-sol");
         expect(result).toMatchObject({
             displayContent: "transformed",
         });

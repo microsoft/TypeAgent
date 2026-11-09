@@ -16,7 +16,7 @@ export const DEFAULT_BROWSER_REASONING_CONFIG: Omit<
     "goal"
 > = {
     maxSteps: 30,
-    model: "gpt-5.6-sol",
+    model: "gpt-6.1-sol",
     provider: "copilot",
     traceCapture: true,
 };

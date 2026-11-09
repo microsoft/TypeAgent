@@ -34,6 +34,21 @@ export function createExternalBrowserClient(
         }
     }
 
+    async function invokeGroundedUi<T>(invoke: () => Promise<T>): Promise<T> {
+        try {
+            return await invoke();
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message.includes("No invoke handler")
+            )
+                throw new Error(
+                    "unsupported: this browser host does not support grounded UI decisions",
+                );
+            throw error;
+        }
+    }
+
     const control: BrowserControl = {
         openWebPage: async (...args) =>
             getActiveRpc().invoke("openWebPage", ...args),
@@ -50,6 +65,18 @@ export function createExternalBrowserClient(
         capturePageSnapshot: async (pageId) =>
             invokeCapture(() =>
                 getActiveRpc().invoke("capturePageSnapshot", pageId),
+            ),
+        captureUiObservation: (frameScope) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("captureUiObservation", frameScope),
+            ),
+        validateUiObservation: (snapshotId) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("validateUiObservation", snapshotId),
+            ),
+        executeUiAction: (...args) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("executeUiAction", ...args),
             ),
         setAgentStatus: (...args) =>
             getActiveRpc().send("setAgentStatus", ...args),

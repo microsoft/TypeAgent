@@ -165,23 +165,111 @@ class EditorialIndex extends FakeSemanticCorpusIndex {
     }
 }
 
-async function settled(service: FileMemoryService, corpusId: string) {
+async function settled(
+    service: Pick<
+        FileMemoryService,
+        | "drainMaintenance"
+        | "listViewBuilds"
+        | "getMaintenanceStatus"
+        | "listViews"
+    >,
+    corpusId: string,
+) {
+    let maintenance = await service.drainMaintenance(15_000);
+    // Consecutive ingests can obsolete a detached read with newer work queued.
+    for (
+        let retry = 0;
+        retry < 2 &&
+        maintenance.pending.length > 0 &&
+        maintenance.failures.length > 0 &&
+        maintenance.failures.every(
+            (failure) =>
+                failure.error ===
+                "Indexed informational evidence changed during detached retrieval",
+        );
+        retry++
+    )
+        maintenance = await service.drainMaintenance(15_000);
+    if (
+        maintenance.reason ||
+        maintenance.pending.length ||
+        maintenance.running.length
+    )
+        throw new Error(
+            `Offline editorial maintenance did not drain: ${JSON.stringify(maintenance)}`,
+        );
     for (let attempt = 0; attempt < 1000; attempt++) {
-        const snapshot = await service.listViews(corpusId);
         const running = (await service.listViewBuilds(corpusId)).some(
             (job) => job.state === "running",
         );
+        const maintenance = service.getMaintenanceStatus();
+        // Family pending can require a decision, but active writers must finish.
         if (
             !running &&
-            !snapshot.wikiFamily?.pending &&
-            !snapshot.projectFamily?.pending
-        )
-            return snapshot;
+            ![...maintenance.pending, ...maintenance.running].some((key) =>
+                key.startsWith(`${corpusId}:`),
+            )
+        ) {
+            const snapshot = await service.listViews(corpusId);
+            const after = service.getMaintenanceStatus();
+            if (
+                ![...after.pending, ...after.running].some((key) =>
+                    key.startsWith(`${corpusId}:`),
+                )
+            )
+                return snapshot;
+        }
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
 
-    throw new Error("Offline editorial maintenance did not settle");
+    throw new Error(
+        `Offline editorial maintenance did not settle: ${JSON.stringify(
+            (await service.listViewBuilds(corpusId)).slice(0, 3).map((job) => ({
+                state: job.state,
+                results: job.results.map((result) => ({
+                    state: result.state,
+                    reason: result.reason,
+                })),
+            })),
+        )}`,
+    );
 }
+
+test.each(["pending", "running"] as const)(
+    "editorial settlement waits for %s writers before reading the final inventory",
+    async (state) => {
+        let checks = 0;
+        let inventories = 0;
+        const idle: ReturnType<FileMemoryService["getMaintenanceStatus"]> = {
+            mode: "automatic",
+            paused: false,
+            settled: true,
+            pending: [],
+            running: [],
+            failures: [],
+            deferred: [],
+            coalesced: 0,
+        };
+        const service: Parameters<typeof settled>[0] = {
+            drainMaintenance: async () => idle,
+            listViewBuilds: async () => [],
+            getMaintenanceStatus: () =>
+                checks++ < 2
+                    ? { ...idle, settled: false, [state]: ["corpus:wiki"] }
+                    : idle,
+            listViews: async () => {
+                expect(checks).toBeGreaterThan(2);
+                inventories++;
+                return { head: "current", views: [] };
+            },
+        };
+        expect(await settled(service, "corpus")).toEqual({
+            head: "current",
+            views: [],
+        });
+        expect(inventories).toBe(1);
+    },
+);
 
 async function maintainFamily(
     service: FileMemoryService,
@@ -268,6 +356,13 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
             );
             if (input.definition.projectSummary)
                 return hydrateProjectSummary(input, {
+                    summary: "Grounded project summary.",
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     title,
                     goalsScope: body,
                     owners: "Accountable service owner unknown; review owners are scoped in the evidence.",
@@ -284,6 +379,8 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
                     citationIds,
                 });
             return hydrateInformational(input, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title,
                 prose:
                     unsafe && input.definition.wiki?.query === "command"
@@ -326,6 +423,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
     const open = () =>
         new FileMemoryService(root, {
             sourceSynopses: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) => new EditorialIndex(directory),
             eventIndexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
@@ -343,6 +441,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
             file: string,
             sourceId: string,
         ) => {
+            await settled(service, corpusId);
             const text = await readFile(
                 path.join(originalFixtureRoot(), stage, file),
                 "utf8",
@@ -588,6 +687,14 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
         const unlocked = await service.saveViewDraft(unlock);
         expect(unlocked.version.provenance).toBe("human");
         expect(unlocked.version.content.title).toBe(edited.title);
+        expect(
+            (
+                await service.getViewPublication({
+                    corpusId,
+                    viewId: protectedLease.viewId,
+                })
+            ).blockedReason,
+        ).toContain("pending merge conflict");
         const followingUnlock = page(
             (await settled(service, corpusId)).views,
             "lease",

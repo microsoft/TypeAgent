@@ -1,0 +1,31 @@
+{
+  "name": "decisionSearchForProduct",
+  "description": "Opt-in native decision pilot: find a main-document product search input, submit through its native form, and verify main-document results. Iframe content is outside this flow's evidence. Does not add items or purchase.",
+  "version": 4,
+  "parameters": {
+    "productName": {
+      "type": "string",
+      "required": true,
+      "description": "The exact product search query to enter"
+    },
+    "selectionCriteria": {
+      "type": "string",
+      "required": false,
+      "description": "Optional search context, such as price range or brand, used when locating the search input"
+    },
+    "navigationTimeoutMs": {
+      "type": "number",
+      "required": false,
+      "description": "Optional navigation wait budget in milliseconds; omitted preserves the browser host default."
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const input = await browser.selectElement({\n        condition: 'The product search input in the main document, not a newsletter, account or address field' + (params.selectionCriteria ? '. Search request context: ' + JSON.stringify(params.productName + ' ' + params.selectionCriteria) : ''),\n        capability: 'fill',\n        frameScope: 'main-document'\n    });\n    await browser.executeUiAction(input.targetId, { type: 'fill', text: params.productName, submit: true });\n    await browser.awaitPageLoad(params.navigationTimeoutMs);\n    const result = await browser.evaluatePageCondition('The main document displays search results for the query ' + JSON.stringify(params.productName) + ', or an explicit no-results message for that query.', 'main-document');\n    if (result.status !== 'matched') {\n        throw new Error('Search result was not verified (' + result.status + '). The form may have been submitted; no retry.');\n    }\n    return { success: true, message: 'Verified main-document search results for ' + params.productName };\n}",
+  "grammarPatterns": ["decision search for $(productName:wildcard)"],
+  "scope": {
+    "type": "global"
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-10-25T00:00:00.000Z"
+  }
+}

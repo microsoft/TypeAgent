@@ -159,6 +159,38 @@ describe("durable extraction and message embedding windows", () => {
         await rm(root, { recursive: true, force: true });
     });
 
+    test("resolved morphological index terms survive through bounded passage selection", async () => {
+        queryTranslation = {
+            searchExpressions: [
+                {
+                    rewrittenQuery: "recover Zephyr",
+                    filters: [
+                        {
+                            entitySearchTerms: [
+                                { name: "Zephyr", isNamePronoun: false },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        const fact = "Recovery takes seventeen seconds in the recorded drill.";
+        const content = `${"Zephyr is discussed in the background. ".repeat(200)}\n\n${fact}`;
+        const index = new KnowProCorpusIndex("test", root, settings);
+        await index.rebuild(
+            [document("text", content)],
+            new AbortController().signal,
+            async () => {},
+        );
+        const selected = await index.readFragments({
+            query: "How do I recover Zephyr?",
+            terms: ["recover", "zephyr"],
+            sourceIds: ["source"],
+            maxFragments: 1,
+        });
+        expect(selected.fragments[0].snippet).toContain(fact);
+    });
+
     test("zero-hit rescue scopes before its eight-message limit even with twelve foreign matches ranked first", async () => {
         queryTranslation = {
             searchExpressions: [

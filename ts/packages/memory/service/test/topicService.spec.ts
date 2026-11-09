@@ -16,6 +16,9 @@ import type {
 } from "../src/viewTypes.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { topicClusterSignature } from "../src/topicDecision.js";
+import { prioritizeTopicMaintenance } from "../src/topicClusterMaintenance.js";
+import { viewHash } from "../src/viewContent.js";
 
 class TopicIndex extends FakeSemanticCorpusIndex {
     public async getTopicOccurrences(
@@ -75,6 +78,14 @@ describe("production topic service vertical slice", () => {
     let calls: number;
     let hold: Promise<void> | undefined;
     let entered: (() => void) | undefined;
+    let generationSignal: AbortSignal | undefined;
+    let curated = false;
+    let summaryCalls = 0;
+    let summaryHold: Promise<void> | undefined;
+    let summaryEntered: (() => void) | undefined;
+    let summaryFailure = false;
+    let certified = false;
+    let admissionCertified = false;
     const synthesis: ViewSynthesisAdapter = {
         identity: "offline-topics",
         generate: async () => {
@@ -85,6 +96,7 @@ describe("production topic service vertical slice", () => {
         },
         generateTopics: async (input, signal) => {
             signal.throwIfAborted();
+            generationSignal = signal;
             calls++;
             entered?.();
             if (hold) await hold;
@@ -106,7 +118,83 @@ describe("production topic service vertical slice", () => {
                     { fromId: b, toId: a, kind: "related" },
                 ];
             }
+            if (curated) {
+                expect(input.model).toContain("topics-curated-lazy-v6");
+                snapshot.curation = {
+                    concepts: [
+                        {
+                            id: `concept:${"a".repeat(32)}`,
+                            label: "Command and lease lifetime",
+                            scope: "Resource lifetime",
+                            purpose:
+                                "Distinguish command completion from held resources",
+                            summary: "",
+                            summaryState: "pending",
+                            memberIds: snapshot.nodes.map((node) => node.id),
+                            citations: snapshot.nodes[0].citations,
+                            salience: 7,
+                        },
+                    ],
+                    deferred: [],
+                };
+                if (certified) {
+                    const concept = snapshot.curation.concepts[0];
+                    concept.citations = [
+                        ...new Map(
+                            snapshot.nodes.flatMap((node) =>
+                                node.citations.map(
+                                    (citation) =>
+                                        [viewHash(citation), citation] as const,
+                                ),
+                            ),
+                        ).values(),
+                    ];
+                    concept.validation = {
+                        recipe: "cluster-local-v1",
+                        modelIdentity: "offline-cluster-validation",
+                        inputFingerprint: snapshot.inputFingerprint,
+                        signature: topicClusterSignature(
+                            snapshot,
+                            concept,
+                            "offline-cluster-validation",
+                        ),
+                    };
+                    if (admissionCertified) {
+                        concept.validation.coverage = "member-admission-v2";
+                        concept.validation.method = "decision";
+                        concept.validation.validatedMemberIds = [
+                            concept.memberIds[0],
+                        ];
+                        concept.validation.signature = topicClusterSignature(
+                            snapshot,
+                            concept,
+                            "offline-cluster-validation",
+                        );
+                        prioritizeTopicMaintenance(
+                            snapshot,
+                            concept,
+                            [concept.memberIds[1]],
+                            0.8,
+                            "Old-anchor uncertainty survives admission",
+                        );
+                    }
+                }
+            }
             return snapshot;
+        },
+        generateTopicSummary: async (concept, signal) => {
+            summaryCalls++;
+            summaryEntered?.();
+            if (summaryHold) await summaryHold;
+            signal.throwIfAborted();
+            if (summaryFailure)
+                throw new Error("Intentional concept summary failure");
+            return {
+                summary: "Command lifetime differs from held lease lifetime.",
+                citations: certified
+                    ? concept.citations.slice(0, 1)
+                    : concept.citations,
+            };
         },
     };
     class PrototypeAdapter implements ViewSynthesisAdapter {
@@ -121,9 +209,17 @@ describe("production topic service vertical slice", () => {
                 throw new Error("Offline prototype adapter lost its receiver");
             return synthesis.generateTopics(input, signal);
         }
+        generateTopicSummary(
+            ...args: Parameters<
+                NonNullable<ViewSynthesisAdapter["generateTopicSummary"]>
+            >
+        ) {
+            return synthesis.generateTopicSummary!(...args);
+        }
     }
-    function open() {
+    function open(sourceSynopses = true) {
         return new FileMemoryService(directory, {
+            sourceSynopses,
             indexFactory: (_corpusId, directory) => new TopicIndex(directory),
             viewSynthesisAdapter: Object.freeze(new PrototypeAdapter()),
             sourceSynopsisModel: {
@@ -140,12 +236,387 @@ describe("production topic service vertical slice", () => {
         calls = 0;
         hold = undefined;
         entered = undefined;
+        generationSignal = undefined;
+        curated = false;
+        summaryCalls = 0;
+        summaryHold = undefined;
+        summaryEntered = undefined;
+        summaryFailure = false;
+        certified = false;
+        admissionCertified = false;
         service = open();
     });
     afterEach(async () => {
         await service.close();
         await rm(directory, { recursive: true, force: true });
     });
+
+    async function conceptCorpus(secondSource = false) {
+        curated = true;
+        const { corpusId } = await service.createCorpus("Lazy concepts");
+        await service.maintainViews({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            family: "topics",
+            operation: "pause",
+        });
+        const admitted = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "worksheet",
+                sourceType: "text",
+                title: "Timing",
+                text: "Command lifetime differs from held lease lifetime.",
+            },
+        });
+        await waitForMemoryJob(service, admitted.jobId, { pollIntervalMs: 10 });
+        if (secondSource) {
+            const additional = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "second-worksheet",
+                    sourceType: "text",
+                    title: "Qualifications",
+                    text: "A held lease remains active after the command completes.",
+                },
+            });
+            await waitForMemoryJob(service, additional.jobId, {
+                pollIntervalMs: 10,
+            });
+        }
+        const receipt = await service.maintainViews({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            family: "topics",
+            operation: "resume",
+        });
+        if (!receipt.job) throw new Error("Concept build was not admitted");
+        const job = await waitTopicJob(service, receipt.job);
+        expect(job.results[0].missingEvidence ?? []).toEqual([]);
+        return corpusId;
+    }
+
+    test("concept browsing and hierarchy are evidence-backed without summaries; explicit details coalesce and cache durably", async () => {
+        const corpusId = await conceptCorpus();
+        const initial = await service.queryTopics({ corpusId, curated: true });
+        const topicId = initial.concepts![0].id;
+        expect(initial.concepts![0].summaryState).toBe("pending");
+        expect(initial.concepts![0].summary).toBe("");
+        expect(initial.concepts![0].citations.length).toBeGreaterThan(0);
+        expect(initial.concepts!.map((concept) => concept.label)).toEqual([
+            "Command and lease lifetime",
+        ]);
+        expect(summaryCalls).toBe(0);
+        let release!: () => void;
+        summaryHold = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            summaryEntered = resolve;
+        });
+        const request = { corpusId, topicId, curated: true, summarize: true };
+        const first = service.queryTopics(request);
+        try {
+            await started;
+            const second = service.queryTopics(request);
+            release();
+            const pages = await Promise.all([first, second]);
+            expect(summaryCalls).toBe(1);
+            expect(
+                pages.every(
+                    (page) => page.concepts![0].summaryState === "ready",
+                ),
+            ).toBe(true);
+            await service.queryTopics(request);
+            expect(summaryCalls).toBe(1);
+            await service.close();
+            service = open();
+            expect(
+                (await service.queryTopics(request)).concepts![0].summary,
+            ).toContain("held lease lifetime");
+            expect(summaryCalls).toBe(1);
+        } finally {
+            release();
+        }
+    });
+
+    test.each([false, true])(
+        "validated concepts retain provenance, declared coverage and maintenance across selective summaries and restart: %s",
+        async (admission) => {
+            certified = true;
+            admissionCertified = admission;
+            const corpusId = await conceptCorpus(true);
+            const initial = await service.queryTopics({
+                corpusId,
+                curated: true,
+            });
+            const concept = initial.concepts![0];
+            expect(concept.citationCount).toBe(2);
+            const request = {
+                corpusId,
+                topicId: concept.id,
+                curated: true,
+                summarize: true,
+            };
+            const detailed = (await service.queryTopics(request)).concepts![0];
+            expect(detailed.citationCount).toBe(2);
+            expect(detailed.citations).toEqual(concept.citations);
+            expect(detailed.summaryCitations).toHaveLength(1);
+            expect(detailed.validation).toEqual(concept.validation);
+            expect(detailed.maintenance).toEqual(concept.maintenance);
+            await service.close();
+            service = open();
+            const reopened = (await service.queryTopics(request)).concepts![0];
+            expect(reopened.citations).toEqual(concept.citations);
+            expect(reopened.summaryCitations).toHaveLength(1);
+            expect(reopened.validation).toEqual(concept.validation);
+            expect(reopened.maintenance).toEqual(concept.maintenance);
+            expect(summaryCalls).toBe(1);
+        },
+    );
+
+    test("lazy concept failures propagate and remain explicitly retryable", async () => {
+        const corpusId = await conceptCorpus();
+        const topicId = (await service.queryTopics({ corpusId, curated: true }))
+            .concepts![0].id;
+        summaryFailure = true;
+        const request = { corpusId, topicId, curated: true, summarize: true };
+        await expect(service.queryTopics(request)).rejects.toThrow(
+            "Intentional concept summary failure",
+        );
+        expect(
+            (await service.queryTopics({ corpusId, curated: true }))
+                .concepts![0].summaryState,
+        ).toBe("pending");
+        summaryFailure = false;
+        expect(
+            (await service.queryTopics(request)).concepts![0].summaryState,
+        ).toBe("ready");
+        expect(summaryCalls).toBe(2);
+        await expect(
+            service.queryTopics({ corpusId, summarize: true }),
+        ).rejects.toThrow("one explicit curated topic");
+    });
+
+    test.each(["clear", "close"] as const)(
+        "%s aborts a held lazy summary without requiring adapter cooperation",
+        async (operation) => {
+            const corpusId = await conceptCorpus();
+            const topicId = (
+                await service.queryTopics({ corpusId, curated: true })
+            ).concepts![0].id;
+            let release!: () => void;
+            summaryHold = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            const started = new Promise<void>((resolve) => {
+                summaryEntered = resolve;
+            });
+            const pending = service.queryTopics({
+                corpusId,
+                topicId,
+                curated: true,
+                summarize: true,
+            });
+            const rejected =
+                expect(pending).rejects.toThrow(/cleared|closing/i);
+            try {
+                await started;
+                if (operation === "clear") {
+                    await service.clearCorpus(corpusId);
+                    expect(
+                        (await service.queryTopics({ corpusId, curated: true }))
+                            .concepts ?? [],
+                    ).toEqual([]);
+                } else {
+                    await service.close();
+                }
+                await rejected;
+            } finally {
+                release();
+            }
+        },
+    );
+
+    test("source replacement completes while lazy summary is held and rejects stale prose", async () => {
+        const corpusId = await conceptCorpus();
+        const topicId = (await service.queryTopics({ corpusId, curated: true }))
+            .concepts![0].id;
+        let release!: () => void;
+        summaryHold = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            summaryEntered = resolve;
+        });
+        const pending = service.queryTopics({
+            corpusId,
+            topicId,
+            curated: true,
+            summarize: true,
+        });
+        const rejected = expect(pending).rejects.toThrow(
+            /evidence changed|superseded/i,
+        );
+        try {
+            await started;
+            await service.maintainViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                family: "topics",
+                operation: "pause",
+            });
+            const changed = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "worksheet",
+                    sourceType: "text",
+                    title: "Updated timing",
+                    text: "Resource failure does not establish command completion.",
+                },
+            });
+            await waitForMemoryJob(service, changed.jobId, {
+                pollIntervalMs: 10,
+            });
+            release();
+            await rejected;
+            expect(
+                (await service.queryTopics({ corpusId, curated: true }))
+                    .concepts ?? [],
+            ).toHaveLength(0);
+        } finally {
+            release();
+        }
+    }, 60000);
+    test("a replacement index aborts obsolete topic work without waiting under ingestion locks", async () => {
+        const { corpusId } = await service.createCorpus("Superseded topics");
+        await service.maintainViews({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            family: "topics",
+            operation: "pause",
+        });
+        const first = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "worksheet",
+                sourceType: "text",
+                title: "Timing",
+                text: "Command lifetime differs from held lease lifetime.",
+            },
+        });
+        expect((await waitForMemoryJob(service, first.jobId)).state).toBe(
+            "complete",
+        );
+        let release!: () => void;
+        hold = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        try {
+            const resumed = await service.maintainViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                family: "topics",
+                operation: "resume",
+            });
+            if (!resumed.job) throw new Error("Expected held topic job");
+            await started;
+            const obsoleteSignal = generationSignal;
+            const changed = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "worksheet",
+                    sourceType: "text",
+                    title: "Timing update",
+                    text: "Resource failure does not establish command completion.",
+                },
+            });
+            expect((await waitForMemoryJob(service, changed.jobId)).state).toBe(
+                "complete",
+            );
+            expect(obsoleteSignal?.aborted).toBe(true);
+            expect(
+                (
+                    await service.getViewBuild({
+                        corpusId,
+                        jobId: resumed.job.jobId,
+                    })
+                )?.state,
+            ).toBe("running");
+            release();
+            hold = undefined;
+            entered = undefined;
+            const obsolete = await waitTopicJob(service, resumed.job);
+            expect(obsolete.results[0].state).toBe("stale");
+            const fresh = await waitTopicJob(
+                service,
+                await service.rebuildTopics(corpusId),
+            );
+            expect(fresh.state).toBe("complete");
+        } finally {
+            release();
+            hold = undefined;
+            entered = undefined;
+        }
+    }, 60000);
+
+    test("finite production admits only the final topic generation after nested holds release", async () => {
+        await service.close();
+        service = open(false);
+        const { corpusId } = await service.createCorpus("Finite production");
+        const outer = service.deferTopicMaintenance(corpusId);
+        const inner = service.deferTopicMaintenance(corpusId);
+        try {
+            for (const sourceId of ["first", "second"]) {
+                const job = await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        sourceId,
+                        sourceType: "text",
+                        title: sourceId,
+                        text: "Command lifetime differs from held lease lifetime.",
+                    },
+                });
+                expect(
+                    (
+                        await waitForMemoryJob(service, job.jobId, {
+                            pollIntervalMs: 10,
+                        })
+                    ).state,
+                ).toBe("complete");
+                await new Promise((resolve) => setTimeout(resolve, 1250));
+                expect(calls).toBe(0);
+                expect(await service.listViewBuilds(corpusId)).toEqual([]);
+            }
+            outer();
+            outer();
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            expect(calls).toBe(0);
+            inner();
+            expect((await service.drainMaintenance(10000)).failures).toEqual(
+                [],
+            );
+            expect(calls).toBe(1);
+            const jobs = await service.listViewBuilds(corpusId);
+            expect(jobs).toHaveLength(1);
+            expect(jobs[0].state).toBe("complete");
+            expect(
+                new Set(
+                    jobs[0].results[0].snapshot.topicInput?.occurrences.map(
+                        (entry) => entry.sourceId,
+                    ),
+                ),
+            ).toEqual(new Set(["first", "second"]));
+            expect(jobs[0].results[0].state).not.toBe("stale");
+        } finally {
+            outer();
+            inner();
+        }
+    }, 60000);
+
     test("startup reconciliation preserves the history head for an unchanged implicit topic family", async () => {
         const { corpusId } = await service.createCorpus("Offline no-op");
         const before = await service.listViews(corpusId);
@@ -215,14 +686,23 @@ describe("production topic service vertical slice", () => {
                 corpusId,
                 "context",
             );
-            await service.forgetSource({
+            if (!generationSignal)
+                throw new Error("Topic generator did not receive its signal");
+            const cancelled = new Promise<void>((resolve) => {
+                generationSignal!.addEventListener("abort", () => resolve(), {
+                    once: true,
+                });
+            });
+            const forgotten = service.forgetSource({
                 corpusId,
                 sourceId: "context",
                 confirmationToken: preview.confirmationToken,
             });
+            await cancelled;
             release();
             hold = undefined;
             entered = undefined;
+            await forgotten;
             expect(
                 await service.getViewBuild({ corpusId, jobId: job.jobId }),
             ).toBeUndefined();

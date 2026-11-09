@@ -1,0 +1,5 @@
+dist/
+*.tsbuildinfo
+.runs/
+.data/
+.test-runs/

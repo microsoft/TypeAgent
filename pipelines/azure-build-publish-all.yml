@@ -85,6 +85,15 @@ variables:
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
     value: "24.22.1"
+  # Match the build and smoke-test workflows' heap budget and CI test settings.
+  - name: NODE_OPTIONS
+    value: --max_old_space_size=8192
+  - name: CI
+    value: "true"
+  # Embedding runtimes use CPU execution. The npm package includes CPU binaries;
+  # its Linux postinstall otherwise downloads optional CUDA libraries from NuGet.
+  - name: ONNXRUNTIME_NODE_INSTALL
+    value: skip
   # Unified version — every artifact from this run shares the same version.
   - name: packageVersion
     value: 0.0.1-$(Build.BuildId)
@@ -498,6 +507,8 @@ stages:
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Allow the full build and serialized suites beyond the default hour.
+        timeoutInMinutes: 150
         # Manual-only gate: a failure here must NOT block Publish.
         # continueOnError makes a failing job report SucceededWithIssues
         # instead of Failed, and the Publish stage accepts that result.
@@ -530,6 +541,9 @@ stages:
               npm run test:local
             displayName: "Run Tests (Local)"
             workingDirectory: $(buildDirectory)
+            env:
+              # Keep full coverage without running large heaps side by side.
+              TYPEAGENT_TEST_WORKSPACE_CONCURRENCY: "1"
 
           - script: |
               Xvfb :99 -screen 0 1600x1200x24 &
@@ -539,6 +553,8 @@ stages:
             workingDirectory: $(buildDirectory)
 
           - script: |
+              set -e
+              git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
               npm run lint
             displayName: "Lint"
             workingDirectory: $(buildDirectory)

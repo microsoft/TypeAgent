@@ -12,6 +12,7 @@ import {
 } from "@typeagent/conversation-memory";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type { IngestionSource, SourceType } from "../src/types.js";
 
 const markdown =
@@ -22,17 +23,14 @@ async function waitForJob(
     service: FileMemoryService,
     jobId: string,
 ): Promise<void> {
-    for (let attempt = 0; attempt < 200; attempt++) {
-        const job = await service.getJob(jobId);
-        if (job?.state === "complete") {
-            return;
-        }
-        if (job?.state === "failed") {
-            throw new Error(job.error);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error("Stubbed Markdown indexing timed out");
+    const job = await waitForMemoryJob(service, jobId, {
+        pollIntervalMs: 10,
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (job.state !== "complete")
+        throw new Error(
+            `Stubbed Markdown indexing ${job.state}: ${job.error ?? jobId}`,
+        );
 }
 
 describe("Markdown source persistence with stubbed KnowPro", () => {

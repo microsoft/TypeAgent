@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type {
     WikiContent,
     ViewRelationshipInput,
@@ -62,7 +64,9 @@ const retrieval = {
 };
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing wiki control ${label}`);
     button.click();
@@ -149,51 +153,59 @@ test("obsolete content and unindexed creation reject explicitly", () => {
 
 test("Memory Hub saves source exclusions with the indexed definition and exposes family creation instead of full-source wiki creation", async () => {
     invoke.mockReset();
-    invoke.mockImplementation(async (method) => {
-        if (method === "memoryListCorpora")
-            return [{ corpusId: "c", name: "Synthetic collection" }];
-        if (method === "memoryViewCapabilities")
-            return {
-                derivedViews: {
-                    builds: true,
-                    kinds: ["wiki"],
-                    informationalWiki: true,
-                },
-            };
-        if (method === "memoryListViews")
-            return {
-                head: "a".repeat(40),
-                views: [
-                    {
-                        corpusId: "c",
-                        viewId: "wiki",
-                        revisionId: "v",
-                        version: 1,
-                        state: "draft",
-                        provenance: "generated",
-                        content,
-                        relationships: edges,
-                        definition: {
-                            viewId: "wiki",
-                            kind: "wiki",
-                            selector: {
-                                kind: "sources",
-                                sources: [{ sourceId: "s", revisionId: "r" }],
-                            },
-                            wiki: retrieval,
-                        },
+    invoke.mockImplementation(
+        inventoryFixture(async (method) => {
+            if (method === "memoryListCorpora")
+                return [{ corpusId: "c", name: "Synthetic collection" }];
+            if (method === "memoryViewCapabilities")
+                return {
+                    derivedViews: {
+                        builds: true,
+                        kinds: ["wiki"],
+                        informationalWiki: true,
                     },
-                ],
-            };
-        if (method === "memoryListViewBuilds") return [];
-        if (method === "memoryGetViewPublicationPolicy")
-            return { revision: 0, autoPublish: true, views: {} };
-        if (method === "memoryGetViewPublication")
-            return { viewId: "wiki", indexState: "absent", reason: "Draft" };
-        if (method === "memoryListSources") return { items: [], total: 0 };
-        if (method === "memorySaveViewDraft") return {};
-        throw new Error(`Unexpected informational client call ${method}`);
-    });
+                };
+            if (method === "memoryListViews")
+                return {
+                    head: "a".repeat(40),
+                    views: [
+                        {
+                            corpusId: "c",
+                            viewId: "wiki",
+                            revisionId: "v",
+                            version: 1,
+                            state: "draft",
+                            provenance: "generated",
+                            content,
+                            relationships: edges,
+                            definition: {
+                                viewId: "wiki",
+                                kind: "wiki",
+                                selector: {
+                                    kind: "sources",
+                                    sources: [
+                                        { sourceId: "s", revisionId: "r" },
+                                    ],
+                                },
+                                wiki: retrieval,
+                            },
+                        },
+                    ],
+                };
+            if (method === "memoryListViewBuilds") return [];
+            if (method === "memoryGetViewPublicationPolicy")
+                return { revision: 0, autoPublish: true, views: {} };
+            if (method === "memoryGetViewPublication")
+                return {
+                    viewId: "wiki",
+                    indexState: "absent",
+                    reason: "Draft",
+                };
+            if (method === "memoryListSources") return { items: [], total: 0 };
+            if (method === "memorySaveViewDraft") return {};
+            throw new Error(`Unexpected informational client call ${method}`);
+        }),
+    );
     const host = document.createElement("div");
     document.body.replaceChildren(host);
     const onError = jest.fn();
@@ -202,6 +214,7 @@ test("Memory Hub saves source exclusions with the indexed definition and exposes
         await mounted.refresh();
         await settle();
         click(host, "Payments wiki");
+        await settle();
         click(host, "Edit");
         click(host, "Edit selected wiki page");
         const excluded = host.querySelector<HTMLInputElement>(

@@ -20,6 +20,7 @@ import { normalizeRecording, RecordingData } from "./recordingNormalizer.mjs";
 import { loadSampleFlows } from "./sampleFlowLoader.mjs";
 import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
 import registerDebug from "debug";
+import { isShoppingMode } from "@typeagent/browser-control-rpc/uiDecisionTypes";
 
 const debug = registerDebug("typeagent:browser:webflows:handler");
 
@@ -133,6 +134,7 @@ function createExtractComponentFn(
             userRequest,
             htmlFragments,
             screenshots,
+            componentDef.schema,
         );
 
         if (!response.success) {
@@ -294,7 +296,7 @@ async function handleDynamicFlowExecution(
     context: SessionContext<BrowserActionContext>,
 ): Promise<WebFlowActionResult> {
     const store = await getStore(context);
-    const flow = await store.get(actionName);
+    let flow = await store.get(actionName);
 
     if (!flow) {
         return {
@@ -304,6 +306,34 @@ async function handleDynamicFlowExecution(
     }
 
     const browser = getBrowserControl(context.agentContext);
+    const decisionName =
+        actionName === "searchForProduct"
+            ? "decisionSearchForProduct"
+            : actionName === "navigateToProductPage"
+              ? "decisionNavigateToProductPage"
+              : undefined;
+    let decisionFlow =
+        actionName === "decisionSearchForProduct" ||
+        actionName === "decisionNavigateToProductPage";
+    if (decisionName) {
+        const { shoppingMode } = await browser.getBrowserSettings();
+        if (shoppingMode !== undefined && !isShoppingMode(shoppingMode)) {
+            throw new Error("Invalid Shopping Mode in browser settings.");
+        }
+        if (shoppingMode === "decision") {
+            const decisionSample = loadSampleFlows().find(
+                (sample) => sample.name === decisionName,
+            );
+            if (!decisionSample) {
+                throw new Error(
+                    `Decision shopping flow "${decisionName}" is unavailable.`,
+                );
+            }
+            // Select an implementation without rewriting saved flows or their scope.
+            flow = { ...decisionSample, scope: flow.scope };
+            decisionFlow = true;
+        }
+    }
 
     // Validate scope against current page
     if (flow.scope.type === "site" && flow.scope.domains?.length) {
@@ -371,12 +401,16 @@ async function handleDynamicFlowExecution(
             displayText: `WebFlow "${actionName}" failed: ${errorMsg}`,
             data: result,
             error: errorMsg,
-            fallbackToReasoning: true,
-            fallbackContext: {
-                failedFlow: actionName,
-                errorMessage: errorMsg,
-                hint: `Use editWebFlow to fix the script for "${actionName}", or regenerate the flow with a clearer description.`,
-            },
+            fallbackToReasoning: !decisionFlow,
+            ...(decisionFlow
+                ? {}
+                : {
+                      fallbackContext: {
+                          failedFlow: actionName,
+                          errorMessage: errorMsg,
+                          hint: `Use editWebFlow to fix the script for "${actionName}", or regenerate the flow with a clearer description.`,
+                      },
+                  }),
         };
     }
 
@@ -393,7 +427,11 @@ async function handleStartGoalDrivenTask(
     const browser = getBrowserControl(context.agentContext);
     const { goal, startUrl, maxSteps } = action.parameters;
 
-    const browserApi = new WebFlowBrowserAPIImpl(browser);
+    const browserApi = new WebFlowBrowserAPIImpl(
+        browser,
+        undefined,
+        createExtractComponentFn(context),
+    );
     const agent = new BrowserReasoningAgent(browserApi, {
         onThinking: (text) => debug(`[thinking] ${text.slice(0, 100)}...`),
         onToolCall: (tool, args) => debug(`[tool_call] ${tool}`),

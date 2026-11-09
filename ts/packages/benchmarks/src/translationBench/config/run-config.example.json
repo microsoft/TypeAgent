@@ -3,12 +3,12 @@
   "models": {
     "azure/gpt-4.1": { "tpmLimit": 0, "maxConcurrency": 10 },
     "azure/gpt-4.1-mini": { "tpmLimit": 0, "maxConcurrency": 20 },
-    "azure/gpt-5.4": { "tpmLimit": 0, "maxConcurrency": 8 }
+    "azure/gpt-6.1-sol": { "tpmLimit": 0, "maxConcurrency": 8 }
   },
   "base": {
     "synthesizer": {
-      "generatorModel": "azure/gpt-5.4",
-      "reviewerModel": "azure/gpt-5.4",
+      "generatorModel": "azure/gpt-6.1-sol",
+      "reviewerModel": "azure/gpt-6.1-sol",
       "caseCount": 100,
       "genCases": 2,
       "maxAttempts": 5,

@@ -10,22 +10,43 @@ import type {
     MemoryCenterCorpusStatus,
 } from "./serviceTypes.js";
 import type { BrowserCapturePage } from "./browserControl.js";
-import type { ViewVersion } from "@typeagent/memory-service";
+import type {
+    ViewVersion,
+    AnswerDerivedReference,
+    AnswerAssertionReference,
+    AnswerRetrievalPolicy,
+    UnderstandingRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
+} from "@typeagent/memory-service";
 import type { MemoryHubRunbookImportFunctions } from "./runbookImportViewTypes.js";
+import type { MemoryHubGraphFunctions } from "./memoryGraphViewTypes.js";
+export type * from "./memoryGraphViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
 
 export type MemoryHubSearchRequest = {
+    intent?: "auto" | "find" | "ask";
+    evidenceSnapshotId?: string;
+    prepareUnderstanding?: boolean;
     query: string;
     corpusId?: string;
     limit?: number;
     generateAnswer?: boolean;
+    retrievalPolicy?: AnswerRetrievalPolicy;
+    knowledgeCheckpointId?: string;
     sourceTypes?: MemoryCenterSource["sourceType"][];
     tags?: string[];
     dateFrom?: string;
     dateTo?: string;
     conversationScope?: "none" | "current" | "all";
     viewKinds?: Array<
-        "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+        | "troubleshootingGuide"
+        | "projectBrief"
+        | "timeline"
+        | "wiki"
+        | "schemaView"
+        | "extension"
     >;
 };
 
@@ -45,7 +66,13 @@ export type MemoryHubEvidence = {
     synopsis?: MemoryCenterSource["revisions"][number]["synopsis"];
     locator?: string;
     canonicalUri?: string;
-    viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
+    viewKind?:
+        | "troubleshootingGuide"
+        | "projectBrief"
+        | "timeline"
+        | "wiki"
+        | "schemaView"
+        | "extension";
     viewVersion?: number;
     viewProvenance?: ViewVersion["provenance"];
     review?: "unreviewed";
@@ -69,9 +96,15 @@ export type MemoryHubAnswer = {
     mode: "synthesized" | "extractive";
     citationIds: string[];
     followUps: string[];
+    derivedReferences?: Array<AnswerDerivedReference & { corpusId: string }>;
+    assertionReferences?: Array<
+        AnswerAssertionReference & { corpusId: string }
+    >;
 };
 
 export type MemoryHubSearchResult = {
+    resolvedIntent?: "find" | "ask";
+    evidenceSnapshotId?: string;
     query: string;
     matches: MemoryHubEvidence[];
     answer?: MemoryHubAnswer;
@@ -128,6 +161,7 @@ export type MemoryHubKnowledgeItem = {
     subtitle?: string;
     mentions?: number;
     sources: MemoryHubGraphSource[];
+    graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
 };
 export type MemoryHubKnowledgeRequest = {
     corpusId?: string;
@@ -147,6 +181,7 @@ export type MemoryHubExploreResult = {
     corpora: MemoryCenterCorpusStatus[];
     counts: {
         sources: number;
+        events?: number;
         entities: number;
         topics: number;
         relationships: number;
@@ -157,12 +192,14 @@ export type MemoryHubExploreResult = {
         types: string[];
         mentionCount: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     topics: Array<{
         id: string;
         name: string;
         mentionCount: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     relationships: Array<{
         id: string;
@@ -173,10 +210,12 @@ export type MemoryHubExploreResult = {
         toName?: string;
         count: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     omittedEntities: number;
     contributingSources?: MemoryHubGraphSource[];
     contributingSourceCount?: number;
+    sourceInventory?: "documents";
     errors: MemoryHubError[];
 };
 
@@ -269,6 +308,18 @@ export type ViewSourceUsageRequest = {
 };
 
 export type MemoryHubFunctions = {
+    [M in keyof MemoryHubGraphFunctions]: MemoryHubGraphFunctions[M];
+} & {
+    memoryHubUnderstand(
+        params: UnderstandingRequest,
+    ): Promise<UnderstandingResult>;
+    memoryHubUnderstandingModule(
+        params: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult>;
+    memoryHubCancelUnderstanding(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean>;
     memoryHubViewUsedBy(
         params: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage>;
@@ -385,6 +436,12 @@ export type ViewCancelResult = {
 
 export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
+    "memoryHubUnderstand",
+    "memoryHubUnderstandingModule",
+    "memoryHubCancelUnderstanding",
+    "memoryHubGraph",
+    "memoryHubGraphSupport",
+    "memoryHubGraphEvent",
     "memoryHubViewUsedBy",
     "memoryHubSourceOriginal",
     "memoryHubStartRunbookImport",
@@ -406,6 +463,24 @@ export const viewMethods = [
     "memoryQueryTopics",
     "memoryRebuildTopics",
     "memoryListViews",
+    "memoryListViewSummaries",
+    "memoryListViewBuildSummaries",
+    "memoryGetViewPublications",
+    "memoryListQuestions",
+    "memoryListQuestionSummaries",
+    "memoryGetQuestion",
+    "memoryGetKnowledgeStatus",
+    "memoryUpdateKnowledgeDiscovery",
+    "memoryCreateKnowledgeCheckpoint",
+    "memoryGetKnowledgeCheckpoint",
+    "memoryWaitForKnowledgeCheckpoint",
+    "memoryListAcquisitions",
+    "memoryRunAcquisitions",
+    "memoryCancelAcquisition",
+    "memoryEditQuestion",
+    "memoryGetViewPage",
+    "memoryProposeSchemaView",
+    "memoryDiscoverSchemaQuestions",
     "memoryGetView",
     "memorySaveViewDraft",
     "memoryArchiveView",
@@ -425,6 +500,8 @@ export const viewMethods = [
     "memoryListViewBuilds",
     "memoryCancelViewBuild",
     "memoryRetryViewBuild",
+    "memoryContinueViewBuild",
+    "memoryRefreshExtensionViews",
     "memoryGetViewConflict",
     "memoryResolveViewConflict",
     "memoryListCorpora",

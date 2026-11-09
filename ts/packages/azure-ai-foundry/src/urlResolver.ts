@@ -101,7 +101,7 @@ async function ensureResolverAgent(
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(project, {
-        model: "gpt-4.1",
+        model: "gpt-6-luna",
         name: "TypeAgent-URLResolverAgent",
         description: "Auto created URL Resolution Agent",
         temperature: 0.01,
@@ -131,7 +131,7 @@ async function ensureValidatorAgent(
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(project, {
-        model: "gpt-4.1",
+        model: "gpt-6-luna",
         name: "TypeAgent-URLValidatorAgent",
         description: "Auto created URL Validation Agent",
         temperature: 0.01,

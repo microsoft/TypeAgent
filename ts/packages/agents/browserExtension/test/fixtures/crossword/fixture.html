@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wordwork | Crossword 2</title>
+    <link rel="stylesheet" href="/exolve-m.css" />
+    <script src="/exolve-m.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        color: #202923;
+        background: #f7f9f8;
+        font-family: Georgia, serif;
+      }
+      header {
+        border-bottom: 1px solid #becdc8;
+        padding: 18px 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+      }
+      header strong {
+        font-size: 22px;
+      }
+      header span {
+        color: #536c64;
+        font-size: 15px;
+      }
+      main {
+        max-width: 1080px;
+        margin: auto;
+        padding: 8px 20px 100px;
+      }
+      .xlv-frame {
+        max-width: 100%;
+      }
+      .xlv-title {
+        font-size: 28px;
+      }
+      @media (max-width: 600px) {
+        header {
+          padding: 14px;
+          flex-wrap: wrap;
+        }
+        main {
+          padding: 8px 8px 100px;
+        }
+        .xlv-title-setter,
+        .xlv-grid-and-clues-flex,
+        .xlv-grid-panel,
+        .xlv-grid-parent-centerer {
+          min-width: 0 !important;
+          width: 100% !important;
+        }
+        .xlv-grid-and-clues-flex {
+          flex-direction: column;
+        }
+        .xlv-frame div {
+          max-width: 100% !important;
+          box-sizing: border-box;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>The Wordwork Desk</strong
+      ><span>Wednesday, October 14 · No. 2</span>
+    </header>
+    <main><div id="exolve"></div></main>
+    <script>
+      createExolve(__PUZZLE_TEXT__, "exolve", false);
+    </script>
+  </body>
+</html>

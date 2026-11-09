@@ -2,11 +2,12 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath } from "node:fs/promises";
+import { cp, mkdtemp, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import {
     assertCheckpoint,
     checkpointExpectationHash,
@@ -28,23 +29,47 @@ import {
     executeMemoryCase,
     judgePrompt,
     officialJudgeTemplates,
+    preflightRetainedKnowledge,
 } from "./longmemeval-runner.mjs";
+import {
+    finishIndexingCase,
+    measureIndexingCase,
+    startIndexingCase,
+} from "./longmemeval-indexing-lifecycle.mjs";
+import {
+    assertPilotProviderConfiguration,
+    indexingTreatments,
+} from "./longmemeval-indexing-contract.mjs";
 
 const datasetSha256 =
     "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442";
 const datasetRevision = "98d7416c24c778c2fee6e6f3006e7a073259d48f";
-const workAllowanceMs = 35 * 60 * 1000;
 const cleanupReserveMs = 5 * 60 * 1000;
+const maximumWorkMinutes = 360;
+const workAllowanceMs = maximumWorkMinutes * 60000 + cleanupReserveMs;
 const seed = "typeagent-longmemeval-full-2026-10-20";
 const productFactory =
     "packages\\agentServer\\server\\dist\\durableMemoryService.js";
 
-export async function createBenchmarkMemoryService(load, rootDirectory) {
+export async function createBenchmarkMemoryService(
+    load,
+    rootDirectory,
+    onReceipt,
+) {
     const { createDurableMemoryService } = await load(productFactory);
+    if (onReceipt) return createDurableMemoryService(rootDirectory, onReceipt);
     return createDurableMemoryService(rootDirectory);
 }
 
-export function recordBenchmarkArm(state, capabilities, resume) {
+export async function createRetainedKnowledgeReader(load, rootDirectory) {
+    const { TypedViewStore } = await load(
+        "packages\\memory\\service\\dist\\viewStore.js",
+    );
+    const store = new TypedViewStore(rootDirectory);
+    return (corpusId) => store.getKnowledgeState(corpusId);
+}
+
+export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
     const arm = {
         name: "TypeAgent production document-backed conversation memory",
         productFactory,
@@ -53,10 +78,37 @@ export function recordBenchmarkArm(state, capabilities, resume) {
         ),
         ingestion:
             "One Markdown source per original session position; dates, roles and turn text preserved",
+        topicCuration: {
+            inputTokenTarget:
+                process.env.TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS ?? null,
+            concurrency: process.env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY ?? null,
+            priorContextFraction:
+                process.env.TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION ?? null,
+        },
+        wikiAssessmentConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY ?? 1,
+        ),
+        maintenanceBuildConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY ?? 1,
+        ),
+        nativeTimingEnabled: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
+        questionViewInputAdmission: "configured-complete-request-v1",
         answerMode: "default",
+        preparedIndexing:
+            process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
+        indexingParallel: (process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
+            .split(",")
+            .some((name) => name.trim() === "indexing-parallel"),
+        indexingTreatments: indexingTreatments(),
+        searchTrace: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
+        indexingLifecycle: options.indexingPilot === true,
+        caseStoreIsolation: options.indexingPilot
+            ? "fresh-store-per-case"
+            : "shared-run-store",
         readerProvenance:
             "Opt-in public diagnostics identify actual indexed reader fragments and selection; citations identify supplied evidence, not independent entailment.",
         answerLimit: "product-default",
+        knowledgeTimeoutMs: state.knowledgeTimeoutMs ?? 600000,
         preliminarySearch: false,
         readerDate:
             "Original question date supplied to retrieval and reader as temporal metadata",
@@ -67,6 +119,9 @@ export function recordBenchmarkArm(state, capabilities, resume) {
         informationalViews:
             capabilities.derivedViews?.informationalWiki === true,
         viewDrafts: capabilities.derivedViews?.drafts === true,
+        knowledgeReadiness: capabilities.derivedViews?.knowledge === true,
+        integratedAnswering:
+            capabilities.derivedViews?.integratedAnswering === true,
     };
     if (resume)
         assert.deepEqual(
@@ -102,7 +157,47 @@ function validateBenchmarkSpec(spec) {
                 spec.workAllowanceMs <= workAllowanceMs),
     );
     assert.equal(spec.totalAllowanceMs, spec.workAllowanceMs);
+    assert.ok(
+        Number.isSafeInteger(spec.knowledgeTimeoutMs ?? 600000) &&
+            (spec.knowledgeTimeoutMs ?? 600000) >= 60000 &&
+            (spec.knowledgeTimeoutMs ?? 600000) <= 3600000,
+        "Knowledge readiness timeout must be between one and sixty minutes",
+    );
     assert.equal(typeof spec.resume, "boolean");
+    if (spec.indexingPilot) {
+        assert.equal(
+            spec.resume,
+            false,
+            "Pilot arms require fresh case stores",
+        );
+        assert.ok(
+            !spec.continuation,
+            "Pilot arms do not permit warm continuations",
+        );
+        assert.ok(
+            spec.questionIds?.length === 3 ||
+                (["indexing-parallel", "indexing-ablation"].includes(
+                    spec.indexingComparison,
+                ) &&
+                    spec.questionIds?.length === 1),
+            "Indexing pilot requires three questions, or one complete parallel-comparison history",
+        );
+        assert.match(spec.expectedConfigurationHash ?? "", /^[a-f0-9]{64}$/);
+        assert.match(spec.expectedDependencyHash ?? "", /^[a-f0-9]{64}$/);
+        assert.match(
+            spec.expectedEmbeddingConfigurationHash ?? "",
+            /^[a-f0-9]{64}$/,
+        );
+        assert.match(
+            spec.expectedRuntimeConfigurationHash ?? "",
+            /^[a-f0-9]{64}$/,
+        );
+    }
+    if (spec.continuation) {
+        assert.equal(spec.resume, false, "Continuation requires a fresh run");
+        assert.ok(path.isAbsolute(spec.continuation.parentRunDirectory));
+        assert.match(spec.continuation.parentStateSha256, /^[a-f0-9]{64}$/);
+    }
     assert.ok(
         Number.isSafeInteger(spec.maximumCompletedQuestions) &&
             spec.maximumCompletedQuestions > 0 &&
@@ -123,10 +218,21 @@ export function benchmarkInvocationAllowance(value) {
     if (value === "unlimited") return null;
     const minutes = Number(value);
     assert.ok(
-        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 30,
-        "Invocation work minutes must be an integer from 1 to 30, or unlimited",
+        Number.isSafeInteger(minutes) &&
+            minutes >= 1 &&
+            minutes <= maximumWorkMinutes,
+        `Invocation work minutes must be an integer from 1 to ${maximumWorkMinutes}, or unlimited`,
     );
     return minutes * 60000 + cleanupReserveMs;
+}
+
+export function benchmarkKnowledgeTimeout(value) {
+    const minutes = Number(value);
+    assert.ok(
+        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 60,
+        "Knowledge readiness minutes must be an integer from 1 to 60",
+    );
+    return minutes * 60000;
 }
 
 export async function acknowledgeStopAfterQuestion(
@@ -161,6 +267,11 @@ export async function acknowledgeStopAfterQuestion(
 export function benchmarkFailure(error) {
     return {
         ...safeFailure(error),
+        ...(error?.code === "EREPLAYNONDETERMINISTIC"
+            ? { category: "REPLAY_CAPTURE_INCONSISTENT_OUTPUT" }
+            : error?.code === "EREPLAYMISS"
+              ? { category: "REPLAY_INPUT_NOT_CAPTURED" }
+              : {}),
         ...(/^E[A-Z0-9_]+$/.test(error?.code ?? "")
             ? { code: error.code }
             : {}),
@@ -177,10 +288,44 @@ export function benchmarkFailure(error) {
     };
 }
 
-async function engineIdentity() {
+export function recordBenchmarkAttemptFailure(
+    state,
+    attempt,
+    error,
+    signal,
+    activeQuestionId,
+) {
+    const bounded = signal.aborted || error.name === "TimeoutError";
+    state.outcome = bounded ? "PARTIAL_BOUNDED_WORK" : "FAILED_REAL_BENCHMARK";
+    attempt.error = benchmarkFailure(error);
+    const record =
+        activeQuestionId === undefined
+            ? undefined
+            : state.cases[activeQuestionId];
+    if (record && record.status !== "complete") {
+        record.status = bounded ? "interrupted" : "failed";
+        record.error = benchmarkFailure(error);
+    }
+}
+
+export function createBenchmarkStateWriter(file, state, write = writeJson) {
+    let tail = Promise.resolve();
+    return () => {
+        const snapshot = structuredClone(state);
+        tail = tail.then(() => write(file, snapshot));
+        return tail;
+    };
+}
+
+export async function engineIdentity(
+    readSource = (file) => readFile(new URL(file, import.meta.url)),
+) {
     const files = [
         "longmemeval-live.mjs",
+        "longmemeval-indexing-lifecycle.mjs",
+        "longmemeval-indexing-contract.mjs",
         "longmemeval-runner.mjs",
+        "knowledge-observer.mjs",
         "quality-adapters.mjs",
         "live-resume.mjs",
     ];
@@ -189,14 +334,14 @@ async function engineIdentity() {
             await Promise.all(
                 files.map(async (file) => [
                     file,
-                    digest(await readFile(new URL(file, import.meta.url))),
+                    digest(await readSource(file)),
                 ]),
             ),
         ),
     );
 }
 
-async function loadPrepared(spec) {
+export async function loadPrepared(spec) {
     const bytes = await readFile(spec.datasetPath);
     assert.equal(
         digest(bytes),
@@ -229,6 +374,15 @@ export function benchmarkConfiguration(settings) {
     };
 }
 
+export function benchmarkProviderConfiguration(client) {
+    return {
+        ...benchmarkConfiguration(client.openai.getChatModelSettings()),
+        poolMembers: client.openai
+            .getChatModelPool()
+            .members.map(({ settings }) => benchmarkConfiguration(settings)),
+    };
+}
+
 export function observedJudgeModel(events, firstRequest) {
     const model = events
         .slice(firstRequest)
@@ -243,18 +397,26 @@ export async function closeBenchmarkService(
     attempt,
     persist,
     failure,
+    restoreObserver = () => {},
 ) {
     attempt.outcome = state.outcome;
     attempt.closeStartedEpochMs = Date.now();
-    await persist();
     try {
-        await service.close();
-        attempt.supportedClose = "COMPLETE";
-    } catch (error) {
-        attempt.supportedClose = failure(error);
-        state.outcome = "FAILED_SUPPORTED_CLOSE";
+        try {
+            await persist();
+        } finally {
+            try {
+                await service.close();
+                attempt.supportedClose = "COMPLETE";
+            } catch (error) {
+                attempt.supportedClose = failure(error);
+                state.outcome = "FAILED_SUPPORTED_CLOSE";
+            }
+        }
+        await persist();
+    } finally {
+        restoreObserver();
     }
-    await persist();
 }
 
 export function selectConstructionCases(construction, selection) {
@@ -290,28 +452,166 @@ function completedOutcome(constructionCases, state, selection) {
         : "DIAGNOSTIC_SELECTION_COMPLETED";
 }
 
-async function runWorker(spec) {
-    const prepared = await loadPrepared(spec);
+export function recordKnowledgeAllowance(state, timeoutMs = 600000) {
+    assert.equal(
+        state.knowledgeTimeoutMs ?? 600000,
+        timeoutMs,
+        "Knowledge readiness allowance changed",
+    );
+    state.knowledgeTimeoutMs = timeoutMs;
+}
+
+export function continuedBenchmarkState(
+    prior,
+    runId,
+    timeoutMs,
+    engineHash,
+    origin,
+) {
+    assert.equal(
+        prior.outcome,
+        "PARTIAL_BOUNDED_WORK",
+        "Only a bounded interruption can seed a continuation",
+    );
+    benchmarkKnowledgeTimeout(String(timeoutMs / 60000));
+    assert.ok(
+        timeoutMs > (prior.knowledgeTimeoutMs ?? 600000),
+        "Continuation requires an explicitly larger readiness allowance",
+    );
+    const state = structuredClone(prior);
+    for (const record of Object.values(state.cases)) {
+        assert.equal(
+            record.status,
+            "interrupted",
+            "Continuation requires interrupted, unscored cases",
+        );
+        assert.ok(!record.hypothesis, "Do not discard an existing hypothesis");
+        delete record.knowledgeCheckpoint;
+        delete record.error;
+    }
+    state.runId = runId;
+    state.knowledgeTimeoutMs = timeoutMs;
+    if (state.arm) state.arm.knowledgeTimeoutMs = timeoutMs;
+    state.engineHash = engineHash;
+    state.providerRequests = [];
+    state.roleCalls = [];
+    state.attempts = [];
+    state.outcome = "IN_PROGRESS";
+    state.continuation = {
+        ...origin,
+        parentRunId: prior.runId,
+        previousKnowledgeTimeoutMs: prior.knowledgeTimeoutMs ?? 600000,
+        knowledgeTimeoutMs: timeoutMs,
+        reusedCompletedImports: Object.values(prior.cases).reduce(
+            (count, record) => count + record.operations.length,
+            0,
+        ),
+        timingScope:
+            "Warm continuation; parent ingestion and maintenance latency excluded",
+    };
+    delete state.scorecard;
+    delete state.stopAfterQuestion;
+    return state;
+}
+
+async function prepareContinuation(parent, spec) {
+    const parentRunDirectory = await realpath(parent);
+    return withLiveRunLock(parentRunDirectory, async () => {
+        const termination = JSON.parse(
+            await readFile(
+                path.join(parentRunDirectory, "termination.json"),
+                "utf8",
+            ),
+        );
+        const owner = JSON.parse(
+            await readFile(
+                path.join(parentRunDirectory, "ownership.json"),
+                "utf8",
+            ),
+        );
+        assert.equal(termination.receiptId, owner.receiptId);
+        assert.equal(termination.workerExited, true);
+        assert.equal(
+            alive(termination.workerPid),
+            false,
+            "Parent worker is still present",
+        );
+        assert.equal(
+            alive(termination.watchdogPid),
+            false,
+            "Parent watchdog is still present",
+        );
+        const bytes = await readFile(
+            path.join(parentRunDirectory, "benchmark-state.json"),
+        );
+        const prior = JSON.parse(bytes.toString("utf8"));
+        assert.equal(prior.runId, owner.receiptId);
+        const origin = { parentRunDirectory, parentStateSha256: digest(bytes) };
+        const state = continuedBenchmarkState(
+            prior,
+            spec.receiptId,
+            spec.knowledgeTimeoutMs,
+            await engineIdentity(),
+            origin,
+        );
+        assert.equal(
+            state.compiledDigest,
+            digest(JSON.stringify(spec.expectedCheckpoint.hashes)),
+            "Production build changed before continuation",
+        );
+        assert.deepEqual(
+            state.questionIds ?? null,
+            spec.questionIds ?? null,
+            "Continuation selection changed",
+        );
+        assert.deepEqual(
+            state.dependencies,
+            await liveDependencyCheckpoint(spec.productRoot),
+            "Model/config dependencies changed before continuation",
+        );
+        await cp(
+            path.join(parentRunDirectory, "isolated-store"),
+            path.join(spec.runDirectory, "isolated-store"),
+            {
+                recursive: true,
+                force: false,
+                errorOnExist: true,
+            },
+        );
+        await writeJson(
+            path.join(spec.runDirectory, "benchmark-state.json"),
+            state,
+        );
+        await writeJson(
+            path.join(spec.runDirectory, "continuation-origin.json"),
+            state.continuation,
+        );
+        return origin;
+    });
+}
+
+async function loadBenchmarkWorkerState(spec, manifestHash) {
     const selection = spec.questionIds;
-    const constructionCases = selectConstructionCases(
-        prepared.construction,
-        selection,
-    );
-    const templates = officialJudgeTemplates(
-        await readFile(spec.judgeSourcePath, "utf8"),
-    );
     const hashes = await benchmarkCheckpoint(spec.productRoot);
     assertCheckpoint(hashes, spec.expectedCheckpoint);
     const compiledDigest = digest(JSON.stringify(hashes));
     const dependencies = await liveDependencyCheckpoint(spec.productRoot);
+    if (spec.expectedDependencyHash)
+        assert.equal(
+            digest(JSON.stringify(dependencies)),
+            spec.expectedDependencyHash,
+            "Approved dependencies changed",
+        );
     const engineHash = await engineIdentity();
     const statePath = path.join(spec.runDirectory, "benchmark-state.json");
-    const state = spec.resume
+    const seeded = spec.resume || !!spec.continuation;
+    const state = seeded
         ? JSON.parse(await readFile(statePath, "utf8"))
         : {
               runId: spec.receiptId,
-              manifestHash: prepared.manifest.sha256,
+              manifestHash,
               compiledDigest,
+              knowledgeTimeoutMs: spec.knowledgeTimeoutMs,
               dependencies,
               engineHash,
               questionIds: selection ?? null,
@@ -321,6 +621,7 @@ async function runWorker(spec) {
               attempts: [],
           };
     assert.equal(state.runId, spec.receiptId);
+    recordKnowledgeAllowance(state, spec.knowledgeTimeoutMs);
     assert.deepEqual(
         state.questionIds ?? null,
         selection ?? null,
@@ -328,7 +629,7 @@ async function runWorker(spec) {
     );
     assert.equal(
         state.manifestHash,
-        prepared.manifest.sha256,
+        manifestHash,
         "Dataset or construction plan changed",
     );
     assert.equal(
@@ -346,7 +647,22 @@ async function runWorker(spec) {
         engineHash,
         "Benchmark implementation changed",
     );
-    const persist = () => writeJson(statePath, state);
+    return { state, statePath, seeded, compiledDigest };
+}
+
+async function runWorker(spec) {
+    const prepared = await loadPrepared(spec);
+    const selection = spec.questionIds;
+    const constructionCases = selectConstructionCases(
+        prepared.construction,
+        selection,
+    );
+    const templates = officialJudgeTemplates(
+        await readFile(spec.judgeSourcePath, "utf8"),
+    );
+    const { state, statePath, seeded, compiledDigest } =
+        await loadBenchmarkWorkerState(spec, prepared.manifest.sha256);
+    const persist = createBenchmarkStateWriter(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -373,9 +689,9 @@ async function runWorker(spec) {
     const client = await load("packages\\aiclient\\dist\\index.js");
     config.loadConfigSync();
     client.initRuntimeConfigFromProcessEnv();
-    const settings = client.openai.getChatModelSettings();
-    const configuration = benchmarkConfiguration(settings);
-    if (spec.resume)
+    const configuration = benchmarkProviderConfiguration(client);
+    assertPilotProviderConfiguration(spec, client, config, configuration);
+    if (seeded)
         assert.deepEqual(
             state.configuration,
             configuration,
@@ -397,11 +713,28 @@ async function runWorker(spec) {
                   Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
               );
     let role = "benchmark-startup";
-    const restoreObserver = observeProvider(state.providerRequests, () => role);
-    const service = await createBenchmarkMemoryService(
-        load,
-        path.join(spec.runDirectory, "isolated-store"),
+    const { currentSearchTraceId } = await load(
+        "packages\\knowPro\\dist\\index.js",
     );
+    const restoreObserver = observeProvider(
+        state.providerRequests,
+        () => role,
+        currentSearchTraceId,
+    );
+    let serviceStore = path.join(spec.runDirectory, "isolated-store");
+    const openService = (root) =>
+        createBenchmarkMemoryService(load, root, (receipt) =>
+            appendFileSync(
+                path.join(spec.runDirectory, "topic-operations.jsonl"),
+                `${JSON.stringify({
+                    ...receipt,
+                    timestamp: new Date().toISOString(),
+                    role,
+                })}\n`,
+                { encoding: "utf8", flag: "a" },
+            ),
+        );
+    let service = await openService(serviceStore);
     const judge = async (reference, hypothesis, abortSignal) => {
         const firstRequest = state.providerRequests.length;
         const result = await model.complete(
@@ -420,9 +753,28 @@ async function runWorker(spec) {
         const actual = observedJudgeModel(state.providerRequests, firstRequest);
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
+    let activeQuestionId;
     try {
+        if (Object.values(state.cases).some((record) => record?.corpusId)) {
+            const readRetainedKnowledgeStatus =
+                await createRetainedKnowledgeReader(
+                    load,
+                    path.join(spec.runDirectory, "isolated-store"),
+                );
+            await preflightRetainedKnowledge(service, state.cases, {
+                persist,
+                signal,
+                failure: benchmarkFailure,
+                readRetainedKnowledgeStatus,
+            });
+        }
         await service.initialize();
-        recordBenchmarkArm(state, await service.getCapabilities(), spec.resume);
+        recordBenchmarkArm(
+            state,
+            await service.getCapabilities(),
+            seeded,
+            spec,
+        );
         await persist();
         const admittedEpochMs = Date.now();
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
@@ -449,6 +801,7 @@ async function runWorker(spec) {
         );
         let completedThisBatch = 0;
         for (const construction of constructionCases) {
+            activeQuestionId = undefined;
             signal.throwIfAborted();
             if (
                 await acknowledgeStopAfterQuestion(
@@ -466,6 +819,16 @@ async function runWorker(spec) {
                 "A real benchmark failure requires review before retry",
             );
             state.currentQuestionId = id;
+            activeQuestionId = id;
+            role = `case-startup:${id}`;
+            const isolated = await startIndexingCase(service, {
+                enabled: spec.indexingPilot,
+                store: serviceStore,
+                runDirectory: spec.runDirectory,
+                open: openService,
+            });
+            service = isolated.service;
+            serviceStore = isolated.store;
             const name = `LongMemEval ${state.runId} ${id}`;
             const matches = (await service.listCorpora()).filter(
                 (corpus) => corpus.name === name,
@@ -480,24 +843,38 @@ async function runWorker(spec) {
                 status: "ingesting",
                 operations: [],
                 mappings: {},
+                storeDirectory: path.relative(spec.runDirectory, serviceStore),
             });
             await persist();
-            await executeMemoryCase(
-                service,
-                construction,
-                readers.get(id),
-                references.get(id),
-                record,
-                {
-                    persist,
-                    signal,
-                    waitForMemoryJob,
-                    judge,
-                    role: (value) => {
-                        role = value;
+            await measureIndexingCase(record, spec.indexingPilot, () =>
+                executeMemoryCase(
+                    service,
+                    construction,
+                    readers.get(id),
+                    references.get(id),
+                    record,
+                    {
+                        persist,
+                        signal,
+                        waitForMemoryJob,
+                        judge,
+                        role: (value) => {
+                            role = value;
+                        },
+                        knowledgeTimeoutMs: state.knowledgeTimeoutMs,
                     },
-                },
+                ),
             );
+            service = await finishIndexingCase(service, {
+                enabled: spec.indexingPilot,
+                store: serviceStore,
+                runDirectory: spec.runDirectory,
+                open: openService,
+                record,
+                question: readers.get(id).question,
+                signal,
+                persist,
+            });
             if (
                 await acknowledgeStopAfterQuestion(
                     spec.runDirectory,
@@ -510,16 +887,13 @@ async function runWorker(spec) {
         }
         state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
-        const bounded = signal.aborted || error.name === "TimeoutError";
-        state.outcome = bounded
-            ? "PARTIAL_BOUNDED_WORK"
-            : "FAILED_REAL_BENCHMARK";
-        attempt.error = benchmarkFailure(error);
-        const record = state.cases[state.currentQuestionId];
-        if (record && record.status !== "complete") {
-            record.status = bounded ? "interrupted" : "failed";
-            record.error = benchmarkFailure(error);
-        }
+        recordBenchmarkAttemptFailure(
+            state,
+            attempt,
+            error,
+            signal,
+            activeQuestionId,
+        );
     } finally {
         state.scorecard = benchmarkScorecard(
             prepared,
@@ -532,8 +906,8 @@ async function runWorker(spec) {
             attempt,
             persist,
             safeFailure,
+            restoreObserver,
         );
-        restoreObserver();
         attempt.finishedEpochMs = Date.now();
         attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
         attempt.outcome = state.outcome;
@@ -577,11 +951,19 @@ export async function main(args = process.argv.slice(2)) {
             "judge-source": { type: "string" },
             output: { type: "string" },
             resume: { type: "string" },
+            "continue-from": { type: "string" },
             spec: { type: "string" },
             "authorized-live-benchmark": { type: "boolean" },
             "max-questions": { type: "string", default: "500" },
             "work-minutes": { type: "string", default: "30" },
             "question-ids": { type: "string" },
+            "knowledge-minutes": { type: "string", default: "10" },
+            "indexing-pilot": { type: "boolean" },
+            "indexing-comparison": { type: "string" },
+            "expected-configuration-hash": { type: "string" },
+            "expected-dependency-hash": { type: "string" },
+            "expected-embedding-configuration-hash": { type: "string" },
+            "expected-runtime-configuration-hash": { type: "string" },
         },
     });
     if (values.spec) {
@@ -599,6 +981,10 @@ export async function main(args = process.argv.slice(2)) {
         return;
     }
     assert.equal(values["authorized-live-benchmark"], true);
+    assert.ok(
+        !(values.resume && values["continue-from"]),
+        "Choose resume or continue-from, not both",
+    );
     const maximumCompletedQuestions = Number(values["max-questions"]);
     assert.ok(
         Number.isSafeInteger(maximumCompletedQuestions) &&
@@ -644,11 +1030,32 @@ export async function main(args = process.argv.slice(2)) {
         workAllowanceMs: invocationAllowanceMs,
         totalAllowanceMs: invocationAllowanceMs,
         maximumCompletedQuestions,
+        knowledgeTimeoutMs: benchmarkKnowledgeTimeout(
+            values["knowledge-minutes"],
+        ),
+        ...(values["indexing-pilot"]
+            ? {
+                  indexingPilot: true,
+                  indexingComparison: values["indexing-comparison"],
+                  expectedConfigurationHash:
+                      values["expected-configuration-hash"],
+                  expectedDependencyHash: values["expected-dependency-hash"],
+                  expectedEmbeddingConfigurationHash:
+                      values["expected-embedding-configuration-hash"],
+                  expectedRuntimeConfigurationHash:
+                      values["expected-runtime-configuration-hash"],
+              }
+            : {}),
         ...(values["question-ids"] === undefined
             ? {}
             : { questionIds: values["question-ids"].split(",") }),
         resume: !!values.resume,
     };
+    if (values["continue-from"])
+        spec.continuation = await prepareContinuation(
+            values["continue-from"],
+            spec,
+        );
     const result = await withLiveRunLock(runDirectory, async () => {
         if (spec.resume) {
             const prior = JSON.parse(

@@ -5,6 +5,7 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
     classifyTranslationBenchAmbiguityAgreement,
+    TRANSLATION_BENCH_DEFAULT_AMBIGUITY_PROBE_MODELS,
     deterministicAmbiguityIssues,
     listTranslationBenchAmbiguityProbeTargets,
     parseTranslationBenchAmbiguityJudgeDecision,
@@ -92,6 +93,13 @@ const catalog = [
 ] as unknown as TranslationBenchBenchmarkSchema[];
 
 describe("translation bench ambiguity probe classification", () => {
+    it("uses current Sol, Terra, and Luna for default quality probes", () => {
+        expect(TRANSLATION_BENCH_DEFAULT_AMBIGUITY_PROBE_MODELS).toEqual([
+            "gpt-6.1-sol",
+            "gpt-6.1-terra",
+            "gpt-6-luna",
+        ]);
+    });
     it("classifies unanimous gold / other / split / all_errors", () => {
         const gold = candidate.seed.expectedActions;
         expect(

@@ -2,6 +2,14 @@
 // Licensed under the MIT License.
 
 import type { WikiIndexEntry, WikiPage } from "./viewTypes.js";
+import { createHash } from "node:crypto";
+import { canonicalizeProcedure } from "./agentEdition.js";
+
+export function viewHash(value: unknown): string {
+    return createHash("sha256")
+        .update(canonicalizeProcedure(value ?? null))
+        .digest("hex");
+}
 
 export function wikiIndex(pages: WikiPage[]): WikiIndexEntry[] {
     return pages.map((page) => ({

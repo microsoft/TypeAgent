@@ -58,6 +58,7 @@ export interface GraphologyLayoutOptions {
     noverlapIterations?: number;
     targetViewportSize?: number;
     skipEdgeFiltering?: boolean;
+    preserveIsolatedNodes?: boolean;
 }
 
 const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
@@ -68,6 +69,7 @@ const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
     noverlapIterations: 1000,
     targetViewportSize: 2000,
     skipEdgeFiltering: false,
+    preserveIsolatedNodes: false,
 };
 
 const COMMUNITY_COLORS = [
@@ -230,7 +232,7 @@ export function buildGraphologyGraph(
         }
     }
 
-    if (isolatedNodes.length > 0) {
+    if (!opts.preserveIsolatedNodes && isolatedNodes.length > 0) {
         debug(`Removing ${isolatedNodes.length} isolated nodes (no edges)`);
         for (const node of isolatedNodes) {
             graph.dropNode(node);

@@ -3,6 +3,7 @@
 
 import { CompletionUsageStats } from "./apiTypes.js";
 import registerDebug from "debug";
+import { createRequire } from "node:module";
 
 const debugTokens = registerDebug("typeagent:tokenCounter");
 
@@ -160,4 +161,13 @@ export class TokenCounter {
     public get counters(): Map<string, TokenStats> {
         return this._counters;
     }
+}
+const require = createRequire(import.meta.url);
+let o200k: typeof import("gpt-tokenizer/encoding/o200k_base") | undefined;
+
+export function countO200kTokens(text: string): number {
+    // Keep the experimental encoder off ordinary chat startup.
+    const tokenizer: typeof import("gpt-tokenizer/encoding/o200k_base") =
+        (o200k ??= require("gpt-tokenizer/encoding/o200k_base"));
+    return tokenizer.encode(text).length;
 }

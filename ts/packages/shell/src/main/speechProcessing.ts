@@ -49,7 +49,7 @@ Only classify statements as questions or requests if they are complete statement
         const apiSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
-            "GPT_5_NANO",
+            "GPT_6_LUNA",
         );
         this.model = openai.createChatModel(
             apiSettings,

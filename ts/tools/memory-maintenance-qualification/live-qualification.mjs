@@ -153,19 +153,22 @@ export function safeFailure(error) {
     ];
     return {
         name: error?.name ?? "Error",
-        category: allowed.includes(message)
-            ? message
-            : /401|403|credential|authentication/i.test(message)
-              ? "CONFIGURED_AUTHENTICATION_FAILURE"
-              : /429|throttl/i.test(message)
-                ? "CONFIGURED_PROVIDER_THROTTLE"
-                : /endpoint|deployment|settings|configuration|config|provider/i.test(
-                        message,
-                    )
-                  ? "CONFIGURED_ROLE_OR_TRANSPORT_UNAVAILABLE"
-                  : /timeout|abort/i.test(message)
-                    ? "BOUNDED_OPERATION_CANCELLED"
-                    : "UNEXPECTED_FAILURE",
+        category:
+            error?.code === "EKNOWLEDGENOTREADY"
+                ? "KNOWLEDGE_NOT_READY"
+                : allowed.includes(message)
+                  ? message
+                  : /401|403|credential|authentication/i.test(message)
+                    ? "CONFIGURED_AUTHENTICATION_FAILURE"
+                    : /429|throttl/i.test(message)
+                      ? "CONFIGURED_PROVIDER_THROTTLE"
+                      : /endpoint|deployment|settings|configuration|config|provider/i.test(
+                              message,
+                          )
+                        ? "CONFIGURED_ROLE_OR_TRANSPORT_UNAVAILABLE"
+                        : /timeout|abort/i.test(message)
+                          ? "BOUNDED_OPERATION_CANCELLED"
+                          : "UNEXPECTED_FAILURE",
         rawProviderMessageSuppressed: true,
         ownedHarnessFrames: [
             ...(error?.stack ?? "").matchAll(

@@ -417,6 +417,10 @@ export class TextEmbeddingIndex {
         return this.embeddingIndex.size;
     }
 
+    public addPreparedEmbeddings(embeddings: NormalizedEmbedding[]): void {
+        this.embeddingIndex.push(embeddings);
+    }
+
     /**
      * True when an embedding model is available. When false, this index
      * silently no-ops indexing and returns no matches on lookup, allowing
