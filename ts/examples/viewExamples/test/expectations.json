@@ -1,0 +1,23 @@
+{
+  "custody": "Evaluator-only expectations for the original fictional fixture; never provider input",
+  "procedureId": "mock-connectivity",
+  "cases": [
+    {
+      "observations": ["green", "ready"],
+      "transitions": ["green", "page-ready"],
+      "path": ["check-link", "verify-page", "resolved"]
+    },
+    {
+      "observations": ["amber"],
+      "transitions": ["amber"],
+      "path": ["check-link", "escalate"]
+    },
+    {
+      "observations": ["green", "unknown"],
+      "transitions": ["green", "page-failed"],
+      "path": ["check-link", "verify-page", "escalate"]
+    }
+  ],
+  "unknownObservationStep": "verify-page",
+  "forbidden": ["factory reset", "password collection", "automatic execution"]
+}

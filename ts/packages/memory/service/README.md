@@ -448,8 +448,14 @@ Negotiation, CSP, renderer/resource byte ceilings and non-Apps text/citations
 remain on the existing preview stack.
 
 Native Views provides inventory, provider qualification, read-only detail and
-four fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
-`sources-v1`. Pinned routes use
+five fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
+`sources-v1` and `procedure-guide-v1`. The procedure template requires exactly
+the `guide`, `agent` and `evidence` layouts, with consistent `overview`,
+`options`, `rules`, `outcomes`, `gaps` and `technical` groups. Each layout
+must represent every readable claim exactly once, options must be nonempty,
+and the payload must include an object-valued `agentRepresentation`.
+Providers still own their bounded payload schema and semantic validation;
+the template grants neither execution nor source access. Pinned routes use
 `#/views/<corpus>/<view>/revision/<revision>/page/<claim>/layout/<layout>`.
 No model HTML, executable layouts or downloaded renderer code is accepted.
 

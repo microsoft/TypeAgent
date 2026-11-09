@@ -3,6 +3,7 @@
 
 import type { ViewCitation, ViewVersion } from "@typeagent/memory-service";
 import { rbButton, rbNode } from "./memoryHubDocumentUi";
+import { renderProcedureGuide } from "./memoryHubProcedureView";
 
 export function renderExtensionView(
     view: ViewVersion,
@@ -13,6 +14,14 @@ export function renderExtensionView(
     const root = rbNode("div", undefined, "hub-view-extension");
     if (view.content.kind !== "extension") return root;
     const content = view.content;
+    if (content.presentation.templateId === "procedure-guide-v1")
+        return renderProcedureGuide(
+            view,
+            content,
+            openSource,
+            initialLayoutId,
+            onLayoutChange,
+        );
     root.dataset.viewId = view.viewId;
     root.dataset.revisionId = view.revisionId;
     root.append(

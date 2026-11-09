@@ -1,0 +1,7 @@
+Support procedure v1. This deterministic provider accepts documented procedure-v1
+JSONL only; it does not extract procedures from arbitrary prose or execute steps.
+Retain each original record, unknown observations, and guarded branch conditions.
+Bind every readable block and payload record to exact retained UTF-16 source spans.
+Reject cycles, invalid endpoints, unreachable nodes, and missing escalation.
+Keep disagreeing source alternatives separate, with explicit opposition evidence.
+Do not choose a branch or resolve contradictory records on the user's behalf.
