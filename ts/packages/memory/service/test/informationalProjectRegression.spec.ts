@@ -260,6 +260,8 @@ test("controlled project qualifications survive hydration, unedited refresh merg
         ].join("\n"),
     );
     const hydrated = hydrateProjectSummary(input, raw);
+    expect(hydrated.content.sections[0].heading).toBe("Goals and Scope");
+    expect(hydrated.content.sections[0].role).toBe("goalsScope");
     expect(() =>
         validateInformationalProjectOutput(input, hydrated),
     ).not.toThrow();
@@ -272,6 +274,8 @@ test("controlled project qualifications survive hydration, unedited refresh merg
     expect(merged.conflicts).toEqual([]);
     expect(merged.output).toEqual(hydrated);
     const rendered = viewContentToText(merged.output.content);
+    expect(rendered).toContain("## Goals and Scope");
+    expect(rendered).not.toContain("## goalsScope");
     for (const role of [
         "goalsScope",
         "owners",
@@ -300,6 +304,24 @@ test("controlled project qualifications survive hydration, unedited refresh merg
         capacity: "pendingOwnerReview",
     });
 });
+
+test.each([
+    ["goalsScope", "Goals and Scope"],
+    ["Goals and Scope", "Goals and Scope"],
+    ["Goals", "Goals"],
+])(
+    "project text renders %s as %s without changing stored content",
+    (heading, expected) => {
+        const content = hydrateProjectSummary(
+            snapshot("Project evidence"),
+            candidate(),
+        ).content;
+        content.sections[0].heading = heading;
+        const stored = structuredClone(content);
+        expect(viewContentToText(content)).toContain(`## ${expected}\n`);
+        expect(content).toEqual(stored);
+    },
+);
 
 test.each(["revision", "excerpt", "locator"] as const)(
     "project output rejects a citation with changed %s",

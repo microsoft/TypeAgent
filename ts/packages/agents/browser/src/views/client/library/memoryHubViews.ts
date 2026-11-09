@@ -48,7 +48,10 @@ import { createTimelineEditor } from "./memoryHubTimeline";
 import { createWikiEditor } from "./memoryHubWiki";
 import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { createGuideEditor } from "./memoryHubGuide";
-import { viewContentToText } from "@typeagent/memory-service/view-text";
+import {
+    projectBriefSectionHeading,
+    viewContentToText,
+} from "@typeagent/memory-service/view-text";
 import { renderExtensionView } from "./memoryHubExtension";
 
 function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
@@ -465,6 +468,7 @@ export function mountMemoryHubViews(
             corpora.map(async ({ corpusId }) => {
                 const views = await invokeMemory("memoryListViewSummaries", {
                     ...pager.request(corpusId),
+                    includeDrafts: true,
                     ...(route
                         ? { viewId: route.viewId, pageSize: 1 }
                         : {
@@ -788,6 +792,7 @@ export function mountMemoryHubViews(
             corpusId: view.corpusId,
             viewId: view.viewId,
             pageSize: 1,
+            includeDrafts: true,
         });
         if (disposed || current !== sequence) return;
         revisionLabel.textContent =
@@ -806,6 +811,7 @@ export function mountMemoryHubViews(
                 corpusId: view.corpusId,
                 viewId: view.viewId,
                 pageSize: 1,
+                includeDrafts: true,
             }),
             invokeMemory("memoryListViewBuildSummaries", {
                 corpusId: view.corpusId,
@@ -2105,7 +2111,14 @@ export function mountMemoryHubViews(
                 view.content.sections.length > 1 ||
                 section.heading !== view.content.title
             )
-                page.append(rbNode("h3", section.heading));
+                page.append(
+                    rbNode(
+                        "h3",
+                        view.content.kind === "projectBrief"
+                            ? projectBriefSectionHeading(section.heading)
+                            : section.heading,
+                    ),
+                );
             page.append(rbMarkdown(section.body));
             if (view.content.kind === "timeline") {
                 const record = view.content.sections.find(

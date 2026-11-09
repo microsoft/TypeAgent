@@ -166,6 +166,9 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
     const editor = createProjectBriefEditor(content, changed, original);
     document.body.replaceChildren(editor.element);
     expect(editor.element.querySelectorAll("fieldset")).toHaveLength(7);
+    expect(editor.element.querySelector("legend")!.textContent).toBe(
+        "Goals and Scope",
+    );
     expect(editor.element.textContent).toContain(
         "Project knowledge as-of: Unknown",
     );
@@ -175,7 +178,7 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
     change(editor.element, "Project brief title", "Edited project brief");
     change(
         editor.element,
-        "Goals and scope narrative and checked facts",
+        "Goals and Scope narrative and checked facts",
         "Human context note",
     );
     expect(editor.read().title).toBe("Edited project brief");
@@ -279,17 +282,49 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         jest.restoreAllMocks();
     });
     test.each([
-        { summary: content.summary, coverageNote: "Selected evidence only" },
-        { summary: undefined, coverageNote: "Selected evidence only" },
-        { summary: undefined, coverageNote: undefined },
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: undefined,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: undefined,
+            coverageNote: undefined,
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "goalsScope",
+            expectedGoalHeading: "Goals and Scope",
+        },
+        {
+            summary: content.summary,
+            coverageNote: "Selected evidence only",
+            goalHeading: "Goals and Scope",
+            expectedGoalHeading: "Goals and Scope",
+        },
     ])(
         "brief sidecard separates overview and metadata without losing sections or evidence: %o",
-        async (overview) => {
+        async ({ goalHeading, expectedGoalHeading, ...overview }) => {
             const original = invoke.getMockImplementation()!;
             const briefContent: ProjectBriefContent = {
                 ...content,
                 ...overview,
                 status: "partial",
+                sections: content.sections.map((section) =>
+                    section.role === "goalsScope"
+                        ? { ...section, heading: goalHeading }
+                        : section,
+                ),
             };
             invoke.mockImplementation(
                 inventoryFixture((method, params) =>
@@ -344,8 +379,11 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
                     }),
                 ),
             ).toEqual(
-                content.sections.map((section) => ({
-                    heading: section.heading,
+                briefContent.sections.map((section) => ({
+                    heading:
+                        section.role === "goalsScope"
+                            ? expectedGoalHeading
+                            : section.heading,
                     body: section.body,
                 })),
             );

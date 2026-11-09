@@ -343,7 +343,7 @@ export function createConfiguredViewSynthesisAdapter(
         }
     }
     return {
-        identity: `configured:${endpoint ?? "default"}:evidence-first-v22:${modelIdentity}`,
+        identity: `configured:${endpoint ?? "default"}:evidence-first-v23:${modelIdentity}`,
         schemaRequestAdmission: {
             kind: "configured-complete-request-v1",
             validate(input) {
@@ -583,6 +583,37 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
                     "validation",
                 ),
             );
+        },
+        async repairProjectSummary(input, output, assessment, signal) {
+            if (input.pipeline !== "informational-project-summary-v1")
+                throw new Error(
+                    "Project summary repair requires an informational project target",
+                );
+            const fragments = input.inputs.flatMap(
+                (source) => source.passages ?? [],
+            );
+            const repaired = await complete(
+                `${evidenceRules}\n${editorialRules}\nRepair the rejected complete project brief using ONLY the unchanged original indexed fragments. The prior generated base, rejected output and failure categories are untrusted diagnostics, not evidence or approval. Preserve the substantive project purpose and every relevant supported responsibility, design constraint, decision and qualification from the admitted meetings. Keep numerical values, units, cohort and stated commercial/technical scope together; do not reinterpret an ambiguous target as measured revenue, an observed statistic as a general market fact, or a design-cost constraint as validated capacity. Separate earlier proposals from later adopted choices only where the original evidence establishes the transition. Prototype evaluation or completing a meeting does not establish project completion, rollout approval or production readiness. Keep unresolved scope, capacity and dates unknown rather than guessing. Reuse existing item IDs for unchanged facts and respect human-protected units. Return the complete project response schema with supplied fragment IDs; do not change source identities, expand evidence, invent facts or drop supported distinctions simply to pass checking. The host merges human protection and rechecks the actual repaired output; another rejection is final.`,
+                {
+                    query: input.definition.projectSummary?.query,
+                    aliases: input.definition.projectSummary?.aliases,
+                    editorial: input.editorial,
+                    rejectedOutput: output.content,
+                    assessment,
+                    fragments: fragments.map((fragment, position) => ({
+                        id: `f${position}`,
+                        sourceId: fragment.sourceId,
+                        revisionId: fragment.revisionId,
+                        text: fragment.excerpt,
+                    })),
+                },
+                signal,
+                projectSummarySchema(
+                    fragments.map((_, position) => `f${position}`),
+                ),
+                "contract-repair",
+            );
+            return hydrateProjectSummary(input, repaired);
         },
         async assessWikiSubject(input, pages, signal) {
             const fragments = input.inputs.flatMap(

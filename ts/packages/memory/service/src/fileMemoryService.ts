@@ -18155,6 +18155,11 @@ export class FileMemoryService
         request: ViewSummaryRequest,
     ): Promise<ViewSummaryPage> {
         validateInventoryPage(request);
+        if (
+            request.includeDrafts !== undefined &&
+            typeof request.includeDrafts !== "boolean"
+        )
+            throw new Error("View summary includeDrafts must be a boolean");
         const runtime = await this.requireViews(request.corpusId);
         return runtime.access.read(() =>
             this.viewStore.withInventorySnapshot(request.corpusId, async () => {
@@ -18163,7 +18168,11 @@ export class FileMemoryService
                 );
                 const eligible = await Promise.all(
                     snapshot.views.map((view) =>
-                        this.informationalVersionEligible(view, view),
+                        this.informationalVersionEligible(
+                            view,
+                            view,
+                            request.includeDrafts === true,
+                        ),
                     ),
                 );
                 const views = snapshot.views.filter(

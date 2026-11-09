@@ -1,8 +1,14 @@
 {
-  "name": "@typeagent/view-examples",
+  "name": "wiki-views",
   "version": "0.0.1",
   "private": true,
-  "description": "Source-grounded procedural memory-view pack and lifecycle example",
+  "description": "Informational wiki, project-brief and source-grounded procedural view examples",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/viewExamples"
+  },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
@@ -26,7 +32,8 @@
     "build": "npm run tsc",
     "postbuild": "copyfiles -u 1 \"src/procedural/*.txt\" \"src/procedural/*Schema.ts\" dist",
     "tsc": "tsc -b",
-    "clean": "rimraf --glob dist *.tsbuildinfo src/*.tsbuildinfo test/*.tsbuildinfo",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log src/*.tsbuildinfo test/*.tsbuildinfo",
+    "wiki-views": "node dist/cli.js",
     "start": "node dist/run.js",
     "live": "node dist/live.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
