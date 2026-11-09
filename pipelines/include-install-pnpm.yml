@@ -53,8 +53,8 @@ steps:
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
         storePath=$PNPM_STORE_PATH
       fi
-      pnpm config set store-dir "$storePath"
-      pnpm config set -g workspace-concurrency 0
+      pnpm config set store-dir "$storePath" --location project
+      pnpm config set workspace-concurrency 0 --location project
       echo "Using pnpm $(pnpm -v)"
       echo "Using pnpm store path $(pnpm store path)"
     displayName: Install and configure pnpm

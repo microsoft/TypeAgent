@@ -251,6 +251,8 @@ or external fork-approval controls. Both variants print task timings and a
 `smoke-build` stage observation. The shared pnpm bootstrap installs the exact
 `packageManager` version with standalone npm/pnpm and the authenticated project
 npmrc; it does not enable Corepack or change the disabled Azure store-cache policy.
+Store/concurrency settings are project-scoped so fresh hosted agents do not need
+a user-global pnpm bin directory or shell-profile changes.
 
 Queue both smoke variants at the same exact source SHA. Retrieve their build
 metadata and Azure task timelines using existing authorized tooling, then run:
