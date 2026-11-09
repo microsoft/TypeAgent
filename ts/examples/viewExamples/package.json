@@ -31,16 +31,16 @@
   "scripts": {
     "build": "npm run tsc",
     "postbuild": "copyfiles -u 1 \"src/procedural/*.txt\" \"src/procedural/*Schema.ts\" dist",
-    "tsc": "tsc -b",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log src/*.tsbuildinfo test/*.tsbuildinfo",
-    "wiki-views": "node dist/cli.js",
-    "start": "node dist/run.js",
-    "live": "node dist/live.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "live": "node dist/live.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore --ignore-path .gitignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore --ignore-path .gitignore",
+    "start": "node dist/run.js",
     "test": "npm run test:local",
     "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
-    "prettier": "prettier --check . --ignore-path ../../.prettierignore --ignore-path .gitignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore --ignore-path .gitignore"
+    "tsc": "tsc -b",
+    "wiki-views": "node dist/cli.js"
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
