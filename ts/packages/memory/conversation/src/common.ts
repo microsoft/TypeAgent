@@ -4,20 +4,25 @@
 import * as kpLib from "@typeagent/knowledge-processor";
 import * as kp from "@typeagent/knowpro";
 import * as ms from "@typeagent/memory-storage";
-import { tryCreateEmbeddingModel } from "@typeagent/aiclient";
+import {
+    embeddingIdentityKey,
+    getEmbeddingSize,
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import { IndexFileSettings, IndexingState } from "./memory.js";
 
 export function createEmbeddingModelWithCache(
     cacheSize: number,
     getCache?: () => kpLib.TextEmbeddingCache | undefined,
-    embeddingSize = 1536,
+    embeddingSize?: number,
 ): [kpLib.TextEmbeddingModelWithCache | undefined, number] {
     // May be undefined when no embedding provider is configured (e.g. Copilot
     // self-host without a local embedder). Memory then indexes/searches with
     // exact + alias + edit-distance matching and skips embedding-only features.
     const innerModel = tryCreateEmbeddingModel();
     if (innerModel === undefined) {
-        return [undefined, embeddingSize];
+        return [undefined, embeddingSize ?? getEmbeddingSize()];
     }
     const embeddingModel = kpLib.createEmbeddingCache(
         innerModel,
@@ -25,7 +30,120 @@ export function createEmbeddingModelWithCache(
         getCache,
     );
 
-    return [embeddingModel, embeddingSize];
+    return [
+        embeddingModel,
+        embeddingModel.embeddingIdentity?.dimensions ??
+            embeddingSize ??
+            getEmbeddingSize(),
+    ];
+}
+
+/**
+ * Synchronous factories can create settings before a local runtime is ready.
+ * Resolve each configured lane before it is used or its identity is persisted.
+ * Empty identities deliberately mean "unknown", never an attested default.
+ */
+export async function prepareConversationEmbeddings(
+    settings: kp.ConversationSettings,
+): Promise<kp.PersistedEmbeddingIdentities> {
+    return kp.prepareConversationEmbeddings(settings);
+}
+
+export async function writeMemoryDataToFile(
+    data: kp.IConversationDataWithIndexes,
+    settings: kp.ConversationSettings,
+    dirPath: string,
+    baseFileName: string,
+    segmented = false,
+): Promise<void> {
+    const identities = await prepareConversationEmbeddings(settings);
+    await kp.writeConversationDataToFile(
+        data,
+        dirPath,
+        baseFileName,
+        undefined,
+        Object.keys(identities).length > 0 ? identities : undefined,
+        segmented,
+    );
+}
+
+export function synchronizeEmbeddingIndexSettings(
+    conversation: kp.IConversation,
+    settings: kp.ConversationSettings,
+): void {
+    // TermEmbeddingIndex copies settings to pin its document lookup role.
+    // Keep that copy aligned when lazy resolution returns a new model.
+    const fuzzyIndex =
+        conversation.secondaryIndexes?.termToRelatedTermsIndex?.fuzzyIndex;
+    const configured = settings.relatedTermIndexSettings.embeddingIndexSettings;
+    if (fuzzyIndex instanceof kp.TermEmbeddingIndex && configured) {
+        fuzzyIndex.settings.embeddingModel = configured.embeddingModel;
+        fuzzyIndex.settings.embeddingSize = configured.embeddingSize;
+    }
+}
+
+export class ConversationEmbeddingState {
+    private key: string | undefined;
+    private models: (TextEmbeddingModel | undefined)[] | undefined;
+
+    public async prepare(
+        settings: kp.ConversationSettings,
+        conversation: kp.IConversation,
+        rebuilding: boolean = false,
+    ): Promise<kp.PersistedEmbeddingIdentities> {
+        const identities = await prepareConversationEmbeddings(settings);
+        const size =
+            settings.messageTextIndexSettings.embeddingIndexSettings
+                .embeddingSize;
+        const key = JSON.stringify([
+            size,
+            Object.entries(identities).map(([lane, identity]) => [
+                lane,
+                embeddingIdentityKey(identity),
+            ]),
+        ]);
+        const models = [
+            settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingModel,
+            settings.messageTextIndexSettings.embeddingIndexSettings
+                .embeddingModel,
+            settings.threadSettings.embeddingModel,
+        ];
+        const previousModels = this.models;
+        const unknownModelChanged =
+            Object.keys(identities).length === 0 &&
+            previousModels !== undefined &&
+            models.some((model, index) => model !== previousModels[index]);
+        if (
+            !rebuilding &&
+            ((this.key !== undefined && this.key !== key) ||
+                unknownModelChanged)
+        ) {
+            throw new Error(
+                "Embedding model changed. Rebuild all embeddings before indexing, saving, or searching this memory.",
+            );
+        }
+        this.key = key;
+        this.models = models;
+        synchronizeEmbeddingIndexSettings(conversation, settings);
+        return identities;
+    }
+}
+
+export async function readMemoryDataFromFile(
+    settings: kp.ConversationSettings,
+    dirPath: string,
+    baseFileName: string,
+    options?: { loadEmbeddings?: boolean },
+): Promise<kp.IConversationDataWithIndexes | undefined> {
+    const identities = await prepareConversationEmbeddings(settings);
+    return kp.readConversationDataFromFile(
+        dirPath,
+        baseFileName,
+        settings.messageTextIndexSettings.embeddingIndexSettings.embeddingSize,
+        identities,
+        options,
+    );
 }
 
 export function createIndexingState(): IndexingState {

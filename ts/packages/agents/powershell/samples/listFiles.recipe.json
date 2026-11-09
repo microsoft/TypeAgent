@@ -61,31 +61,11 @@
     }
   ],
   "sandbox": {
-    "allowedCmdlets": [
-      "Get-ChildItem",
-      "ForEach-Object",
-      "Select-Object",
-      "Sort-Object",
-      "Test-Path",
-      "Write-Output"
-    ],
-    "allowedPaths": [
-      "$env:USERPROFILE",
-      "$env:USERPROFILE\\Downloads",
-      "$env:USERPROFILE\\Documents",
-      "$env:USERPROFILE\\Pictures",
-      "$env:USERPROFILE\\Music",
-      "$env:USERPROFILE\\Videos",
-      "$env:USERPROFILE\\Desktop",
-      "$PWD",
-      "$env:TEMP"
-    ],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
-    "maxExecutionTime": 30,
-    "networkAccess": false
+    "maxExecutionTime": 30
   },
   "source": {
     "type": "manual",
     "timestamp": "2026-03-12T12:00:00Z"
-  }
+  },
+  "requiredModules": ["Microsoft.PowerShell.Management"]
 }

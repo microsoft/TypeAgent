@@ -2,15 +2,11 @@
 // Licensed under the MIT License.
 
 import type * as sqlite from "better-sqlite3";
-import fs from "node:fs";
 import path from "node:path";
 import { removeFile, ensureDir } from "../fileSystem.js";
 import { createRequire } from "node:module";
 
-type BetterSqlite3Ctor = new (
-    filePath: string,
-    options?: unknown,
-) => sqlite.Database;
+type BetterSqlite3Ctor = new (filePath: string) => sqlite.Database;
 
 let sqliteCtor: BetterSqlite3Ctor | undefined;
 
@@ -30,23 +26,6 @@ function getSqliteCtor(): BetterSqlite3Ctor {
     return sqliteCtor;
 }
 
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../prebuild-node/better_sqlite3.node",
-    );
-    // Fall back to default (build/Release) when prebuild-node doesn't exist
-    if (!fs.existsSync(nativeBinding)) {
-        return undefined;
-    }
-    return { nativeBinding };
-}
-
 export function createDatabase(
     filePath: string,
     createNew: boolean,
@@ -56,7 +35,7 @@ export function createDatabase(
     }
     ensureDir(path.dirname(filePath));
     const Database = getSqliteCtor();
-    const db = new Database(filePath, getDbOptions());
+    const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
 }

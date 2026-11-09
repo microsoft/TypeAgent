@@ -6,6 +6,10 @@
     "originalSchemaFile": "weatherSchema.ts",
     "schemaFile": "../dist/weatherSchema.pas.json",
     "grammarFile": "../dist/weatherSchema.ag.json",
+    "actionPolicies": {
+      "getCurrentConditions": { "effects": "read-only" },
+      "getForecast": { "effects": "read-only" }
+    },
     "schemaType": {
       "action": "WeatherAction"
     }

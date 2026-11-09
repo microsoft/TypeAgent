@@ -13,7 +13,8 @@ import { CodeWorkbenchActions } from "./workbenchCommandActionsSchema.ts";
   | <workbenchBuildRelatedTaskInFolder>
   | <workbenchBuildRelatedTask>
   | <openInIntegratedTerminalInFolder>
-  | <openInIntegratedTerminal>;
+  | <openInIntegratedTerminal>
+  | <runWorkspaceCommand>;
 
 <BuildTask> = 'build' -> "build"
   | 'rebuild' -> "rebuild"
@@ -42,5 +43,8 @@ import { CodeWorkbenchActions } from "./workbenchCommandActionsSchema.ts";
 
 // "open the integrated terminal"
 <openInIntegratedTerminal> = <Polite> ('open' | 'show') ('the')? ('integrated')? 'terminal' -> { actionName: "openInIntegratedTerminal", parameters: {} };
+
+// "run command pnpm test"
+<runWorkspaceCommand> = <Polite> ('run' | 'execute') ('the')? 'command' $(command:wildcard) -> { actionName: "runWorkspaceCommand", parameters: { command: command } };
 
 <Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

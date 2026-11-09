@@ -7,6 +7,7 @@ import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { email as email } from "@typeagent/knowledge-processor";
 import { Message, MessageMetadata } from "./memory.js";
 import path from "path";
+import { createHash } from "node:crypto";
 import { importEmlFile } from "./emailImport.js";
 
 export class EmailMeta extends MessageMetadata {
@@ -14,6 +15,7 @@ export class EmailMeta extends MessageMetadata {
     public bcc?: email.EmailAddress[] | undefined;
     public subject?: string | undefined;
     public sentOn?: string | undefined;
+    public sentOnRaw?: string | undefined;
     public receivedOn?: string | undefined;
     public importance?: string | undefined;
 
@@ -45,6 +47,7 @@ export class EmailMeta extends MessageMetadata {
         this.importance = meta.importance;
         this.receivedOn = meta.receivedOn;
         this.sentOn = meta.sentOn;
+        this.sentOnRaw = meta.sentOnRaw;
         this.subject = meta.subject;
         this.to = meta.to;
     }
@@ -61,6 +64,41 @@ export class EmailMessage extends Message<EmailMeta> {
     ) {
         if (isNew) {
             emailBody = emailToTextChunks(emailBody, metadata.subject);
+        }
+        const sourceDate = metadata.sentOnRaw ?? metadata.sentOn;
+        if (
+            metadata.temporalContext === undefined &&
+            sourceDate !== undefined
+        ) {
+            const text =
+                typeof emailBody === "string"
+                    ? emailBody
+                    : emailBody.join("\n");
+            const revision = createHash("sha256")
+                .update(
+                    JSON.stringify([
+                        sourceDate,
+                        metadata.from,
+                        metadata.to,
+                        text,
+                    ]),
+                )
+                .digest("hex");
+            metadata.temporalContext = kp.temporalSegments(
+                text,
+                {
+                    version: 1,
+                    scopes: [
+                        {
+                            ownerId: "email",
+                            start: 0,
+                            end: text.length,
+                            messageTime: sourceDate,
+                        },
+                    ],
+                },
+                revision,
+            )[0]?.context;
         }
         super(
             metadata,
@@ -128,6 +166,7 @@ export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
         const jMeta: EmailMeta = jMsg.metadata;
         const meta = new EmailMeta(jMeta.from);
         meta.copyFrom(jMeta);
+        meta.temporalContext = jMeta.temporalContext;
         return new EmailMessage(
             meta,
             jMsg.textChunks,

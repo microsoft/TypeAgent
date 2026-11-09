@@ -13,6 +13,7 @@ import { createContentScriptRpcClient } from "@typeagent/browser-control-rpc/con
 import { app, ipcMain, net } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { createInlinePageCapture } from "./inlinePageCapture.js";
 
 type InlineBrowserControl = {
     control: BrowserControl;
@@ -21,6 +22,11 @@ type InlineBrowserControl = {
 export function createInlineBrowserControl(
     shellWindow: ShellWindow,
 ): InlineBrowserControl {
+    const pageCapture = createInlinePageCapture(() =>
+        shellWindow
+            .getAllBrowserTabs()
+            .map((tab) => tab.webContentsView.webContents),
+    );
     // Helper function to get the active browser WebContents for automation
     function getActiveBrowserWebContents() {
         const activeBrowserView = shellWindow.getActiveBrowserView();
@@ -47,6 +53,9 @@ export function createInlineBrowserControl(
         contentScriptRpcChannel.channel,
     );
     const control: BrowserControl = {
+        getCapturePages: () => pageCapture.getCapturePages(),
+        capturePageSnapshot: (pageId) =>
+            pageCapture.capturePageSnapshot(pageId),
         async openWebPage(url: string, options?: { newTab?: boolean }) {
             const activeTab = shellWindow.getActiveBrowserView();
             if (options?.newTab || !activeTab) {
@@ -57,7 +66,7 @@ export function createInlineBrowserControl(
                 let resolvedUrl = new URL(url);
                 if (resolvedUrl.protocol === "typeagent-browser:") {
                     resolvedUrl =
-                        shellWindow.resolveCustomProtocolUrl(resolvedUrl);
+                        await shellWindow.resolveCustomProtocolUrl(resolvedUrl);
                 }
                 activeTab.webContentsView.webContents.loadURL(
                     resolvedUrl.toString(),
@@ -233,7 +242,7 @@ export function createInlineBrowserControl(
             }
             return url;
         },
-        async closeWindow() {
+        async closeWindow(_title?: string) {
             throw new Error(
                 "Closing the inline browser window is not supported.",
             );
@@ -547,6 +556,7 @@ export function createInlineBrowserControl(
     return {
         control,
         close: () => {
+            pageCapture.close();
             contentScriptRpcChannel.notifyDisconnected();
             ipcMain.removeListener("inline-browser-rpc-reply", onReply);
         },
@@ -579,6 +589,18 @@ export function createInlineBrowserControlRpcHandlers(
         goBack: () => control.goBack(),
         reload: () => control.reload(),
         getPageUrl: () => control.getPageUrl(),
+        getCapturePages: async () => {
+            if (!control.getCapturePages) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            return control.getCapturePages();
+        },
+        capturePageSnapshot: async (pageId) => {
+            if (!control.capturePageSnapshot) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            return control.capturePageSnapshot(pageId);
+        },
         scrollUp: () => control.scrollUp(),
         scrollDown: () => control.scrollDown(),
         zoomIn: () => control.zoomIn(),
@@ -588,7 +610,7 @@ export function createInlineBrowserControlRpcHandlers(
             control.followLinkByText(keywords, openInNewTab),
         followLinkByPosition: (position, openInNewTab) =>
             control.followLinkByPosition(position, openInNewTab),
-        closeWindow: () => control.closeWindow(),
+        closeWindow: (title) => control.closeWindow(title),
         search: (query, sites, searchProvider, options) =>
             control.search(query, sites, searchProvider, options),
         switchTabs: (tabDescription, tabIndex) =>

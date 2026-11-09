@@ -15,7 +15,7 @@ import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import { conversation } from "@typeagent/knowledge-processor";
 //import { getLookupSettings, handleLookup } from "./internet.js";
 import registerDebug from "debug";
-import { getImageElement, getMimeType } from "@typeagent/typechat-utils";
+import { rehydrateImageAttachments } from "@typeagent/typechat-utils";
 import { lookupAndAnswerFromMemory } from "../context/memory.js";
 
 const debug = registerDebug("typeagent:dispatcher:lookup");
@@ -77,7 +77,7 @@ async function getAnswerFromConversationManager(
             );
 
             return createActionResultFromHtmlDisplay(
-                `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`,
+                `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImageAttachments(context.sessionContext.sessionStorage, imageNames)}</div>`,
                 matches.response.answer.answer!,
                 matchEntities,
             );
@@ -111,7 +111,10 @@ export async function lookupAndAnswer(
         // }
         case "lookupAndAnswerConversation": {
             const systemContext = context.sessionContext.agentContext;
-            if (systemContext.session.getConfig().execution.memory.legacy) {
+            if (
+                systemContext.conversationDurableMemory === undefined &&
+                systemContext.session.getConfig().execution.memory.legacy
+            ) {
                 return getAnswerFromConversationManager(
                     context,
                     lookupAction.parameters.question,
@@ -160,39 +163,4 @@ function compositeEntityToEntity(entity: conversation.CompositeEntity): Entity {
         name: entity.name,
         type: [...entity.type, conversation.KnownEntityTypes.Memorized],
     };
-}
-
-async function rehydrateImages(
-    context: ActionContext<CommandHandlerContext>,
-    files: (string | undefined)[],
-) {
-    let html = "<div>";
-
-    if (files) {
-        for (let i = 0; i < files.length; i++) {
-            let name = files[i];
-
-            if (files[i] && name) {
-                console.log(`Rehydrating Image ${name}`);
-                if (files[i]!.lastIndexOf("\\") > -1) {
-                    name = files[i]!.substring(files[i]!.lastIndexOf("\\") + 1);
-                }
-
-                const a = await context.sessionContext.sessionStorage?.read(
-                    `\\..\\user_files\\${name}`,
-                    "base64",
-                );
-
-                if (a) {
-                    html += getImageElement(
-                        `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
-                    );
-                }
-            }
-        }
-    }
-
-    html += "</div>";
-
-    return html;
 }

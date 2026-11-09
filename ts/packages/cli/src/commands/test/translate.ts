@@ -20,6 +20,7 @@ import fs from "node:fs";
 import { getElapsedString } from "@typeagent/common-utils";
 import { getChatModelNames, openai as ai } from "@typeagent/aiclient";
 import { TypeAgentAction } from "@typeagent/agent-sdk";
+import { exitCli } from "../../telemetry.js";
 
 type TestResult = {
     request: string;
@@ -608,6 +609,6 @@ export default class TestTranslateCommand extends Command {
         await new Promise<void>((resolve) =>
             process.stdout.write("", () => resolve()),
         );
-        process.exit(0);
+        exitCli(0);
     }
 }

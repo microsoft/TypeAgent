@@ -10,7 +10,9 @@ import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAll
  * (`dotnet/visualStudioTypeAgent/Bridge/AgentBridgeClient.cs`), which uses
  * `System.Net.WebSockets.ClientWebSocket`. That client does **not**
  * send an `Origin` header, so we rely on the shared no-Origin baseline
- * documented on {@link createAgentOriginAllowlist}.
+ * documented on {@link createAgentOriginAllowlist}. An explicit `null`
+ * Origin is rejected because browser sandboxing must not be treated like a
+ * native client.
  *
  * No extension scheme prefixes are accepted — anything beyond loopback
  * web clients (manual debugging, future webview consumers) and
@@ -19,4 +21,6 @@ import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAll
  * ephemeral port via the PortRegistrar must gate Origin so those ports
  * can't be dialed by arbitrary web pages on the same host.
  */
-export const isAllowedAgentOrigin = createAgentOriginAllowlist();
+export const isAllowedAgentOrigin = createAgentOriginAllowlist({
+    allowNullOrigin: false,
+});

@@ -172,6 +172,10 @@ export type AgentContextInvokeFunctions = {
         choices?: string[] | undefined;
         defaultId?: number | undefined;
     }) => Promise<number>;
+    requestSecurityApproval: (param: {
+        contextId: number;
+        request: import("@typeagent/agent-sdk").SecurityApprovalRequest;
+    }) => Promise<number>;
 
     queueToggleTransientAgent: (
         contextId: number,
@@ -276,6 +280,9 @@ export type AgentInvokeFunctions = {
                 | QuestionFormResponse;
         },
     ): Promise<ActionResult | undefined>;
+    cancelChoice(
+        param: Partial<ContextParams> & { choiceId: string },
+    ): Promise<void>;
     getDynamicSchema(
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<SchemaContent | undefined>;
@@ -294,12 +301,19 @@ export type ContextParams = {
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
     sessionContextId: string;
+    conversationId?: string | undefined;
+    // Snapshot of SessionContext.currentConnectionId taken when the call is
+    // made. Optional: older agent processes and server-initiated calls have
+    // none.
+    currentConnectionId?: string | undefined;
 };
 
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
     isFromReasoningLoop: boolean;
+    executionOrigin?: import("@typeagent/agent-sdk").ActionContext["executionOrigin"];
+    workingDirectory: string | undefined;
 };
 
 export type OptionsFunctionCallBack = {

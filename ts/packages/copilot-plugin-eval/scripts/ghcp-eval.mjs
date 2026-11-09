@@ -1,0 +1,1307 @@
+#!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import fs from "node:fs";
+import path from "node:path";
+import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
+import { randomUUID, createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
+import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
+import {
+    candidateToolBoundary,
+    pendingInteractionGate,
+    callCorrelation,
+    toolEvidenceViews,
+    executionRouteViolation,
+} from "./ghcp-eval-boundary.mjs";
+import {
+    snapshotFiles,
+    fileStateMatches,
+    gradeFileState,
+    restoreFiles,
+} from "./ghcp-eval-files.mjs";
+import { ghcpEvalNativeFilePermission } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalFiles.js";
+import { ghcpEvalListActionAllowed } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalLists.js";
+import {
+    evaluationCategory,
+    categoryCorpus,
+    categorySchedule,
+    assertCategoryReadiness,
+    assertCategoryResults,
+} from "./ghcp-eval-categories.mjs";
+import {
+    listPolicy,
+    listFilePolicy,
+    listClarificationQuestion,
+    readLists,
+    resetLists,
+    listsUnchanged,
+    gradeListTrial,
+} from "./ghcp-eval-lists.mjs";
+import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
+import {
+    registerGhcpEvalArtifact,
+    isGhcpEvalArtifact,
+} from "../../dispatcher/dispatcher/dist/execute/ghcpEvalArtifacts.js";
+import {
+    assertFrozenSpecification,
+    assertCorpusReadiness,
+    filePolicy,
+    fileConsentContext,
+    consumeFixtureContinuation,
+    fileFixture,
+    fixtureConfirmationAllowed,
+    isClarificationQuestion,
+    listFixture,
+    normalizeLists,
+    protocolVersion,
+    shuffled,
+    sendWithClarification,
+} from "./ghcp-eval-corpus.mjs";
+import { stageCopilotPlugin } from "../../../tools/scripts/stageCopilotPlugin.mjs";
+import {
+    externalOracle,
+    intervalUnionMs,
+    preliminaryGrade,
+    terminalExecutionFailure,
+} from "./ghcp-eval-grade.mjs";
+import {
+    checkPort,
+    makeConfiguration,
+    startProcess,
+    stopProcess,
+    waitForServer,
+} from "../../copilot-plugin/scripts/discovery-e2e.mjs";
+
+const root = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../..",
+);
+const [
+    cliPath,
+    template,
+    outputDirectory,
+    configDirectory,
+    ledgerPath,
+    selectionText,
+    phase = "pilot",
+    evidencePath,
+    pilotCasesText,
+    batchStartText = "0",
+    batchSizeText,
+    repetitionsText = "1",
+    categoryName = "common-files",
+] = process.argv.slice(2);
+const category = evaluationCategory(categoryName);
+const corpusVersion = category.corpusVersion;
+const listCategory = category.name === "lists";
+const selection = selectionText ?? category.candidates.join(",");
+const pilotCases = pilotCasesText ?? (listCategory ? "list-S1" : "S1");
+if (
+    !cliPath ||
+    !template ||
+    !outputDirectory ||
+    !configDirectory ||
+    !ledgerPath
+) {
+    throw new Error(
+        "Usage: node ghcp-eval.mjs <copilot.exe> <completed-preflight-directory> <new-output-directory> <model-config-directory> <credit-ledger> [candidate-ids] [pilot|measured] [oracle-evidence.json]",
+    );
+}
+const fixtures = listFixture;
+const creditLedger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
+validateEvalLedger(creditLedger);
+function assertReadiness(readiness) {
+    assertCategoryReadiness(readiness, category);
+    if (!listCategory) assertCorpusReadiness(readiness);
+}
+assertReadiness(
+    JSON.parse(fs.readFileSync(path.join(template, "result.json"), "utf8")),
+);
+const { getCopilotPermissionDefault } = await import(
+    "../../dispatcher/dispatcher/dist/reasoning/copilot.js"
+);
+const seededLists = Object.entries(fixtures).map(([name, items]) => ({
+    name,
+    items,
+}));
+const caseFilePolicy = (id, clarified = false) =>
+    listCategory ? listFilePolicy(id) : filePolicy(id, clarified);
+const clarificationQuestion = (id, question) =>
+    listCategory
+        ? listClarificationQuestion(id, question)
+        : isClarificationQuestion(id, question);
+const port = 19024;
+const excludedSchemas = Object.keys(
+    JSON.parse(
+        fs.readFileSync(
+            path.join(root, "packages/defaultAgentProvider/data/config.json"),
+            "utf8",
+        ),
+    ).mcpServers ?? {},
+);
+const toolNames = {
+    nl: ["typeagent-processCommand"],
+    structured: [
+        "typeagent-searchActions",
+        "typeagent-executeAction",
+        "typeagent-continueAction",
+        "typeagent-cancelAction",
+    ],
+};
+const nativeTools = [
+    "view",
+    "edit",
+    "create",
+    "glob",
+    "rg",
+    "powershell",
+    "read_powershell",
+    "stop_powershell",
+    "list_powershell",
+    "web_fetch",
+    "ask_user",
+].map((name) => `builtin:${name}`);
+const candidates = [
+    { id: 1, policy: "NL only", fallback: false, tools: toolNames.nl },
+    { id: 2, policy: "NL only", fallback: true, tools: toolNames.nl },
+    { id: 3, policy: "Structured discovery only", tools: toolNames.structured },
+    {
+        id: 4,
+        policy: "Structured current-contract reuse only",
+        tools: toolNames.structured,
+    },
+    {
+        id: 5,
+        policy: "Production mixed",
+        fallback: false,
+        tools: [...toolNames.nl, ...toolNames.structured],
+    },
+    {
+        id: 6,
+        policy: "Production mixed",
+        fallback: true,
+        tools: [...toolNames.nl, ...toolNames.structured],
+    },
+    { id: 7, policy: "Native only" },
+];
+
+function caseConsentAllowed(
+    action,
+    testCase,
+    store,
+    workspace,
+    clarified,
+    evidence,
+    env,
+) {
+    if (
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        typeof action.parameters?.path === "string" &&
+        isGhcpEvalArtifact(
+            action.parameters.path,
+            env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+        )
+    )
+        return true;
+    if (!listCategory)
+        return fixtureConfirmationAllowed(
+            testCase.id,
+            action,
+            workspace,
+            evidence?.issueTitle,
+        );
+    if (action?.schemaName === "list")
+        return ghcpEvalListActionAllowed(
+            action.actionName,
+            action.parameters,
+            listPolicy(testCase.id, store, clarified, evidence?.issueTitle),
+        );
+    return (
+        testCase.id === "list-R4" &&
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        action.parameters?.path === path.join(workspace, "trip.txt")
+    );
+}
+
+function findListStores(directory) {
+    return fs
+        .readdirSync(directory, { recursive: true })
+        .filter((name) => path.basename(name) === "lists.json")
+        .map((name) => path.join(directory, name));
+}
+
+function readBackendEvents(tracePath) {
+    const trace = fs.existsSync(tracePath)
+        ? fs.readFileSync(tracePath, "utf8")
+        : "";
+    return trace.trim()
+        ? trace
+              .trim()
+              .split("\n")
+              .map((line) => JSON.parse(line))
+        : [];
+}
+
+function collectObservations(result, tracePath) {
+    result.typeagentEvents = readBackendEvents(tracePath);
+    result.fallback =
+        result.candidate === 7
+            ? null
+            : Object.fromEntries(
+                  ["enter", "completed", "failed"].map((name) => [
+                      name,
+                      result.typeagentEvents.filter(
+                          ({ event }) =>
+                              event === `translation.reasoning.${name}`,
+                      ).length,
+                  ]),
+              );
+    const usage = result.usage.filter((entry) => !entry.preparation);
+    const tools = result.tools.filter((entry) => !entry.preparation);
+    const modelMs = usage.every(({ durationMs }) => durationMs !== null)
+        ? usage.reduce((sum, entry) => sum + entry.durationMs, 0)
+        : null;
+    const toolMs = tools.every(({ endMs }) => endMs !== undefined)
+        ? intervalUnionMs(tools.map(({ startMs, endMs }) => [startMs, endMs]))
+        : null;
+    const credits = JSON.parse(
+        fs.readFileSync(ledgerPath, "utf8"),
+    ).reservations;
+    result.credits = credits.filter(
+        (entry) =>
+            entry.sessionId === result.sessionId ||
+            entry.sessionId?.startsWith(`${result.sessionId}::`),
+    );
+    result.measurements = {
+        rootModelInvocations: usage.length,
+        rootModelMs: modelMs,
+        toolUnionMs: toolMs,
+        unattributedMs:
+            result.e2eMs !== null &&
+            modelMs !== null &&
+            toolMs !== null &&
+            modelMs + toolMs <= result.e2eMs
+                ? result.e2eMs - modelMs - toolMs
+                : null,
+        nonAdditiveTiming:
+            modelMs !== null &&
+            toolMs !== null &&
+            modelMs + toolMs > result.e2eMs,
+        mcpCalls: tools.filter(({ name }) => /typeagent-/.test(name)).length,
+        internalModelInvocations: result.credits.filter(
+            ({ sessionId }) => sessionId !== result.sessionId,
+        ).length,
+        backendSpans: result.typeagentEvents.filter(({ event }) =>
+            ["action.completed", "action.failed"].includes(event),
+        ),
+        transportRetries: null,
+        translationMs: null,
+        scriptedInteractionCount: result.interactions.length,
+        humanWaitingMs: 0,
+        systemActiveE2eMs: result.e2eMs,
+        timingNote:
+            "Synchronous fixture answers; nested backend spans are not additive with outer tools. Missing stages remain null.",
+    };
+}
+
+function captureNetworkEvidence(includeDns) {
+    return {
+        capturedAt: new Date().toISOString(),
+        configuration: execFileSync("ipconfig.exe", ["/all"], {
+            encoding: "utf8",
+            timeout: 15_000,
+        }),
+        dns: includeDns
+            ? execFileSync("ipconfig.exe", ["/displaydns"], {
+                  encoding: "utf8",
+                  timeout: 15_000,
+              })
+            : null,
+    };
+}
+
+function gradeCompletedTrial({
+    result,
+    testCase,
+    store,
+    workspace,
+    evidence,
+    clarificationGiven,
+}) {
+    const after = JSON.parse(fs.readFileSync(store, "utf8"));
+    const finalFiles = snapshotFiles(workspace);
+    const correctNames = Object.keys(
+        listCategory ? listFixture : fileFixture,
+    ).every((name) => result.answer.includes(name));
+    result.grade = {
+        fileStateMatchesOracle: listCategory
+            ? fileStateMatches(finalFiles, fileFixture)
+            : gradeFileState(
+                  testCase.id,
+                  finalFiles,
+                  2617,
+                  evidence?.issueTitle,
+              ),
+        listStateUnchanged:
+            JSON.stringify(normalizeLists(after)) ===
+            JSON.stringify(normalizeLists(seededLists)),
+        containsAllNames: ["S1", "list-S1"].includes(testCase.id)
+            ? correctNames
+            : null,
+        clarificationRequested: testCase.clarification
+            ? clarificationGiven
+            : null,
+        noPrematureFileMutation: testCase.clarification
+            ? result.noPrematureFileMutation === true &&
+              result.stateAtClarification !== undefined &&
+              fileStateMatches(result.stateAtClarification, fileFixture)
+            : null,
+        requiresManualFaithfulnessCheck: true,
+        ...(listCategory
+            ? gradeListTrial(result, store, finalFiles, evidence?.issueTitle)
+            : {}),
+    };
+    result.finalLists = normalizeLists(after);
+    result.finalFiles = finalFiles;
+    result.status = "completed_ungraded";
+    if (
+        phase === "pilot" &&
+        result.candidate !== 7 &&
+        ((["S1", "list-S1"].includes(testCase.id) && !correctNames) ||
+            !result.grade.fileStateMatchesOracle ||
+            !(listCategory
+                ? result.grade.listStateMatchesOracle
+                : result.grade.listStateUnchanged))
+    )
+        result.status = "pilot_needs_review";
+}
+
+function prepareTrial(candidate, directory, workspace, testCase, evidence) {
+    fs.mkdirSync(directory);
+    const { env, mcp } = makeConfiguration(
+        directory,
+        port,
+        process.env,
+        configDirectory,
+    );
+    env.TYPEAGENT_MODE = "mcp";
+    env.TYPEAGENT_COPILOT_CREDIT_LEDGER = path.resolve(ledgerPath);
+    env.TYPEAGENT_GHCP_EVAL_CLI = cliPath;
+    env.COPILOT_HOME = path.join(directory, "nested-copilot");
+    env.COPILOT_REASONING_MODEL = evalModel;
+    env.COPILOT_REASONING_EFFORT = "high";
+    env.TYPEAGENT_REASONING_TIMEOUT_MS = "90000";
+    env.DEBUG = "typeagent:request";
+    env.TYPEAGENT_GHCP_EVAL_FIXTURES = workspace;
+    env.TYPEAGENT_GHCP_EVAL_CATEGORY = category.name;
+    delete env.TYPEAGENT_GHCP_EVAL_LIST_POLICY;
+    env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
+        directory,
+        "file-policy.json",
+    );
+    fs.writeFileSync(
+        env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
+        JSON.stringify(caseFilePolicy(testCase.id)),
+    );
+    const sessionId = randomUUID();
+    env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
+    env.TYPEAGENT_GHCP_EVAL_TRACE = path.join(directory, "events.jsonl");
+    env.TYPEAGENT_GHCP_EVAL_CORRELATION = path.join(
+        directory,
+        "call-correlation.json",
+    );
+    fs.writeFileSync(env.TYPEAGENT_GHCP_EVAL_CORRELATION, "{}");
+    const temporaryRoot = path.resolve(directory, "sdk-temp");
+    fs.mkdirSync(temporaryRoot);
+    env.TEMP = env.TMP = env.TMPDIR = temporaryRoot;
+    env.TYPEAGENT_GHCP_EVAL_ARTIFACTS = path.join(directory, "artifacts.json");
+    fs.writeFileSync(
+        env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+        JSON.stringify({ root: temporaryRoot, artifacts: [] }),
+    );
+    fs.cpSync(path.join(template, "data"), env.TYPEAGENT_USER_DATA_DIR, {
+        recursive: true,
+        filter: (entry) => !entry.endsWith(".lock"),
+    });
+    fs.cpSync(path.join(template, "plugin-data"), env.TYPEAGENT_PLUGIN_DATA, {
+        recursive: true,
+    });
+    const routingPath = path.join(env.TYPEAGENT_PLUGIN_DATA, "config.json");
+    const routingConfig = fs.existsSync(routingPath)
+        ? JSON.parse(fs.readFileSync(routingPath, "utf8"))
+        : {};
+    fs.writeFileSync(
+        routingPath,
+        JSON.stringify(
+            {
+                ...routingConfig,
+                mode: "mcp",
+                mcpRouting: candidate.id >= 5 ? "mixed" : "delegate",
+            },
+            null,
+            2,
+        ),
+    );
+    const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
+    if (stores.length !== 1)
+        throw new Error("Expected exactly one disposable list store");
+    resetLists(stores[0]);
+    if (listCategory) {
+        env.TYPEAGENT_GHCP_EVAL_LIST_POLICY = path.resolve(
+            directory,
+            "list-policy.json",
+        );
+        fs.writeFileSync(
+            env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+            JSON.stringify(
+                listPolicy(testCase.id, stores[0], false, evidence?.issueTitle),
+            ),
+        );
+    }
+    const sessionDataPath = path.join(
+        path.dirname(path.dirname(stores[0])),
+        "data.json",
+    );
+    const sessionData = JSON.parse(fs.readFileSync(sessionDataPath, "utf8"));
+    sessionData.settings ??= {};
+    for (const key of ["schemas", "actions"]) {
+        sessionData.settings[key] = {
+            ...sessionData.settings[key],
+            ...Object.fromEntries(excludedSchemas.map((name) => [name, false])),
+        };
+    }
+    fs.writeFileSync(sessionDataPath, JSON.stringify(sessionData, null, 2));
+    restoreFiles(workspace);
+    stageCopilotPlugin(path.join(directory, "plugin"));
+    const pluginMcpPath = path.join(directory, "plugin", ".mcp.json");
+    const pluginMcp = JSON.parse(fs.readFileSync(pluginMcpPath, "utf8"));
+    fs.writeFileSync(
+        pluginMcpPath,
+        JSON.stringify(
+            {
+                mcpServers: {
+                    typeagent: {
+                        ...pluginMcp.mcpServers.typeagent,
+                        tools: candidate.tools,
+                    },
+                },
+            },
+            null,
+            2,
+        ),
+    );
+    const config = mcp.mcpServers["typeagent-e2e"];
+    config.tools = candidate.tools;
+    if (candidate.fallback !== undefined) {
+        env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK = candidate.fallback
+            ? "enabled"
+            : "disabled";
+        config.env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK =
+            env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK;
+    }
+    return { env, config, stores, sessionDataPath, sessionData, sessionId };
+}
+
+function persistTrial({
+    result,
+    env,
+    executionStopped,
+    sessionData,
+    sessionDataPath,
+    evidence,
+    network,
+    directory,
+    started,
+    workspace,
+}) {
+    if (result.harnessError) {
+        result.status = "harness_failed";
+        result.error = result.harnessError;
+    }
+    result.totalIncludingSetupMs = performance.now() - started;
+    try {
+        result.finalFiles = snapshotFiles(workspace);
+        const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
+        if (stores.length !== 1)
+            throw new Error("Expected one final list store");
+        result.finalLists = readLists(stores[0]);
+    } catch (error) {
+        result.status = "harness_failed";
+        result.error = `Final fixture snapshot failed: ${String(error)}`;
+    }
+    collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
+    result.terminalExecutionFailure = executionStopped;
+    result.providerUsage = {
+        before: sessionData.tokens ?? null,
+        after:
+            JSON.parse(fs.readFileSync(sessionDataPath, "utf8")).tokens ?? null,
+        coverage:
+            "Persisted TypeAgent token counters only; unflushed calls and embedding usage may be absent. Not Copilot credits.",
+    };
+    result.preliminaryGrade = preliminaryGrade(result, evidence ?? {});
+    if (network)
+        fs.writeFileSync(
+            path.join(directory, "private-network-evidence.json"),
+            JSON.stringify(network, null, 2),
+        );
+    fs.writeFileSync(
+        path.join(directory, "result.json"),
+        JSON.stringify(result, null, 2) + "\n",
+    );
+}
+
+async function trial(candidate, directory, testCase, workspace, evidence) {
+    const { env, config, stores, sessionDataPath, sessionData, sessionId } =
+        prepareTrial(candidate, directory, workspace, testCase, evidence);
+    const result = {
+        phase,
+        candidate: candidate.id,
+        caseId: testCase.id,
+        category: category.name,
+        protocolVersion,
+        corpusVersion,
+        prompt: testCase.prompt,
+        sessionId,
+        status: "not_started",
+        usage: [],
+        tools: [],
+        interactions: [],
+        routeViolations: [],
+        e2eMs: null,
+        preparationMs: null,
+        grade: null,
+        permissions: [],
+        toolResults: [],
+        recoverableToolFailures: [],
+        noPrematureFileMutation: true,
+        noPrematureListMutation: true,
+    };
+    let server;
+    let client;
+    let session;
+    let preparation = candidate.id === 4;
+    let clarificationGiven = false;
+    let confirmationCount = 0;
+    let executionStopped = false;
+    let measuredStart;
+    const network = ["S5", "M2"].includes(testCase.id)
+        ? { toolResults: [] }
+        : undefined;
+    const approvedInteractions = new Map();
+    const boundary = candidateToolBoundary(candidate, nativeTools);
+    const interactionGate = pendingInteractionGate();
+    const consentResults = [];
+    const clarify = (question, source) => {
+        if (executionStopped || clarificationGiven)
+            throw new Error("Clarification cannot replay stopped work");
+        result.stateAtClarification = snapshotFiles(workspace);
+        result.listsAtClarification = readLists(stores[0]);
+        if (!listsUnchanged(stores[0])) result.noPrematureListMutation = false;
+        if (!fileStateMatches(result.stateAtClarification, fileFixture))
+            result.noPrematureFileMutation = false;
+        clarificationGiven = true;
+        fs.writeFileSync(
+            env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
+            JSON.stringify(caseFilePolicy(testCase.id, true)),
+        );
+        if (listCategory)
+            fs.writeFileSync(
+                env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+                JSON.stringify(
+                    listPolicy(
+                        testCase.id,
+                        stores[0],
+                        true,
+                        evidence?.issueTitle,
+                    ),
+                ),
+            );
+        result.clarificationSource = source;
+        result.clarificationQuestion = question;
+        return testCase.clarification;
+    };
+    const started = performance.now();
+    try {
+        if (candidate.id !== 7) {
+            await checkPort(port);
+            const stdout = fs.openSync(
+                path.join(directory, "server.stdout.log"),
+                "a",
+            );
+            const stderrPath = path.join(directory, "server.stderr.log");
+            const stderr = fs.openSync(stderrPath, "a");
+            server = startProcess(
+                process.execPath,
+                [
+                    path.join(
+                        root,
+                        "packages/agentServer/server/dist/server.js",
+                    ),
+                    "--port",
+                    String(port),
+                    "--config",
+                    "ghcp-eval",
+                    "--idle-timeout",
+                    "300",
+                ],
+                { cwd: root, env, stdio: ["ignore", stdout, stderr] },
+            );
+            fs.closeSync(stdout);
+            fs.closeSync(stderr);
+            await waitForServer(
+                server,
+                port,
+                90,
+                new AbortController().signal,
+                stderrPath,
+            );
+        }
+        client = new CopilotClient({
+            mode: "empty",
+            baseDirectory: path.join(directory, "outer-copilot"),
+            workingDirectory: workspace,
+            connection: RuntimeConnection.forStdio({ path: cliPath }),
+            env:
+                candidate.id === 7
+                    ? Object.fromEntries(
+                          Object.entries(env).filter(
+                              ([key]) =>
+                                  !key.startsWith("TYPEAGENT_") &&
+                                  ![
+                                      "CLAUDE_PLUGIN_DATA",
+                                      "INSTANCE_NAME",
+                                  ].includes(key),
+                          ),
+                      )
+                    : env,
+            builtinPluginDirectories:
+                candidate.id === 5 || candidate.id === 6
+                    ? [path.join(directory, "plugin")]
+                    : [],
+            requestHandler: new CopilotCreditBudget(path.resolve(ledgerPath)),
+            useLoggedInUser: true,
+            logLevel: "error",
+        });
+        await client.start();
+        session = await client.createSession({
+            sessionId: result.sessionId,
+            model: evalModel,
+            reasoningEffort: "high",
+            contextTier: "default",
+            capi: { enableWebSocketResponses: false },
+            sessionLimits: { maxAiCredits: 60 },
+            workingDirectory: workspace,
+            skipCustomInstructions: true,
+            availableTools: boundary.availableTools,
+            ...(candidate.id === 7
+                ? {}
+                : { mcpServers: { "typeagent-e2e": config } }),
+            ...(candidate.id === 7 || candidate.id >= 5
+                ? {}
+                : {
+                      systemMessage: {
+                          mode: "append",
+                          content: `${candidate.policy}. Use only the exposed TypeAgent MCP interface. Preserve confirmation and clarification. Ordinary read failures may be corrected within this route; denials, cancellation and uncertain effects never authorize replay or a permission bypass.`,
+                      },
+                  }),
+            onPermissionRequest: (request) => {
+                result.permissions.push({
+                    kind: request.kind,
+                    readOnly: request.readOnly,
+                });
+                const policy = caseFilePolicy(testCase.id, clarificationGiven);
+                if (
+                    executionStopped ||
+                    (preparation && request.kind === "write")
+                )
+                    return {
+                        kind: "denied-no-approval-rule-and-could-not-request-from-user",
+                    };
+                const allowed = ghcpEvalNativeFilePermission(
+                    request,
+                    workspace,
+                    policy,
+                );
+                if (allowed !== undefined) {
+                    if (!allowed) {
+                        executionStopped = true;
+                        result.routeViolations.push(
+                            "file-access-outside-case-or-before-clarification",
+                        );
+                    }
+                    return {
+                        kind: allowed
+                            ? "approve-once"
+                            : "denied-no-approval-rule-and-could-not-request-from-user",
+                    };
+                }
+                if (request.managedApprovalRequired !== true) {
+                    const safe = getCopilotPermissionDefault(request);
+                    if (safe) return safe;
+                    if (request.kind === "mcp") return { kind: "approve-once" };
+                    if (
+                        request.kind === "url" &&
+                        request.requestSandboxBypass !== true
+                    ) {
+                        const url = new URL(request.url);
+                        if (["https:", "http:"].includes(url.protocol))
+                            return { kind: "approve-once" };
+                    }
+                }
+                executionStopped = true;
+                result.routeViolations.push("native-permission-denied");
+                return {
+                    kind: "denied-no-approval-rule-and-could-not-request-from-user",
+                };
+            },
+            onUserInputRequest: (request) => {
+                result.interactions.push(request.question);
+                if (testCase.clarification && !clarificationGiven) {
+                    if (!clarificationQuestion(testCase.id, request.question)) {
+                        result.routeViolations.push(
+                            "confirmation-or-unrelated-question-before-clarification",
+                        );
+                        executionStopped = true;
+                        throw new Error(
+                            "Clarification is required before effect confirmation.",
+                        );
+                    }
+                    return {
+                        answer: clarify(request.question, "callback"),
+                        wasFreeform: true,
+                    };
+                }
+                const { action, pending, handlerAnswer } = fileConsentContext(
+                    result.tools,
+                    consentResults,
+                    readBackendEvents(env.TYPEAGENT_GHCP_EVAL_TRACE),
+                    request,
+                );
+                if (
+                    !executionStopped &&
+                    confirmationCount < 8 &&
+                    (pending?.prompt?.type === "confirmation" ||
+                        handlerAnswer) &&
+                    caseConsentAllowed(
+                        action,
+                        testCase,
+                        stores[0],
+                        workspace,
+                        clarificationGiven,
+                        evidence,
+                        env,
+                    )
+                ) {
+                    const yes = handlerAnswer
+                        ? "Run"
+                        : request.choices?.find((choice) =>
+                              /^(yes|approve|confirm|proceed|allow)\b/i.test(
+                                  choice,
+                              ),
+                          );
+                    confirmationCount++;
+                    if (pending)
+                        approvedInteractions.set(pending.interactionId, {
+                            operationId: pending.operationId,
+                            scopeId: pending.scopeId,
+                            response: handlerAnswer ?? {
+                                type: "confirmation",
+                                approved: true,
+                            },
+                        });
+                    return {
+                        answer: yes ?? "Yes",
+                        wasFreeform: yes === undefined,
+                    };
+                }
+                executionStopped = true;
+                throw new Error(
+                    "No authorized scripted answer for this interaction.",
+                );
+            },
+            hooks: {
+                onPreMcpToolCall: (input) => {
+                    fs.writeFileSync(
+                        env.TYPEAGENT_GHCP_EVAL_CORRELATION,
+                        JSON.stringify(
+                            callCorrelation(result, input, result.tools.length),
+                        ),
+                    );
+                },
+                onPreToolUse: (input) => {
+                    input = {
+                        ...input,
+                        toolName: boundary.canonical(input.toolName),
+                    };
+                    if (
+                        listCategory &&
+                        testCase.clarification &&
+                        !clarificationGiven &&
+                        !listsUnchanged(stores[0])
+                    )
+                        result.noPrematureListMutation = false;
+                    if (
+                        testCase.clarification &&
+                        !clarificationGiven &&
+                        !fileStateMatches(snapshotFiles(workspace), fileFixture)
+                    )
+                        result.noPrematureFileMutation = false;
+                    const continuation =
+                        input.toolName.includes("continueAction");
+                    const unauthorizedContinuation =
+                        continuation &&
+                        input.toolArgs?.response?.approved !== false &&
+                        !consumeFixtureContinuation(
+                            approvedInteractions,
+                            input.toolArgs,
+                            executionStopped,
+                        );
+                    if (!/ask_user|continueAction/.test(input.toolName))
+                        approvedInteractions.clear();
+                    const wrongRoute = !boundary.check(input.toolName);
+                    const pendingReason = interactionGate.reason(
+                        input.toolName,
+                        input.toolArgs,
+                    );
+                    const forbidden =
+                        wrongRoute ||
+                        pendingReason ||
+                        (input.toolName !== "ask_user" &&
+                            boundary.hasActiveDomainCall()) ||
+                        unauthorizedContinuation ||
+                        executionRouteViolation(
+                            input.toolName,
+                            candidate,
+                            preparation,
+                            executionStopped,
+                        );
+                    boundary.recordDecision(
+                        input.toolName,
+                        input.toolArgs,
+                        !forbidden,
+                    );
+                    if (forbidden) {
+                        executionStopped = true;
+                        result.routeViolations.push(input.toolName);
+                        result.boundaryDenials ??= [];
+                        result.boundaryDenials.push({
+                            tool: input.toolName,
+                            reason: wrongRoute
+                                ? "outside_candidate_allowlist"
+                                : (pendingReason ??
+                                  "execution_or_consent_guard"),
+                        });
+                        return {
+                            permissionDecision: "deny",
+                            permissionDecisionReason:
+                                pendingReason ??
+                                "Evaluation route/interaction policy denied this call; do not replay it.",
+                        };
+                    }
+                    return undefined;
+                },
+            },
+        });
+        try {
+            result.toolBoundary = {
+                admitted: await boundary.initialize(session),
+                verifiedBeforePrompt: true,
+                auditedCalls: 0,
+            };
+        } catch (error) {
+            result.harnessError = `Tool boundary preflight failed: ${String(error)}`;
+            throw error;
+        }
+        session.on("assistant.usage", (event) =>
+            result.usage.push({
+                model: event.data.model,
+                copilotUsage: event.data.copilotUsage,
+                durationMs: event.data.duration ?? null,
+                preparation,
+            }),
+        );
+        session.on("tool.execution_start", (event) => {
+            try {
+                result.tools.push({
+                    toolCallId: event.data.toolCallId,
+                    name: event.data.toolName,
+                    arguments: event.data.arguments,
+                    preparation,
+                    startMs: performance.now() - started,
+                    backendEventOffset: readBackendEvents(
+                        env.TYPEAGENT_GHCP_EVAL_TRACE,
+                    ).length,
+                });
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
+                executionStopped = true;
+            }
+        });
+        session.on("tool.execution_complete", (event) => {
+            try {
+                const artifact = registerGhcpEvalArtifact(
+                    event.data.result,
+                    env.TEMP,
+                    env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+                );
+                if (artifact) {
+                    result.outputArtifacts ??= [];
+                    result.outputArtifacts.push(artifact);
+                }
+            } catch (error) {
+                result.harnessError = `Artifact provenance failed: ${String(error)}`;
+                executionStopped = true;
+            }
+            if (network) network.toolResults.push(event.data);
+            const tool = result.tools.find(
+                (tool) => tool.toolCallId === event.data.toolCallId,
+            );
+            if (tool) tool.endMs = performance.now() - started;
+            try {
+                if (!tool)
+                    throw new Error("Tool completion has no start record");
+                const admitted = boundary.audit(tool.name, tool.arguments);
+                result.toolBoundary.auditedCalls++;
+                if (!admitted && event.data.success === true)
+                    throw new Error(
+                        "Denied outer tool reported success; enforcement unavailable",
+                    );
+                interactionGate.observe(event.data.result);
+                if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                        event.data.error,
+                        tool
+                            ? readBackendEvents(
+                                  env.TYPEAGENT_GHCP_EVAL_TRACE,
+                              ).slice(tool.backendEventOffset)
+                            : [],
+                    )
+                )
+                    executionStopped = true;
+                else if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                    )
+                )
+                    result.recoverableToolFailures.push(event.data.toolCallId);
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
+                executionStopped = true;
+            }
+            const views = toolEvidenceViews(event.data, Boolean(network));
+            result.toolResults.push(views.persisted);
+            consentResults.push(views.consent);
+            if (executionStopped) {
+                approvedInteractions.clear();
+                interactionGate.clear();
+            }
+        });
+        result.status = "running";
+        if (preparation) {
+            const preparationStart = performance.now();
+            await session.sendAndWait(
+                {
+                    prompt: category.preparation,
+                },
+                90_000,
+            );
+            result.preparationMs = performance.now() - preparationStart;
+            preparation = false;
+        }
+        if (network) {
+            network.before = captureNetworkEvidence(testCase.id === "M2");
+        }
+        measuredStart = performance.now();
+        result.promptAcceptedAt = new Date().toISOString();
+        const answer = await sendWithClarification({
+            session,
+            prompt: result.prompt,
+            timeoutMs: 90_000,
+            testCase,
+            canClarify: () => !clarificationGiven && !executionStopped,
+            clarify,
+            isClarification: clarificationQuestion,
+        });
+        result.e2eMs = performance.now() - measuredStart;
+        result.finalResponseAt = new Date().toISOString();
+        result.answer = answer?.data.content ?? "";
+        interactionGate.assertSettled();
+        if (result.toolBoundary.auditedCalls !== result.tools.length) {
+            result.harnessError =
+                "Incomplete tool boundary audit at final response";
+            throw new Error(result.harnessError);
+        }
+        gradeCompletedTrial({
+            result,
+            testCase,
+            store: stores[0],
+            workspace,
+            evidence,
+            clarificationGiven,
+        });
+        if (testCase.id === "S5" || testCase.id === "M2") {
+            network.answer = result.answer;
+            network.after = captureNetworkEvidence(testCase.id === "M2");
+            result.answerSha256 = createHash("sha256")
+                .update(result.answer)
+                .digest("hex");
+            result.answer =
+                "[network response withheld from sanitized results]";
+        }
+    } catch (error) {
+        result.status = "failed";
+        result.error = error instanceof Error ? error.message : String(error);
+    } finally {
+        if (measuredStart !== undefined && result.e2eMs === null)
+            result.e2eMs = performance.now() - measuredStart;
+        try {
+            if (session) await session.abort();
+            if (client) await client.stop();
+        } finally {
+            try {
+                if (server) await stopProcess(server);
+            } finally {
+                persistTrial({
+                    result,
+                    env,
+                    executionStopped,
+                    sessionData,
+                    sessionDataPath,
+                    evidence,
+                    network,
+                    directory,
+                    started,
+                    workspace,
+                });
+            }
+        }
+    }
+    return result;
+}
+
+const repetitions = phase === "pilot" ? 1 : Number(repetitionsText);
+const batchStart = Number(batchStartText);
+const width = category.candidates.length;
+const batchSize = phase === "pilot" ? width : Number(batchSizeText ?? width);
+if (
+    !Number.isInteger(batchStart) ||
+    batchStart < 0 ||
+    !Number.isInteger(batchSize) ||
+    batchSize < 1 ||
+    batchSize > width
+)
+    throw new Error("Batch size exceeds the active category candidate count");
+if (phase === "measured" && (batchStart % width !== 0 || batchSize !== width))
+    throw new Error(
+        "Measured batches must preserve all category candidates for one paired case",
+    );
+fs.mkdirSync(outputDirectory, { recursive: true });
+const resultsPath = path.join(outputDirectory, "results.json");
+const results = fs.existsSync(resultsPath)
+    ? JSON.parse(fs.readFileSync(resultsPath, "utf8"))
+    : [];
+if (results.length !== batchStart)
+    throw new Error(
+        "Batch start must equal the persisted completed/failed trial count; never replay an uncertain trial",
+    );
+const selected = selection.split(",").map(Number);
+if (
+    selected.some((id) => !category.candidates.includes(id)) ||
+    new Set(selected).size !== selected.length
+) {
+    throw new Error("Unknown pilot candidate");
+}
+if (!["pilot", "measured"].includes(phase))
+    throw new Error("Unknown run phase");
+const workspace = path.resolve(outputDirectory, "workspace");
+fs.mkdirSync(workspace, { recursive: true });
+const corpus = categoryCorpus(
+    category,
+    workspace,
+    "microsoft/TypeAgent",
+    3058,
+    3067,
+    2617,
+);
+const evidence = evidencePath
+    ? JSON.parse(fs.readFileSync(evidencePath, "utf8"))
+    : undefined;
+if (evidence?.readinessFile)
+    assertReadiness(
+        JSON.parse(
+            fs.readFileSync(
+                path.resolve(
+                    path.dirname(evidencePath),
+                    evidence.readinessFile,
+                ),
+                "utf8",
+            ),
+        ),
+    );
+if (
+    phase === "measured" &&
+    (!evidence?.issueTitle ||
+        selected.length !== width ||
+        new Set(selected).size !== width ||
+        !evidence.readinessFile)
+) {
+    throw new Error(
+        "Measured runs require independent issue evidence and all category candidates",
+    );
+}
+if (evidence?.readinessFile && !listCategory)
+    evidence.prOracles = externalOracle(
+        JSON.parse(
+            fs.readFileSync(
+                path.resolve(
+                    path.dirname(evidencePath),
+                    evidence.readinessFile,
+                ),
+                "utf8",
+            ),
+        ),
+    );
+const seed = 20260924;
+const cases =
+    phase === "pilot"
+        ? corpus.filter(({ id }) => pilotCases.split(",").includes(id))
+        : shuffled(corpus, seed);
+if (cases.length === 0) throw new Error("No cases selected");
+const { order, ...applicability } = categorySchedule(
+    category,
+    cases,
+    phase === "pilot" ? selected : shuffled(selected, seed),
+    repetitions,
+);
+assertCategoryResults(results, order, category);
+const specification =
+    JSON.stringify(
+        {
+            protocolVersion,
+            category: category.name,
+            corpusVersion,
+            fixtures: fileFixture,
+            listFixtures: listFixture,
+            preparationPrompt: category.preparation,
+            outerToolBoundary:
+                "Exact source-qualified allowlist, initialized runtime metadata before prompt, deny hook, per-call enforcement audit. Missing evidence fails closed.",
+            runnerSha256: createHash("sha256")
+                .update(fs.readFileSync(fileURLToPath(import.meta.url)))
+                .digest("hex"),
+            evidenceSha256: evidencePath
+                ? createHash("sha256")
+                      .update(fs.readFileSync(evidencePath))
+                      .digest("hex")
+                : null,
+            phase,
+            repetitions,
+            seed,
+            order,
+            cases,
+            candidates: candidates.filter(({ id }) =>
+                category.candidates.includes(id),
+            ),
+            applicability: {
+                ...applicability,
+                policy: `Only ${category.candidates.join(",")} are eligible in ${category.name}; derive separate denominators from this category schedule.`,
+            },
+            model: evalModel,
+            reasoningEffort: "high",
+            concurrency: 1,
+            commit: execFileSync("git", ["rev-parse", "HEAD"], {
+                encoding: "utf8",
+            }).trim(),
+            trialTimeoutMs: 90_000,
+            preparationTimeoutMs: 90_000,
+            perSessionRequestLimit: 24,
+            cumulativeRequestLimit: 2000,
+            requestCreditReservation:
+                creditLedger.requestMaximumNanoAiu / 1_000_000_000,
+            cumulativeCreditCap: creditLedger.capNanoAiu / 1_000_000_000,
+            overflowPolicy:
+                "Trial-private temp artifacts registered from SDK completion notices; canonical direct child, regular unlinked file, SHA256 rechecked before registered reads.",
+            clarificationPolicy:
+                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after terminal failure.",
+            sessionCreditSoftLimit: 60,
+            ledgerPath,
+            templateDirectory: path.resolve(template),
+            fixtureReset:
+                "Copy category preflight state, exclude stale locks; restore exact seven-list seed and seven ordinary files, remove previous backup; validate both domains independently.",
+            gradingStatus:
+                "independent fixture oracles; explicit final-answer review required",
+            nativeTools,
+            cliVersion: execFileSync(cliPath, ["--version"], {
+                encoding: "utf8",
+            }).trim(),
+            internalTools:
+                "Unmodified production TypeAgent reasoning toolset; effects and credits gated",
+            disabledShippedMcpSchemas: excludedSchemas,
+            disabledAuxiliaryOuterMcpServers: [
+                "typeagent-workspace",
+                "typeagent-macros",
+                "typeagent-skills",
+            ],
+            safety: "Ordinary read I/O errors require affirmative safe evidence for recovery within existing routes, permissions and budgets. Denied/cancelled/uncertain execution and missing error details remain terminal. Translation fallback toolset retained.",
+        },
+        null,
+        2,
+    ) + "\n";
+const specificationPath = path.join(outputDirectory, "specification.json");
+assertFrozenSpecification(
+    fs.existsSync(specificationPath)
+        ? fs.readFileSync(specificationPath, "utf8")
+        : undefined,
+    specification,
+);
+fs.writeFileSync(specificationPath, specification);
+for (const entry of order.slice(batchStart, batchStart + batchSize)) {
+    const candidate = candidates.find(({ id }) => id === entry.candidate);
+    const testCase = cases.find(({ id }) => id === entry.caseId);
+    const directory = path.join(
+        outputDirectory,
+        `${entry.repetition}-${entry.caseId}-candidate-${candidate.id}`,
+    );
+    const result = await trial(
+        candidate,
+        directory,
+        testCase,
+        workspace,
+        evidence,
+    );
+    result.repetition = entry.repetition;
+    results.push(result);
+    fs.writeFileSync(
+        path.join(outputDirectory, "results.json"),
+        JSON.stringify(results, null, 2) + "\n",
+    );
+    process.stdout.write(
+        JSON.stringify({
+            candidate: candidate.id,
+            caseId: testCase.id,
+            repetition: entry.repetition,
+            status: result.status,
+            error: result.error,
+        }) + "\n",
+    );
+    if (
+        result.status === "harness_failed" ||
+        (phase === "pilot" && result.status !== "completed_ungraded") ||
+        /credit|budget|reservation|Agent server|permission orchestrator/i.test(
+            result.error ?? "",
+        )
+    ) {
+        process.exitCode = 1;
+        break;
+    }
+}

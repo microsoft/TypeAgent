@@ -43,13 +43,14 @@ export function validateSchema(
     expected: SchemaType,
     actual: unknown,
     coerce: boolean = false, // coerce string to the right primitive type
+    allowResultReferences: boolean = true,
 ) {
     if (actual === null) {
         throw new Error(`${errorName(name)} should not be null`);
     }
     // A result-reference placeholder ({ "$result": "<id>" }) is resolved to its
     // real value at execution time, so accept it against any expected type.
-    if (isResultReference(actual)) {
+    if (allowResultReferences && isResultReference(actual)) {
         return;
     }
     switch (expected.type) {
@@ -59,7 +60,13 @@ export function validateSchema(
             const errors: [SchemaType, Error][] = [];
             for (const type of expected.types) {
                 try {
-                    return validateSchema(name, type, actual, coerce);
+                    return validateSchema(
+                        name,
+                        type,
+                        actual,
+                        coerce,
+                        allowResultReferences,
+                    );
                 } catch (e: any) {
                     errors.push([type, e]);
                 }
@@ -82,6 +89,7 @@ export function validateSchema(
                     expected.definition.type,
                     actual,
                     coerce,
+                    allowResultReferences,
                 );
             }
             break;
@@ -96,6 +104,8 @@ export function validateSchema(
                 expected,
                 actual as Record<string, unknown>,
                 coerce,
+                undefined,
+                allowResultReferences,
             );
             break;
         case "array":
@@ -104,7 +114,13 @@ export function validateSchema(
                     `${errorName(name)} is not an array, got ${typeof actual} instead`,
                 );
             }
-            validateArray(name, expected, actual, coerce);
+            validateArray(
+                name,
+                expected,
+                actual,
+                coerce,
+                allowResultReferences,
+            );
             break;
         case "string-union":
             if (typeof actual !== "string") {
@@ -154,6 +170,7 @@ function validateArray(
     expected: SchemaTypeArray,
     actual: unknown[],
     coerce: boolean = false,
+    allowResultReferences: boolean = true,
 ) {
     for (let i = 0; i < actual.length; i++) {
         const element = actual[i];
@@ -162,6 +179,7 @@ function validateArray(
             expected.elementType,
             element,
             coerce,
+            allowResultReferences,
         );
         if (coerce && v !== undefined) {
             actual[i] = v;
@@ -175,6 +193,7 @@ function validateObject(
     actual: Record<string, unknown>,
     coerce: boolean,
     ignoreExtraneous?: string[],
+    allowResultReferences: boolean = true,
 ) {
     for (const field of Object.entries(expected.fields)) {
         const [fieldName, fieldInfo] = field;
@@ -186,7 +205,13 @@ function validateObject(
             }
             continue;
         }
-        const v = validateSchema(fullName, fieldInfo.type, actualValue, coerce);
+        const v = validateSchema(
+            fullName,
+            fieldInfo.type,
+            actualValue,
+            coerce,
+            allowResultReferences,
+        );
         if (coerce && v !== undefined) {
             actual[fieldName] = v;
         }
@@ -211,6 +236,10 @@ export function validateAction(
     validateObject("", actionSchema.type, action, coerce, ["schemaName"]);
 }
 
-export function validateType(type: SchemaType, value: any) {
-    validateSchema("", type, value);
+export function validateType(
+    type: SchemaType,
+    value: unknown,
+    allowResultReferences: boolean = true,
+) {
+    validateSchema("", type, value, false, allowResultReferences);
 }

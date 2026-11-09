@@ -17,8 +17,9 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
     - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
-- Enable Corepack (required for pnpm)
-  - `corepack enable`
+    - `nvm use --lts`
+- Install pnpm
+  - `npm install --global pnpm`
 - Setup Node native module build tools:
   - `sudo apt install -y make build-essential`
 - Clone and build:

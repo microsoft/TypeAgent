@@ -55,19 +55,32 @@ export function buildFlowNameMap(persistDir: string): Record<string, string> {
     };
 
     const nameMap: Record<string, string> = {};
+    const mappedFlowNames = new Set<string>();
+
+    for (const canonical of Object.keys(canonicalKeywords)) {
+        if (flows[canonical]) {
+            nameMap[canonical] = canonical;
+            mappedFlowNames.add(canonical);
+        }
+    }
 
     for (const [actualName, flow] of Object.entries(flows)) {
+        if (mappedFlowNames.has(actualName)) continue;
         const desc = (flow.description ?? "").toLowerCase();
         const name = actualName.toLowerCase();
 
         for (const [canonical, keywords] of Object.entries(canonicalKeywords)) {
             if (nameMap[canonical]) continue;
-            if (actualName === canonical) {
+            if (
+                keywords.some((keyword) => {
+                    const pattern = new RegExp(
+                        `\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+                    );
+                    return pattern.test(desc) || pattern.test(name);
+                })
+            ) {
                 nameMap[canonical] = actualName;
-                break;
-            }
-            if (keywords.some((kw) => desc.includes(kw) || name.includes(kw))) {
-                nameMap[canonical] = actualName;
+                mappedFlowNames.add(actualName);
                 break;
             }
         }

@@ -7,9 +7,11 @@ sidebar; sending a prompt in a TypeAgent session routes through the running
 agent server.
 
 This extension uses VS Code's **proposed** `chatSessionsProvider` API. It
-must be sideloaded into a VS Code build that runs proposed APIs (typically
-Insiders, launched with `--enable-proposed-api typeagent.vscode-chat`). It
-is **not** Marketplace-eligible while the API remains proposed.
+must be sideloaded and VS Code must be launched with
+`--enable-proposed-api=typeagent.vscode-chat`. VS Code 1.133 stable supports
+the explicit flag; Insiders remains the officially documented environment for
+proposed API development. The extension is **not** Marketplace-eligible while
+the API remains proposed.
 
 If you want the stable, Marketplace-eligible TypeAgent chat surface, see
 the sibling `vscode-shell` extension — that one uses a custom webview and
@@ -17,7 +19,7 @@ does not depend on proposed APIs.
 
 ## Prerequisites
 
-- VS Code **1.95** or newer (Insiders recommended).
+- VS Code **1.133** or newer (Insiders recommended).
 - A running TypeAgent **agent server** reachable on `ws://localhost:8999`
   (the default). Start it from the TypeAgent monorepo:
 
@@ -37,10 +39,10 @@ npm run deploy:local
 `code` CLI. After install, launch VS Code with the proposed API enabled:
 
 ```sh
-code-insiders --enable-proposed-api typeagent.vscode-chat
+code --enable-proposed-api=typeagent.vscode-chat
 ```
 
-(or set the `enable-proposed-api` flag in your Insiders launch config.)
+(Use `code-insiders` instead when installing into VS Code Insiders.)
 
 ## Usage
 

@@ -29,7 +29,8 @@ import { readAllLines, readAllText, writeAllLines } from "./objStream.js";
 import fs from "fs";
 import { textToProcessSection } from "./promptLib.js";
 import { ProcessProgress, mapAsync } from "./arrayAsync.js";
-import { generateTextEmbeddings, similarity, SimilarityType } from "./index.js";
+import { generateTextEmbeddings } from "./vector/vectorIndex.js";
+import { similarity, SimilarityType } from "./vector/embeddings.js";
 import * as cheerio from "cheerio";
 
 function splitIntoSentences(text: string): string[] {

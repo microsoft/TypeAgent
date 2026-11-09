@@ -17,6 +17,7 @@ import {
     Message,
     MessageMetadata,
 } from "./memory.js";
+import { readMemoryDataFromFile, writeMemoryDataToFile } from "./common.js";
 const debugLogger = registerDebug("conversation-memory.conversation");
 
 export class ConversationMessageMeta extends MessageMetadata {
@@ -157,6 +158,7 @@ export class ConversationMemory
         extractKnowledge: boolean = true,
         retainKnowledge: boolean = false,
     ): Promise<Result<kpLib.KnowledgeResponse | undefined>> {
+        await this.prepareEmbeddings();
         //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we:
@@ -247,7 +249,10 @@ export class ConversationMemory
     }
 
     public async serialize(): Promise<ConversationMemoryData> {
+        const identities = await this.prepareEmbeddings();
         const data: ConversationMemoryData = {
+            embeddingIdentities:
+                Object.keys(identities).length > 0 ? identities : undefined,
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
@@ -261,6 +266,12 @@ export class ConversationMemory
     }
 
     public async deserialize(data: ConversationMemoryData): Promise<void> {
+        const identities = await this.prepareEmbeddings();
+        kp.validateConversationEmbeddingIdentities(
+            data,
+            identities,
+            this.settings.embeddingSize,
+        );
         this.nameTag = data.nameTag;
         this.messages = this.deserializeMessages(data);
         this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
@@ -295,29 +306,35 @@ export class ConversationMemory
         baseFileName: string,
     ): Promise<void> {
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+        await writeMemoryDataToFile(
+            data,
+            this.settings.conversationSettings,
+            dirPath,
+            baseFileName,
+        );
     }
 
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
+        settings?: ConversationMemorySettings,
     ): Promise<ConversationMemory | undefined> {
-        const memory = new ConversationMemory();
-        const data = await kp.readConversationDataFromFile(
+        const memory = new ConversationMemory(
+            undefined,
+            undefined,
+            undefined,
+            settings,
+        );
+        await memory.prepareEmbeddings();
+        const data = await readMemoryDataFromFile(
+            memory.settings.conversationSettings,
             dirPath,
             baseFileName,
-            memory.settings.conversationSettings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
         );
         if (data) {
-            try {
-                memory.deserialize(data);
-            } catch (e) {
-                console.warn(
-                    `[ConversationMemory] Failed to deserialize saved data (${e}). Starting with fresh memory.`,
-                );
-                return undefined;
-            }
+            await memory.deserialize(data);
+        } else {
+            return undefined;
         }
         return memory;
     }
@@ -450,7 +467,7 @@ type AddMessageTask = {
 type ConversationMemoryTasks = AddMessageTask;
 
 export interface ConversationMemoryData
-    extends kp.IConversationDataWithIndexes<ConversationMessage> {}
+    extends kp.EmbeddingIdentifiedConversationData<ConversationMessage> {}
 
 export function parseConversationMemoryTranscript(
     transcriptText: string,

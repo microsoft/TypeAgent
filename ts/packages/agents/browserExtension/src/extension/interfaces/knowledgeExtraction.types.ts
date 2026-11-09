@@ -4,14 +4,7 @@
 // Progress tracking for knowledge extraction (based on ImportProgress pattern)
 export interface KnowledgeExtractionProgress {
     extractionId: string;
-    phase:
-        | "content"
-        | "basic"
-        | "summary"
-        | "analyzing"
-        | "extracting"
-        | "complete"
-        | "error";
+    phase: "content" | "analyzing" | "extracting" | "complete" | "error";
     totalItems: number;
     processedItems: number;
     currentItem?: string;

@@ -8,6 +8,7 @@ import {
 
 import WebSocket from "ws";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
+import { getDiscoveredViewHostUrl } from "@typeagent/browser-control-rpc/viewRoutes";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -78,6 +79,35 @@ export class BrowserAgentIpc {
         agentServerDiscoveryUrlOverride = url;
     }
 
+    public async getViewHostUrl(): Promise<string> {
+        const agentServerUrl =
+            agentServerDiscoveryUrlOverride ||
+            process.env["WEBSOCKET_HOST"] ||
+            AGENT_SERVER_DEFAULT_URL;
+        const deadline = Date.now() + 10_000;
+        do {
+            const result = await discoverPort("browser", "view", {
+                url: agentServerUrl,
+            });
+            if (result.kind === "found") {
+                return getDiscoveredViewHostUrl(
+                    agentServerUrl,
+                    result.port,
+                    result.url,
+                );
+            }
+            if (result.kind === "unreachable") {
+                throw new Error(
+                    `Browser view discovery failed: ${result.error.message}`,
+                );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        } while (Date.now() < deadline);
+        throw new Error(
+            "Browser view host is not ready. Enable the browser agent and try again.",
+        );
+    }
+
     public async ensureWebsocketConnected(): Promise<WebSocket | undefined> {
         // if there's a pending websocket promise, return it
         if (this.webSocketPromise) {
@@ -97,7 +127,14 @@ export class BrowserAgentIpc {
         //create a new promise to establish the websocket connection
         this.webSocketPromise = new Promise<WebSocket | undefined>(
             async (resolve) => {
-                this.webSocket = await createInlineBrowserWebSocket();
+                try {
+                    this.webSocket = await createInlineBrowserWebSocket();
+                } catch {
+                    debugBrowserIPCError(
+                        "Inline browser connection unavailable",
+                    );
+                    this.webSocket = undefined;
+                }
                 if (!this.webSocket) {
                     this.webSocketPromise = null;
                     resolve(undefined);
@@ -152,7 +189,9 @@ export class BrowserAgentIpc {
                     } catch {}
                 };
 
+                const activeSocket = this.webSocket;
                 this.webSocket.onclose = () => {
+                    if (this.webSocket !== activeSocket) return;
                     debugBrowserIPC("websocket connection closed");
                     this.browserControlProvider?.notifyDisconnected();
                     this.browserControlProvider = undefined;
@@ -292,7 +331,7 @@ export class BrowserAgentIpc {
     }
 
     public isConnected(): boolean {
-        return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
+        return !!this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
     }
 
     /**

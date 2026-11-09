@@ -19,6 +19,7 @@ import { IndexData } from "@typeagent/image-memory";
 import { IndexManager } from "../context/indexManager.js";
 import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
 import registerDebug from "debug";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 const debug = registerDebug("typeagent:dispatcher:sessionContext");
 const debugClientCountWarn = registerDebug(
@@ -107,6 +108,15 @@ export function createSessionContext<T = unknown>(
         },
         get sessionContextId() {
             return sessionContextId;
+        },
+        get conversationId() {
+            return (
+                context.conversationDurableMemory?.conversationId ??
+                context.conversationId
+            );
+        },
+        get currentConnectionId() {
+            return context.currentRequestId?.connectionId;
         },
         notify(
             event: AppAgentEvent,
@@ -225,12 +235,42 @@ export function createSessionContext<T = unknown>(
             defaultId?: number,
         ): Promise<number> {
             return context.clientIO.question(
-                undefined,
+                getStructuredExecution(context) === undefined
+                    ? undefined
+                    : context.currentRequestId,
                 message,
                 choices,
                 defaultId,
                 name,
             );
+        },
+        async requestSecurityApproval(request) {
+            const requestId = context.currentRequestId;
+            const signal = context.currentAbortSignal;
+            const session = context.session;
+            const client = context.clientIO;
+            signal?.throwIfAborted();
+            if (!requestId || !client.requestSecurityApproval) {
+                throw new Error(
+                    "Security approval requires an interactive TypeAgent client. Model continuation answers cannot authorize execution.",
+                );
+            }
+            const result = await client.requestSecurityApproval(
+                { ...requestId },
+                request,
+                name,
+                signal,
+            );
+            signal?.throwIfAborted();
+            if (
+                context.session !== session ||
+                context.currentRequestId?.requestId !== requestId.requestId
+            ) {
+                throw new Error(
+                    "The request changed while security approval was pending.",
+                );
+            }
+            return result;
         },
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);

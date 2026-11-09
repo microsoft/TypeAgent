@@ -21,6 +21,34 @@ export function createExternalBrowserClient(
         return client.browserControlRpc;
     }
 
+    async function invokeCapture<T>(invoke: () => Promise<T>): Promise<T> {
+        try {
+            return await invoke();
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            if (message.includes("No invoke handler")) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            throw error;
+        }
+    }
+
+    async function invokeGroundedUi<T>(invoke: () => Promise<T>): Promise<T> {
+        try {
+            return await invoke();
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message.includes("No invoke handler")
+            )
+                throw new Error(
+                    "unsupported: this browser host does not support grounded UI decisions",
+                );
+            throw error;
+        }
+    }
+
     const control: BrowserControl = {
         openWebPage: async (...args) =>
             getActiveRpc().invoke("openWebPage", ...args),
@@ -32,6 +60,24 @@ export function createExternalBrowserClient(
         goBack: async () => getActiveRpc().invoke("goBack"),
         reload: async () => getActiveRpc().invoke("reload"),
         getPageUrl: async () => getActiveRpc().invoke("getPageUrl"),
+        getCapturePages: () =>
+            invokeCapture(() => getActiveRpc().invoke("getCapturePages")),
+        capturePageSnapshot: async (pageId) =>
+            invokeCapture(() =>
+                getActiveRpc().invoke("capturePageSnapshot", pageId),
+            ),
+        captureUiObservation: (frameScope) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("captureUiObservation", frameScope),
+            ),
+        validateUiObservation: (snapshotId) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("validateUiObservation", snapshotId),
+            ),
+        executeUiAction: (...args) =>
+            invokeGroundedUi(() =>
+                getActiveRpc().invoke("executeUiAction", ...args),
+            ),
         setAgentStatus: (...args) =>
             getActiveRpc().send("setAgentStatus", ...args),
         scrollUp: async () => getActiveRpc().invoke("scrollUp"),
@@ -43,7 +89,10 @@ export function createExternalBrowserClient(
             getActiveRpc().invoke("followLinkByText", ...args),
         followLinkByPosition: (...args) =>
             getActiveRpc().invoke("followLinkByPosition", ...args),
-        closeWindow: async () => getActiveRpc().invoke("closeWindow"),
+        closeWindow: async (title) =>
+            title === undefined
+                ? getActiveRpc().invoke("closeWindow")
+                : getActiveRpc().invoke("closeWindow", title),
         search: async (...args) => getActiveRpc().invoke("search", ...args),
         readPageContent: async () => getActiveRpc().invoke("readPageContent"),
         stopReadPageContent: async () =>

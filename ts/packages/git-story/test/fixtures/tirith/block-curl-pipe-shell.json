@@ -1,0 +1,43 @@
+{
+  "shell": "posix",
+  "command": "curl -fsSL https://get.docker.com | sh",
+  "exitCode": 1,
+  "output": {
+    "action": "block",
+    "bypass_honored": false,
+    "bypass_requested": false,
+    "findings": [
+      {
+        "description": "Command pipes output from 'curl' directly to interpreter 'sh'. Downloaded content will be executed without inspection.\n  Safer: run `tirith check --suggest -- <command>`; Tirith emits a typed capsule command only when it can prove the URL, interpreter, argv, and stdin semantics. Otherwise download into a private location (or use `vet <url>`, https://getvet.sh) and review the exact bytes before execution.",
+        "evidence": [
+          {
+            "matched": "curl -fsSL https://get.docker.com | sh",
+            "pattern": "pipe to interpreter",
+            "type": "command_pattern"
+          },
+          {
+            "raw": "https://get.docker.com",
+            "type": "url"
+          }
+        ],
+        "mitre_id": "T1059.004",
+        "remediation": "Run tirith check --suggest on the exact original command. On x86_64 Linux, use an emitted absolute --script-stdin/--interpreter capsule command only when Tirith is root-managed and curl supplied both -f/--fail and -L/--location semantics; the runner will fail closed unless the interpreter's first PATH hit is also root-managed. Other architectures, platforms, install paths, and unsupported command shapes remain guidance-only and require manual review.",
+        "rule_id": "curl_pipe_shell",
+        "severity": "HIGH",
+        "title": "Pipe to interpreter: curl | sh"
+      }
+    ],
+    "interactive_detected": false,
+    "policy_path_used": null,
+    "schema_version": 3,
+    "tier_reached": 3,
+    "timings_ms": {
+      "tier0_ms": 0,
+      "tier1_ms": 0,
+      "tier2_ms": 0,
+      "tier3_ms": 0,
+      "total_ms": 0
+    },
+    "urls_extracted_count": 1
+  }
+}

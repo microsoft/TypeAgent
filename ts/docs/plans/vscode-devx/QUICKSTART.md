@@ -11,7 +11,7 @@
 
 ## 1. Prerequisites
 
-- **Node ≥ 22**, **pnpm ≥ 10**
+- The **latest Node LTS** (recommended; see [supported versions](../../../README.md#setup)), **pnpm ≥ 10**
 - An OpenAI or Azure key in `ts/config.local.yaml` (see `config.sample.yaml`)
 - VS Code
 

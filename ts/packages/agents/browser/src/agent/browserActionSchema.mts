@@ -50,7 +50,11 @@ export type OpenWebPage = {
             | "turtleGraphics"
             | "annotationsLibrary"
             | "knowledgeLibrary"
-            | "macrosLibrary"
+            | "automationsLibrary"
+            | "memoryCenter"
+            | "memoryHub" // Memory hub (also called Memory)
+            | "entityGraph"
+            | "topicGraph"
             | "chatView" // the chat view (a.k.a. conversation history, chat tab, chat viewer, etc.))
             | WebPageMoniker;
         // Enum indicating if the page to open in the new tab or the current tab.
@@ -179,6 +183,13 @@ export type SearchWebMemories = {
         originalUserRequest?: string;
         query: string;
         searchScope?: "current_page" | "all_indexed";
+        // Restrict results by when and how the page was encountered
+        dateFrom?: string;
+        dateTo?: string;
+        domain?: string;
+        eventType?: "visited" | "bookmarked" | "captured" | "imported";
+        source?: string;
+        pageType?: string;
 
         // Search configuration
         limit?: number;

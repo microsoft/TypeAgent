@@ -1,0 +1,498 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import {
+    createDocMemorySettings,
+    docPartsFromMarkdown,
+    countDocTokens,
+} from "@typeagent/conversation-memory";
+import { FileMemoryService } from "../src/fileMemoryService.js";
+import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
+import type { IngestionSource, SourceType } from "../src/types.js";
+
+const markdown =
+    "# Zephyr report\r\n\r\nZephyr **recovery** preserves source identity.\r\n";
+const contentHash = createHash("sha256").update(markdown).digest("hex");
+
+async function waitForJob(
+    service: FileMemoryService,
+    jobId: string,
+): Promise<void> {
+    const job = await waitForMemoryJob(service, jobId, {
+        pollIntervalMs: 10,
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (job.state !== "complete")
+        throw new Error(
+            `Stubbed Markdown indexing ${job.state}: ${job.error ?? jobId}`,
+        );
+}
+
+describe("Markdown source persistence with stubbed KnowPro", () => {
+    let root: string;
+    let service: FileMemoryService;
+    let previousProvider: string | undefined;
+    const extracted: string[] = [];
+
+    function openService(): FileMemoryService {
+        return new FileMemoryService(root, {
+            informationalViews: false,
+            indexFactory: (corpusId, directory) =>
+                createKnowProCorpusIndex(corpusId, directory, () => {
+                    const settings = createDocMemorySettings(64, undefined, {
+                        completionSettings: {},
+                        complete: async () => ({
+                            success: true as const,
+                            data: JSON.stringify({
+                                searchExpressions: [
+                                    {
+                                        rewrittenQuery: "Zephyr",
+                                        filters: [
+                                            {
+                                                entitySearchTerms: [
+                                                    {
+                                                        name: "Zephyr",
+                                                        isNamePronoun: false,
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            }),
+                        }),
+                    });
+                    settings.embeddingSize = 0;
+                    const knowledge = {
+                        entities: [{ name: "Zephyr", type: ["service"] }],
+                        actions: [],
+                        inverseActions: [],
+                        topics: ["recovery"],
+                    };
+                    settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+                        {
+                            settings: { maxContextLength: 1000 },
+                            extract: async (content: string) => {
+                                extracted.push(content);
+                                return knowledge;
+                            },
+                            extractWithRetry: async (content: string) => {
+                                extracted.push(content);
+                                return {
+                                    success: true as const,
+                                    data: knowledge,
+                                };
+                            },
+                        };
+                    return settings;
+                }),
+        });
+    }
+
+    beforeEach(async () => {
+        extracted.length = 0;
+        previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
+        root = await mkdtemp(
+            path.join(os.tmpdir(), "typeagent-markdown-persistence-"),
+        );
+        service = openService();
+    });
+
+    afterEach(async () => {
+        await service.close();
+        await rm(root, { recursive: true, force: true });
+        if (previousProvider === undefined) {
+            delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        } else {
+            process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
+        }
+    });
+
+    async function ingest(corpusId: string, sourceId: string): Promise<void> {
+        await waitForJob(
+            service,
+            (
+                await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        sourceId,
+                        sourceType: "markdown",
+                        title: `Report ${sourceId}`,
+                        canonicalUri: `https://memory.test/${sourceId}.pdf`,
+                        markdown,
+                        tags: ["report"],
+                        metadata: { producer: "pdf", artifactId: sourceId },
+                        capturedAt: "2026-10-01T12:00:00.000Z",
+                    },
+                    pipeline: { maxCharsPerChunk: 1000 },
+                })
+            ).jobId,
+        );
+    }
+
+    async function checkEvidence(
+        corpusId: string,
+        sourceIds: string[],
+    ): Promise<void> {
+        const result = await service.search({
+            corpusId,
+            query: "Zephyr",
+            limit: 20,
+        });
+        expect(new Set(result.matches.map((match) => match.sourceId))).toEqual(
+            new Set(sourceIds),
+        );
+        for (const evidence of result.matches) {
+            expect(evidence).toMatchObject({
+                corpusId,
+                revisionId: contentHash,
+                title: `Report ${evidence.sourceId}`,
+                canonicalUri: `https://memory.test/${evidence.sourceId}.pdf`,
+                sourceType: "markdown",
+                capturedAt: "2026-10-01T12:00:00.000Z",
+            });
+            expect(evidence.locator).toMatch(/^message:\d+$/);
+            expect(evidence.snippet).toContain("Zephyr");
+            const expectedSnippets = docPartsFromMarkdown(
+                markdown,
+                1000,
+                `typeagent-memory://sources/${evidence.sourceId}/revisions/${contentHash}`,
+                {
+                    collectLinkKnowledge: false,
+                    collectStructuralKnowledge: false,
+                    maxTokensPerPart: 24000,
+                },
+            ).map((part) => part.textChunks.join("\n"));
+            expect(expectedSnippets).toContain(evidence.snippet);
+            expect(evidence).not.toHaveProperty("canonicalRanges");
+            expect(evidence).not.toHaveProperty("locations");
+        }
+        for (const sourceId of sourceIds) {
+            const source = await service.getSource(corpusId, sourceId);
+            expect(source).toMatchObject({
+                sourceId,
+                activeRevisionId: contentHash,
+                metadata: { producer: "pdf", artifactId: sourceId },
+                tags: ["report"],
+            });
+            expect(source?.revisions[0]).not.toHaveProperty("locationMap");
+            expect(
+                (await service.getSourceContent({ corpusId, sourceId }))
+                    .content,
+            ).toBe(markdown);
+        }
+        const answer = await service.answer({
+            corpusId,
+            question: "Zephyr",
+            answerMode: "extractive",
+        });
+        expect(answer.mode).toBe("extractive");
+        expect(answer.citations.length).toBeGreaterThan(0);
+        expect(
+            answer.citations.every((evidence) =>
+                sourceIds.includes(evidence.sourceId),
+            ),
+        ).toBe(true);
+    }
+
+    const tokenBudgetFormats: SourceType[] = [
+        "text",
+        "markdown",
+        "web",
+        "html",
+        "vtt",
+    ];
+    test.each(tokenBudgetFormats)(
+        "durable %s ingestion budgets actual extraction inputs and retains the source",
+        async (sourceType) => {
+            const body =
+                "Zephyr " + "\uC548\uB155\uD558\uC138\uC694".repeat(2_000);
+            const content =
+                sourceType === "html"
+                    ? `<html><body><p>${body}</p></body></html>`
+                    : sourceType === "vtt"
+                      ? `WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<v Alice>${body}</v>\n`
+                      : body;
+            const source: IngestionSource = {
+                sourceId: sourceType,
+                sourceType,
+                title: "Token budget",
+            };
+            if (sourceType === "html") {
+                source.html = content;
+            } else if (sourceType === "markdown" || sourceType === "web") {
+                source.markdown = content;
+            } else {
+                source.text = content;
+            }
+            const { corpusId } = await service.createCorpus("Token budget");
+            const job = await service.ingestDocument({ corpusId, source });
+            await waitForJob(service, job.jobId);
+            expect(extracted.length).toBeGreaterThan(0);
+            for (const input of extracted) {
+                expect(countDocTokens(input)).toBeLessThanOrEqual(24_000);
+            }
+            expect(
+                (
+                    await service.getSourceContent({
+                        corpusId,
+                        sourceId: sourceType,
+                    })
+                ).content,
+            ).toBe(content);
+        },
+        30_000,
+    );
+
+    test("coalesced KnowPro append preserves extraction scope and stable message citations through restart", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Grouped Markdown reports",
+        );
+        await ingest(corpusId, "seed");
+        const perSourceExtractions = extracted.length;
+        await service.withIngestionGroup(async () => {
+            await Promise.all([
+                ingest(corpusId, "first"),
+                ingest(corpusId, "second"),
+            ]);
+        });
+        await checkEvidence(corpusId, ["seed", "first", "second"]);
+        expect(extracted.length).toBe(perSourceExtractions * 3);
+        const citations = async () =>
+            (
+                await service.search({ corpusId, query: "Zephyr", limit: 20 })
+            ).matches.map((hit) => ({
+                sourceId: hit.sourceId,
+                locator: hit.locator,
+                snippet: hit.snippet,
+            }));
+        const before = await citations();
+        await service.close();
+        service = openService();
+        await checkEvidence(corpusId, ["seed", "first", "second"]);
+        expect(await citations()).toEqual(before);
+        expect(extracted.length).toBe(perSourceExtractions * 3);
+    });
+
+    test("uses ordinary Markdown and retains source attribution through append, restart, and reindex", async () => {
+        const { corpusId } = await service.createCorpus("Markdown reports");
+        await ingest(corpusId, "first");
+        await ingest(corpusId, "appended");
+        await checkEvidence(corpusId, ["first", "appended"]);
+        expect(extracted.length).toBeGreaterThan(0);
+        expect(extracted.join("\n")).toContain("Zephyr **recovery**");
+        const extractionCount = extracted.length;
+        await ingest(corpusId, "first");
+        expect(extracted).toHaveLength(extractionCount);
+        await service.close();
+        service = openService();
+        await checkEvidence(corpusId, ["first", "appended"]);
+        await service.reindexSource(corpusId, "first");
+        await checkEvidence(corpusId, ["first", "appended"]);
+        await service.reindexCorpus(corpusId);
+        await checkEvidence(corpusId, ["first", "appended"]);
+        const manifest = JSON.parse(
+            await readFile(path.join(root, corpusId, "manifest.json"), "utf8"),
+        );
+        expect(
+            await readdir(
+                path.join(root, corpusId, "index", manifest.indexGeneration),
+            ),
+        ).not.toContain("document-projection.json");
+    });
+
+    test("delta replacement extracts only changed content, filters tombstones before limits, and keeps retained citations stable", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Delta Markdown reports",
+        );
+        for (const id of ["first", "unchanged", "also-unchanged"])
+            await ingest(corpusId, id);
+        const citations = async () =>
+            (
+                await service.search({ corpusId, query: "Zephyr", limit: 20 })
+            ).matches
+                .map((hit) => ({
+                    sourceId: hit.sourceId,
+                    revisionId: hit.revisionId,
+                    locator: hit.locator,
+                    snippet: hit.snippet,
+                }))
+                .sort((left, right) =>
+                    left.sourceId.localeCompare(right.sourceId),
+                );
+        const retained = (await citations()).filter(
+            (hit) => hit.sourceId !== "first",
+        );
+        const replace = async (text: string) => {
+            const current = (await service.getSource(corpusId, "first"))!;
+            const job = await service.replaceSource({
+                corpusId,
+                sourceId: "first",
+                expectedActiveRevisionId: current.activeRevisionId,
+                source: {
+                    sourceType: "markdown",
+                    title: "Changing report",
+                    markdown: text,
+                    tags: ["changing"],
+                },
+            });
+            await waitForJob(service, job.jobId);
+        };
+        for (let revision = 0; revision < 8; revision++) {
+            const before = extracted.length;
+            await replace(
+                `# Zephyr\n\nZephyr private-delta-${revision} recovery.`,
+            );
+            expect(extracted.length - before).toBe(1);
+            const result = await service.search({
+                corpusId,
+                query: "Zephyr",
+                tags: ["changing"],
+                limit: 1,
+            });
+            expect(result.matches).toHaveLength(1);
+            expect(result.matches[0]?.snippet).toContain(
+                `private-delta-${revision}`,
+            );
+        }
+        expect(
+            (await citations()).filter((hit) => hit.sourceId !== "first"),
+        ).toEqual(retained);
+        const beforeRestart = await citations();
+        const fragments = await service.search({
+            corpusId,
+            query: "Zephyr",
+            indexedFragments: true,
+            tags: ["changing"],
+            limit: 1,
+        });
+        expect(fragments.matches).toHaveLength(1);
+        expect(fragments.matches[0].snippet).toContain("private-delta-7");
+        const graph = await service.getKnowledgeGraph(corpusId);
+        expect(
+            graph.entities.find((entity) => entity.name === "Zephyr")
+                ?.mentionCount,
+        ).toBe(3);
+        expect(
+            graph.topics.find((topic) => topic.name === "recovery")
+                ?.mentionCount,
+        ).toBe(3);
+        const extractionCount = extracted.length;
+        await service.close();
+        service = openService();
+        expect(await citations()).toEqual(beforeRestart);
+        expect(extracted).toHaveLength(extractionCount);
+        await replace(markdown);
+        expect(extracted).toHaveLength(extractionCount);
+        expect(
+            (await service.getSource(corpusId, "first"))?.activeRevisionId,
+        ).toBe(contentHash);
+        await service.close();
+        service = openService();
+        expect(
+            (await citations()).find((hit) => hit.sourceId === "first")
+                ?.locator,
+        ).toBe("message:0");
+        const preview = await service.previewForgetSource(corpusId, "first");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "first",
+            confirmationToken: preview.confirmationToken,
+        });
+        for (const directory of ["index", "revision-text"]) {
+            const rootDirectory = path.join(root, corpusId, directory);
+            const inspect = async (folder: string): Promise<void> => {
+                for (const entry of await readdir(folder, {
+                    withFileTypes: true,
+                })) {
+                    const file = path.join(folder, entry.name);
+                    if (entry.isDirectory()) await inspect(file);
+                    else
+                        expect(await readFile(file, "utf8")).not.toContain(
+                            "private-delta-",
+                        );
+                }
+            };
+            await inspect(rootDirectory);
+        }
+        expect((await citations()).map((hit) => hit.sourceId)).toEqual([
+            "also-unchanged",
+            "unchanged",
+        ]);
+    });
+
+    test.each(["search", "append"])(
+        "%s rebuilds a legacy mapped generation without rewriting retained revisions",
+        async (operation) => {
+            const { corpusId } = await service.createCorpus(
+                "Legacy Markdown reports",
+            );
+            await ingest(corpusId, "first");
+            await service.close();
+            const manifestPath = path.join(root, corpusId, "manifest.json");
+            const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+            const legacyMap = {
+                contentHash: "obsolete",
+                entries: [{ page: 0, start: -1 }],
+            };
+            manifest.sources[0].revisions[0].locationMap = legacyMap;
+            manifest.sources[0].revisions[0].producerExtension = {
+                retained: true,
+            };
+            const retainedRevisions = structuredClone(
+                manifest.sources[0].revisions,
+            );
+            await writeFile(manifestPath, JSON.stringify(manifest));
+            const legacyDirectory = path.join(
+                root,
+                corpusId,
+                "index",
+                manifest.indexGeneration,
+            );
+            await writeFile(
+                path.join(legacyDirectory, "document-projection.json"),
+                "{",
+            );
+            const extractionCount = extracted.length;
+            service = openService();
+            if (operation === "append") {
+                await ingest(corpusId, "appended");
+            }
+            const sourceIds =
+                operation === "append" ? ["first", "appended"] : ["first"];
+            await checkEvidence(corpusId, sourceIds);
+            expect(extracted.length).toBeGreaterThan(extractionCount);
+            const migrated = JSON.parse(await readFile(manifestPath, "utf8"));
+            expect(migrated.indexGeneration).not.toBe(manifest.indexGeneration);
+            expect(migrated.sources[0].revisions).toEqual(retainedRevisions);
+            expect(await readdir(path.join(root, corpusId, "index"))).toEqual([
+                ".segments",
+                migrated.indexGeneration,
+            ]);
+            expect(
+                await readdir(
+                    path.join(
+                        root,
+                        corpusId,
+                        "index",
+                        migrated.indexGeneration,
+                    ),
+                ),
+            ).not.toContain("document-projection.json");
+            await service.close();
+            service = openService();
+            const migratedExtractionCount = extracted.length;
+            await checkEvidence(corpusId, sourceIds);
+            expect(extracted).toHaveLength(migratedExtractionCount);
+            await service.reindexCorpus(corpusId);
+            const reindexed = JSON.parse(await readFile(manifestPath, "utf8"));
+            expect(reindexed.sources[0].revisions).toEqual(retainedRevisions);
+        },
+    );
+});

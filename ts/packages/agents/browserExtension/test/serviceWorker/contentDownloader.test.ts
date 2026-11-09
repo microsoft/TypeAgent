@@ -90,4 +90,203 @@ describe("BrowserContentDownloader", () => {
             expect(result.text).toContain("Test paragraph content");
         });
     });
+
+    describe("concurrent offscreen downloads", () => {
+        it("creates one document and processes requests one at a time", async () => {
+            const getContexts = jest.fn().mockResolvedValue([]);
+            const createDocument = jest.fn().mockResolvedValue(undefined);
+            const closeDocument = jest.fn().mockResolvedValue(undefined);
+            let activeDownloads = 0;
+            let maxActiveDownloads = 0;
+
+            (chrome.runtime as any).getContexts = getContexts;
+            (chrome as any).offscreen = {
+                createDocument,
+                closeDocument,
+            };
+            (chrome.runtime.sendMessage as jest.Mock).mockImplementation(
+                async (message: any) => {
+                    if (message.type === "ping") {
+                        return {
+                            success: true,
+                            data: "pong",
+                            messageId: message.messageId,
+                        };
+                    }
+                    activeDownloads++;
+                    maxActiveDownloads = Math.max(
+                        maxActiveDownloads,
+                        activeDownloads,
+                    );
+                    await Promise.resolve();
+                    activeDownloads--;
+                    return {
+                        success: true,
+                        messageId: message.messageId,
+                        data: {
+                            processedHtml: `<p>${message.url}</p>`,
+                            textContent: message.url,
+                            metadata: { finalUrl: message.url },
+                        },
+                    };
+                },
+            );
+            (downloader as any).delay = jest.fn().mockResolvedValue(undefined);
+
+            const results = await Promise.all(
+                Array.from({ length: 10 }, (_, index) =>
+                    downloader.downloadContent(`https://example.test/${index}`),
+                ),
+            );
+
+            expect(results.every((result) => result.success)).toBe(true);
+            expect(createDocument).toHaveBeenCalledTimes(1);
+            expect(getContexts).toHaveBeenCalledTimes(1);
+            expect(maxActiveDownloads).toBe(1);
+        });
+
+        it("cancels a timed-out request before processing the next item", async () => {
+            (chrome.runtime as any).getContexts = jest
+                .fn()
+                .mockResolvedValue([{ contextType: "OFFSCREEN_DOCUMENT" }]);
+            (chrome as any).offscreen = {
+                closeDocument: jest.fn().mockResolvedValue(undefined),
+            };
+            (downloader as any).maxRetries = 1;
+            (downloader as any).sanitizeTimeout = () => 1;
+
+            let firstMessageId: string | undefined;
+            (chrome.runtime.sendMessage as jest.Mock).mockImplementation(
+                (message: any) => {
+                    if (message.type === "ping") {
+                        return Promise.resolve({
+                            success: true,
+                            data: "pong",
+                            messageId: message.messageId,
+                        });
+                    }
+                    if (message.type === "cancel") {
+                        expect(message.targetMessageId).toBe(firstMessageId);
+                        return Promise.resolve({
+                            success: true,
+                            data: { cancelled: true },
+                            messageId: message.messageId,
+                        });
+                    }
+                    if (firstMessageId === undefined) {
+                        firstMessageId = message.messageId;
+                        return new Promise(() => {});
+                    }
+                    return Promise.resolve({
+                        success: true,
+                        messageId: message.messageId,
+                        data: {
+                            processedHtml: "<p>second</p>",
+                            textContent: "second",
+                            metadata: { finalUrl: message.url },
+                        },
+                    });
+                },
+            );
+
+            const first = await downloader.downloadContent(
+                "https://example.test/slow",
+                { timeout: 1 },
+            );
+            const second = await downloader.downloadContent(
+                "https://example.test/next",
+                { timeout: 1 },
+            );
+
+            expect(first).toMatchObject({ success: false, method: "failed" });
+            expect(second).toMatchObject({
+                success: true,
+                textContent: "second",
+            });
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    type: "cancel",
+                    targetMessageId: firstMessageId,
+                }),
+            );
+        });
+    });
+
+    describe("retry classification", () => {
+        beforeEach(() => {
+            (chrome.runtime as any).getContexts = jest
+                .fn()
+                .mockResolvedValue([{ contextType: "OFFSCREEN_DOCUMENT" }]);
+            (chrome as any).offscreen = {
+                closeDocument: jest.fn().mockResolvedValue(undefined),
+            };
+            (downloader as any).delay = jest.fn().mockResolvedValue(undefined);
+        });
+
+        it("does not retry permanent HTTP failures", async () => {
+            let downloadAttempts = 0;
+            (chrome.runtime.sendMessage as jest.Mock).mockImplementation(
+                async (message: any) => {
+                    if (message.type === "ping") {
+                        return {
+                            success: true,
+                            data: "pong",
+                            messageId: message.messageId,
+                        };
+                    }
+                    downloadAttempts++;
+                    return {
+                        success: false,
+                        error: "HTTP 404: Not Found",
+                        messageId: message.messageId,
+                    };
+                },
+            );
+
+            const result = await downloader.downloadContent(
+                "https://example.test/missing",
+            );
+
+            expect(result.success).toBe(false);
+            expect(downloadAttempts).toBe(1);
+        });
+
+        it("retries transient HTTP failures", async () => {
+            let downloadAttempts = 0;
+            (chrome.runtime.sendMessage as jest.Mock).mockImplementation(
+                async (message: any) => {
+                    if (message.type === "ping") {
+                        return {
+                            success: true,
+                            data: "pong",
+                            messageId: message.messageId,
+                        };
+                    }
+                    downloadAttempts++;
+                    return downloadAttempts === 1
+                        ? {
+                              success: false,
+                              error: "HTTP 503: Service Unavailable",
+                              messageId: message.messageId,
+                          }
+                        : {
+                              success: true,
+                              messageId: message.messageId,
+                              data: {
+                                  processedHtml: "<p>recovered</p>",
+                                  textContent: "recovered",
+                                  metadata: { finalUrl: message.url },
+                              },
+                          };
+                },
+            );
+
+            const result = await downloader.downloadContent(
+                "https://example.test/retry",
+            );
+
+            expect(result.success).toBe(true);
+            expect(downloadAttempts).toBe(2);
+        });
+    });
 });

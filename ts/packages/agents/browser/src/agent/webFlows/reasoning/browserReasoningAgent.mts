@@ -1,14 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    createSdkMcpServer,
-    Options,
-    query,
-    SdkMcpToolDefinition,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import type {
+    AssistantMessageEvent,
+    MessageOptions,
+    SessionConfig,
+} from "@github/copilot-sdk";
 import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
-import { z } from "zod/v4";
+import os from "node:os";
+import path from "node:path";
 import { WebFlowBrowserAPI } from "../webFlowBrowserApi.mjs";
 import {
     BrowserReasoningConfig,
@@ -28,6 +29,61 @@ const debug = registerDebug("typeagent:browser:webflows:reasoning");
 const PAGE_LOAD_TIMEOUT_MS = 5000; // 5 second timeout for page loads
 
 const MCP_SERVER_NAME = "browser-tools";
+const COPILOT_TIMEOUT_MS = 2_147_483_647;
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+    if (signal?.aborted) {
+        throw signal.reason ?? new Error("Browser reasoning was cancelled.");
+    }
+}
+
+export interface BrowserReasoningCopilotSession {
+    sendAndWait(
+        promptOrOptions: string | MessageOptions,
+        timeout?: number,
+    ): Promise<AssistantMessageEvent | undefined>;
+    abort(): Promise<void>;
+    disconnect(): Promise<void>;
+}
+
+export interface BrowserReasoningCopilotClient {
+    start(): Promise<void>;
+    createSession(
+        config: SessionConfig,
+    ): Promise<BrowserReasoningCopilotSession>;
+    stop(): Promise<unknown>;
+}
+
+export type BrowserReasoningCopilotClientFactory =
+    () => Promise<BrowserReasoningCopilotClient>;
+
+export async function createCopilotClient(
+    clientFactory?: () =>
+        | BrowserReasoningCopilotClient
+        | Promise<BrowserReasoningCopilotClient>,
+): Promise<BrowserReasoningCopilotClient> {
+    const client = clientFactory
+        ? await clientFactory()
+        : new (await import("@github/copilot-sdk")).CopilotClient({
+              mode: "empty",
+              baseDirectory: path.join(os.homedir(), ".typeagent", "copilot"),
+          });
+    try {
+        await client.start();
+        return client;
+    } catch (error) {
+        try {
+            await client.stop();
+        } catch (stopError) {
+            debug(
+                "Failed to stop Copilot client after startup failure: %O",
+                stopError,
+            );
+        }
+        throw error;
+    }
+}
 
 export interface BrowserReasoningCallbacks {
     onThinking?: (text: string) => void;
@@ -42,12 +98,33 @@ export interface BrowserReasoningCallbacks {
  * capturing a trace of all actions for later script generation.
  */
 export class BrowserReasoningAgent {
-    private toolAdapter?: WebFlowToolAdapter;
+    private readonly toolAdapter: WebFlowToolAdapter;
 
     constructor(
         private browserApi: WebFlowBrowserAPI,
         private callbacks?: BrowserReasoningCallbacks,
-    ) {}
+        private copilotClientFactory: BrowserReasoningCopilotClientFactory = createCopilotClient,
+    ) {
+        this.toolAdapter = this.createToolAdapter();
+    }
+
+    private createToolAdapter(): WebFlowToolAdapter {
+        const toolCallbacks: WebFlowToolCallbacks = {
+            onStepRecorded: (step) => {
+                this.callbacks?.onToolResult?.(step.tool, step.result);
+            },
+            onToolCall: (tool, args) => {
+                this.callbacks?.onToolCall?.(tool, args);
+            },
+        };
+        if (this.callbacks?.onThinking) {
+            toolCallbacks.onThinking = this.callbacks.onThinking;
+        }
+        if (this.callbacks?.onText) {
+            toolCallbacks.onText = this.callbacks.onText;
+        }
+        return new WebFlowToolAdapter(this.browserApi, toolCallbacks);
+    }
 
     /**
      * Creates an agent using the unified WebFlowBrowserAPI tools.
@@ -57,20 +134,7 @@ export class BrowserReasoningAgent {
         browserApi: WebFlowBrowserAPI,
         callbacks?: BrowserReasoningCallbacks,
     ): BrowserReasoningAgent {
-        const agent = new BrowserReasoningAgent(browserApi, callbacks);
-        const toolCallbacks: WebFlowToolCallbacks = {
-            onStepRecorded: (step) => {
-                callbacks?.onToolResult?.(step.tool, step.result);
-            },
-        };
-        if (callbacks?.onThinking) {
-            toolCallbacks.onThinking = callbacks.onThinking;
-        }
-        if (callbacks?.onText) {
-            toolCallbacks.onText = callbacks.onText;
-        }
-        agent.toolAdapter = new WebFlowToolAdapter(browserApi, toolCallbacks);
-        return agent;
+        return new BrowserReasoningAgent(browserApi, callbacks);
     }
 
     /**
@@ -83,14 +147,22 @@ export class BrowserReasoningAgent {
     async executeGoal(
         config: Partial<BrowserReasoningConfig> & { goal: string },
     ): Promise<BrowserReasoningTrace> {
-        const fullConfig = {
+        const provider =
+            config.provider ??
+            (config.model?.startsWith("claude-") ? "claude" : "copilot");
+        const fullConfig: BrowserReasoningConfig = {
             ...DEFAULT_BROWSER_REASONING_CONFIG,
             ...config,
+            provider,
+            model:
+                config.model ??
+                (provider === "claude"
+                    ? DEFAULT_CLAUDE_MODEL
+                    : DEFAULT_BROWSER_REASONING_CONFIG.model),
         };
 
         const startTime = Date.now();
-        const steps: BrowserTraceStep[] = [];
-
+        throwIfAborted(fullConfig.abortSignal);
         const currentUrl = await this.browserApi.getCurrentUrl();
         const startUrl = fullConfig.startUrl || currentUrl;
 
@@ -104,24 +176,48 @@ export class BrowserReasoningAgent {
                 `Already on target URL: ${fullConfig.startUrl}, skipping navigation`,
             );
         }
+        throwIfAborted(fullConfig.abortSignal);
 
-        // Use unified tools if adapter is available, otherwise fall back to legacy tools
-        let tools: SdkMcpToolDefinition<any>[];
-        let systemPrompt: string;
+        this.toolAdapter.clearSteps();
+        const systemPrompt = this.buildUnifiedSystemPrompt(fullConfig);
+        const result =
+            fullConfig.provider === "claude"
+                ? await this.executeWithClaude(fullConfig, systemPrompt)
+                : await this.executeWithCopilot(fullConfig, systemPrompt);
 
-        if (this.toolAdapter) {
-            this.toolAdapter.clearSteps();
-            tools = this.toolAdapter.buildTools();
-            systemPrompt = this.buildUnifiedSystemPrompt(fullConfig);
-        } else {
-            tools = this.buildBrowserMcpTools(steps);
-            systemPrompt = this.buildSystemPrompt(fullConfig);
+        return {
+            goal: fullConfig.goal,
+            startUrl,
+            steps: this.convertRecordedSteps(
+                this.toolAdapter.getRecordedSteps(),
+            ),
+            result,
+            duration: Date.now() - startTime,
+        };
+    }
+
+    private async executeWithClaude(
+        config: BrowserReasoningConfig,
+        systemPrompt: string,
+    ): Promise<BrowserReasoningTrace["result"]> {
+        const { createSdkMcpServer, query } = await import(
+            "@anthropic-ai/claude-agent-sdk"
+        );
+        const tools = this.toolAdapter.buildTools();
+        const abortController = new AbortController();
+        const abortListener = () =>
+            abortController.abort(config.abortSignal?.reason);
+        config.abortSignal?.addEventListener("abort", abortListener, {
+            once: true,
+        });
+        if (config.abortSignal?.aborted) {
+            abortListener();
         }
-
         const options: Options = {
-            model: fullConfig.model,
-            maxTurns: fullConfig.maxSteps,
+            model: config.model,
+            maxTurns: config.maxSteps,
             systemPrompt,
+            abortController,
             allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
             canUseTool: async (toolName) => {
                 // Only allow browser-tools MCP tools; deny all others
@@ -164,11 +260,12 @@ export class BrowserReasoningAgent {
 
         try {
             const queryInstance = query({
-                prompt: fullConfig.goal,
+                prompt: config.goal,
                 options: { ...options, ...claudeExecutableOption() },
             });
 
             for await (const message of queryInstance) {
+                throwIfAborted(config.abortSignal);
                 debug(message);
 
                 if (message.type === "assistant") {
@@ -184,10 +281,9 @@ export class BrowserReasoningAgent {
                             const thinkingContent = (content as any).thinking;
                             if (thinkingContent) {
                                 this.callbacks?.onThinking?.(thinkingContent);
-                                if (steps.length > 0) {
-                                    steps[steps.length - 1].thinking =
-                                        thinkingContent;
-                                }
+                                this.toolAdapter.setThinkingForLastStep(
+                                    thinkingContent,
+                                );
                             }
                         }
                     }
@@ -206,19 +302,144 @@ export class BrowserReasoningAgent {
             }
         } catch (error) {
             summary = error instanceof Error ? error.message : String(error);
+        } finally {
+            config.abortSignal?.removeEventListener("abort", abortListener);
         }
 
-        // Convert recorded steps from tool adapter to trace format
-        const finalSteps = this.toolAdapter
-            ? this.convertRecordedSteps(this.toolAdapter.getRecordedSteps())
-            : steps;
+        return { success, summary };
+    }
 
+    private async executeWithCopilot(
+        config: BrowserReasoningConfig,
+        systemPrompt: string,
+    ): Promise<BrowserReasoningTrace["result"]> {
+        const client = await this.copilotClientFactory();
+        let session: BrowserReasoningCopilotSession | undefined;
+        let abortListener: (() => void) | undefined;
+        let stepLimitReached = false;
+
+        try {
+            throwIfAborted(config.abortSignal);
+            let toolCallCount = 0;
+            const tools = this.toolAdapter.buildCopilotTools(() => {
+                if (toolCallCount >= config.maxSteps) {
+                    stepLimitReached = true;
+                    void session
+                        ?.abort()
+                        .catch((error) =>
+                            debug(
+                                "Failed to abort Copilot session at step limit: %O",
+                                error,
+                            ),
+                        );
+                    throw new Error(
+                        `Maximum browser reasoning steps (${config.maxSteps}) reached.`,
+                    );
+                }
+                toolCallCount++;
+            });
+            session = await client.createSession({
+                clientName: "TypeAgent Browser WebFlow",
+                model: config.model,
+                reasoningEffort: "high",
+                streaming: true,
+                tools,
+                availableTools: tools.map((tool) => `custom:${tool.name}`),
+                toolSearch: { enabled: false },
+                systemMessage: { mode: "replace", content: systemPrompt },
+                skipCustomInstructions: true,
+                onPermissionRequest: () => ({
+                    kind: "reject",
+                    feedback:
+                        "Only the configured WebFlow browser tools are allowed.",
+                }),
+            });
+
+            if (config.abortSignal) {
+                const activeSession = session;
+                let rejectForAbort: (reason?: unknown) => void = () => {};
+                const aborted = new Promise<never>((_, reject) => {
+                    rejectForAbort = reject;
+                });
+                abortListener = () => {
+                    void activeSession
+                        .abort()
+                        .catch((error) =>
+                            debug("Failed to abort Copilot session: %O", error),
+                        );
+                    rejectForAbort(config.abortSignal?.reason);
+                };
+                config.abortSignal.addEventListener("abort", abortListener, {
+                    once: true,
+                });
+                if (config.abortSignal.aborted) {
+                    abortListener();
+                }
+                const response = await Promise.race([
+                    session.sendAndWait(
+                        { prompt: config.goal },
+                        COPILOT_TIMEOUT_MS,
+                    ),
+                    aborted,
+                ]);
+                if (stepLimitReached) {
+                    return this.stepLimitResult(config.maxSteps);
+                }
+                return this.copilotResponseResult(response);
+            }
+
+            const response = await session.sendAndWait(
+                { prompt: config.goal },
+                COPILOT_TIMEOUT_MS,
+            );
+            if (stepLimitReached) {
+                return this.stepLimitResult(config.maxSteps);
+            }
+            return this.copilotResponseResult(response);
+        } catch (error) {
+            if (stepLimitReached) {
+                return this.stepLimitResult(config.maxSteps);
+            }
+            return {
+                success: false,
+                summary: error instanceof Error ? error.message : String(error),
+            };
+        } finally {
+            if (abortListener && config.abortSignal) {
+                config.abortSignal.removeEventListener("abort", abortListener);
+            }
+            if (session) {
+                try {
+                    await session.disconnect();
+                } catch (error) {
+                    debug("Failed to disconnect Copilot session: %O", error);
+                }
+            }
+            try {
+                await client.stop();
+            } catch (error) {
+                debug("Failed to stop Copilot client: %O", error);
+            }
+        }
+    }
+
+    private stepLimitResult(maxSteps: number): BrowserReasoningTrace["result"] {
         return {
-            goal: fullConfig.goal,
-            startUrl,
-            steps: finalSteps,
-            result: { success, summary },
-            duration: Date.now() - startTime,
+            success: false,
+            summary: `Maximum browser reasoning steps (${maxSteps}) reached.`,
+        };
+    }
+
+    private copilotResponseResult(
+        response: AssistantMessageEvent | undefined,
+    ): BrowserReasoningTrace["result"] {
+        const summary = response?.data.content ?? "";
+        if (summary) {
+            this.callbacks?.onText?.(summary);
+        }
+        return {
+            success: response !== undefined,
+            summary: summary || "Copilot returned no final response.",
         };
     }
 
@@ -240,254 +461,6 @@ export class BrowserReasoningAgent {
         }));
     }
 
-    private buildBrowserMcpTools(
-        steps: BrowserTraceStep[],
-    ): SdkMcpToolDefinition<any>[] {
-        let stepCounter = 0;
-
-        const recordStep = (
-            tool: string,
-            args: Record<string, unknown>,
-            result: BrowserTraceStep["result"],
-        ) => {
-            stepCounter++;
-            steps.push({
-                stepNumber: stepCounter,
-                thinking: "",
-                action: { tool, args },
-                result,
-                timestamp: Date.now(),
-            });
-            this.callbacks?.onToolResult?.(tool, result);
-        };
-
-        return [
-            this.createTool(
-                "navigateTo",
-                "Navigate the browser to a URL",
-                { url: z.string().describe("The URL to navigate to") },
-                async (args) => {
-                    await this.browserApi.navigateTo(args.url as string);
-                    await this.browserApi.awaitPageLoad(PAGE_LOAD_TIMEOUT_MS);
-                    const pageUrl = await this.browserApi.getCurrentUrl();
-                    recordStep("navigateTo", args, {
-                        success: true,
-                        pageUrl,
-                    });
-                    return {
-                        content: [
-                            { type: "text", text: `Navigated to ${pageUrl}` },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "goBack",
-                "Go back to the previous page",
-                {},
-                async (args) => {
-                    await this.browserApi.goBack();
-                    const pageUrl = await this.browserApi.getCurrentUrl();
-                    recordStep("goBack", args, { success: true, pageUrl });
-                    return {
-                        content: [
-                            { type: "text", text: `Went back to ${pageUrl}` },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "getCurrentUrl",
-                "Get the current page URL",
-                {},
-                async (args) => {
-                    const url = await this.browserApi.getCurrentUrl();
-                    recordStep("getCurrentUrl", args, {
-                        success: true,
-                        data: url,
-                    });
-                    return { content: [{ type: "text", text: url }] };
-                },
-            ),
-            this.createTool(
-                "getPageText",
-                "Get the text content of the current page",
-                {},
-                async (args) => {
-                    const text = await this.browserApi.getPageText();
-                    recordStep("getPageText", args, {
-                        success: true,
-                        data: text.slice(0, 500),
-                    });
-                    return { content: [{ type: "text", text }] };
-                },
-            ),
-            this.createTool(
-                "click",
-                "Click on an element identified by its CSS selector",
-                {
-                    selector: z
-                        .string()
-                        .describe("CSS selector of the element"),
-                },
-                async (args) => {
-                    await this.browserApi.click(args.selector as string);
-                    await this.browserApi.awaitPageInteraction();
-                    const pageUrl = await this.browserApi.getCurrentUrl();
-                    recordStep("click", args, { success: true, pageUrl });
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: `Clicked element: ${args.selector}`,
-                            },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "enterText",
-                "Type text into an input element",
-                {
-                    selector: z.string().describe("CSS selector of the input"),
-                    text: z.string().describe("Text to enter"),
-                },
-                async (args) => {
-                    await this.browserApi.enterText(
-                        args.selector as string,
-                        args.text as string,
-                    );
-                    recordStep("enterText", args, { success: true });
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: `Entered text into ${args.selector}`,
-                            },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "pressKey",
-                "Press a keyboard key (e.g., 'Enter', 'Tab', 'Escape')",
-                {
-                    key: z.string().describe("Key name to press"),
-                },
-                async (args) => {
-                    await this.browserApi.pressKey(args.key as string);
-                    recordStep("pressKey", args, { success: true });
-                    return {
-                        content: [
-                            { type: "text", text: `Pressed key: ${args.key}` },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "selectOption",
-                "Select an option from a dropdown/select element",
-                {
-                    selector: z
-                        .string()
-                        .describe("CSS selector of the select element"),
-                    value: z.string().describe("Value to select"),
-                },
-                async (args) => {
-                    await this.browserApi.selectOption(
-                        args.selector as string,
-                        args.value as string,
-                    );
-                    recordStep("selectOption", args, { success: true });
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: `Selected "${args.value}" in ${args.selector}`,
-                            },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "captureScreenshot",
-                "Take a screenshot of the current page",
-                {},
-                async (args) => {
-                    const screenshot =
-                        await this.browserApi.captureScreenshot();
-                    recordStep("captureScreenshot", args, {
-                        success: true,
-                        screenshot: screenshot.slice(0, 100) + "...",
-                    });
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: `Screenshot captured (${screenshot.length} chars base64)`,
-                            },
-                        ],
-                    };
-                },
-            ),
-        ];
-    }
-
-    private createTool(
-        name: string,
-        description: string,
-        schema: Record<string, any>,
-        handler: (args: Record<string, unknown>) => Promise<{
-            content: Array<{ type: "text"; text: string }>;
-        }>,
-    ): SdkMcpToolDefinition<any> {
-        return {
-            name,
-            description,
-            inputSchema: schema,
-            handler: async (args: Record<string, unknown>) => {
-                try {
-                    return await handler(args);
-                } catch (error) {
-                    const msg =
-                        error instanceof Error ? error.message : String(error);
-                    return {
-                        content: [
-                            { type: "text" as const, text: `Error: ${msg}` },
-                        ],
-                        isError: true,
-                    };
-                }
-            },
-        };
-    }
-
-    private buildSystemPrompt(config: BrowserReasoningConfig): string {
-        return [
-            "You are a browser automation agent. Your goal is to complete the user's task by interacting with web pages.",
-            "",
-            "Available tools:",
-            "- navigateTo: Navigate to a URL",
-            "- goBack: Go back to previous page",
-            "- getCurrentUrl: Get current page URL",
-            "- getPageText: Read page text content",
-            "- click: Click on an element by CSS selector",
-            "- enterText: Type text into an input by CSS selector",
-            "- pressKey: Press a keyboard key",
-            "- selectOption: Select from a dropdown by CSS selector",
-            "- captureScreenshot: Take a page screenshot",
-            "",
-            "Strategy:",
-            "1. Start by understanding the current page (getPageText or captureScreenshot)",
-            "2. Interact with elements to achieve the goal",
-            "3. Verify results after each action",
-            "4. When the goal is achieved, report success with a summary",
-            "",
-            "Be methodical. If an action fails, try alternative approaches.",
-            "Always verify the page state after navigation or form submission.",
-        ].join("\n");
-    }
-
     /**
      * Builds system prompt for unified WebFlowBrowserAPI tools.
      * Emphasizes the extractComponent-first pattern for component reuse.
@@ -503,18 +476,18 @@ export class BrowserReasoningAgent {
             "**FORBIDDEN tools (will be denied):** ToolSearch, Bash, WebFetch, Read, Write, Task, Glob, Grep, Edit, WebSearch",
             "",
             "**AVAILABLE tools (use ONLY these):**",
-            "- mcp__browser-tools__extractComponent - Find UI elements",
-            "- mcp__browser-tools__click - Click an element",
-            "- mcp__browser-tools__clickAndWait - Click and wait for page update",
-            "- mcp__browser-tools__enterText - Type into a field",
-            "- mcp__browser-tools__clearAndType - Clear and type text",
-            "- mcp__browser-tools__selectOption - Select dropdown option",
-            "- mcp__browser-tools__pressKey - Press keyboard key",
-            "- mcp__browser-tools__navigateTo - Navigate to URL",
-            "- mcp__browser-tools__awaitPageLoad - Wait for page load",
-            "- mcp__browser-tools__checkPageState - Verify page content",
-            "- mcp__browser-tools__getPageText - Read page text",
-            "- mcp__browser-tools__queryContent - Extract structured data",
+            "- extractComponent - Find UI elements",
+            "- click - Click an element",
+            "- clickAndWait - Click and wait for page update",
+            "- enterText - Type into a field",
+            "- clearAndType - Clear and type text",
+            "- selectOption - Select dropdown option",
+            "- pressKey - Press keyboard key",
+            "- navigateTo - Navigate to URL",
+            "- awaitPageLoad - Wait for page load",
+            "- checkPageState - Verify page content",
+            "- getPageText - Read page text",
+            "- queryContent - Extract structured data",
             "",
             "## Important Pattern: Extract First, Then Act",
             "",
@@ -555,6 +528,7 @@ export class BrowserReasoningAgent {
             "",
             "## Strategy",
             "",
+            `Complete the goal in at most ${config.maxSteps} browser actions.`,
             "1. Understand the current page with getPageText (once at start)",
             "2. Use extractComponent to find each UI element you need",
             "3. Perform actions using CSS selectors from extracted components",

@@ -1,0 +1,101 @@
+{
+  "revision": "f9e92cbc0224d1413c11dda15b284ee41b9fc48f",
+  "cases": [
+    {
+      "options": {
+        "images": "none",
+        "math": "unicode",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n<!-- figura: Figure 1: Signals -->\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "none",
+        "math": "unicode",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n<!-- figura: Figure 1: Signals -->\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "none",
+        "math": "latex",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n<!-- figura: Figure 1: Signals -->\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "none",
+        "math": "latex",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n<!-- figura: Figure 1: Signals -->\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "ref",
+        "math": "unicode",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](images/p1-figure-1.png)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "ref",
+        "math": "unicode",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](images/p1-figure-1.png)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "ref",
+        "math": "latex",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](images/p1-figure-1.png)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "ref",
+        "math": "latex",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](images/p1-figure-1.png)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "embed",
+        "math": "unicode",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](data:image/png;base64,fixture-only)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "embed",
+        "math": "unicode",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen x² + y₂ = 5, then tg x = 1.\n\n **Bold** *italic* ***both*** x<sup>2</sup> + y<sub>2</sub> **= 5  \nliteral \\* and $** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](data:image/png;base64,fixture-only)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "embed",
+        "math": "latex",
+        "pageBreaks": false
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](data:image/png;base64,fixture-only)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    },
+    {
+      "options": {
+        "images": "embed",
+        "math": "latex",
+        "pageBreaks": true
+      },
+      "markdown": "# Local mathematics\n\n###### Bounded heading\n\nWhen $x^{2} + y_{2} = 5$, then $\\operatorname{tg} x = 1$.\n\n **Bold** *italic* ***both*** $x^{2} + y_{2} = 5$  \n**literal \\* and \\$** \n\n1. First\n  - Nested  \na) Letter marker\n\n| A\\|B | Heading |  |\n|---|---|---|\n| one<br>two |  |  |\n| x² + 1 = 0 | value | extra |\n\n$$\n\\frac{a}{b} + \\sqrt{x} \\tag{2.1}\n$$\n\n*Table 1: Measured values*\n\n```\nconst value = 1;\nreturn value;\n```\n\n![Figure 1: Signals](data:image/png;base64,fixture-only)\n\n> Signal strength\n\n<!-- figura: figura -->\n\n> Words without an image\n\nA quoted sentence is ordinary text upstream.\n\n<!-- página 2 -->\n\nContinue without a synthetic page heading.\n\n$$\nE = mc²\n$$\n"
+    }
+  ]
+}

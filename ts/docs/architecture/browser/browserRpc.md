@@ -9,12 +9,16 @@
 
 ## Overview
 
-The browser agent spans four processes connected by three communication
-transports. The `@typeagent/agent-rpc` package provides the foundation:
+The browser agent spans multiple processes and communication transports.
+The `@typeagent/agent-rpc` package provides the foundation:
 channel multiplexing over a shared transport, typed request-response RPC,
 and fire-and-forget messaging.
 
 ![Browser agent processes and transports](../images/browser_process_transport_overview.svg)
+
+This diagram covers the browser-control transports. Portable agent-data
+pages additionally use HTTP/SSE and forked-process IPC, described in
+[Localhost view RPC](#localhost-view-rpc).
 
 ---
 
@@ -100,6 +104,71 @@ Liveness is maintained from three independent angles:
 ---
 
 ## The agent-rpc package
+
+### Local browser view gateway
+
+Browser views use same-origin HTTP rather than extension service-worker
+messaging. The forked view server binds loopback and connects to the browser
+agent using `createRpc` directly on the Node child-process IPC channel.
+`@typeagent/browser-control-rpc/viewRpc` defines the named view contract.
+`getViewHostUrl` waits for the shared child startup promise before returning
+an address; a missing, disconnected, or zero-port host is an error, never a URL.
+Concurrent callers reuse the pending fork, and disabling the agent cancels
+startup even before session-folder discovery completes. Canonical view routes
+from the shared registry redirect to their `/library/` assets, retaining query
+strings and browser URL fragments.
+
+- `POST /api/views/invoke` accepts JSON `{ method, params }`. Empty operations
+  require `params: {}`. Only named Memory Center, knowledge-library, macro,
+  import, and auto-index read operations are exposed. Generic tab, script,
+  browser-control, and navigation operations are not available.
+- Payloads are validated, including nested documents and import options.
+  Responses are `{ success: true, data }` or `{ success: false, error }`.
+  Invalid requests receive 400/415; disconnected agents receive 503.
+- `GET /api/views/events` streams SSE JSON
+  `{ type, data, timestamp }`, with `importProgress` and
+  `knowledgeExtractionProgress` events. Progress listeners are added alongside
+  the existing extension listeners and removed on child exit/disconnection.
+- Import calls resolve when existing domain processing finishes; progress is
+  streamed concurrently. `getFileImportProgress` reads the latest observed
+  progress and persisted `ImportStateManager` checkpoint, when available.
+  `cancelImport` and `cancelFileImport` explicitly return
+  `{ success: false, cancelled: false, error }`: these import pipelines do not
+  support cancellation. Memory Center job cancellation uses its existing
+  domain implementation instead.
+
+The gateway checks the loopback Host header and requires matching Origin when
+present, rejects cross-site fetches and opaque origins, and does not enable
+cross-origin API access. Local assets use a self-only script/connect CSP.
+Browser controls needed by extension options remain in the extension.
+
+### Explicit-page capture
+
+`BrowserControl` exposes `getCapturePages(): Promise<BrowserCapturePage[]>`
+and `capturePageSnapshot(pageId: string): Promise<BrowserCaptureSnapshot>`.
+A capture page contains `{ pageId, url, title }`; a snapshot adds
+`htmlFragments: { frameId: string, content: string }[]` and `warnings: string[]`.
+Handles are opaque and provider-local, expire on navigation/removal or a fresh
+listing, and must not be constructed from URLs or tab IDs.
+
+Chrome lists actual HTTP(S) tabs, excluding incognito and loading/restricted
+pages. The handle binds the tab and Chrome-supplied root `documentId`.
+Capture never switches the active tab: document-targeted content-script RPC
+reads URL, title, and HTML synchronously from that one document, rejecting
+navigation or vanished documents. A separate `captureRpc` message envelope
+prevents call-ID collisions with active-tab RPC. The Puppeteer launcher uses
+this same extension provider; it is not a separate active-Page capture backend.
+
+Electron inline capture pins the listed `WebContents` and root `WebFrameMain`,
+uses one synchronous object-bound evaluation, and rejects navigation, destruction,
+or frame replacement. Non-persistent (private) sessions are excluded. Both
+providers capture only root-document HTML and explicitly warn when embedded
+frames are omitted. Providers lacking a safe document-bound implementation
+reject with an explicit unavailable error; neither the facade nor an older
+external provider falls back to `getPageUrl` plus `getHtmlFragments`.
+
+These are browser-provider methods, not generic browser operations exposed to
+the localhost view gateway.
 
 All RPC communication in the browser agent is built on `@typeagent/agent-rpc`,
 which provides four layers of abstraction.
@@ -545,7 +614,7 @@ The agent server filters these messages before routing to channel handlers.
 ### Status broadcasting
 
 On connection state changes, the extension broadcasts to all open
-extension pages (side panel, library views, options):
+extension pages (side panel and options):
 
 ```typescript
 broadcastConnectionStatus(connected: boolean): void
@@ -637,18 +706,59 @@ Methods handled entirely within the service worker:
 
 ## Custom protocol handling
 
-The extension implements a custom `typeagent-browser://` protocol for
-internal navigation:
+The lightweight `@typeagent/browser-control-rpc/viewRoutes` registry owns
+logical names, canonical routes, and approved legacy filenames. The shared
+resolver recognizes `typeagent-browser://views/<page>.html` and the historical
+hostname-only form. Chrome and Electron resolve them against the live view
+server; neither rewrites them to extension assets.
 
 ```typescript
-function resolveCustomProtocolUrl(url: string): string;
-// Maps: typeagent-browser://knowledgeLibrary.html
-//    → chrome-extension://<extensionId>/views/knowledgeLibrary.html
-// Preserves query parameters
+resolveBrowserViewUrl(
+  "typeagent-browser://views/entityGraphView.html?entity=Alice#details",
+  "http://localhost:49152",
+);
+// -> http://localhost:49152/memory/hub/?entity=Alice#/explore/web/entities/Alice
 ```
 
-This allows the agent to open extension views (knowledge library, graph
-views) via the same `openWebPage()` mechanism used for regular URLs.
+Context menus call the agent's `getViewHostUrl` before opening/focusing a tab;
+the Electron shell discovers the registered `"view"` port. Unknown custom
+routes and unavailable hosts fail explicitly rather than opening stale
+extension pages or a port-zero URL. Knowledge-card links use shared logical
+link generation so saved links remain valid across port changes.
+
+Memory Center, Knowledge Library and standalone entity/topic graph names are
+compatibility aliases for Memory Hub, not separately built shells. Navigation
+and old `/library/<filename>.html` aliases redirect before static middleware,
+so stale build output cannot serve the retired application. HTTP cannot read
+fragments: its redirect preserves the query and adds `legacyView`; the Hub
+translates the inherited fragment and graph selection, then removes the marker.
+Extension tab matching uses fragment-free Hub paths; retired-name navigation
+updates the reused Hub tab to the requested section.
+
+## Localhost view RPC
+
+Portable libraries bypass Chrome runtime and the extension service worker:
+
+```text
+Local page -- POST /api/views/invoke { method, params } --> Express child
+Express child -- typed agent-rpc over process IPC --> browser agent parent
+Browser agent parent --> existing domain handler
+```
+
+The view-only operation contract lives in
+`@typeagent/browser-control-rpc/viewRpc`. The gateway validates operation
+names and payloads before dispatch; it is not a generic proxy to browser
+control, Chrome settings, or arbitrary agent methods. Runtime HTTP failures
+are explicit and the endpoint uses the existing loopback/origin boundary.
+
+Progress uses `GET /api/views/events` (SSE). Agent import and extraction
+events are forwarded over typed child-process IPC without removing the
+existing extension notification path. Disconnects reject pending requests;
+local views do not become active WebSocket browser-control clients.
+
+Annotations use the existing same-origin `/api/pdf` routes instead of this
+domain-operation gateway. Extension Chat Panel and Options retain their
+Chrome RPC contracts and storage ownership.
 
 ---
 

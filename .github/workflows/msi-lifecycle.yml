@@ -1,0 +1,63 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Windows MSI lifecycle
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "ts/tools/installers/**"
+      - "ts/tools/scripts/test/msi*"
+      - "ts/tools/scripts/test/msiLifecycle/**"
+      - "ts/tools/scripts/test/registerPluginResolution.spec.mjs"
+      - ".github/workflows/msi-lifecycle.yml"
+  push:
+    paths:
+      - "ts/tools/installers/**"
+      - "ts/tools/scripts/test/msi*"
+      - "ts/tools/scripts/test/msiLifecycle/**"
+      - "ts/tools/scripts/test/registerPluginResolution.spec.mjs"
+      - ".github/workflows/msi-lifecycle.yml"
+  merge_group:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: msi-lifecycle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows_lifecycle:
+    name: Real Windows Installer transactions
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+      - name: Build transaction packages
+        shell: powershell
+        run: |
+          & ts\tools\scripts\test\msiLifecycle\build.ps1 -OutputDir (Join-Path $env:RUNNER_TEMP 'msi-lifecycle')
+      - name: Check Copilot launcher and WinGet package discovery
+        shell: powershell
+        run: node --test ts\tools\scripts\test\registerPluginResolution.spec.mjs
+      - name: Install, upgrade, repair, rollback, and reinstall
+        shell: powershell
+        run: |
+          & ts\tools\scripts\test\msiLifecycle\run.ps1 -OutputDir (Join-Path $env:RUNNER_TEMP 'msi-lifecycle')
+      - name: Retain MSI logs, packages, and state on every outcome
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-msi-lifecycle-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/msi-lifecycle
+          if-no-files-found: error
+          retention-days: 14

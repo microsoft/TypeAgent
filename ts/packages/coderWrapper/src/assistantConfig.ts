@@ -15,6 +15,11 @@ export interface AssistantConfig {
  * Predefined assistant configurations
  */
 export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
+    copilot: {
+        name: "GitHub Copilot CLI",
+        command: "copilot",
+        args: [],
+    },
     claude: {
         name: "Claude Code",
         command: "claude",
@@ -47,7 +52,7 @@ export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
  * Get assistant configuration by name or return default
  */
 export function getAssistantConfig(assistantName?: string): AssistantConfig {
-    const name = assistantName || "claude";
+    const name = assistantName || "copilot";
     const config = ASSISTANT_CONFIGS[name];
 
     if (!config) {

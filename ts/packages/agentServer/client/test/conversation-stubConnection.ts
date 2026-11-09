@@ -10,10 +10,10 @@
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerConnection,
+    ConversationContentMatch,
     ConversationDispatcher,
     ConversationInfo,
     ConversationMatch,
-    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -118,6 +118,31 @@ export function makeStubConnection(
         }) as ConversationDispatcher;
 
     const stub: AgentServerConnection = {
+        async listSkills() {
+            return [];
+        },
+        async searchSkills() {
+            return [];
+        },
+        async getSkill() {
+            return undefined;
+        },
+        async readSkillFile() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async publishSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async changeSkillState() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async activateSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async rollbackSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+
         async listConversations(name?: string) {
             const idx = nextCount("listConversations");
             calls.push({ method: "listConversations", args: [name] });

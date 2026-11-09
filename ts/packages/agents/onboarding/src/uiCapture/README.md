@@ -285,7 +285,7 @@ The shipping smoke tests under `test/` exercise each phase:
 
 Run any of them with `node packages/agents/onboarding/dist/uiCapture/test/<name>.js` after `pnpm --filter onboarding-agent run build`.
 
-For a real crawl, env vars `AZURE_OPENAI_API_KEY_GPT_5` + `AZURE_OPENAI_ENDPOINT_GPT_5` must be set in `ts/config.local.yaml` (under `azureOpenAI.deployments` / `azureOpenAI.endpoints`) or the legacy `ts/.env`. Note that aiclient's env reading short-circuits on its empty-string default and doesn't fall back from `_GPT_5`-suffixed vars to base vars, so for non-default settings (timeouts etc.) the suffixed variant must also be set explicitly. The smoke tests handle this in their preamble.
+For a real crawl, configure `azureOpenAI.deployments.gpt_6_1_terra` in `ts/config.local.yaml` for exploration and synthesis, and `gpt_v` for vision recon. Generic Terra Responses URLs require `wireApi: responses` and `model: gpt-6.1-terra`. The equivalent legacy selector is `GPT_6_1_TERRA`. Smoke-test timeout overrides use the `_GPT_6_1_TERRA` suffix.
 
 ## Quality observations from the Clock crawl
 
@@ -297,8 +297,8 @@ The pipeline produces real, replay-ready actions, but a few quality patterns are
 - **Modal-name selectors can decay mid-flow.** Some UWP Group containers embed running state into their `Name` (e.g., `Stopwatch, Paused, 12 seconds 23 centiseconds`). Selectors built on those Names go stale immediately when the state changes. The current selector grammar handles this by adding ClassName disambiguation when no AutomationId is present, but ancestors with dynamic names remain a real issue.
 - **UWP InvokedEvent doesn't fire in-process.** The autonomous loop doesn't depend on this (it re-dumps the tree after each action), but record-mode against a same-process driver only catches StructureChanged events.
 - **Snapshot-restore is critical.** Without the baseline, every crawl leaves alarms / timers / cities behind. Make sure `snapshotPolicy.detectionStatus === "user-confirmed"` before any non-trivial run.
-- **API-version + URL-shape gotchas in aiclient.** GPT-5 and GPT-v deployments work via standard Azure paths. GPT-4o uses `/openai/v1/chat/completions` (Responses-API style) which aiclient doesn't construct correctly — request returns "API version not supported." Stick to GPT-5 for synthesis and GPT-v for vision; revisit if we need GPT-4o specifically.
-- **Endpoint-suffixed env vars don't fall back.** aiclient's `getEnvSetting` short-circuits on its empty-string default and doesn't fall back from `_GPT_5`-suffixed vars to base vars when an endpoint suffix is set. Smoke tests have to set BOTH `AZURE_OPENAI_MAX_TIMEOUT` and `AZURE_OPENAI_MAX_TIMEOUT_GPT_5` (and `_GPT_v`) explicitly.
+- **Model migration.** The quality observations above describe historical GPT-5 runs, not measured Terra results. New runs default to GPT-6.1 Terra for exploration/synthesis and retain GPT-v for vision.
+- **Legacy timeout overrides.** Smoke tests set both `AZURE_OPENAI_MAX_TIMEOUT` and `AZURE_OPENAI_MAX_TIMEOUT_GPT_6_1_TERRA` (and `_GPT_v`) explicitly. Typed YAML configurations use `azureOpenAI.maxTimeoutMs`.
 
 ## Adding a new integration
 

@@ -17,7 +17,10 @@ export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
 export type { GrammarOptimizationOptions } from "./grammarOptimizer.js";
-export { recommendedOptimizations } from "./grammarOptimizer.js";
+export {
+    recommendedOptimizations,
+    nfaCompatibleOptimizations,
+} from "./grammarOptimizer.js";
 export type {
     SchemaLoader,
     DebugInfoCollector,
@@ -232,6 +235,10 @@ export type {
     StoredGrammarRule,
     GrammarStoreData,
     GrammarStoreInfo,
+    GrammarRuleStatus,
+    GrammarRuleActionBinding,
+    GrammarSchemaIdentity,
+    GrammarRuleReconciliation,
 } from "./grammarStore.js";
 export {
     GrammarStore,

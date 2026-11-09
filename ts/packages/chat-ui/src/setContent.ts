@@ -21,12 +21,49 @@ import {
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
+import { iconCheck, iconCopy } from "./icons.js";
+import { copyTextToClipboard } from "./clipboard.js";
+import { highlightJson, highlightYaml } from "./highlight.js";
 
 const ansiUpTextToHtml = new AnsiUp();
 ansiUpTextToHtml.use_classes = true;
 const ansiUpMarkdownToHtml = new AnsiUp();
 ansiUpMarkdownToHtml.use_classes = true;
 ansiUpMarkdownToHtml.escape_html = false;
+
+// Schemes a link or image in message content may use. `typeagent-browser` and
+// `typeagent-file` are the app's own link schemes (see fileLink.ts); `cid`
+// covers inline mail attachments. Note `file:` is deliberately absent - local
+// files are linked with `typeagent-file:` precisely because `file:` hrefs are
+// sanitized away here and are inert in Electron and webview hosts.
+const ALLOWED_URI_REGEXP =
+    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+
+// The single DOMPurify configuration for every message-content sink.
+//
+// Message content is NOT trusted: an agent can relay text it got from the
+// outside world (an email body, a web page, a file), so anything rendered
+// here may be attacker-controlled. Two rules follow from that, and both were
+// previously violated:
+//
+//   1. Never add event-handler attributes (`onclick`, `onerror`, ...) to
+//      ADD_ATTR. Doing so re-permits exactly what DOMPurify strips by default
+//      and lets `<img src=x onerror=...>` execute.
+//   2. Never list `href`/`src` in ADD_URI_SAFE_ATTR. That marks them as not
+//      needing URI checks, which skips ALLOWED_URI_REGEXP entirely and lets
+//      `javascript:` URLs through.
+//
+// `target` is the only addition needed: the markdown `link_open` rule sets
+// `target="_blank"`. `href`, `src` and `style` are already allowed by
+// DOMPurify's defaults, so they do not need to be listed.
+//
+// Agent content that genuinely needs to run script uses `type: "iframe"`
+// instead, which renders in a sandboxed iframe and never reaches this config.
+const sanitizeConfig = {
+    ADD_ATTR: ["target"],
+    ADD_DATA_URI_TAGS: ["img"],
+    ALLOWED_URI_REGEXP,
+};
 
 // ---------------------------------------------------------------------------
 // Structured-content HTML renderer (Phase 3a)
@@ -557,13 +594,7 @@ function processContent(
         case "iframe":
             return content;
         case "html":
-            return DOMPurify.sanitize(content, {
-                ADD_ATTR: ["target", "onclick", "onerror", "href"],
-                ADD_DATA_URI_TAGS: ["img"],
-                ADD_URI_SAFE_ATTR: ["src", "href"],
-                ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-            });
+            return DOMPurify.sanitize(content, sanitizeConfig);
         case "markdown": {
             const md = createMarkdownRenderer();
             const renderedMarkdown = inline
@@ -572,13 +603,7 @@ function processContent(
             const withAnsi =
                 ansiUpMarkdownToHtml.ansi_to_html(renderedMarkdown);
 
-            return DOMPurify.sanitize(withAnsi, {
-                ADD_ATTR: ["target", "onclick", "onerror", "href"],
-                ADD_DATA_URI_TAGS: ["img"],
-                ADD_URI_SAFE_ATTR: ["src", "href", "style"],
-                ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-            });
+            return DOMPurify.sanitize(withAnsi, sanitizeConfig);
         }
         case "text":
             return enableText2Html
@@ -668,10 +693,7 @@ async function copyStatusMessage(
     text: string,
     anchor: HTMLElement,
 ): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(text);
-    } catch (e) {
-        console.warn("clipboard write failed", e);
+    if (!(await copyTextToClipboard(text))) {
         return;
     }
     showCopiedToast(anchor);
@@ -689,6 +711,134 @@ function showCopiedToast(anchor: HTMLElement): void {
     toast.style.top = `${rect.top}px`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 1200);
+}
+
+// Give every fenced code block a hover-reveal copy button, so snippets an
+// agent hands the user (config YAML, shell commands) can be grabbed in one
+// click instead of hand-selected.
+//
+// The click is delegated to `root` rather than bound on each button: the
+// `innerHTML +=` append sink re-serializes the container, which recreates
+// the buttons and drops any listener attached directly to them (the link
+// and status-badge handlers below re-bind for the same reason). `root`
+// itself survives, so one listener on it keeps working.
+function attachCodeBlockCopyButtons(root: HTMLElement): void {
+    const codes = root.querySelectorAll<HTMLElement>("pre > code");
+    codes.forEach((code) => {
+        const pre = code.parentElement;
+        if (
+            pre === null ||
+            pre.querySelector(":scope > button.chat-code-copy") !== null
+        ) {
+            return;
+        }
+        pre.classList.add("chat-code-block");
+        highlightCodeBlock(code);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chat-code-copy";
+        button.title = "Copy to clipboard";
+        button.setAttribute("aria-label", "Copy code to clipboard");
+        button.appendChild(iconCopy());
+        pre.appendChild(button);
+    });
+    decorateInlineCommands(root);
+    if (
+        (codes.length === 0 && !root.querySelector("code.chat-inline-copy")) ||
+        root.dataset.chatCodeCopyBound === "true"
+    ) {
+        return;
+    }
+    root.dataset.chatCodeCopyBound = "true";
+    root.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement | null;
+        const button = target?.closest<HTMLElement>("button.chat-code-copy");
+        if (button !== null && button !== undefined && root.contains(button)) {
+            e.preventDefault();
+            e.stopPropagation();
+            // The button lives inside the <pre>, so exclude it from the text.
+            const code = button.parentElement?.querySelector("code");
+            void copyCodeBlock(code?.textContent ?? "", button);
+            return;
+        }
+        const inline = target?.closest<HTMLElement>("code.chat-inline-copy");
+        if (inline !== null && inline !== undefined && root.contains(inline)) {
+            e.preventDefault();
+            e.stopPropagation();
+            void copyInlineCommand(inline);
+        }
+    });
+}
+
+// Commands an agent tells the user to run (`@config agent refresh player`)
+// arrive as inline code, not a fenced block, so they miss out on the block
+// copy button — yet they're the thing the user most wants to paste. Make
+// those click-to-copy.
+//
+// Deliberately narrow: only inline code that reads as a command, so an
+// ordinary mention of a setting name like `clientId` doesn't become a
+// mystery click target.
+function decorateInlineCommands(root: HTMLElement): void {
+    root.querySelectorAll<HTMLElement>("code").forEach((code) => {
+        if (code.closest("pre") !== null) {
+            return;
+        }
+        const text = code.textContent?.trim() ?? "";
+        if (!text.startsWith("@") || text.length < 2) {
+            return;
+        }
+        code.classList.add("chat-inline-copy");
+        code.title = "Click to copy";
+    });
+}
+
+async function copyInlineCommand(code: HTMLElement): Promise<void> {
+    if (!(await copyTextToClipboard(code.textContent?.trim() ?? ""))) {
+        return;
+    }
+    showCopiedToast(code);
+    // The element is the affordance here (there's no button to swap an
+    // icon on), so flash it instead.
+    code.classList.add("chat-inline-copied");
+    setTimeout(() => code.classList.remove("chat-inline-copied"), 600);
+}
+
+// Colorize fenced blocks whose language we can highlight cheaply. The
+// markdown renderer emits `language-<lang>` on the <code>. Guarded by a
+// data flag because later container serialization preserves the spans,
+// which must not be re-scanned as source text.
+function highlightCodeBlock(code: HTMLElement): void {
+    if (code.dataset.highlighted === "true") {
+        return;
+    }
+    const lang = /(?:^|\s)language-([\w-]+)/.exec(code.className)?.[1];
+    const source = code.textContent ?? "";
+    let highlighted: string;
+    if (lang === "yaml" || lang === "yml") {
+        highlighted = highlightYaml(source);
+    } else if (lang === "json") {
+        highlighted = highlightJson(source);
+    } else {
+        return;
+    }
+    const fragment = DOMPurify.sanitize(highlighted, {
+        ALLOWED_TAGS: ["span"],
+        ALLOWED_ATTR: ["class"],
+        RETURN_DOM_FRAGMENT: true,
+    });
+    code.replaceChildren(fragment);
+    code.dataset.highlighted = "true";
+}
+
+async function copyCodeBlock(text: string, button: HTMLElement): Promise<void> {
+    if (!(await copyTextToClipboard(text))) {
+        return;
+    }
+    showCopiedToast(button);
+    // Brief check-mark confirmation on the button itself, so the feedback
+    // survives the toast fading out.
+    button.replaceChildren(iconCheck());
+    setTimeout(() => button.replaceChildren(iconCopy()), 1200);
 }
 
 /**
@@ -840,18 +990,12 @@ export function setContent(
 
         contentElm.appendChild(iframe);
     } else {
-        // vanilla, sanitized HTML only — re-run DOMPurify at the sink so
+        // vanilla, sanitized HTML only: re-run DOMPurify at the sink so
         // CodeQL js/xss can recognize sanitization (the upstream
         // `processContent` already sanitizes html/markdown, but the data
         // flow through messageContentToHTML breaks the static analysis
         // chain).
-        contentElm.innerHTML += DOMPurify.sanitize(contentHtml, {
-            ADD_ATTR: ["target", "onclick", "onerror", "href"],
-            ADD_DATA_URI_TAGS: ["img"],
-            ADD_URI_SAFE_ATTR: ["src", "href", "style"],
-            ALLOWED_URI_REGEXP:
-                /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-        });
+        contentElm.innerHTML += DOMPurify.sanitize(contentHtml, sanitizeConfig);
 
         // Plain-text content authors no links of its own, so bare URLs would
         // otherwise render as dead text. Wrap them in anchors here (markdown
@@ -868,6 +1012,7 @@ export function setContent(
             if (
                 href &&
                 (href.startsWith("typeagent-browser://") ||
+                    href.startsWith("typeagent-file:") ||
                     href.startsWith("http://") ||
                     href.startsWith("https://"))
             ) {
@@ -881,6 +1026,9 @@ export function setContent(
 
         // Phase 4a — wire sort + filter on any sc-table elements just added.
         attachTableInteractivity(contentElm);
+
+        // Fenced code blocks get a hover copy button.
+        attachCodeBlockCopyButtons(contentElm);
 
         // Status badges (agent-status readiness/load indicators and other
         // tooltip-bearing status glyphs) stash their full message in a
@@ -955,6 +1103,14 @@ export function swapContent(
         targetElement.classList.add("chat-message-action-data");
     }
 
-    sourceElement.setAttribute("action-data", originalMessage);
-    targetElement.innerHTML = data;
+    // Both halves of the swap are sanitized. `action-data` is an attribute on
+    // a DOM node, so it is reachable by anything that can already write to the
+    // document, and `originalMessage` is re-serialized message content that is
+    // swapped back in on the next toggle. Sanitizing both keeps this toggle
+    // from becoming a way to reintroduce markup that the render sink rejected.
+    sourceElement.setAttribute(
+        "action-data",
+        DOMPurify.sanitize(originalMessage, sanitizeConfig),
+    );
+    targetElement.innerHTML = DOMPurify.sanitize(data, sanitizeConfig);
 }

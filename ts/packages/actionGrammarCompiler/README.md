@@ -17,6 +17,11 @@ Both support a shortcut invocation style: if the first argument isn't a recogniz
 
 Compiles an `.agr` grammar file into `.ag.json` format.
 
+Compiled artifacts use the NFA-compatible optimization preset so they can be
+loaded by AST, NFA, and DFA matchers. AST-only tail optimizations remain available
+to library callers through `recommendedOptimizations`, but are not emitted by
+the shared artifact compiler. Recompile older artifacts before NFA validation.
+
 ```bash
 agc compile -i input.agr -o output.ag.json
 ```

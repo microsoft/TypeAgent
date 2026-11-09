@@ -26,7 +26,7 @@ import {
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
-import { emitActionResult } from "./execute/actionHandlers.js";
+import { emitActionResult, executeActions } from "./execute/actionHandlers.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -34,7 +34,13 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
+import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
+import {
+    StructuredActionDiscovery,
+    type StructuredActionAccess,
+} from "./structuredAction/discovery.js";
+import { StructuredActionExecution } from "./structuredAction/execution.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -199,7 +205,18 @@ export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
     closeFn?: () => Promise<void>,
+    structuredActionAccess?: StructuredActionAccess,
 ): Dispatcher {
+    const structuredActions = new StructuredActionDiscovery(
+        context,
+        structuredActionAccess,
+    );
+    const structuredExecution = new StructuredActionExecution(
+        context,
+        structuredActions,
+        { executeActions, getActionContext },
+        connectionId,
+    );
     const submitInput = (
         command: string,
         clientRequestId: unknown,
@@ -216,6 +233,9 @@ export function createDispatcherFromContext(
         if (attachments != null) input.attachments = attachments;
         if (options != null) input.options = options;
         if (requestId !== undefined) input.requestId = requestId;
+        if (context.telemetryOptions.joinActiveTrace) {
+            input.traceContext = otelContext.active();
+        }
         return input;
     };
 
@@ -385,6 +405,13 @@ export function createDispatcherFromContext(
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
         },
+        async searchActions(request) {
+            return structuredActions.searchActions(request);
+        },
+        executeAction: (request) => structuredExecution.executeAction(request),
+        continueAction: (request) =>
+            structuredExecution.continueAction(request),
+        cancelAction: (request) => structuredExecution.cancelAction(request),
         async cancelCommand(requestId: string): Promise<CancelResult> {
             const kind = context.requestQueue.classifyCancel(requestId, "user");
             if (kind === "queued") {
@@ -402,28 +429,51 @@ export function createDispatcherFromContext(
             return context.requestQueue.promote(requestId);
         },
         cancelCommandByClientId(clientRequestId: unknown) {
-            const controller =
-                context.activeRequestsByClientId.get(clientRequestId);
-            if (controller) {
-                controller.abort();
-                return;
-            }
-            // Entry may still be sitting in the queue (no AbortController yet).
-            // Walk the snapshot to find a matching clientRequestId and cancel
-            // it via the queue. Check the running head too — it's normally
-            // already in activeRequestsByClientId, but cover the race anyway.
-            const snap = context.requestQueue.getSnapshot();
-            const running = snap.running;
-            if (running && running.clientRequestId === clientRequestId) {
+            const cancelRunning = (): boolean => {
+                const running = context.requestQueue.getSnapshot().running;
+                if (
+                    running === null ||
+                    running.clientRequestId !== clientRequestId
+                ) {
+                    return false;
+                }
                 context.requestQueue.cancelRunning(running.requestId, "user");
+                const controller =
+                    context.activeRequests.get(running.requestId) ??
+                    context.activeRequestsByClientId.get(clientRequestId);
+                controller?.abort();
+                return true;
+            };
+
+            // Record a running cancellation before aborting so queue observers
+            // see the initiating event before command unwinding completes.
+            if (cancelRunning()) {
                 return;
             }
+
+            // A queued entry has no active controller. If it promotes between
+            // the snapshot and cancelQueued, retry through the running path.
+            const snap = context.requestQueue.getSnapshot();
             for (const entry of snap.queued) {
                 if (entry.clientRequestId === clientRequestId) {
-                    context.requestQueue.cancelQueued(entry.requestId, "user");
+                    if (
+                        !context.requestQueue.cancelQueued(
+                            entry.requestId,
+                            "user",
+                        )
+                    ) {
+                        cancelRunning();
+                    }
                     return;
                 }
             }
+
+            // Cover the race where the request starts after the first running
+            // check but before the queued snapshot is read.
+            if (cancelRunning()) {
+                return;
+            }
+            context.activeRequestsByClientId.get(clientRequestId)?.abort();
         },
         async recordUserHide(
             requestId: RequestId,
@@ -542,6 +592,11 @@ export function createDispatcherFromContext(
                 | { selected: number; remember: boolean }
                 | QuestionFormResponse,
         ) {
+            // Structured execution owns its agent choice directly and never
+            // registers it with the legacy choice route.
+            if (!context.pendingChoiceRoutes.has(choiceId)) {
+                throw new Error("Choice not found or expired");
+            }
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
                 if (!pending) {

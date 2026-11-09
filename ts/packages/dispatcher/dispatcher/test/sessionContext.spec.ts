@@ -42,10 +42,47 @@ function makeContext(overrides: {
             translatorCache: { clear: () => {} },
             lastActionSchemaName: undefined,
             conversationManager: undefined,
+            currentOptions: undefined,
         } as any,
         calls,
     };
 }
+
+describe("createSessionContext currentConnectionId", () => {
+    test("exposes the owning conversation without guessing from the context ID", () => {
+        const { context } = makeContext({});
+        const sc = createSessionContext(
+            "browser",
+            {},
+            context,
+            false,
+            "lifetime",
+        );
+        expect(sc.conversationId).toBeUndefined();
+        context.conversationId = "connected-conversation";
+        expect(sc.conversationId).toBe("connected-conversation");
+        context.conversationDurableMemory = { conversationId: "durable-owner" };
+        expect(sc.conversationId).toBe("durable-owner");
+    });
+    test("tracks the request in flight and is undefined between requests", () => {
+        const { context } = makeContext({ persistDir: "/session/persist" });
+        const sc = createSessionContext("myAgent", {}, context, false, "cc-1");
+
+        // No request in flight.
+        expect(sc.currentConnectionId).toBeUndefined();
+
+        // A client-originated request.
+        context.currentRequestId = {
+            requestId: "r1",
+            connectionId: "conn-42",
+        };
+        expect(sc.currentConnectionId).toBe("conn-42");
+
+        // A server-initiated request carries no connection.
+        context.currentRequestId = { requestId: "r2" };
+        expect(sc.currentConnectionId).toBeUndefined();
+    });
+});
 
 describe("createSessionContext storage routing", () => {
     test("instanceStorage uses instanceDir when provided", () => {

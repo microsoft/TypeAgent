@@ -7,6 +7,7 @@ import type {
     RefinementResult,
 } from "./types.mjs";
 import {
+    DEFAULT_GENERATION_MODEL,
     runQueryWithTimeout,
     DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
 } from "./queryWithTimeout.mjs";
@@ -53,7 +54,7 @@ export class PatternRefiner {
 
     constructor(config?: PatternRefinerConfig) {
         this.config = {
-            model: config?.model ?? "claude-sonnet-4-20250514",
+            model: config?.model ?? DEFAULT_GENERATION_MODEL,
             maxIterations: config?.maxIterations ?? 2,
             timeoutMs: config?.timeoutMs ?? DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
         };

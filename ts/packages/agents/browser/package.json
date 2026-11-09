@@ -17,8 +17,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
+    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
   },
   "main": "index.js",
   "files": [
@@ -38,17 +37,30 @@
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "setup:aisearch": "node dist/agent/lookup/aiSearchSetup.mjs",
     "test": "npm run test:local",
-    "test:local": "jest",
+    "test:crossword": "node --test test/crosswordDecisionHandler.spec.mjs test/crosswordDecisionIntegrated.spec.mjs test/crosswordHybrid2.spec.mjs",
+    "test:local": "jest && npm run test:crossword && npm run test:ui-decision && npm run test:views:gateway && npm run test:views:client",
+    "test:pdf": "node --test test/pdf*.spec.mjs test/pdfExtraction/*.spec.mjs test/memoryImportHandlers.spec.mjs test/agentConnectionBoundary.spec.mjs",
+    "test:ui-decision": "node --test test/uiDecision.spec.mjs test/shoppingMode.spec.mjs",
+    "test:views:client": "jest --runInBand --testMatch \"**/views/client/**/*.test.ts\"",
+    "test:views:derived-browser": "node --test test/derivedViewBrowser.test.mjs",
+    "test:views:gateway": "node --test test/viewGateway.test.mjs test/viewDraftGateway.test.mjs test/viewLifecycle.test.mjs test/memoryHub.test.mjs test/memoryHubQuery.test.mjs test/memoryHubGraph.test.mjs test/memoryHubScopedKnowledge.test.mjs test/memoryHubSourceDependencies.test.mjs test/memoryHubCapture.test.mjs test/browserCaptureRpc.test.mjs test/memoryHubRunbookImports.test.mjs test/memoryHubWebAnalytics.test.mjs test/schemaQuestionRpc.test.mjs test/knowledgeRpc.test.mjs",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
-    "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json",
+    "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json && tsc -p src/views/client/library/tsconfig.json",
     "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
     "tsc:views:shared": "tsc -p src/views/shared/tsconfig.json",
     "vite:views:client": "vite build"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.8",
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "@github/copilot-sdk": "1.0.13",
+    "@lezer/common": "^1.5.2",
+    "@lezer/highlight": "^1.2.3",
+    "@milkdown/crepe": "^7.3.6",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
@@ -62,22 +74,29 @@
     "@typeagent/chat-ui": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-client": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "@typeagent/website-memory": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.13.1",
     "chalk": "^5.4.1",
     "cheerio": "^1.1.0",
+    "cytoscape": "^3.32.0",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.17",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
+    "gpt-tokenizer": "^2.9.0",
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.1",
     "graphology-layout": "^0.6.1",
@@ -87,8 +106,12 @@
     "html-to-text": "^9.0.5",
     "jsdom": "^28.1.0",
     "jsonpath": "^1.2.0",
-    "pdfjs-dist": "^5.3.31",
-    "puppeteer": "^24.15.0",
+    "katex": "^0.16.21",
+    "markdown-it": "^14.3.3",
+    "mermaid": "^11.16.1",
+    "pdfjs-dist": "5.3.31",
+    "prismjs": "^1.30.0",
+    "puppeteer": "^25.14.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
@@ -96,7 +119,7 @@
     "sanitize-filename": "^1.6.3",
     "typechat": "^0.1.1",
     "typescript": "~5.4.5",
-    "ws": "^8.21.1",
+    "ws": "^8.21.3",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
     "zod": "^4.1.13"
@@ -105,6 +128,10 @@
     "@fluidframework/build-tools": "^0.57.0",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@typeagent/browser-extension": "workspace:*",
+    "@types/bootstrap": "^5.2.10",
+    "@types/cytoscape": "^3.21.9",
+    "@types/cytoscape-dagre": "^2.3.3",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.21",
     "@types/html-to-text": "^9.0.4",
@@ -112,14 +139,17 @@
     "@types/jquery": "^3.5.14",
     "@types/jsdom": "^28.0.0",
     "@types/jsonpath": "0.2.4",
-    "@types/node": "^22.0.0",
+    "@types/katex": "^0.16.7",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.20.5",
+    "@types/prismjs": "^1.26.3",
     "@types/ws": "^8.5.10",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jsdom": "^28.1.0",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.3.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.5"
   },
   "fluidBuild": {
     "tasks": {
@@ -205,6 +235,38 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "browser"
+    "defaultAgentName": "browser",
+    "bundle": {
+      "entries": [
+        "dist/views/server/server.mjs",
+        "dist/puppeteer/index.mjs"
+      ],
+      "assets": [
+        "dist/views/public",
+        "src/agent/discovery/schema",
+        "src/agent/indexing/schema",
+        "src/agent/knowledge/actions/schema",
+        "src/agent/knowledge/schema",
+        "src/agent/webFlows/samples",
+        "src/agent/webFlows/schema"
+      ],
+      "assetMappings": [
+        {
+          "package": "@typeagent/azure-ai-foundry",
+          "source": "dist/phrases.json",
+          "destination": "dist/agent/phrases.json"
+        },
+        {
+          "package": "@typeagent/browser-extension",
+          "source": "dist/extension",
+          "destination": "dist/extension"
+        },
+        {
+          "package": "@typeagent/browser",
+          "source": "src/agent/webFlows/webFlowSandbox.d.ts",
+          "destination": "src/agent/webFlows/webFlowSandbox.d.ts"
+        }
+      ]
+    }
   }
 }

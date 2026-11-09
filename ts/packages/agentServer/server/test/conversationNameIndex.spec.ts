@@ -81,6 +81,29 @@ function seededIndex(model: TextEmbeddingModel) {
 }
 
 describe("conversationNameIndex", () => {
+    it("uses the configured local embedding provider without Azure settings", () => {
+        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        const previousAzureEndpoint =
+            process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING;
+        try {
+            process.env.TYPEAGENT_EMBEDDING_PROVIDER = "local";
+            delete process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING;
+            expect(() => createConversationNameIndex()).not.toThrow();
+        } finally {
+            if (previousProvider === undefined) {
+                delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+            } else {
+                process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
+            }
+            if (previousAzureEndpoint === undefined) {
+                delete process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING;
+            } else {
+                process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING =
+                    previousAzureEndpoint;
+            }
+        }
+    });
+
     it("ranks an exact name match first", async () => {
         const index = seededIndex(keywordModel());
         const matches = await index.search("workout playlist setup", 10);

@@ -52,7 +52,7 @@ dotnet/visualStudioTypeAgent/       # VSIX project (.NET / WPF)
 ├── VisualStudioTypeAgent.csproj
 ├── source.extension.vsixmanifest
 ├── TypeAgentPackage.cs             # AsyncPackage entry; registers tool window
-├── ChatToolWindowCommand.cs        # "View → Other Windows → TypeAgent Chat"
+├── ChatToolWindowCommand.cs        # "View → TypeAgent Chat"
 ├── ChatToolWindow.cs               # ToolWindowPane wrapper
 ├── ChatToolWindowControl.xaml      # WPF host with WebView2
 ├── ChatToolWindowControl.xaml.cs
@@ -60,28 +60,25 @@ dotnet/visualStudioTypeAgent/       # VSIX project (.NET / WPF)
 │   ├── BridgeDiscovery.cs          # Discovery RPC → agent-server (8999)
 │   ├── AgentBridgeClient.cs        # WS client → discovered bridge port
 │   └── DTEActionExecutor.cs        # actionName → EnvDTE call
-└── webview-content/                # Populated at build time from
-    └── (.gitignore'd)              #   host/webview/dist
+└── VerifyVsixContents.ps1          # Checks packaged WebView assets
 ```
 
 ## Build
 
-Two stages — the WebView2 bundle (Node) then the VSIX (MSBuild):
+Install the TypeScript workspace dependencies, then build the VSIX. MSBuild
+builds the WebView bundle and packages its generated `dist/` files directly
+under `webview-content/` in the VSIX:
 
 ```powershell
-# 1. Build the WebView2 content
-cd ts\packages\agents\visualStudio\host\webview
+cd ts
 pnpm install
-pnpm run build           # outputs to dist/
-
-# 2. Copy bundled assets into the VSIX project's webview-content/
-xcopy /E /Y dist ..\..\..\..\..\..\dotnet\visualStudioTypeAgent\webview-content\
-
-# 3. Build the VSIX
-cd ..\..\..\..\..\..\dotnet\visualStudioTypeAgent
+cd ..\dotnet\visualStudioTypeAgent
 msbuild VisualStudioTypeAgent.sln /p:Configuration=Release
 # .vsix lands in bin\Release\
 ```
+
+The build fails if `webview-content/index.html` or the bundled JavaScript is
+missing from the generated VSIX.
 
 ## Install
 
@@ -92,5 +89,5 @@ Double-click the `.vsix` and follow the VSIX installer. Or for development, F5 f
 1. Start the TypeAgent agent-server (e.g. `pnpm --filter agent-server start` or however you normally do it).
 2. Ensure the `visualstudio-agent` is enabled in your dispatcher config.
 3. Launch Visual Studio.
-4. **View → Other Windows → TypeAgent Chat**.
+4. **View → TypeAgent Chat**.
 5. The chat panel connects to `ws://localhost:8999`. The C# bridge then queries the dispatcher's discovery channel for the agent's ephemeral bridge port and connects automatically.

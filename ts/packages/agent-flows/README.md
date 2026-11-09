@@ -2,17 +2,40 @@
 
 Shared workflow infrastructure for TypeAgent flow agents.
 
-## Why this package exists
+## Shared helpers
 
-Several TypeAgent agents (`excel`, `powershell`, `taskflow`, `browser`) each implement a "flow" abstraction — a persisted, user-defined, parameterized TypeScript script that the dispatcher can invoke through natural language. They independently re-derived the same supporting machinery: AST-based script validation, sandboxed execution, dynamic schema/grammar generation, LLM-response parsing, free-form-name slugification, and so on.
+PowerShell, TaskFlow and browser agents implement provider-owned flows with
+different languages and execution rules. They reuse helpers for validation,
+schema/grammar, parsing, names and persistence. This package also exposes the
+Automations inspection/management catalog; it is not a universal flow executor.
 
-`@typeagent/agent-flows` collects the **pure, agent-agnostic** parts of that machinery into one package so behavior stays uniform across agents and individual agents shrink to their domain-specific glue.
+Providers supply their parameter types, validators and domain-specific options.
+The helpers handle the common operations:
 
-**Architectural posture:**
-
-- **Zero runtime dependencies** beyond `typescript`. This is load-bearing — the package is consumed by agents with very different dependency surfaces and any new transitive dep would propagate widely. Helpers that need `@typeagent/agent-sdk` (e.g. anything that touches `Storage` or `ActionContext`) live in the consuming agent, not here.
+- **Keep helper dependencies small.** Pure helpers do not initialize models or
+  dispatchers. Store/catalog exports also use agent-sdk storage types and local
+  I/O; the package currently depends on agent-sdk, debug and TypeScript.
 - **Generic over caller types.** Parameter shapes differ between agents (Excel's `ExcelFlowParameter` has `range`/`sheetName`/`columnLetter`/…; PowerShell's is different again). Utilities take the caller's type as a generic and the caller supplies a type-narrowing validator.
-- **Curated data stays at the caller.** Things like alias dictionaries for common LLM hallucinations, reserved-action-name predicates, and dynamic-schema allow-lists are agent-specific and pass in as options — they're not baked into the library.
+- **Caller-supplied options.** Agents pass alias dictionaries, reserved-action-name predicates and dynamic-schema allow-lists to the helpers.
+
+### Execution boundary
+
+The historical `sandbox` names below describe a restricted API surface, not
+hostile-code containment. The ordinary script helper uses `new Function` and frozen
+bindings. It races the script's promise against a timer but does not terminate
+the script on timeout. Synchronous code can block the timer; asynchronous work
+can continue after the caller receives a timeout. This differs from the
+worker-contained QuickJS runtime used by [checked program macros](../../docs/architecture/workflows/macros.md).
+PowerShell uses its own authorized Windows execution path, not this TypeScript
+executor. Shared helpers do not unify provider storage, permissions or recovery.
+
+### Automations catalog
+
+The [`catalog`](./src/catalog/index.ts) subpath aggregates WebFlow, PowerShell,
+TaskFlow and injected tool-macro summaries for the browser Automations UI.
+It delegates validate/approve/disable/delete to the owning provider; it applies no
+new approval rules and exposes no universal `run` verb. It neither mirrors the
+plugin-local macro store nor synchronizes it with agent-server.
 
 ## Module index
 
@@ -85,18 +108,16 @@ The same shape applies to `parseFlowLLMResponse` (caller passes an `isValidFooPa
 
 ## Adoption status across TypeAgent flow agents
 
-| Module                                                                                          | Excel | PowerShell                                 | TaskFlow       | WebFlows                         |
-| ----------------------------------------------------------------------------------------------- | ----- | ------------------------------------------ | -------------- | -------------------------------- |
-| Runtime: `validation`, `execution`, `sandbox`, `schema/schemaBuilder`, `grammar/grammarBuilder` | ✅    | ✅                                         | ✅             | ✅                               |
-| `markdown`                                                                                      | ✅    | adoption-ready                             | adoption-ready | adoption-ready                   |
-| `jsonHelpers`                                                                                   | ✅    | adoption-ready                             | adoption-ready | adoption-ready                   |
-| `naming`                                                                                        | ✅    | adoption-ready                             | adoption-ready | adoption-ready                   |
-| `grammar/triggerPhrase`                                                                         | ✅    | LLM-authored patterns (different approach) | LLM-authored   | LLM-authored                     |
-| `llmResponse`                                                                                   | ✅    | narrow variant in `ScriptAnalyzer`         | not needed     | uses TypeChat translator instead |
-| `actionCatalog`                                                                                 | ✅    | not applicable                             | not applicable | not applicable                   |
-| `unknownActions`                                                                                | ✅    | not applicable                             | not applicable | not applicable                   |
+| Consumer            | Current use                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| PowerShell          | PowerShell store, recipe and integrity subpaths; separate script executor/authorization |
+| TaskFlow            | Shared script validator, executor, declarations and store helpers                       |
+| WebFlows            | Shared script validator, executor, declarations and store helpers                       |
+| Browser Automations | Catalog summaries and provider management                                               |
 
-✅ = active consumer · _adoption-ready_ = same need today, replacing the ad-hoc implementation with this module is a mechanical change · _different approach_ = the agent solves the same problem with a different strategy (TypeChat translators, LLM-authored grammar) that is not strictly worse — adoption is optional · _not applicable_ = the agent doesn't have this need given its sandbox/dispatch model.
+Office-shaped examples below illustrate helper APIs, not a claim that an Excel
+flow provider ships in this checkout. Check actual import sites before extending
+the adoption map.
 
 ### When to reach for `llmResponse` vs TypeChat
 
@@ -112,7 +133,9 @@ Agents that dispatch through TypeScript unions (WebFlows) or generate their acti
 
 ### Future direction
 
-A `generateDynamicSchemaText()` helper is on the near-term roadmap — all four current flow agents have isomorphic code that orchestrates `generateFlowActionTypes` + `buildUnionType` on top of their flow store. A shared `FlowStore` (persistence + indexing) is the largest single remaining extraction candidate but is gated on a dependency-posture decision (whether the package can take `@typeagent/agent-sdk` as a peer dep). Tracked in the internal design doc.
+Further extraction should follow actual shared provider code. Stores remain
+domain-owned; the existing catalog is aggregation, not a decision to replace
+them or the separate checked-program runtime.
 
 ## Adding a new utility
 
@@ -143,7 +166,9 @@ pnpm test:local      # same — explicit alias matching the rest of the monorepo
 
 The test setup follows the same pattern as [`packages/actionGrammar`](../actionGrammar/): a `test/tsconfig.json` composite project that emits to `dist/test/`, a `jest.config.cjs` thin wrapper around the root config, and the `jest-esm` script that runs Jest under `--experimental-vm-modules`. New specs should import `jest`/`describe`/`expect` from `@jest/globals` (required under ESM) and import the modules under test from `../src/index.js` rather than reaching into subdirectories — that way private layout changes don't propagate into tests.
 
-The runtime modules (`validation/scriptValidator`, `execution/scriptExecutor`, `sandbox/declarationGenerator`, `schema/schemaBuilder`, `grammar/*`) are still covered transitively by the Excel agent's integration suite; lifting dedicated unit tests for those is tracked in the design doc.
+When changing runtime helpers, validate the relevant consuming provider as well
+as focused package coverage; do not infer every provider's behavior from a
+single shared-helper test.
 
 ## Documentation companion
 

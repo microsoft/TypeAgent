@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "build": "npm run tsc",
-    "clean": "rimraf dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "demo": "tsx demo/run-demo.ts",
     "demo:server": "tsx demo/server.ts",
     "dev": "tsc -b && node dist/index.js",
@@ -55,14 +55,14 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "fast-glob": "^3.3.3",
     "validation": "workspace:*",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.5",
     "rimraf": "^6.0.1",
     "tsx": "^4.21.0",
     "typescript": "~5.4.5"

@@ -57,23 +57,14 @@
     }
   ],
   "sandbox": {
-    "allowedCmdlets": [
-      "Get-ChildItem",
-      "Where-Object",
-      "Sort-Object",
-      "Select-Object",
-      "Format-Table"
-    ],
-    "allowedPaths": ["$PWD", "$env:USERPROFILE", "$env:TEMP"],
-    "allowedModules": [
-      "Microsoft.PowerShell.Management",
-      "Microsoft.PowerShell.Utility"
-    ],
-    "maxExecutionTime": 60,
-    "networkAccess": false
+    "maxExecutionTime": 60
   },
   "source": {
     "type": "manual",
     "timestamp": "2026-04-23T00:00:00Z"
-  }
+  },
+  "requiredModules": [
+    "Microsoft.PowerShell.Management",
+    "Microsoft.PowerShell.Utility"
+  ]
 }

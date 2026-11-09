@@ -10,7 +10,6 @@ import {
     IMessage,
     MessageOrdinal,
     IndexingEventHandlers,
-    TextLocation,
     ListIndexingResult,
     ScoredMessageOrdinal,
     IConversation,
@@ -20,16 +19,24 @@ import {
     ITextToTextLocationIndexData,
     ScoredTextLocation,
     TextToTextLocationIndex,
+    TextEmbeddingChunk,
+    TextEmbeddingLocation,
 } from "./textLocationIndex.js";
 import { getMessageBatches } from "./message.js";
+import { embeddingModelForRole } from "@typeagent/aiclient";
+import { queryEmbedding } from "./queryEmbeddingCache.js";
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
     batchSize?: number | number;
+    splitText?: (text: string) => TextEmbeddingChunk[];
 };
 
 export interface IMessageTextIndexData {
     indexData?: ITextToTextLocationIndexData | undefined;
+    // Number of messages indexed. Absent in data serialized before ordinals
+    // were tracked independently of chunk positions.
+    messageCount?: number | undefined;
 }
 
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
@@ -50,8 +57,32 @@ export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
     ): ScoredMessageOrdinal[];
 }
 
+function validateEmbeddingChunks(
+    text: string,
+    chunks: TextEmbeddingChunk[],
+): void {
+    let end = 0;
+    for (const chunk of chunks) {
+        if (
+            chunk.start !== end ||
+            !Number.isSafeInteger(chunk.end) ||
+            chunk.end > text.length ||
+            chunk.end < chunk.start ||
+            (chunk.end === chunk.start && text.length > 0) ||
+            text.slice(chunk.start, chunk.end) !== chunk.text
+        )
+            throw new Error("Invalid message embedding window");
+        end = chunk.end;
+    }
+    if (chunks.length === 0 || end !== text.length)
+        throw new Error("Incomplete message embedding windows");
+}
+
 export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     public textLocationIndex: TextToTextLocationIndex;
+    // Next unassigned message ordinal. Tracked independently of chunk
+    // positions because a message can index zero chunks.
+    private messageCount: number = 0;
 
     constructor(public settings: MessageTextIndexSettings) {
         this.textLocationIndex = new TextToTextLocationIndex(
@@ -60,7 +91,28 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     }
 
     public get size(): number {
-        return this.textLocationIndex.size;
+        return this.messageCount;
+    }
+
+    public addPreparedData(
+        data: IMessageTextIndexData,
+        messageOrdinal: number,
+    ): void {
+        if (!this.isEmbeddingEnabled) return;
+        if (
+            this.messageCount !== messageOrdinal ||
+            data.messageCount !== 1 ||
+            !data.indexData
+        )
+            throw new Error("Prepared message ordinals are not contiguous");
+        this.textLocationIndex.addPreparedData({
+            embeddings: data.indexData.embeddings,
+            textLocations: data.indexData.textLocations.map((location) => ({
+                ...location,
+                messageOrdinal,
+            })),
+        });
+        this.messageCount++;
     }
 
     /**
@@ -74,12 +126,12 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         );
     }
 
-    public addMessages(
+    public async addMessages(
         messages: Iterable<IMessage>,
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
         const baseMessageOrdinal: MessageOrdinal = this.size;
-        const allChunks: [string, TextLocation][] = [];
+        const allChunks: [string, TextEmbeddingLocation][] = [];
         // Collect everything so we can batch efficiently
         let i = 0;
         for (const message of messages) {
@@ -89,14 +141,59 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                 chunkOrdinal < message.textChunks.length;
                 ++chunkOrdinal
             ) {
-                allChunks.push([
-                    message.textChunks[chunkOrdinal],
-                    { messageOrdinal, chunkOrdinal },
-                ]);
+                const text = message.textChunks[chunkOrdinal];
+                const chunks = this.isEmbeddingEnabled
+                    ? this.settings.splitText?.(text)
+                    : undefined;
+                if (chunks === undefined) {
+                    allChunks.push([text, { messageOrdinal, chunkOrdinal }]);
+                } else {
+                    validateEmbeddingChunks(text, chunks);
+                    for (const chunk of chunks)
+                        allChunks.push([
+                            chunk.text,
+                            {
+                                messageOrdinal,
+                                chunkOrdinal,
+                                ...(chunks.length > 1
+                                    ? {
+                                          textRange: {
+                                              start: chunk.start,
+                                              end: chunk.end,
+                                          },
+                                      }
+                                    : {}),
+                            },
+                        ]);
+                }
             }
             ++i;
         }
-        return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
+        const messageCount = baseMessageOrdinal + i;
+        // A count that stops being a safe integer would silently reuse
+        // ordinals on the next append.
+        if (!Number.isSafeInteger(messageCount)) {
+            throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
+        }
+        const baseSize = this.textLocationIndex.size;
+        try {
+            const result = await this.textLocationIndex.addTextLocations(
+                allChunks,
+                eventHandler,
+            );
+            if (
+                result.error === undefined &&
+                result.numberCompleted === allChunks.length
+            ) {
+                this.messageCount = messageCount;
+                return result;
+            }
+            this.textLocationIndex.truncate(baseSize);
+            return { ...result, numberCompleted: 0 };
+        } catch (error) {
+            this.textLocationIndex.truncate(baseSize);
+            throw error;
+        }
     }
 
     public async lookupMessages(
@@ -106,12 +203,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
+        // Chunks are ranked without a limit so several chunks of one message
+        // cannot consume maxMatches; the limit applies per message below.
         const scoredTextLocations = await this.textLocationIndex.lookupText(
             messageText,
-            maxMatches,
+            undefined,
             thresholdScore,
         );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public async lookupMessagesInSubset(
@@ -123,11 +222,11 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         const scoredTextLocations =
             await this.textLocationIndex.lookupTextInSubset(
                 messageText,
-                ordinalsToSearch,
-                maxMatches,
+                this.getChunkPositions(ordinalsToSearch),
+                undefined,
                 thresholdScore,
             );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
@@ -139,7 +238,12 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                 "Message text embedding index is disabled (no embedding model configured)",
             );
         }
-        return generateEmbeddingWithRetry(embeddingModel, text);
+        return queryEmbedding(embeddingModel, text, () =>
+            generateEmbeddingWithRetry(
+                embeddingModelForRole(embeddingModel, "query"),
+                text,
+            ),
+        );
     }
 
     public lookupByEmbedding(
@@ -148,13 +252,19 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         thresholdScore?: number,
         predicate?: (messageOrdinal: MessageOrdinal) => boolean,
     ): ScoredMessageOrdinal[] {
+        // The text location index passes chunk positions to its predicate
+        const chunkPredicate = predicate
+            ? (chunkPos: number) =>
+                  predicate(this.textLocationIndex.get(chunkPos).messageOrdinal)
+            : undefined;
+        // Same per-message limit rule as lookupMessages: do not cap chunks.
         const scoredTextLocations = this.textLocationIndex.lookupByEmbedding(
             textEmbedding,
-            maxMatches,
+            undefined,
             thresholdScore,
-            predicate,
+            chunkPredicate,
         );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public lookupInSubsetByEmbedding(
@@ -166,16 +276,30 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         const scoredTextLocations =
             this.textLocationIndex.lookupInSubsetByEmbedding(
                 textEmbedding,
-                ordinalsToSearch,
-                maxMatches,
+                this.getChunkPositions(ordinalsToSearch),
+                undefined,
                 thresholdScore,
             );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
+    }
+
+    // Subset lookups take message ordinals, but the embedding index is
+    // addressed by chunk position. Return every chunk position of those messages.
+    private getChunkPositions(messageOrdinals: MessageOrdinal[]): number[] {
+        const wanted = new Set(messageOrdinals);
+        const positions: number[] = [];
+        for (let pos = 0; pos < this.textLocationIndex.size; ++pos) {
+            if (wanted.has(this.textLocationIndex.get(pos).messageOrdinal)) {
+                positions.push(pos);
+            }
+        }
+        return positions;
     }
 
     public serialize(): IMessageTextIndexData {
         return {
             indexData: this.textLocationIndex.serialize(),
+            messageCount: this.messageCount,
         };
     }
 
@@ -184,17 +308,42 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
+        if (
+            data.messageCount !== undefined &&
+            Number.isSafeInteger(data.messageCount) &&
+            data.messageCount >= 0
+        ) {
+            this.messageCount = data.messageCount;
+            return;
+        }
+        // Older data assigned message ordinals from chunk positions. Preserve
+        // those ordinals and continue after the highest one when appending.
+        let highestMessageOrdinal: MessageOrdinal = -1;
+        for (let i = 0; i < this.textLocationIndex.size; ++i) {
+            highestMessageOrdinal = Math.max(
+                highestMessageOrdinal,
+                this.textLocationIndex.get(i).messageOrdinal,
+            );
+        }
+        this.messageCount = highestMessageOrdinal + 1;
+        if (!Number.isSafeInteger(this.messageCount)) {
+            throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
+        }
     }
 
     // Since a message has multiple chunks, each of which is indexed individually, we can end up
     // with a message matching multiple times. The message accumulator dedupes those and also
     // supports smoothing the scores if needed
+    // Lookups rank every chunk and apply maxMatches here, per message,
+    // so several chunks of one message cannot use up maxMatches.
     private toScoredMessageOrdinals(
         scoredLocations: ScoredTextLocation[],
+        maxMatches?: number,
     ): ScoredMessageOrdinal[] {
         const messageMatches = new MessageAccumulator();
         messageMatches.addMessagesFromLocations(scoredLocations);
-        return messageMatches.toScoredMessageOrdinals();
+        const scored = messageMatches.toScoredMessageOrdinals();
+        return maxMatches ? scored.slice(0, maxMatches) : scored;
     }
 }
 
@@ -202,7 +351,7 @@ export async function buildMessageIndex(
     conversation: IConversation,
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     return addToMessageIndex(
         conversation,
@@ -218,7 +367,7 @@ export async function addToMessageIndex(
     settings: MessageTextIndexSettings,
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     const result: ListIndexingResult = {
         numberCompleted: 0,

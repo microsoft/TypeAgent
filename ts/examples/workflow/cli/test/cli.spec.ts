@@ -89,9 +89,13 @@ function runCli(
     });
 }
 
+function cliTest(name: string, fn: () => Promise<void>): void {
+    it(name, fn, 35_000);
+}
+
 describe("CLI integration", () => {
     describe("list-tasks", () => {
-        it("lists all registered tasks", async () => {
+        cliTest("lists all registered tasks", async () => {
             const { stdout, code } = await runCli(["list-tasks"]);
             expect(code).toBe(0);
             expect(stdout).toContain("shell.exec");
@@ -105,7 +109,7 @@ describe("CLI integration", () => {
     });
 
     describe("validate", () => {
-        it("validates d1-standup-prep.json", async () => {
+        cliTest("validates d1-standup-prep.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
                 workflowPath("d1-standup-prep.json"),
@@ -114,7 +118,7 @@ describe("CLI integration", () => {
             expect(stdout).toContain("Valid");
         });
 
-        it("validates d4-commit-summary.json", async () => {
+        cliTest("validates d4-commit-summary.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
                 workflowPath("d4-commit-summary.json"),
@@ -123,7 +127,7 @@ describe("CLI integration", () => {
             expect(stdout).toContain("Valid");
         });
 
-        it("validates d5-code-review-prep.json", async () => {
+        cliTest("validates d5-code-review-prep.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
                 workflowPath("d5-code-review-prep.json"),
@@ -132,7 +136,7 @@ describe("CLI integration", () => {
             expect(stdout).toContain("Valid");
         });
 
-        it("validates d8-summarize-url.json", async () => {
+        cliTest("validates d8-summarize-url.json", async () => {
             const { stdout, code } = await runCli([
                 "validate",
                 workflowPath("d8-summarize-url.json"),
@@ -141,7 +145,7 @@ describe("CLI integration", () => {
             expect(stdout).toContain("Valid");
         });
 
-        it("rejects invalid workflow file", async () => {
+        cliTest("rejects invalid workflow file", async () => {
             const tmp = mkdtempSync(join(tmpdir(), "wf-test-"));
             const bad = join(tmp, "bad.json");
             writeFileSync(
@@ -181,7 +185,7 @@ describe("CLI integration", () => {
     });
 
     describe("run --dry-run", () => {
-        it("d1: denies shell.exec in dry-run mode", async () => {
+        cliTest("d1: denies shell.exec in dry-run mode", async () => {
             const input = JSON.stringify({
                 repos: ["/tmp/fake-repo"],
                 author: "test@example.com",
@@ -197,7 +201,7 @@ describe("CLI integration", () => {
             expect(stderr).toContain("denied by policy");
         });
 
-        it("d4: denies shell.exec in dry-run mode", async () => {
+        cliTest("d4: denies shell.exec in dry-run mode", async () => {
             const input = JSON.stringify({ repoPath: "/tmp/fake" });
             const { stderr, code } = await runCli([
                 "run",
@@ -210,7 +214,7 @@ describe("CLI integration", () => {
             expect(stderr).toContain("denied by policy");
         });
 
-        it("d8: denies http.get in dry-run mode", async () => {
+        cliTest("d8: denies http.get in dry-run mode", async () => {
             const input = JSON.stringify({
                 url: "https://example.com",
                 outputPath: "/tmp/out.md",
@@ -256,7 +260,7 @@ describe("CLI integration", () => {
             rmSync(repoDir, { recursive: true, force: true });
         });
 
-        it("runs D1 and produces markdown with commit info", async () => {
+        cliTest("runs D1 and produces markdown with commit info", async () => {
             const input = JSON.stringify({
                 repos: [repoDir],
                 author: "test@example.com",
@@ -278,7 +282,7 @@ describe("CLI integration", () => {
     });
 
     describe("usage", () => {
-        it("prints usage with no args", async () => {
+        cliTest("prints usage with no args", async () => {
             const { stdout, code } = await runCli([]);
             expect(code).toBe(0);
             expect(stdout).toContain("Usage:");

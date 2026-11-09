@@ -2,13 +2,24 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getRecordedActions, saveRecordedActions } from "./storage";
+import {
+    getRecordedActions,
+    saveRecordedActions,
+    getCrosswordDecisionSettings,
+    getShoppingMode,
+    notifyCrosswordModeChanged,
+} from "./storage";
+import { forwardCrosswordDecisionRpc } from "./crosswordDecisionRpc";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
     getWebSocket,
 } from "./websocket";
 import { screenshotCoordinator } from "./screenshotCoordinator";
+import {
+    getViewHostUrl,
+    resolveLocalBrowserViewUrl,
+} from "./browserViewNavigation";
 import {
     connectToDispatcher,
     isDispatcherConnected,
@@ -35,7 +46,6 @@ import {
     handleSearchByEntities,
     handleSearchByTopics,
     handleHybridSearch,
-    handleGetHierarchicalTopics,
     handleGetTopicMetrics,
     handleGetSearchSuggestions,
     handleSaveSearchHistory,
@@ -61,6 +71,112 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
     }
 
     return {
+        memoryCreateCorpus: (params) => forward("memoryCreateCorpus", params),
+        memoryListCorpora: (params) => forward("memoryListCorpora", params),
+        memoryGetCorpus: (params) => forward("memoryGetCorpus", params),
+        memoryListSources: (params) => forward("memoryListSources", params),
+        memoryListEvents: (params) => forward("memoryListEvents", params),
+        memoryViewCapabilities: (params) =>
+            forward("memoryViewCapabilities", params),
+        memoryQueryTopics: (params) => forward("memoryQueryTopics", params),
+        memoryRebuildTopics: (params) => forward("memoryRebuildTopics", params),
+        memoryListViews: (params) => forward("memoryListViews", params),
+        memoryListViewSummaries: (params) =>
+            forward("memoryListViewSummaries", params),
+        memoryListViewBuildSummaries: (params) =>
+            forward("memoryListViewBuildSummaries", params),
+        memoryGetViewPublications: (params) =>
+            forward("memoryGetViewPublications", params),
+        memoryListQuestions: (params) => forward("memoryListQuestions", params),
+        memoryListQuestionSummaries: (params) =>
+            forward("memoryListQuestionSummaries", params),
+        memoryGetQuestion: (params) => forward("memoryGetQuestion", params),
+        memoryGetKnowledgeStatus: (params) =>
+            forward("memoryGetKnowledgeStatus", params),
+        memoryUpdateKnowledgeDiscovery: (params) =>
+            forward("memoryUpdateKnowledgeDiscovery", params),
+        memoryCreateKnowledgeCheckpoint: (params) =>
+            forward("memoryCreateKnowledgeCheckpoint", params),
+        memoryGetKnowledgeCheckpoint: (params) =>
+            forward("memoryGetKnowledgeCheckpoint", params),
+        memoryWaitForKnowledgeCheckpoint: (params) =>
+            forward("memoryWaitForKnowledgeCheckpoint", params),
+        memoryEditQuestion: (params) => forward("memoryEditQuestion", params),
+        memoryGetViewPage: (params) => forward("memoryGetViewPage", params),
+        memoryProposeSchemaView: (params) =>
+            forward("memoryProposeSchemaView", params),
+        memoryDiscoverSchemaQuestions: (params) =>
+            forward("memoryDiscoverSchemaQuestions", params),
+        memoryListAcquisitions: (params) =>
+            forward("memoryListAcquisitions", params),
+        memoryRunAcquisitions: (params) =>
+            forward("memoryRunAcquisitions", params),
+        memoryCancelAcquisition: (params) =>
+            forward("memoryCancelAcquisition", params),
+        memoryGetView: (params) => forward("memoryGetView", params),
+        memorySaveViewDraft: (params) => forward("memorySaveViewDraft", params),
+        memoryArchiveView: (params) => forward("memoryArchiveView", params),
+        memoryViewHistory: (params) => forward("memoryViewHistory", params),
+        memoryGetViewPublicationPolicy: (params) =>
+            forward("memoryGetViewPublicationPolicy", params),
+        memoryUpdateViewPublicationPolicy: (params) =>
+            forward("memoryUpdateViewPublicationPolicy", params),
+        memoryGetViewPublication: (params) =>
+            forward("memoryGetViewPublication", params),
+        memoryPublishView: (params) => forward("memoryPublishView", params),
+        memoryRetryViewIndex: (params) =>
+            forward("memoryRetryViewIndex", params),
+        memorySearchViews: (params) => forward("memorySearchViews", params),
+        memoryBuildViews: (params) => forward("memoryBuildViews", params),
+        memoryPlanViewMaintenance: (params) =>
+            forward("memoryPlanViewMaintenance", params),
+        memoryMaintainViews: (params) => forward("memoryMaintainViews", params),
+        memoryUpdateViewMaintenance: (params) =>
+            forward("memoryUpdateViewMaintenance", params),
+        memoryGetViewMaintenance: (params) =>
+            forward("memoryGetViewMaintenance", params),
+        memoryGetViewBuild: (params) => forward("memoryGetViewBuild", params),
+        memoryListViewBuilds: (params) =>
+            forward("memoryListViewBuilds", params),
+        memoryCancelViewBuild: (params) =>
+            forward("memoryCancelViewBuild", params),
+        memoryRetryViewBuild: (params) =>
+            forward("memoryRetryViewBuild", params),
+        memoryContinueViewBuild: (params) =>
+            forward("memoryContinueViewBuild", params),
+        memoryRefreshExtensionViews: (params) =>
+            forward("memoryRefreshExtensionViews", params),
+        memoryGetViewConflict: (params) =>
+            forward("memoryGetViewConflict", params),
+        memoryResolveViewConflict: (params) =>
+            forward("memoryResolveViewConflict", params),
+        memoryGetSource: (params) => forward("memoryGetSource", params),
+        memoryGetSourceSynopsis: (params) =>
+            forward("memoryGetSourceSynopsis", params),
+        memoryGetSourceContent: (params) =>
+            forward("memoryGetSourceContent", params),
+        memoryGetSourceKnowledge: (params) =>
+            forward("memoryGetSourceKnowledge", params),
+        memoryListSourceKnowledgeSuppressions: (params) =>
+            forward("memoryListSourceKnowledgeSuppressions", params),
+        memorySuppressSourceKnowledge: (params) =>
+            forward("memorySuppressSourceKnowledge", params),
+        memoryRestoreSourceKnowledge: (params) =>
+            forward("memoryRestoreSourceKnowledge", params),
+        memoryImportDocument: (params) =>
+            forward("memoryImportDocument", params),
+        memoryReplaceSource: (params) => forward("memoryReplaceSource", params),
+        memoryPreviewForgetSource: (params) =>
+            forward("memoryPreviewForgetSource", params),
+        memoryForgetSource: (params) => forward("memoryForgetSource", params),
+        memoryReindexCorpus: (params) => forward("memoryReindexCorpus", params),
+        memoryReindexSource: (params) => forward("memoryReindexSource", params),
+        memoryListJobs: (params) => forward("memoryListJobs", params),
+        memoryCancelJob: (params) => forward("memoryCancelJob", params),
+        memoryListActivity: (params) => forward("memoryListActivity", params),
+        memoryForgetActivity: (params) =>
+            forward("memoryForgetActivity", params),
+
         // =============================================================
         // Local operations (handled directly in service worker)
         // =============================================================
@@ -136,11 +252,26 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async settingsUpdated(params: any) {
-            console.log("Settings updated:", params.settings);
+            const [{ mode, strategy }, shoppingMode] = await Promise.all([
+                getCrosswordDecisionSettings(),
+                getShoppingMode(),
+            ]);
             await chrome.storage.local.set({
-                knowledgeSettings: params.settings,
+                knowledgeSettings: {
+                    ...params.settings,
+                    shoppingMode,
+                    crosswordMode: mode,
+                    crosswordDecisionStrategy: strategy,
+                },
             });
+            await notifyCrosswordModeChanged(mode);
             return { success: true };
+        },
+
+        async getCrosswordDecisionCapabilities() {
+            return forwardCrosswordDecisionRpc(
+                "getCrosswordDecisionCapabilities",
+            );
         },
 
         async autoIndexSettingChanged(params: any) {
@@ -433,15 +564,16 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async indexPageContentDirect(params: any) {
             const targetTab = await getActiveTab();
             if (targetTab) {
-                const success = await indexPageContent(
+                const result = await indexPageContent(
                     targetTab,
                     params.showNotification !== false,
                     {
                         mode: params.mode,
                         extractedKnowledge: params.extractedKnowledge,
+                        activityType: "captured",
                     },
                 );
-                return { success };
+                return { success: result.indexed, error: result.error };
             }
             return {
                 success: false,
@@ -452,11 +584,11 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async autoIndexPage(params: any) {
             const targetTab = await getActiveTab();
             if (targetTab && (await shouldIndexPage(targetTab.url!))) {
-                const success = await indexPageContent(targetTab, false, {
-                    quality: params.quality,
+                const result = await indexPageContent(targetTab, false, {
                     textOnly: params.textOnly,
+                    activityType: "visited",
                 });
-                return { success };
+                return { success: result.indexed, error: result.error };
             }
             return {
                 success: false,
@@ -780,32 +912,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async testMergeTopicHierarchies() {
-            try {
-                return await forward("testMergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error testing topic merge:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to test topic merge",
-                };
-            }
-        },
-
-        async mergeTopicHierarchies() {
-            try {
-                return await forward("mergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error merging topic hierarchies:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to merge topic hierarchies",
-                };
-            }
-        },
-
         async getGlobalGraphLayoutData(params: any) {
             try {
                 return await forward(
@@ -962,32 +1068,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async getTopicViewportNeighborhood(params: any) {
-            try {
-                return await forward("getTopicViewportNeighborhood", {
-                    centerTopic: params.centerTopic,
-                    viewportTopicIds: params.viewportTopicIds,
-                    maxNodes: params.maxNodes,
-                    maxDepth: params.maxDepth,
-                });
-            } catch (error) {
-                console.error(
-                    "Error getting topic viewport neighborhood:",
-                    error,
-                );
-                return {
-                    topics: [],
-                    relationships: [],
-                    metadata: {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error",
-                    },
-                };
-            }
-        },
-
         async getTopicMetrics(params: any) {
             return handleGetTopicMetrics(params);
         },
@@ -1061,10 +1141,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async getHierarchicalTopics(params: any) {
-            return handleGetHierarchicalTopics(params);
-        },
-
         // =============================================================
         // Delegations to existing helpers (search, import, etc.)
         // =============================================================
@@ -1132,7 +1208,9 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async createTab(params: any) {
             try {
                 return await chrome.tabs.create({
-                    url: params.url,
+                    url: await resolveLocalBrowserViewUrl(params.url, () =>
+                        getViewHostUrl(sendActionToAgent),
+                    ),
                     active: params.active ?? true,
                 });
             } catch (error) {
@@ -1190,8 +1268,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async saveExtractionSettings(params: any) {
             try {
+                const mode = params.settings?.mode ?? params.mode ?? "content";
+                if (mode !== "content") {
+                    throw new Error(
+                        "Unsupported extraction mode. Only 'content' is supported.",
+                    );
+                }
                 await chrome.storage.sync.set({
-                    extractionMode: params.settings?.mode || params.mode,
+                    extractionMode: mode,
                     suggestQuestions:
                         params.settings?.suggestQuestions ??
                         params.suggestQuestions,

@@ -43,6 +43,7 @@ import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { processCommandNoLock } from "../../command/command.js";
+import { withChatModelTelemetryPurpose } from "@typeagent/aiclient";
 import { PreferenceMember } from "../collisionPreferences.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
 import {
@@ -448,7 +449,8 @@ async function clarifyWithLookup(
     // strategy disables. Only bail when there is no conversation memory at all.
     if (
         systemContext.conversationMemory === undefined &&
-        systemContext.conversationManager === undefined
+        systemContext.conversationManager === undefined &&
+        systemContext.conversationDurableMemory === undefined
     ) {
         return undefined;
     }
@@ -456,7 +458,10 @@ async function clarifyWithLookup(
     const translator = getLookupClarifyTranslator(systemContext);
 
     const question = `What is ${action.parameters.reference}?`;
-    const result = await translator.translate(question);
+    const result = await withChatModelTelemetryPurpose(
+        "entity-resolution",
+        () => translator.translate(question),
+    );
 
     if (!result.success) {
         return undefined;
@@ -600,6 +605,11 @@ export const dispatcherManifest: AppAgentManifest = {
 
 export const dispatcherAgent: AppAgent = {
     executeAction: executeDispatcherAction,
+    cancelChoice: async (choiceId, context) => {
+        (
+            context.agentContext as CommandHandlerContext
+        ).choiceManager.cancelChoice(choiceId);
+    },
     handleChoice: async (choiceId, response, context) => {
         const systemContext = (context as ActionContext<CommandHandlerContext>)
             .sessionContext.agentContext;

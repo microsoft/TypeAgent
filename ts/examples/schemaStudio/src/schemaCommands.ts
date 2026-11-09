@@ -169,6 +169,7 @@ async function getTypeChatResponse(
 
     // make the request
     const chatResponse = await chat.translate(`
+             Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve the complete required schema even when that needs a longer answer.
             <action id="${id}" name="${actionName}">
                 <desc>${description.replaceAll('"', "'")}</desc>
                 <sample>${testUtterance}</sample>
@@ -186,8 +187,6 @@ function createModel(): ChatModelWithStreaming {
     }
     const completionSettings: CompletionSettings = {
         temperature: 1.0,
-        // Max response tokens
-        max_tokens: 1000,
         // createChatModel will remove it if the model doesn't support it
         response_format: { type: "json_object" },
     };

@@ -1,17 +1,70 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { resolveReasoningTimeoutMs } from "../src/reasoning/copilot.js";
+import {
+    resolveCopilotReasoningModel,
+    resolveReasoningTimeoutMs,
+    sendAndWaitWithCancellation,
+} from "../src/reasoning/copilot.js";
+import type { CopilotSession } from "@github/copilot-sdk";
 
 const ENV_KEY = "TYPEAGENT_REASONING_TIMEOUT_MS";
 const DEFAULT_MS = 20 * 60 * 1000;
 const MAX_SETTIMEOUT_MS = 2_147_483_647;
+
+describe("resolveCopilotReasoningModel", () => {
+    it("uses the configured model before the environment", () => {
+        expect(resolveCopilotReasoningModel("gpt-6-astra", "gpt-5.5")).toBe(
+            "gpt-6-astra",
+        );
+    });
+
+    it("uses the environment model when no live override is configured", () => {
+        expect(resolveCopilotReasoningModel(undefined, "gpt-5.5")).toBe(
+            "gpt-5.5",
+        );
+    });
+
+    it("defaults to GPT-6 Sol", () => {
+        expect(resolveCopilotReasoningModel(undefined, undefined)).toBe(
+            "gpt-6-sol",
+        );
+    });
+});
 
 describe("resolveReasoningTimeoutMs", () => {
     let saved: string | undefined;
     beforeEach(() => {
         saved = process.env[ENV_KEY];
         delete process.env[ENV_KEY];
+    });
+
+    describe("sendAndWaitWithCancellation", () => {
+        it("reports the configured idle timeout as cancellation", async () => {
+            const saved = process.env[ENV_KEY];
+            process.env[ENV_KEY] = "1";
+            let abortCalls = 0;
+            const waitPromise = new Promise<never>(() => {});
+            const session = {
+                sendAndWait: () => waitPromise,
+                abort: async () => {
+                    abortCalls++;
+                },
+            } as unknown as CopilotSession;
+
+            try {
+                await expect(
+                    sendAndWaitWithCancellation(session, "prompt", undefined),
+                ).rejects.toMatchObject({ name: "AbortError" });
+                expect(abortCalls).toBe(1);
+            } finally {
+                if (saved === undefined) {
+                    delete process.env[ENV_KEY];
+                } else {
+                    process.env[ENV_KEY] = saved;
+                }
+            }
+        });
     });
     afterEach(() => {
         if (saved === undefined) {

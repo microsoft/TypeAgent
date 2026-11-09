@@ -1,0 +1,118 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createExtensionCommands } from "../src/extension/commands.js";
+import { getSelectedSkills, writeConfig } from "../src/shared/plugin-config.js";
+
+describe("extension commands", () => {
+    let dataDir: string;
+    const originalDataDir = process.env.TYPEAGENT_PLUGIN_DATA;
+    const originalMode = process.env.TYPEAGENT_MODE;
+    const originalSelectedSkills = process.env.TYPEAGENT_SELECTED_SKILLS;
+    const originalHost = process.env.TYPEAGENT_HOST;
+    const originalPort = process.env.TYPEAGENT_PORT;
+
+    beforeEach(() => {
+        dataDir = mkdtempSync(join(tmpdir(), "typeagent-copilot-"));
+        process.env.TYPEAGENT_PLUGIN_DATA = dataDir;
+        delete process.env.TYPEAGENT_MODE;
+        delete process.env.TYPEAGENT_SELECTED_SKILLS;
+        delete process.env.TYPEAGENT_HOST;
+        delete process.env.TYPEAGENT_PORT;
+    });
+
+    afterEach(() => {
+        rmSync(dataDir, { recursive: true, force: true });
+        if (originalDataDir === undefined)
+            delete process.env.TYPEAGENT_PLUGIN_DATA;
+        else process.env.TYPEAGENT_PLUGIN_DATA = originalDataDir;
+        if (originalMode === undefined) delete process.env.TYPEAGENT_MODE;
+        else process.env.TYPEAGENT_MODE = originalMode;
+        if (originalSelectedSkills === undefined)
+            delete process.env.TYPEAGENT_SELECTED_SKILLS;
+        else process.env.TYPEAGENT_SELECTED_SKILLS = originalSelectedSkills;
+        if (originalHost === undefined) delete process.env.TYPEAGENT_HOST;
+        else process.env.TYPEAGENT_HOST = originalHost;
+        if (originalPort === undefined) delete process.env.TYPEAGENT_PORT;
+        else process.env.TYPEAGENT_PORT = originalPort;
+    });
+
+    it("reports status using the default configuration", async () => {
+        const messages: string[] = [];
+        const command = createExtensionCommands(async (message) => {
+            messages.push(message);
+        }).find(({ name }) => name === "typeagent-status");
+
+        await command?.handler({} as never);
+
+        expect(messages[0]).toContain("Mode: direct");
+        expect(messages[0]).toContain(
+            "Ordinary prompts: local recipes, then Copilot",
+        );
+        expect(messages[0]).toContain("Server: ws://localhost:8999");
+    });
+
+    it("reports status using the configured server host and port", async () => {
+        process.env.TYPEAGENT_HOST = "127.0.0.1";
+        process.env.TYPEAGENT_PORT = "9026";
+        const messages: string[] = [];
+        const command = createExtensionCommands(async (message) => {
+            messages.push(message);
+        }).find(({ name }) => name === "typeagent-status");
+
+        await command?.handler({} as never);
+
+        expect(messages[0]).toContain("Server: ws://127.0.0.1:9026");
+    });
+
+    it("persists a valid mode and rejects an invalid mode", async () => {
+        const messages: string[] = [];
+        const command = createExtensionCommands(async (message) => {
+            messages.push(message);
+        }).find(({ name }) => name === "typeagent-mode");
+
+        await command?.handler({ args: "mcp" } as never);
+        await command?.handler({ args: "invalid" } as never);
+
+        expect(
+            JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
+        ).toMatchObject({ mode: "mcp" });
+        expect(messages).toEqual([
+            expect.stringContaining(
+                "TypeAgent mode switched to mcp (delegate).",
+            ),
+            "Usage: /typeagent-mode direct|mcp [delegate|mixed]|dev|bypass",
+        ]);
+        expect(messages[0]).toContain("Explicit TypeAgent");
+    });
+
+    it("loads explicit selected skills from plugin configuration", () => {
+        writeConfig({
+            mode: "direct",
+            selectedSkills: [
+                {
+                    identity: {
+                        scope: "project",
+                        origin: "c:/src/project",
+                        name: "calendar",
+                    },
+                    revision: "a".repeat(64),
+                },
+            ],
+        });
+
+        expect(getSelectedSkills()).toEqual([
+            {
+                identity: {
+                    scope: "project",
+                    origin: "c:/src/project",
+                    name: "calendar",
+                },
+                revision: "a".repeat(64),
+            },
+        ]);
+    });
+});

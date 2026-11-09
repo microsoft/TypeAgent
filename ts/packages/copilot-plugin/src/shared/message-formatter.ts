@@ -10,6 +10,7 @@ import type { IAgentMessage } from "@typeagent/agent-server-client";
 import type {
     DisplayAppendMode,
     DisplayContent,
+    MessageContent,
     StructuredContent,
 } from "@typeagent/agent-sdk";
 import {
@@ -25,6 +26,15 @@ export function toMarkdownBreaks(text: string): string {
     return text.replace(/\n/g, "  \n");
 }
 
+function messageContentToString(content: MessageContent): string {
+    if (typeof content === "string") {
+        return content;
+    }
+    return content
+        .map((row) => (Array.isArray(row) ? row.join(" | ") : row))
+        .join("\n");
+}
+
 /**
  * Extract text content from a DisplayContent message, converting HTML to
  * plain text when needed. Shared by both direct hook and MCP server paths.
@@ -35,11 +45,17 @@ function extractText(msg: unknown): string | undefined {
 
     if (typeof msg === "string") {
         text = msg;
+    } else if (Array.isArray(msg)) {
+        text = messageContentToString(msg as MessageContent);
     } else if (isStructuredContent(msg as DisplayContent)) {
         // StructuredContent — use the pre-derived text alternate.
-        text = String(getStructuredFallback(msg as StructuredContent, "text"));
+        text = messageContentToString(
+            getStructuredFallback(msg as StructuredContent, "text"),
+        );
     } else if (typeof msg === "object" && msg && "content" in msg) {
-        text = String((msg as { content: unknown }).content);
+        text = messageContentToString(
+            (msg as { content: MessageContent }).content,
+        );
         if ("type" in msg && (msg as { type: unknown }).type === "html") {
             isHtml = true;
         }

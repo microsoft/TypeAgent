@@ -1,0 +1,25 @@
+{
+  "description": "Hosted API profile with only managed-identity GPT-backed and local agents.",
+  "agents": {
+    "chat": {
+      "name": "@typeagent/chat-agent",
+      "execMode": "dispatcher"
+    },
+    "greeting": {
+      "name": "greeting-agent",
+      "execMode": "dispatcher"
+    },
+    "list": {
+      "name": "@typeagent/list-agent"
+    },
+    "settings": {
+      "name": "settings-agent",
+      "execMode": "dispatcher"
+    },
+    "timer": {
+      "name": "@typeagent/timer-agent"
+    }
+  },
+  "explainers": {},
+  "tests": []
+}

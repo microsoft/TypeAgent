@@ -21,6 +21,7 @@ import type {
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
 import { gatherUserContext } from "./userContext.js";
+import { showSecurityApproval } from "./securityApproval.js";
 
 /**
  * Narrow callback surface needed by the bridge ClientIO. Keeping this
@@ -89,6 +90,8 @@ export interface BridgeClientIOContext {
  */
 export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
     return {
+        requestSecurityApproval: (_requestId, request, _source, signal) =>
+            showSecurityApproval(vscode, request, signal),
         question: async (
             _requestId: RequestId | undefined,
             message: string,
@@ -315,8 +318,16 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
         },
         // Another connected client answered, or the server cancelled/timed
         // out the interaction — tell the webview to tear down its prompt.
-        interactionResolved: (interactionId: string) => {
-            ctx.broadcast({ type: "interactionResolved", interactionId });
+        // The `response` value the server committed is forwarded so the
+        // webview can reconcile a locally-staged permission grant against
+        // the authoritative outcome (see `stagedPermissionGrants` in the
+        // webview's `interactionResolved` handler).
+        interactionResolved: (interactionId: string, response: unknown) => {
+            ctx.broadcast({
+                type: "interactionResolved",
+                interactionId,
+                response,
+            });
         },
         interactionCancelled: (interactionId: string) => {
             ctx.broadcast({ type: "interactionCancelled", interactionId });

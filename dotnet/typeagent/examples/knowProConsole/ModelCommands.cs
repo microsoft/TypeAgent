@@ -84,7 +84,7 @@ public partial class ModelCommands : ICommandModule
     {
         Command cmd = new("kpModelSwitch", "Switch to a different chat model.")
         {
-            Options.Arg<string>("model", "Model suffix (e.g., GPT_4_O, GPT_5_MINI). Leave empty for default.", "")
+            Options.Arg<string>("model", "Model suffix (e.g., GPT_6_LUNA, GPT_5_MINI). Leave empty for default.", "")
         };
         cmd.SetAction(this.ModelSwitchAsync);
         return cmd;

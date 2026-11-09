@@ -8,7 +8,7 @@
  *
  * Why: the agent-server's dependency closure includes packages that ship
  * prebuilt native binaries as per-platform optional sub-packages (e.g.
- * `@github/copilot-win32-x64` + `@github/copilot-win32-arm64`,
+ * `@github/copilot-sdk-win32-x64` + `@github/copilot-sdk-win32-arm64`,
  * `@anthropic-ai/claude-agent-sdk-win32-*`, `@napi-rs/canvas-win32-*-msvc`,
  * `@img/sharp-<os>-<arch>`, `@esbuild/<os>-<arch>`, ...). pnpm installs every
  * platform variant, so a naive `pnpm deploy --prod` carries binaries for arches
@@ -79,7 +79,7 @@ function tokensIn(name, tokens) {
  * point of a prebuilt-binary variant: `...-win32-x64`, `...-win32-arm64`,
  * `@esbuild/linux-arm`, ...). We therefore require an arch token before
  * considering a directory for removal — this avoids false positives on agent
- * package names that merely contain an OS word (e.g. `android-mobile-agent`).
+ * package names that merely contain an OS word (e.g. `windowsclock-agent`).
  *
  * Given an arch token, the package is foreign when its arch is not ours, or
  * when it also names an OS that is not ours (e.g. `linux-x64` on a win32-x64

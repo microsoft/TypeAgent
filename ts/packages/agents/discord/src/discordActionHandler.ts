@@ -16,6 +16,7 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ChatModel, openai } from "@typeagent/aiclient";
+import { configSetupError, tryReloadConfigKeysSync } from "@typeagent/config";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -149,14 +150,19 @@ async function discordFetch(
     path: string,
     options: RequestInit = {},
 ): Promise<Response> {
-    const token = process.env.DISCORD_BOT_TOKEN;
-    if (!token) {
-        throw new Error(
-            "DISCORD_BOT_TOKEN is not set. Please add it to ts/.env.",
+    // Re-read this agent's key on every request so changed and removed local
+    // overrides take effect without touching unrelated inherited settings.
+    tryReloadConfigKeysSync(["DISCORD_BOT_TOKEN"]);
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    if (!botToken) {
+        throw configSetupError(
+            "Discord is not configured.",
+            ["DISCORD_BOT_TOKEN"],
+            "The bot token comes from your application's Bot page in the Discord developer portal.",
         );
     }
     const headers: Record<string, string> = {
-        Authorization: `Bot ${token}`,
+        Authorization: `Bot ${botToken}`,
         "Content-Type": "application/json",
         ...(options.headers as Record<string, string>),
     };

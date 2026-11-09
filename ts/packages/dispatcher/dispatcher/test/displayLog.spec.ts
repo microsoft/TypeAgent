@@ -553,6 +553,48 @@ describe("DisplayLog", () => {
         });
     });
 
+    describe("logCommandResult", () => {
+        it("persists an optional traceId onto the command-result entry", () => {
+            const log = new DisplayLog(undefined);
+            const reqId = makeRequestId("req-trace");
+
+            log.logCommandResult(
+                reqId,
+                undefined,
+                undefined,
+                undefined,
+                "abcd1234abcd1234abcd1234abcd1234",
+            );
+
+            const entries = log.getEntries();
+            expect(entries).toHaveLength(1);
+            expect(entries[0].type).toBe("command-result");
+            if (entries[0].type === "command-result") {
+                expect(entries[0].traceId).toBe(
+                    "abcd1234abcd1234abcd1234abcd1234",
+                );
+            }
+        });
+
+        it("omits traceId from the entry when the caller does not pass one", () => {
+            const log = new DisplayLog(undefined);
+            const reqId = makeRequestId("req-no-trace");
+
+            log.logCommandResult(reqId);
+
+            const entries = log.getEntries();
+            expect(entries).toHaveLength(1);
+            if (entries[0].type === "command-result") {
+                expect(entries[0].traceId).toBeUndefined();
+                // Undefined should not be serialized as a JSON key: absence,
+                // not `"traceId": null`, is what history replay expects.
+                expect(
+                    Object.prototype.hasOwnProperty.call(entries[0], "traceId"),
+                ).toBe(false);
+            }
+        });
+    });
+
     describe("disk persistence", () => {
         let tmpDir: string;
 

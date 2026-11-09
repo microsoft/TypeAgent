@@ -6,7 +6,7 @@ import {
     conversation as kpLib,
     splitIntoParagraphs,
 } from "@typeagent/knowledge-processor";
-import { htmlSimplify, htmlToText } from "./html.js";
+import { htmlToText } from "./html.js";
 
 /**
  * Parses markdown into a token DOM using the "marked" library
@@ -87,6 +87,9 @@ export function markdownToTextBlocks(
                 break;
             case "space":
             case "br":
+                if (curTextBlock.length === maxCharsPerChunk) {
+                    endBlock();
+                }
                 curTextBlock += "\n";
                 break;
             case "text":
@@ -231,6 +234,7 @@ export function markdownToTextBlocks(
             textBlocks.push(curTextBlock);
             handler?.onBlockEnd(curTextBlock);
         }
+        curTextBlock = "";
     }
 }
 
@@ -254,10 +258,14 @@ export type KnowledgeMarkdownTypes =
 
 export type KnowledgeCollectionOptions = {
     tagTokens: Set<KnowledgeMarkdownTypes>; // Extract tags for these token types
+    collectLinks: boolean;
+    collectStructuralKnowledge: boolean;
 };
 
 export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
     return {
+        collectLinks: true,
+        collectStructuralKnowledge: true,
         tagTokens: new Set([
             "blockquote",
             "code",
@@ -331,7 +339,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 this.onCode(token as md.Tokens.Code);
                 break;
             case "em":
-                this.onEmphasis(token.text);
+                this.onEmphasis(token.text, "em");
                 break;
             case "image":
                 this.onImage(token as md.Tokens.Image);
@@ -349,7 +357,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 this.onTable(token as md.Tokens.Table);
                 break;
             case "strong":
-                this.onEmphasis(token.text);
+                this.onEmphasis(token.text, "strong");
                 break;
         }
         this.lastToken = token;
@@ -380,7 +388,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
     onBlockQuote(block: md.Tokens.Blockquote): void {
         const blockName = this.getPrecedingHeading();
-        if (blockName) {
+        if (this.options.collectStructuralKnowledge && blockName) {
             this.addEntityAndTag(blockQuoteToEntity(blockName), block.type);
         } else {
             this.addTag("block", block.type);
@@ -389,7 +397,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
     onCode(code: md.Tokens.Code): void {
         const blockName = this.getPrecedingHeading();
-        if (blockName) {
+        if (this.options.collectStructuralKnowledge && blockName) {
             this.addEntityAndTag(
                 codeBlockToEntity(blockName, code.lang),
                 code.type,
@@ -401,7 +409,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
     onCodeSpan(code: md.Tokens.Codespan): void {
         const blockName = this.getPrecedingHeading();
-        if (blockName) {
+        if (this.options.collectStructuralKnowledge && blockName) {
             this.addEntityAndTag(codeBlockToEntity(blockName), code.type);
         } else {
             this.addTag("code", code.type);
@@ -409,19 +417,25 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     }
 
     onLink(link: md.Tokens.Link): void {
-        this.linksInScope.set(link.text, link.href);
+        if (this.options.collectLinks) {
+            this.linksInScope.set(link.text, link.href);
+        }
     }
 
     onImage(image: md.Tokens.Image): void {
-        this.addEntityAndTag(
-            imageToEntity(image.title, image.href),
-            image.type,
-        );
+        if (this.options.collectStructuralKnowledge) {
+            this.addEntityAndTag(
+                imageToEntity(image.title, image.href),
+                image.type,
+            );
+        } else {
+            this.addTag("image", image.type);
+        }
     }
 
     onList(list: md.Tokens.List): void {
         const listName = this.getPrecedingHeading();
-        if (listName) {
+        if (this.options.collectStructuralKnowledge && listName) {
             this.addEntityAndTag(listToEntity(listName), list.type);
         } else {
             this.addTag("list", list.type);
@@ -430,15 +444,17 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
     onTable(table: md.Tokens.Table): void {
         const tableName = this.getPrecedingHeading();
-        if (tableName) {
+        if (this.options.collectStructuralKnowledge && tableName) {
             this.addEntityAndTag(tableToEntity(tableName), table.type);
         } else {
             this.addTag("table", table.type);
         }
     }
 
-    onEmphasis(text: string): void {
-        if (!(text.startsWith("__") || text.startsWith("**"))) {
+    onEmphasis(text: string, tokenType: "em" | "strong"): void {
+        if (!this.options.collectStructuralKnowledge) {
+            this.addTag(tokenType, tokenType);
+        } else if (!(text.startsWith("__") || text.startsWith("**"))) {
             // Automatically make any emphasized text into to topics
             this.knowledgeBlock.knowledge.topics.push(text);
             this.addEntity(emphasisToEntity(text));
@@ -456,6 +472,12 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     }
 
     protected addHeadingsToKnowledgeBlock() {
+        if (!this.options.collectStructuralKnowledge) {
+            if (this.headingsInScope.size > 0) {
+                this.addTag("heading", "heading");
+            }
+            return;
+        }
         // Include top K headings in scope.. as topics, entities
         const topK = 2;
         let headingLevelsInScope = [...this.headingsInScope.keys()].sort(
@@ -667,24 +689,38 @@ function splitTable(
     table: md.Tokens.Table,
     maxCharsPerChunk: number,
 ): md.Tokens.Table[] {
+    const headerLength = rowsToTable(table, []).raw.length;
+    if (
+        headerLength >= maxCharsPerChunk ||
+        table.rows.some(
+            (row) => headerLength + getRowRaw(row).length > maxCharsPerChunk,
+        )
+    ) {
+        return markdownTableContinuations(table, maxCharsPerChunk).map(
+            (continuation) => ({
+                type: "table",
+                header: table.header,
+                align: table.align,
+                rows: [],
+                raw: continuation.text,
+            }),
+        );
+    }
     const tables: md.Tokens.Table[] = [];
     const rows = table.rows;
     let curTableStartAt = 0;
-    let curTableLength = 0;
+    let curTableLength = headerLength;
     for (let i = 0; i < rows.length; ++i) {
         const row = rows[i];
-        const rowLength = getRowLength(row);
-        if (rowLength > maxCharsPerChunk) {
-            simplifyRow(row, maxCharsPerChunk);
-        }
+        const rowLength = getRowRaw(row).length;
         if (curTableLength + rowLength > maxCharsPerChunk) {
             tables.push(rowsToTable(table, rows.slice(curTableStartAt, i)));
-            curTableLength = 0;
+            curTableLength = headerLength;
             curTableStartAt = i;
         }
         curTableLength += rowLength;
     }
-    if (curTableLength > 0) {
+    if (curTableStartAt < rows.length) {
         tables.push(rowsToTable(table, rows.slice(curTableStartAt)));
     }
     return tables;
@@ -717,34 +753,76 @@ function getRowRaw(row: md.Tokens.TableCell[]): string {
     return raw + "\n";
 }
 
-function getRowLength(row: md.Tokens.TableCell[]): number {
-    return row.reduce<number>((total, cell) => total + cell.text.length, 0);
+export interface MarkdownTableContinuation {
+    text: string;
+    /** UTF-16 offsets into the original table token's raw text, not index locators. */
+    sourceStart: number;
+    sourceEnd: number;
+    /** Start of exact source content in text; preceding labels are synthetic. */
+    contentStart: number;
+    /** Zero denotes the header/separator; data rows are one-based. */
+    row: number;
 }
 
-function simplifyRow(
-    row: md.Tokens.TableCell[],
+/**
+ * Bounded structural reads with complete, exact coverage of table.raw.
+ * HTML and escaped Markdown are retained verbatim, without mutating the token.
+ * Repeated headers/row labels are context, not additional source evidence.
+ */
+export function markdownTableContinuations(
+    table: Pick<md.Tokens.Table, "raw">,
     maxCharsPerChunk: number,
-): void {
-    for (const cell of row) {
-        if (cell.text.length > maxCharsPerChunk) {
-            cell.text = simplifyText(cell.text, maxCharsPerChunk);
-        }
+): MarkdownTableContinuation[] {
+    if (!Number.isSafeInteger(maxCharsPerChunk) || maxCharsPerChunk < 2) {
+        throw new Error(
+            "maxCharsPerChunk must be a safe integer of at least 2",
+        );
     }
-}
+    const lines = table.raw.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+    const header = lines.slice(0, 2).join("");
+    const continuations: MarkdownTableContinuation[] = [];
+    let sourceStart = 0;
+    let row = 0;
+    append(header, 0);
+    for (let i = 2; i < lines.length; ++i) {
+        if (lines[i].trim().length > 0) {
+            ++row;
+        }
+        append(lines[i], row);
+    }
+    return continuations;
 
-function simplifyText(text: string, maxCharsPerChunk: number): string {
-    try {
-        // Large text is frequently raw html. First, retain the html, which has meaning
-        text = htmlSimplify(text);
-        if (text.length > maxCharsPerChunk) {
-            // Get rid of the html
-            text = htmlToText(text);
+    function append(raw: string, row: number): void {
+        const label = `[Table row ${row} continuation]\n`;
+        const context = row === 0 ? "" : header + label;
+        const prefix =
+            context.length <= Math.floor(maxCharsPerChunk / 2)
+                ? context
+                : label.length <= Math.floor(maxCharsPerChunk / 2)
+                  ? label
+                  : "";
+        let start = 0;
+        while (start < raw.length) {
+            let end = Math.min(
+                raw.length,
+                start + maxCharsPerChunk - prefix.length,
+            );
+            if (
+                end < raw.length &&
+                /[\uD800-\uDBFF]/.test(raw[end - 1]) &&
+                /[\uDC00-\uDFFF]/.test(raw[end])
+            ) {
+                --end;
+            }
+            continuations.push({
+                text: prefix + raw.slice(start, end),
+                sourceStart: sourceStart + start,
+                sourceEnd: sourceStart + end,
+                contentStart: prefix.length,
+                row,
+            });
+            start = end;
         }
-        if (text.length < maxCharsPerChunk) {
-            return text;
-        }
-    } finally {
+        sourceStart += raw.length;
     }
-    // Just truncate
-    return text.slice(0, maxCharsPerChunk);
 }

@@ -3,6 +3,17 @@
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
 import { CompletionUsageStats } from "./apiTypes.js";
+import {
+    EmbeddingIdentity,
+    EmbeddingPart,
+    EmbeddingRole,
+} from "./embeddingIdentity.js";
+import type { RequestConstraintReceipt } from "./requestConstraints.js";
+import { otel } from "@typeagent/telemetry";
+
+export function isRetryableModelFailure(value: unknown): boolean {
+    return otel.readTelemetryErrorClassification(value)?.retryable === true;
+}
 
 /**
  * Translation settings for Chat models
@@ -11,22 +22,35 @@ import { CompletionUsageStats } from "./apiTypes.js";
 export type CompletionSettings = {
     n?: number;
     temperature?: number;
-    /**
-     * @deprecated Use `max_completion_tokens` instead.  The runtime
-     * auto-promotes this to `max_completion_tokens` before sending the
-     * request, but new code should set `max_completion_tokens` directly.
-     */
-    max_tokens?: number;
     response_format?: { type: "json_object" };
     // Use fixed seed parameter to improve determinism
     //https://cookbook.openai.com/examples/reproducible_outputs_with_the_seed_parameter
     seed?: number;
     top_p?: number;
 
-    max_completion_tokens?: number;
-    reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    reasoning_effort?:
+        | "none"
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "xhigh"
+        | "max";
     verbosity?: "low" | "medium" | "high";
 };
+
+export function rejectCompletionLimits(settings?: CompletionSettings): void {
+    for (const key of [
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+    ]) {
+        if (settings && key in settings)
+            throw new Error(
+                `${key} is no longer supported in completion settings; use prompt guidance for final-answer length, excluding reasoning`,
+            );
+    }
+}
 
 // A JSON Schema object passed opaquely to the OpenAI API.
 export type JsonSchemaType = Record<string, unknown>;
@@ -59,11 +83,24 @@ export type FunctionCallingResult = {
 
 export type CompleteUsageStatsCallback = (usage: CompletionUsageStats) => void;
 
+/** Offline inspection of the non-streaming wire request. Contains prompt/schema; do not log it. */
+export interface ChatRequestInspection {
+    serializedRequest: string;
+    estimatedInputTokens: number;
+    tokenizer: "o200k_base";
+    constraints: RequestConstraintReceipt;
+}
+
 /**
  * A TypeChat language model with greater control on settings
  */
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
+    /** Available on supported providers; throws when configured request constraints fail. */
+    inspectRequest?(
+        prompt: string | PromptSection[],
+        jsonSchema?: CompletionJsonSchema,
+    ): ChatRequestInspection;
     completionCallback?: ((request: any, response: any) => void) | undefined;
     /**
      * Complete the prompt
@@ -109,6 +146,14 @@ export interface EmbeddingModel<K> {
  * A Model that generates embeddings for the given input
  */
 export interface TextEmbeddingModel extends EmbeddingModel<string> {
+    readonly embeddingIdentity?: EmbeddingIdentity | undefined;
+    readonly embeddingCapabilities?: EmbeddingCapabilities | undefined;
+    forRole?(role: EmbeddingRole): TextEmbeddingModel;
+    resolve?(): Promise<TextEmbeddingModel>;
+    dispose?(): Promise<void>;
+    generateMediaEmbeddingBatch?(
+        samples: EmbeddingPart[][],
+    ): Promise<Result<number[][]>>;
     /**
      * Optional: batching support
      * Not all models/apis support batching
@@ -120,6 +165,38 @@ export interface TextEmbeddingModel extends EmbeddingModel<string> {
      * If no batching, maxBatchSize should be 1
      */
     readonly maxBatchSize: number;
+}
+
+export interface EmbeddingCapabilities {
+    readonly inputModalities: readonly ("text" | "image")[];
+    readonly mixedInputs: boolean;
+}
+
+export async function resolveEmbeddingModel(
+    model: TextEmbeddingModel,
+): Promise<TextEmbeddingModel> {
+    return model.resolve ? model.resolve() : model;
+}
+
+export function supportsImageEmbeddings(model: TextEmbeddingModel): boolean {
+    return (
+        model.embeddingCapabilities?.inputModalities.includes("image") ===
+            true && typeof model.generateMediaEmbeddingBatch === "function"
+    );
+}
+
+export function embeddingModelForRole(
+    model: TextEmbeddingModel,
+    role: EmbeddingRole,
+): TextEmbeddingModel {
+    const selected = model.forRole?.(role) ?? model;
+    if (
+        selected.embeddingIdentity &&
+        selected.embeddingIdentity.task !== role
+    ) {
+        throw new Error(`Embedding model does not support the ${role} role`);
+    }
+    return selected;
 }
 
 /**

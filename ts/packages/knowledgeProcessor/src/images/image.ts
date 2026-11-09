@@ -651,7 +651,7 @@ export async function loadImageWithKnowledge(
 
             // how much over the limit are we?
             const over: number = fileSize / maxSize - 1;
-            const md: sharp.Metadata = await img_sharp.metadata();
+            const md = await img_sharp.metadata();
             const newWidth = Math.round((1 - over) * md.width!);
             const newHeight = Math.round((1 - over) * md.height!);
 

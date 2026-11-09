@@ -1,14 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "./cliPath.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import {
     ScenarioTemplate,
     getPrefixSuffixPatterns,
 } from "./scenarioTemplates.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
+import {
+    createGrammarModelQuery,
+    GrammarModelOptions,
+    GrammarModelProvider,
+    GrammarModelQuery,
+} from "./grammarModel.js";
 
 /**
  * Configuration for scenario-based grammar generation
@@ -29,9 +33,9 @@ export interface ScenarioGrammarConfig {
 /**
  * Constructor configuration for ScenarioBasedGrammarGenerator
  */
-export interface ScenarioGeneratorOptions {
-    /** Model to use for generation */
-    model?: string;
+export interface ScenarioGeneratorOptions extends GrammarModelOptions {
+    /** Provider to use for generation (default: Copilot) */
+    provider?: GrammarModelProvider;
     /** Maximum retries for grammar validation/fixing */
     maxRetries?: number;
 }
@@ -124,12 +128,12 @@ const LANGUAGE_INSTRUCTIONS = {
  * actually say in context.
  */
 export class ScenarioBasedGrammarGenerator {
-    private model: string;
     private maxRetries: number;
+    private readonly queryModel: GrammarModelQuery;
 
     constructor(config: ScenarioGeneratorOptions = {}) {
-        this.model = config.model || "claude-sonnet-4-20250514";
-        this.maxRetries = config.maxRetries || 3;
+        this.queryModel = createGrammarModelQuery(config);
+        this.maxRetries = config.maxRetries ?? 3;
     }
 
     /**
@@ -305,23 +309,7 @@ export class ScenarioBasedGrammarGenerator {
             )
             .replace("{languageInstructions}", languageInstructions);
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         // Parse JSON array
         const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
@@ -1011,7 +999,7 @@ export class ScenarioBasedGrammarGenerator {
     }
 
     /**
-     * Ask Claude to fix grammar errors
+     * Ask the configured model to fix grammar errors
      */
     private async fixGrammar(
         grammarText: string,
@@ -1034,25 +1022,7 @@ Remember the CRITICAL SYNTAX RULES:
 
 Return the complete corrected grammar, starting with the copyright header.`;
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                } else {
-                    return null;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         // Extract grammar
         let grammar = responseText;

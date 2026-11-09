@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "memory-quality-pilot-v1",
+  "baselineCommit": "6c5d8dc89190a3602376bdb4cc9d4b87930587ac",
+  "fixtureOrigin": "authored synthetic pilot, not historical replay or independent reviewed gold",
+  "goldReviewStatus": "pending-independent-human-review",
+  "custody": "Evaluator retains expectations and locked questions. Workers receive only explicitly exported development construction packets. Holdout inspection for tuning retires that split.",
+  "splits": {
+    "wiki": { "development": 6, "holdout": 6 },
+    "brief": { "development": 6, "holdout": 6 }
+  },
+  "generationsPerHoldoutBundlePerArm": 3,
+  "independentSamplingUnit": "source bundle",
+  "thresholds": {
+    "criticalRegressionErrorsAllowed": 0,
+    "qualificationRecall": 0.95,
+    "supportedClaimPrecision": 0.98,
+    "omissionBearingOutputReduction": 0.5,
+    "minimumBaselineOmissionBearingOutputs": 4
+  },
+  "rubric": {
+    "support": "Humans enumerate every externally verifiable claim in saved/rendered output, mark support against exact source revision and quote/offset, and record unsupported claims without matching by keywords.",
+    "qualifications": "Humans judge each evaluator expectation against the saved/rendered prose; merely citing a source or accepting a schema does not preserve its qualification.",
+    "selectedEvidence": "Humans mark each required expectation's support present in the actual serialized construction request, separately from output recall.",
+    "errors": [
+      "attribution",
+      "status",
+      "correction",
+      "unknownState",
+      "citationRevision",
+      "critical"
+    ],
+    "progress": "Record legitimate admission progress and essential prose distinctions separately from blocked, conflicted, failed and covered outcomes.",
+    "usefulness": "Blinded paired human wins/ties/losses with reviewer identities, arm blinding key, source witnesses, disagreement and adjudication retained by evaluator.",
+    "review": "Independent reviewer approval must bind this frozen manifest and expectation hashes; annotation reviewers cite exact source witnesses for claims and expectation decisions."
+  },
+  "emptyDenominators": "Return null, never zero or perfect. Gates are indeterminate if their denominators are empty.",
+  "failures": "Every scheduled output is represented. Missing/failed outputs count as uncovered required qualifications and selected evidence, and as omission-bearing outputs. Claim precision is observed-output-only; complete coverage is required for a passing gate.",
+  "uncertainty": "Paired differences averaged within source bundle first; seeded paired cluster bootstrap resamples bundles, never individual generations. Report complete-pair coverage and do not infer significance from this small pilot.",
+  "benchmarkScopes": {
+    "longMemEval": 50,
+    "qedLocal": 20,
+    "qedGlobal": 20,
+    "qedHoldoutFraction": 0.5
+  },
+  "execution": "Offline preparation only. No model, credential, production store or live-run authorization."
+}

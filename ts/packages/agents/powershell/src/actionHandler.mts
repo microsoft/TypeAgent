@@ -12,6 +12,7 @@ import {
     AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
+    createActionResultNoDisplay,
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -23,28 +24,71 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
+import { homedir, tmpdir } from "node:os";
 import { join, dirname, isAbsolute, resolve, extname } from "path";
-import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
 import type { PowerShellFlowDefinition } from "./store/powerShellStore.mjs";
 import {
+    createEditedScriptSource,
+    getScriptExecutionProvenance,
+    getRequiredModules,
     type ScriptRecipe,
     type ScriptParameter,
 } from "./types/scriptRecipe.js";
 import {
     executeScript,
     type ScriptExecutionRequest,
+    type ScriptExecutionResult,
+    type ScriptParameterRole,
 } from "./execution/powershellRunner.mjs";
+import {
+    revokeScriptApprovals,
+    closeScriptApprovals,
+    scriptApprovalStatus,
+} from "./execution/scriptApproval.mjs";
+import {
+    createPowerShellRevision,
+    matchesPowerShellRevision,
+    PowerShellIntegrityError,
+} from "@typeagent/agent-flows/powershell/integrity";
+import {
+    createPowerShellExecutionFailure,
+    createPowerShellFailure,
+} from "./types/powerShellFailure.mjs";
+import type { PowerShellAgentContext } from "./types/powerShellAgentContext.mjs";
+import { executeNamespaceAction } from "./namespaces/actionHandlerRegistry.mjs";
+import type { PowerShellAction } from "./namespaces/namespaceActionHandler.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:handler");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SAMPLES_DIR = join(__dirname, "..", "samples");
 
-interface PowerShellAgentContext {
-    store?: PowerShellStore | undefined;
+const flowMutationTails = new Map<string, Promise<void>>();
+const repairAttempts = new WeakSet<object>();
+
+async function withFlowMutationLock<T>(
+    flowName: string,
+    operation: () => Promise<T>,
+): Promise<T> {
+    const previous = flowMutationTails.get(flowName) ?? Promise.resolve();
+    let release: () => void;
+    const current = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const tail = previous.then(() => current);
+    flowMutationTails.set(flowName, tail);
+    await previous;
+    try {
+        return await operation();
+    } finally {
+        release!();
+        if (flowMutationTails.get(flowName) === tail) {
+            flowMutationTails.delete(flowName);
+        }
+    }
 }
 
 async function seedSampleFlows(store: PowerShellStore): Promise<number> {
@@ -81,10 +125,34 @@ async function executeFlowScript(
     flow: PowerShellFlowDefinition,
     script: string,
     parameters: Record<string, unknown>,
+    context: ActionContext<PowerShellAgentContext>,
+    flowName: string,
+    store: PowerShellStore,
 ): Promise<ActionResult> {
+    const snapshot = await store.getExecutionSnapshot(flowName);
+    if (
+        !snapshot ||
+        !matchesPowerShellRevision(
+            snapshot.revision,
+            createPowerShellRevision(script, flow),
+        )
+    ) {
+        throw new PowerShellIntegrityError(
+            "PowerShell changed before execution was prepared.",
+        );
+    }
+    const requiredModules = getRequiredModules(flow);
+
     const resolvedParams: Record<string, unknown> = {};
     for (const paramDef of flow.parameters) {
-        const value = parameters[paramDef.name] ?? paramDef.default;
+        let value = parameters[paramDef.name] ?? paramDef.default;
+        if (
+            paramDef.type === "boolean" &&
+            typeof value === "string" &&
+            /^(true|false)$/i.test(value)
+        ) {
+            value = value.toLowerCase() === "true";
+        }
         if (value !== undefined) {
             resolvedParams[paramDef.name] = value;
         }
@@ -93,27 +161,62 @@ async function executeFlowScript(
     const request: ScriptExecutionRequest = {
         script,
         parameters: resolvedParams,
+        workingDirectory: context.workingDirectory ?? process.cwd(),
+        provenance: getScriptExecutionProvenance(flow.source),
+        parameterRoles: getScriptParameterRoles(flow.parameters),
         sandbox: {
-            allowedCmdlets: flow.sandbox.allowedCmdlets,
-            allowedPaths: flow.sandbox.allowedPaths,
-            allowedModules: flow.sandbox.allowedModules,
             maxExecutionTime: flow.sandbox.maxExecutionTime,
-            networkAccess: flow.sandbox.networkAccess,
         },
-        // Use user's home directory as working directory for consistent path resolution
-        workingDirectory: homedir(),
+        abortSignal: context.abortSignal,
+        profiler: context.profiler,
+        requiredModules,
+        revisionStatus: snapshot.revisionStatus,
+        onAuthorized: snapshot.acceptRevision,
     };
 
-    const result = await executeScript(request);
+    const result = await executeScript(request, {
+        sessionContext: context.sessionContext,
+        definition: { ...flow, requiredModules, actionName: flowName },
+        allowSessionReuse:
+            context.executionOrigin === "direct-user" &&
+            context.isFromReasoningLoop !== true &&
+            context.sessionContext.currentConnectionId !== undefined,
+    });
+    if (result.cancelled) {
+        context.abortSignal?.throwIfAborted();
+    }
 
     if (result.success) {
-        const output = result.stdout.trim() || "(no output)";
+        const output = executionOutput(result);
         return createActionResultFromTextDisplay(output);
     }
 
-    const errorMsg =
-        result.stderr || `Script exited with code ${result.exitCode}`;
-    return { error: errorMsg, fallbackToReasoning: true };
+    return createPowerShellExecutionFailure(result);
+}
+
+function executionOutput(result: ScriptExecutionResult): string {
+    const output = result.stdout.trim() || "(no output)";
+    return result.stderr.trim()
+        ? `${output}\n\nNative command warnings:\n${result.stderr.trim()}`
+        : output;
+}
+
+function getScriptParameterRoles(
+    paramDefs: ScriptParameter[],
+): Record<string, ScriptParameterRole> {
+    return Object.fromEntries(
+        paramDefs
+            .filter(
+                (
+                    parameter,
+                ): parameter is ScriptParameter & {
+                    type: ScriptParameterRole;
+                } =>
+                    parameter.type === "path" ||
+                    parameter.type === "executable",
+            )
+            .map((parameter) => [parameter.name, parameter.type]),
+    );
 }
 
 function mapParamsToFlowDefs(
@@ -138,18 +241,36 @@ function mapParamsToFlowDefs(
     }
 }
 
-function expandEnvVarsInParams(
+function validateFlowParameters(
     params: Record<string, unknown>,
-    _paramDefs: ScriptParameter[],
-): void {
-    for (const key of Object.keys(params)) {
-        const val = params[key];
-        if (typeof val !== "string") continue;
-        if (!/\$env:/i.test(val)) continue;
-        params[key] = val.replace(/\$env:(\w+)/gi, (_match, varName) => {
-            return process.env[varName] ?? _match;
-        });
+    paramDefs: ScriptParameter[],
+    workingDirectory: string = process.cwd(),
+): string | undefined {
+    const pathAliases = new Map([
+        ["USERPROFILE", homedir()],
+        ["HOME", homedir()],
+        ["TEMP", tmpdir()],
+        ["TMP", tmpdir()],
+        ["PWD", workingDirectory],
+    ]);
+    for (const def of paramDefs) {
+        if (def.type !== "path" && def.type !== "executable") continue;
+        const value = params[def.name];
+        if (typeof value !== "string" || !/\$env:/i.test(value)) continue;
+        const expanded = value.replace(
+            /\$env:(\w+)/gi,
+            (match, name: string) =>
+                pathAliases.get(name.toUpperCase()) ?? match,
+        );
+        if (/\$env:/i.test(expanded)) {
+            return `Parameter '${def.name}' uses an unsupported environment variable. Supported path aliases: USERPROFILE, HOME, TEMP, TMP, PWD.`;
+        }
+        params[def.name] = expanded;
     }
+    return (
+        validatePathParameters(params, paramDefs) ??
+        validateParameterRules(params, paramDefs)
+    );
 }
 
 function validatePathParameters(
@@ -157,7 +278,7 @@ function validatePathParameters(
     paramDefs: ScriptParameter[],
 ): string | undefined {
     for (const def of paramDefs) {
-        if (def.type !== "path") continue;
+        if (def.type !== "path" && def.type !== "executable") continue;
         const val = params[def.name];
         if (val === undefined || val === "") continue;
         if (typeof val !== "string") {
@@ -225,10 +346,587 @@ function validateParameterRules(
     return undefined;
 }
 
-async function handlePowerShellFlowAction(
-    action: { actionName: string; parameters?: Record<string, unknown> },
+type FlowGrammarPatternInput = {
+    pattern: string;
+    isAlias?: boolean;
+};
+
+async function validateFlowGrammarPatterns(
+    actionName: string,
+    description: string,
+    grammarPatterns: FlowGrammarPatternInput[],
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<{ patterns: FlowGrammarPatternInput[] } | { error: ActionResult }> {
+    if (
+        grammarPatterns.length === 0 ||
+        !context.sessionContext.validateGrammarPatterns
+    ) {
+        return { patterns: grammarPatterns };
+    }
+
+    const validationResult =
+        await context.sessionContext.validateGrammarPatterns({
+            actionName,
+            description,
+            patterns: grammarPatterns.map((pattern) => pattern.pattern),
+        });
+    if (!validationResult.approved) {
+        const message = [
+            "Grammar pattern validation failed:",
+            ...(validationResult.errors ?? []),
+            ...(validationResult.suggestions?.length
+                ? ["Suggestions:", ...validationResult.suggestions]
+                : []),
+        ].join("\n");
+        return {
+            error: createPowerShellFailure("policyDenied", message, {
+                retryable: false,
+            }),
+        };
+    }
+
+    if (validationResult.warnings?.length) {
+        context.sessionContext.notify(
+            AppAgentEvent.Warning,
+            `Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+        );
+    }
+
+    return {
+        patterns:
+            validationResult.patterns?.map((pattern) => ({
+                pattern,
+                isAlias: false,
+            })) ?? grammarPatterns,
+    };
+}
+
+function buildPowerShellRecipe(
+    params: Record<string, unknown>,
+    grammarPatterns: FlowGrammarPatternInput[],
+): ScriptRecipe {
+    const actionName = params.actionName as string;
+    const scriptParameters = (params.scriptParameters as any[]) ?? [];
+    return {
+        version: 1,
+        actionName,
+        description: (params.description as string) ?? "",
+        displayName: (params.displayName as string) ?? actionName,
+        parameters: scriptParameters.map((parameter: any) => ({
+            name: parameter.name,
+            type: parameter.type ?? "string",
+            required: parameter.required ?? false,
+            description: parameter.description ?? "",
+            default: parameter.default,
+        })),
+        script: {
+            language: "powershell",
+            body: params.script as string,
+            expectedOutputFormat: "text",
+        },
+        grammarPatterns: grammarPatterns.map((pattern) => ({
+            pattern: pattern.pattern,
+            isAlias: pattern.isAlias ?? false,
+            examples: [],
+        })),
+        sandbox: {
+            maxExecutionTime: 30,
+        },
+        requiredModules: getRequiredModules({
+            sandbox: { maxExecutionTime: 30 },
+            requiredModules: params.requiredModules as string[] | undefined,
+        }),
+        source: {
+            type: "reasoning",
+            timestamp: new Date().toISOString(),
+        },
+    };
+}
+
+function parseNamedParameters(
+    value: unknown,
+    parameterName: string,
+): { parameters: Record<string, unknown> } | { error: ActionResult } {
+    if (value === undefined) {
+        return { parameters: {} };
+    }
+    if (typeof value !== "string") {
+        return {
+            error: createPowerShellFailure(
+                "invalidParameters",
+                `${parameterName} must be a JSON string`,
+            ),
+        };
+    }
+    try {
+        const parsed = JSON.parse(value);
+        if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            Array.isArray(parsed)
+        ) {
+            throw new Error("expected a JSON object");
+        }
+        return { parameters: parsed as Record<string, unknown> };
+    } catch (error) {
+        return {
+            error: createPowerShellFailure(
+                "invalidParameters",
+                `Invalid JSON in ${parameterName}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+        };
+    }
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function createPostExecutionFailure(
+    flowName: string,
+    phase: string,
+    error?: unknown,
+): ActionResult {
+    const detail = error === undefined ? "" : `: ${errorMessage(error)}`;
+    return createPowerShellFailure(
+        "partialSideEffects",
+        `PowerShell flow '${flowName}' executed, but ${phase}${detail}. The operation may have caused side effects and was not executed again.`,
+    );
+}
+
+function getPostExecutionCancellation(
+    flowName: string,
+    phase: string,
+    abortSignal?: AbortSignal,
+): ActionResult | undefined {
+    if (!abortSignal?.aborted) {
+        return undefined;
+    }
+    return createPostExecutionFailure(
+        flowName,
+        `the request was cancelled ${phase}`,
+    );
+}
+
+async function recordUsageAfterExecution(
+    flowStore: PowerShellStore,
+    flowName: string,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<void> {
+    try {
+        await flowStore.recordUsage(flowName);
+    } catch (error) {
+        const message = `PowerShell flow '${flowName}' executed successfully, but usage accounting failed: ${errorMessage(error)}`;
+        debug(message);
+        context.sessionContext.notify(AppAgentEvent.Warning, message);
+    }
+}
+
+async function executeDraftRecipe(
+    recipe: ScriptRecipe,
+    suppliedParameters: Record<string, unknown>,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<{ output: string } | { error: ActionResult }> {
+    const executionParameters: Record<string, unknown> = {};
+    mapParamsToFlowDefs(
+        suppliedParameters,
+        recipe.parameters,
+        executionParameters,
+    );
+    const validationError = validateFlowParameters(
+        executionParameters,
+        recipe.parameters,
+        context.workingDirectory,
+    );
+    if (validationError) {
+        return {
+            error: createPowerShellFailure(
+                "invalidParameters",
+                validationError,
+            ),
+        };
+    }
+
+    const result = await executeScript(
+        {
+            script: recipe.script.body,
+            parameters: executionParameters,
+            workingDirectory: context.workingDirectory ?? process.cwd(),
+            provenance: getScriptExecutionProvenance(recipe.source),
+            parameterRoles: getScriptParameterRoles(recipe.parameters),
+            sandbox: {
+                maxExecutionTime: recipe.sandbox.maxExecutionTime,
+            },
+            abortSignal: context.abortSignal,
+            profiler: context.profiler,
+            requiredModules: getRequiredModules(recipe),
+        },
+        {
+            sessionContext: context.sessionContext,
+            definition: {
+                ...recipe,
+                requiredModules: getRequiredModules(recipe),
+            },
+        },
+    );
+    if (result.cancelled) {
+        context.abortSignal?.throwIfAborted();
+    }
+    if (!result.success) {
+        return {
+            error: createPowerShellExecutionFailure(result),
+        };
+    }
+    return { output: executionOutput(result) };
+}
+
+async function createOrReusePowerShellFlow(
+    params: Record<string, unknown>,
+    flowStore: PowerShellStore,
     context: ActionContext<PowerShellAgentContext>,
 ): Promise<ActionResult> {
+    const actionName = params.actionName as string | undefined;
+    const script = params.script as string | undefined;
+    if (!actionName) {
+        return createPowerShellFailure(
+            "invalidParameters",
+            "Missing required parameter: actionName",
+        );
+    }
+    if (!script) {
+        return createPowerShellFailure(
+            "invalidParameters",
+            "Missing required parameter: script",
+        );
+    }
+    const executionParameters = parseNamedParameters(
+        params.executionParametersJson,
+        "executionParametersJson",
+    );
+    if ("error" in executionParameters) {
+        return executionParameters.error;
+    }
+
+    return withFlowMutationLock(actionName, async () => {
+        context.abortSignal?.throwIfAborted();
+        const existing = await flowStore.getFlow(actionName);
+        if (existing) {
+            return executeExistingPowerShellFlow(
+                actionName,
+                existing,
+                executionParameters.parameters,
+                flowStore,
+                context,
+            );
+        }
+
+        const grammarValidation = await validateFlowGrammarPatterns(
+            actionName,
+            (params.description as string) ?? "",
+            (params.grammarPatterns as FlowGrammarPatternInput[]) ?? [],
+            context,
+        );
+        if ("error" in grammarValidation) {
+            return grammarValidation.error;
+        }
+        const recipe = buildPowerShellRecipe(
+            params,
+            grammarValidation.patterns,
+        );
+        context.abortSignal?.throwIfAborted();
+        const pendingId = await flowStore.savePending(recipe);
+        const pendingFile = `${pendingId}.recipe.json`;
+        let execution: Awaited<ReturnType<typeof executeDraftRecipe>>;
+        try {
+            execution = await executeDraftRecipe(
+                recipe,
+                executionParameters.parameters,
+                context,
+            );
+        } catch (error) {
+            await flowStore.deletePending(pendingFile);
+            throw error;
+        }
+        if ("error" in execution) {
+            await flowStore.deletePending(pendingFile);
+            return execution.error;
+        }
+
+        const cancellation = getPostExecutionCancellation(
+            actionName,
+            "before the flow could be promoted",
+            context.abortSignal,
+        );
+        if (cancellation) {
+            await flowStore.deletePending(pendingFile);
+            return cancellation;
+        }
+
+        let promoted: string | null;
+        try {
+            promoted = await flowStore.promotePending(pendingFile);
+        } catch (error) {
+            await flowStore.deletePending(pendingFile);
+            return createPostExecutionFailure(
+                actionName,
+                "the flow could not be promoted",
+                error,
+            );
+        }
+        if (!promoted) {
+            await flowStore.deletePending(pendingFile);
+            return createPostExecutionFailure(
+                actionName,
+                "the flow could not be promoted because that name is already registered",
+            );
+        }
+        try {
+            const activationCancellation = getPostExecutionCancellation(
+                actionName,
+                "before the promoted flow could be activated",
+                context.abortSignal,
+            );
+            if (activationCancellation) {
+                await flowStore.deleteFlow(promoted);
+                return activationCancellation;
+            }
+            await context.sessionContext.reloadAgentSchema();
+            const completedCancellation = getPostExecutionCancellation(
+                actionName,
+                "after the flow was activated",
+                context.abortSignal,
+            );
+            if (completedCancellation) {
+                return completedCancellation;
+            }
+        } catch (error) {
+            let cleanupError: unknown;
+            try {
+                await flowStore.deleteFlow(promoted);
+            } catch (deleteError) {
+                cleanupError = deleteError;
+            }
+            const cleanupDetail =
+                cleanupError === undefined
+                    ? ""
+                    : ` Cleanup also failed: ${errorMessage(cleanupError)}.`;
+            return createPostExecutionFailure(
+                actionName,
+                `the new flow could not be activated${cleanupDetail}`,
+                error,
+            );
+        }
+
+        return createActionResultFromTextDisplay(
+            `${execution.output}\n\nCreated reusable PowerShell flow '${promoted}'.`,
+        );
+    });
+}
+
+async function executeExistingPowerShellFlow(
+    flowName: string,
+    flow: PowerShellFlowDefinition,
+    suppliedParameters: Record<string, unknown>,
+    flowStore: PowerShellStore,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<ActionResult> {
+    const script = await flowStore.getScript(flowName);
+    if (!script) {
+        return createPowerShellFailure(
+            "scriptFailure",
+            `Script not found for flow: ${flowName}`,
+        );
+    }
+    const mappedParameters: Record<string, unknown> = {};
+    mapParamsToFlowDefs(suppliedParameters, flow.parameters, mappedParameters);
+    const validationError = validateFlowParameters(
+        mappedParameters,
+        flow.parameters,
+        context.workingDirectory,
+    );
+    if (validationError) {
+        return createPowerShellFailure("invalidParameters", validationError);
+    }
+    const result = await executeFlowScript(
+        flow,
+        script,
+        mappedParameters,
+        context,
+        flowName,
+        flowStore,
+    );
+    if (result.error === undefined) {
+        await recordUsageAfterExecution(flowStore, flowName, context);
+    }
+    return result;
+}
+
+async function repairAndExecutePowerShellFlow(
+    params: Record<string, unknown>,
+    flowStore: PowerShellStore,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<ActionResult> {
+    const flowName = params.flowName as string | undefined;
+    const script = params.script as string | undefined;
+    if (!flowName || !script) {
+        return createPowerShellFailure(
+            "invalidParameters",
+            "Missing required parameter: flowName or script",
+        );
+    }
+    const repairKey = context.abortSignal ?? context;
+    if (repairAttempts.has(repairKey)) {
+        return createPowerShellFailure(
+            "policyDenied",
+            "A PowerShell flow repair was already attempted for this request.",
+            { retryable: false },
+        );
+    }
+    repairAttempts.add(repairKey);
+    const executionParameters = parseNamedParameters(
+        params.executionParametersJson,
+        "executionParametersJson",
+    );
+    if ("error" in executionParameters) {
+        return executionParameters.error;
+    }
+
+    return withFlowMutationLock(flowName, async () => {
+        context.abortSignal?.throwIfAborted();
+        const existing = await flowStore.getFlow(flowName);
+        const oldScript = await flowStore.getScript(flowName);
+        if (!existing || !oldScript) {
+            return createPowerShellFailure(
+                "unknownFlow",
+                `Unknown PowerShell flow '${flowName}'.`,
+            );
+        }
+        const candidate: ScriptRecipe = {
+            version: 1,
+            actionName: existing.actionName,
+            displayName: existing.displayName,
+            description: existing.description,
+            parameters: existing.parameters,
+            script: {
+                language: "powershell",
+                body: script,
+                expectedOutputFormat: existing.expectedOutputFormat,
+            },
+            grammarPatterns: existing.grammarPatterns,
+            sandbox: {
+                ...existing.sandbox,
+            },
+            requiredModules:
+                params.requiredModules === undefined
+                    ? getRequiredModules(existing)
+                    : getRequiredModules({
+                          sandbox: existing.sandbox,
+                          requiredModules: params.requiredModules as string[],
+                      }),
+            source: createEditedScriptSource(existing.source),
+        };
+        const execution = await executeDraftRecipe(
+            candidate,
+            executionParameters.parameters,
+            context,
+        );
+        if ("error" in execution) {
+            return execution.error;
+        }
+
+        const updateCancellation = getPostExecutionCancellation(
+            flowName,
+            "before the repaired script could be saved",
+            context.abortSignal,
+        );
+        if (updateCancellation) {
+            return updateCancellation;
+        }
+        try {
+            await flowStore.updateFlowScript(
+                flowName,
+                script,
+                getRequiredModules(candidate),
+                candidate.source,
+            );
+        } catch (error) {
+            return createPostExecutionFailure(
+                flowName,
+                "the repaired script could not be saved",
+                error,
+            );
+        }
+
+        try {
+            const activationCancellation = getPostExecutionCancellation(
+                flowName,
+                "before the repaired flow could be activated",
+                context.abortSignal,
+            );
+            if (activationCancellation) {
+                try {
+                    await flowStore.updateFlowScript(
+                        flowName,
+                        oldScript,
+                        getRequiredModules(existing),
+                        existing.source,
+                    );
+                    return activationCancellation;
+                } catch (restoreError) {
+                    return createPostExecutionFailure(
+                        flowName,
+                        `the request was cancelled before the repaired flow could be activated, and restoring the previous flow failed: ${errorMessage(restoreError)}`,
+                    );
+                }
+            }
+            await context.sessionContext.reloadAgentSchema();
+            const completedCancellation = getPostExecutionCancellation(
+                flowName,
+                "after the repaired flow was activated",
+                context.abortSignal,
+            );
+            if (completedCancellation) {
+                return completedCancellation;
+            }
+        } catch (error) {
+            let restorationError: unknown;
+            try {
+                await flowStore.updateFlowScript(
+                    flowName,
+                    oldScript,
+                    getRequiredModules(existing),
+                    existing.source,
+                );
+            } catch (restoreError) {
+                restorationError = restoreError;
+            }
+            const restorationDetail =
+                restorationError === undefined
+                    ? ""
+                    : ` Restoring the previous flow also failed: ${errorMessage(restorationError)}.`;
+            return createPostExecutionFailure(
+                flowName,
+                `the repaired flow could not be activated${restorationDetail}`,
+                error,
+            );
+        }
+        await recordUsageAfterExecution(flowStore, flowName, context);
+        return createActionResultFromTextDisplay(
+            `${execution.output}\n\nRepaired PowerShell flow '${flowName}' after one retry.`,
+        );
+    });
+}
+
+async function handlePowerShellFlowAction(
+    action: PowerShellAction,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<ActionResult> {
+    context.abortSignal?.throwIfAborted();
+    const namespaceResult = await executeNamespaceAction(action, context);
+    if (namespaceResult !== undefined) {
+        return namespaceResult;
+    }
+
     const flowStore = (context as any).__store as PowerShellStore | undefined;
 
     switch (action.actionName) {
@@ -265,16 +963,18 @@ async function handlePowerShellFlowAction(
                     "Missing required parameter: name",
                 );
             }
-            const deleted = await flowStore.deleteFlow(name);
-            if (!deleted) {
-                return createActionResultFromError(
-                    `Script flow not found: ${name}`,
+            return withFlowMutationLock(name, async () => {
+                const deleted = await flowStore.deleteFlow(name);
+                if (!deleted) {
+                    return createActionResultFromError(
+                        `Script flow not found: ${name}`,
+                    );
+                }
+                await context.sessionContext.reloadAgentSchema();
+                return createActionResultFromTextDisplay(
+                    `Deleted PowerShell flow: ${name}`,
                 );
-            }
-            await context.sessionContext.reloadAgentSchema();
-            return createActionResultFromTextDisplay(
-                `Deleted PowerShell flow: ${name}`,
-            );
+            });
         }
 
         case "createPowerShellFlow": {
@@ -290,114 +990,146 @@ async function handlePowerShellFlowAction(
                     "Missing required parameter: actionName",
                 );
             }
+            if (flowStore.hasFlow(newActionName)) {
+                return createActionResultFromError(
+                    `A PowerShell flow named '${newActionName}' already exists. Reuse it or add grammar patterns instead of overwriting it.`,
+                );
+            }
             const scriptBody = params.script as string;
             if (!scriptBody) {
                 return createActionResultFromError(
                     "Missing required parameter: script",
                 );
             }
-            const scriptParams = (params.scriptParameters as any[]) ?? [];
-            const grammarPats = (params.grammarPatterns as any[]) ?? [];
-            const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
-            const allowedModules = (params.allowedModules as string[]) ?? [
-                "Microsoft.PowerShell.Management",
-            ];
+            const grammarValidation = await validateFlowGrammarPatterns(
+                newActionName,
+                (params.description as string) ?? "",
+                (params.grammarPatterns as FlowGrammarPatternInput[]) ?? [],
+                context,
+            );
+            if ("error" in grammarValidation) {
+                return grammarValidation.error;
+            }
+            const recipe = buildPowerShellRecipe(
+                params,
+                grammarValidation.patterns,
+            );
 
-            // Validate grammar patterns before saving
-            if (
-                grammarPats.length > 0 &&
-                context.sessionContext.validateGrammarPatterns
-            ) {
-                const patterns = grammarPats.map((g: any) => g.pattern);
-
-                const validationResult =
-                    await context.sessionContext.validateGrammarPatterns({
-                        actionName: newActionName,
-                        description: (params.description as string) ?? "",
-                        patterns,
-                    });
-
-                if (!validationResult.approved) {
-                    const errorMsg = [
-                        "❌ Grammar pattern validation failed:",
-                        "",
-                        ...(validationResult.errors ?? []),
-                    ].join("\n");
-
-                    const suggestionMsg = validationResult.suggestions
-                        ? [
-                              "",
-                              "Suggestions:",
-                              ...validationResult.suggestions,
-                          ].join("\n")
-                        : "";
-
+            return withFlowMutationLock(newActionName, async () => {
+                if (flowStore.hasFlow(newActionName)) {
                     return createActionResultFromError(
-                        errorMsg + suggestionMsg,
+                        `A PowerShell flow named '${newActionName}' already exists. Reuse it or add grammar patterns instead of overwriting it.`,
                     );
                 }
+                context.abortSignal?.throwIfAborted();
+                await flowStore.saveFlow(recipe, "reasoning");
+                try {
+                    context.abortSignal?.throwIfAborted();
+                    await context.sessionContext.reloadAgentSchema();
+                } catch (error) {
+                    await flowStore.deleteFlow(newActionName);
+                    throw error;
+                }
+                return createActionResultFromTextDisplay(
+                    `Created PowerShell flow '${newActionName}': ${recipe.description}`,
+                );
+            });
+        }
 
-                if (
-                    validationResult.warnings &&
-                    validationResult.warnings.length > 0
-                ) {
-                    context.sessionContext.notify(
-                        AppAgentEvent.Warning,
-                        `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+        case "createAndExecutePowerShellFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            return createOrReusePowerShellFlow(
+                action.parameters as Record<string, unknown>,
+                flowStore,
+                context,
+            );
+        }
+
+        case "addPowerShellFlowPatterns": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const flowName = action.parameters?.flowName as string | undefined;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: flowName",
+                );
+            }
+            return withFlowMutationLock(flowName, async () => {
+                const flow = await flowStore.getFlow(flowName);
+                if (!flow) {
+                    return createActionResultFromError(
+                        `Script flow not found: ${flowName}`,
                     );
                 }
-
-                // Use refined patterns if provided
-                if (
-                    validationResult.patterns &&
-                    validationResult.patterns.length > 0
-                ) {
-                    grammarPats.length = 0;
-                    for (const pattern of validationResult.patterns) {
-                        grammarPats.push({ pattern, isAlias: false });
+                const validation = await validateFlowGrammarPatterns(
+                    flowName,
+                    flow.description,
+                    (action.parameters
+                        ?.grammarPatterns as FlowGrammarPatternInput[]) ?? [],
+                    context,
+                );
+                if ("error" in validation) {
+                    return validation.error;
+                }
+                const previousPatterns = [...flow.grammarPatterns];
+                const added = await flowStore.addGrammarPatterns(
+                    flowName,
+                    validation.patterns.map((pattern) => ({
+                        pattern: pattern.pattern,
+                        isAlias: true,
+                        examples: [],
+                    })),
+                );
+                if (added > 0) {
+                    try {
+                        await context.sessionContext.reloadAgentSchema();
+                    } catch (error) {
+                        try {
+                            await flowStore.replaceGrammarPatterns(
+                                flowName,
+                                previousPatterns,
+                            );
+                            await context.sessionContext.reloadAgentSchema();
+                        } catch (rollbackError) {
+                            return createActionResultFromError(
+                                `The grammar update failed and rollback also failed: ${errorMessage(rollbackError)}`,
+                            );
+                        }
+                        return createActionResultFromError(
+                            `No patterns were added because the updated PowerShell grammar could not be activated: ${errorMessage(error)}`,
+                        );
                     }
                 }
+                return createActionResultFromTextDisplay(
+                    added > 0
+                        ? `Added ${added} grammar pattern(s) to PowerShell flow '${flowName}'.`
+                        : `PowerShell flow '${flowName}' already contains those grammar patterns.`,
+                );
+            });
+        }
+
+        case "reportPowerShellCapabilityOutcome":
+            return createActionResultNoDisplay(
+                "PowerShell capability outcome reported.",
+            );
+
+        case "repairAndExecutePowerShellFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
             }
-
-            const recipe: ScriptRecipe = {
-                version: 1,
-                actionName: newActionName,
-                description: (params.description as string) ?? "",
-                displayName: (params.displayName as string) ?? newActionName,
-                parameters: scriptParams.map((p: any) => ({
-                    name: p.name,
-                    type: p.type ?? "string",
-                    required: p.required ?? false,
-                    description: p.description ?? "",
-                    default: p.default,
-                })),
-                script: {
-                    language: "powershell",
-                    body: scriptBody,
-                    expectedOutputFormat: "text",
-                },
-                grammarPatterns: grammarPats.map((g: any) => ({
-                    pattern: g.pattern,
-                    isAlias: g.isAlias ?? false,
-                    examples: [],
-                })),
-                sandbox: {
-                    allowedCmdlets,
-                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-                    allowedModules,
-                    maxExecutionTime: 30,
-                    networkAccess: false,
-                },
-                source: {
-                    type: "reasoning",
-                    timestamp: new Date().toISOString(),
-                },
-            };
-
-            await flowStore.saveFlow(recipe, "reasoning");
-            await context.sessionContext.reloadAgentSchema();
-            return createActionResultFromTextDisplay(
-                `Created PowerShell flow '${newActionName}': ${recipe.description}`,
+            return repairAndExecutePowerShellFlow(
+                action.parameters as Record<string, unknown>,
+                flowStore,
+                context,
             );
         }
 
@@ -415,35 +1147,29 @@ async function handlePowerShellFlowAction(
                     "Missing required parameter: flowName",
                 );
             }
-            const existingFlow = await flowStore.getFlow(editFlowName);
-            if (!existingFlow) {
-                return createActionResultFromError(
-                    `Script flow not found: ${editFlowName}`,
-                );
-            }
             const newScript = action.parameters?.script as string | undefined;
             if (!newScript) {
                 return createActionResultFromError(
                     "Missing required parameter: script",
                 );
             }
-            const newCmdlets =
-                (action.parameters?.allowedCmdlets as string[]) ??
-                existingFlow.sandbox.allowedCmdlets;
-            const newModules =
-                (action.parameters?.allowedModules as string[]) ??
-                existingFlow.sandbox.allowedModules;
-
-            // Update the script and sandbox policy while preserving everything else
-            await flowStore.updateFlowScript(
-                editFlowName,
-                newScript,
-                newCmdlets,
-                newModules,
-            );
-            return createActionResultFromTextDisplay(
-                `Updated PowerShell flow '${editFlowName}'`,
-            );
+            return withFlowMutationLock(editFlowName, async () => {
+                const existingFlow = await flowStore.getFlow(editFlowName);
+                if (!existingFlow) {
+                    return createActionResultFromError(
+                        `Script flow not found: ${editFlowName}`,
+                    );
+                }
+                await flowStore.updateFlowScript(
+                    editFlowName,
+                    newScript,
+                    action.parameters?.requiredModules as string[] | undefined,
+                    createEditedScriptSource(existingFlow.source),
+                );
+                return createActionResultFromTextDisplay(
+                    `Updated PowerShell flow '${editFlowName}'`,
+                );
+            });
         }
 
         case "testPowerShellFlow": {
@@ -456,11 +1182,10 @@ async function handlePowerShellFlowAction(
                 );
             }
 
-            const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
-            const allowedModules = (params.allowedModules as string[]) ?? [
-                "Microsoft.PowerShell.Management",
-            ];
-            const networkAccess = (params.networkAccess as boolean) ?? false;
+            const requiredModules = getRequiredModules({
+                sandbox: { maxExecutionTime: 30 },
+                requiredModules: params.requiredModules as string[] | undefined,
+            });
 
             // Parse test parameters if provided
             let testParams: Record<string, unknown> = {};
@@ -475,34 +1200,44 @@ async function handlePowerShellFlowAction(
                 }
             }
 
-            // Execute the script in sandbox without saving
+            // Approved-local tests require the same authorization as saved flows.
             const request: ScriptExecutionRequest = {
                 script: scriptBody,
                 parameters: testParams,
+                workingDirectory: context.workingDirectory ?? process.cwd(),
+                provenance: "generated",
                 sandbox: {
-                    allowedCmdlets,
-                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-                    allowedModules,
                     maxExecutionTime: 30,
-                    networkAccess,
                 },
-                workingDirectory: homedir(),
+                abortSignal: context.abortSignal,
+                profiler: context.profiler,
+                requiredModules,
             };
 
-            const result = await executeScript(request);
+            const result = await executeScript(request, {
+                sessionContext: context.sessionContext,
+                definition: {
+                    actionName: "testPowerShellFlow",
+                    displayName: "Unsaved PowerShell test",
+                    description:
+                        "Execute model-proposed code without registering a flow",
+                    parameters: [],
+                    grammarPatterns: [],
+                    requiredModules,
+                },
+            });
+            if (result.cancelled) {
+                context.abortSignal?.throwIfAborted();
+            }
 
             if (result.success) {
-                const output = result.stdout.trim() || "(no output)";
+                const output = executionOutput(result);
                 return createActionResultFromTextDisplay(
                     `Script test PASSED:\n${output}\n\nTo register this script, use createPowerShellFlow with the same script.`,
                 );
             }
 
-            const errorMsg =
-                result.stderr || `Script exited with code ${result.exitCode}`;
-            return createActionResultFromError(
-                `Script test FAILED: ${errorMsg}\n\nFix the script and try testPowerShellFlow again.`,
-            );
+            return createPowerShellExecutionFailure(result);
         }
 
         case "executePowerShellFlow": {
@@ -520,10 +1255,10 @@ async function handlePowerShellFlowAction(
 
             const flow = await flowStore.getFlow(flowName);
             if (!flow) {
-                return {
-                    error: `Unknown PowerShell flow '${flowName}'. Use 'listPowerShellFlows' to see available flows.`,
-                    fallbackToReasoning: true,
-                };
+                return createPowerShellFailure(
+                    "unknownFlow",
+                    `Unknown PowerShell flow '${flowName}'. Use 'listPowerShellFlows' to see available flows.`,
+                );
             }
 
             const script = await flowStore.getScript(flowName);
@@ -564,37 +1299,31 @@ async function handlePowerShellFlowAction(
                 }
             }
 
-            // Expand environment variable references in path parameters
-            expandEnvVarsInParams(flowParameters, flow.parameters);
-
-            // Validate path-type parameters before execution
-            const pathError = validatePathParameters(
+            const validationError = validateFlowParameters(
                 flowParameters,
                 flow.parameters,
-            );
-            if (pathError) {
-                return { error: pathError, fallbackToReasoning: true };
-            }
-
-            // Validate parameter validation rules (pattern, allowedValues)
-            const validationError = validateParameterRules(
-                flowParameters,
-                flow.parameters,
+                context.workingDirectory,
             );
             if (validationError) {
-                return { error: validationError, fallbackToReasoning: true };
+                return createPowerShellFailure(
+                    "invalidParameters",
+                    validationError,
+                );
             }
 
             const result = await executeFlowScript(
                 flow,
                 script,
                 flowParameters,
+                context,
+                flowName,
+                flowStore,
             );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return result;
             }
 
-            await flowStore.recordUsage(flowName);
+            await recordUsageAfterExecution(flowStore, flowName, context);
             return result;
         }
 
@@ -657,21 +1386,30 @@ async function handlePowerShellFlowAction(
                 );
             }
 
-            if (flowStore.hasFlow(recipe.actionName)) {
-                return createActionResultFromError(
-                    `A flow named '${recipe.actionName}' already exists. Use a different name: @powershell import ${filePath} with actionName set to a new name`,
+            return withFlowMutationLock(recipe.actionName, async () => {
+                if (flowStore.hasFlow(recipe.actionName)) {
+                    return createActionResultFromError(
+                        `A flow named '${recipe.actionName}' already exists. Use a different name: @powershell import ${filePath} with actionName set to a new name`,
+                    );
+                }
+
+                context.abortSignal?.throwIfAborted();
+                await flowStore.saveFlow(recipe, "imported");
+                try {
+                    context.abortSignal?.throwIfAborted();
+                    await context.sessionContext.reloadAgentSchema();
+                } catch (error) {
+                    await flowStore.deleteFlow(recipe.actionName);
+                    throw error;
+                }
+
+                const patternList = recipe.grammarPatterns
+                    .map((p) => `  "${p.pattern}"`)
+                    .join("\n");
+                return createActionResultFromTextDisplay(
+                    `Imported PowerShell flow '${recipe.actionName}': ${recipe.description}\n\nGrammar patterns:\n${patternList}`,
                 );
-            }
-
-            await flowStore.saveFlow(recipe, "manual");
-            await context.sessionContext.reloadAgentSchema();
-
-            const patternList = recipe.grammarPatterns
-                .map((p) => `  "${p.pattern}"`)
-                .join("\n");
-            return createActionResultFromTextDisplay(
-                `Imported PowerShell flow '${recipe.actionName}': ${recipe.description}\n\nGrammar patterns:\n${patternList}`,
-            );
+            });
         }
 
         default: {
@@ -683,10 +1421,10 @@ async function handlePowerShellFlowAction(
 
             const flow = await flowStore.getFlow(action.actionName);
             if (!flow) {
-                return {
-                    error: `Unknown PowerShell flow '${action.actionName}'. Use 'list PowerShell flows' to see available flows.`,
-                    fallbackToReasoning: true,
-                };
+                return createPowerShellFailure(
+                    "unknownFlow",
+                    `Unknown PowerShell flow '${action.actionName}'. Use 'list PowerShell flows' to see available flows.`,
+                );
             }
 
             const script = await flowStore.getScript(action.actionName);
@@ -697,30 +1435,35 @@ async function handlePowerShellFlowAction(
             }
 
             const directParams = { ...(action.parameters ?? {}) };
-            expandEnvVarsInParams(directParams, flow.parameters);
-            const pathError = validatePathParameters(
+            const validationError = validateFlowParameters(
                 directParams,
                 flow.parameters,
-            );
-            if (pathError) {
-                return { error: pathError, fallbackToReasoning: true };
-            }
-
-            // Validate parameter validation rules (pattern, allowedValues)
-            const validationError = validateParameterRules(
-                directParams,
-                flow.parameters,
+                context.workingDirectory,
             );
             if (validationError) {
-                return { error: validationError, fallbackToReasoning: true };
+                return createPowerShellFailure(
+                    "invalidParameters",
+                    validationError,
+                );
             }
 
-            const result = await executeFlowScript(flow, script, directParams);
+            const result = await executeFlowScript(
+                flow,
+                script,
+                directParams,
+                context,
+                action.actionName,
+                flowStore,
+            );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return result;
             }
 
-            await flowStore.recordUsage(action.actionName);
+            await recordUsageAfterExecution(
+                flowStore,
+                action.actionName,
+                context,
+            );
             return result;
         }
     }
@@ -790,7 +1533,7 @@ class ImportScriptHandler implements CommandHandler {
             );
         }
 
-        await store.saveFlow(recipe, "manual");
+        await store.saveFlow(recipe, "imported");
         await context.sessionContext.reloadAgentSchema();
 
         const patternList = recipe.grammarPatterns
@@ -877,23 +1620,23 @@ class RunHandler implements CommandHandler {
             }
         }
 
-        expandEnvVarsInParams(flowParameters, flow.parameters);
-        const pathError = validatePathParameters(
+        const validationError = validateFlowParameters(
             flowParameters,
             flow.parameters,
-        );
-        if (pathError) {
-            throw new Error(pathError);
-        }
-        const validationError = validateParameterRules(
-            flowParameters,
-            flow.parameters,
+            context.workingDirectory,
         );
         if (validationError) {
             throw new Error(validationError);
         }
 
-        const result = await executeFlowScript(flow, script, flowParameters);
+        const result = await executeFlowScript(
+            flow,
+            script,
+            flowParameters,
+            context,
+            flowName,
+            store,
+        );
         if (result.error !== undefined) {
             throw new Error(String(result.error));
         }
@@ -986,8 +1729,27 @@ class ShowHandler implements CommandHandler {
         const grammarLines = flow.grammarPatterns.map(
             (g) => `    "${g.pattern}"${g.isAlias ? " (alias)" : ""}`,
         );
-        const cmdletList = flow.sandbox.allowedCmdlets.join(", ");
+        const snapshot = await store.getExecutionSnapshot(flowName);
 
+        const executionLines = [
+            "Execution: approved local code (NOT sandboxed)",
+            "    Requires trusted user approval and the Windows execution broker",
+            "    Files, network, modules and native programs: current user privileges after authorization",
+            `    Approval: ${scriptApprovalStatus(
+                {
+                    sessionContext: context.sessionContext,
+                    definition: {
+                        ...flow,
+                        requiredModules: getRequiredModules(flow),
+                        actionName: flowName,
+                    },
+                },
+                script ?? "",
+            )}`,
+            `    Stored fingerprint: ${snapshot?.revisionStatus ?? "unavailable"} (not execution approval)`,
+            `    Required modules: ${getRequiredModules(flow).join(", ") || "(none)"}`,
+            `    Timeout: ${flow.sandbox.maxExecutionTime}s`,
+        ];
         const output = [
             `Flow: ${flow.actionName}`,
             `Description: ${flow.description}`,
@@ -1001,10 +1763,7 @@ class ShowHandler implements CommandHandler {
             "Grammar Patterns:",
             grammarLines.length > 0 ? grammarLines.join("\n") : "    (none)",
             "",
-            "Sandbox:",
-            `    Cmdlets: ${cmdletList || "(none)"}`,
-            `    Timeout: ${flow.sandbox.maxExecutionTime}s`,
-            `    Network: ${flow.sandbox.networkAccess ? "allowed" : "blocked"}`,
+            ...executionLines,
             "",
             "Script:",
             "```powershell",
@@ -1016,6 +1775,17 @@ class ShowHandler implements CommandHandler {
     }
 }
 
+class RevokeApprovalsHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Revoke all remembered PowerShell approvals in this session";
+    public async run(context: ActionContext<PowerShellAgentContext>) {
+        revokeScriptApprovals(context.sessionContext);
+        context.actionIO.setDisplay(
+            "PowerShell approvals revoked. Subsequent approved-local executions require confirmation.",
+        );
+    }
+}
+
 const handlers: CommandHandlerTable = {
     description: "PowerShell commands",
     commands: {
@@ -1024,6 +1794,7 @@ const handlers: CommandHandlerTable = {
         delete: new DeleteHandler(),
         show: new ShowHandler(),
         import: new ImportScriptHandler(),
+        revoke: new RevokeApprovalsHandler(),
     },
 };
 
@@ -1033,10 +1804,14 @@ const POWERSHELL_BUILTIN_ACTIONS = new Set([
     "listPowerShellFlows",
     "deletePowerShellFlow",
     "executePowerShellFlow",
+    "testPowerShellFlow",
     "createPowerShellFlow",
+    "createAndExecutePowerShellFlow",
+    "addPowerShellFlowPatterns",
+    "reportPowerShellCapabilityOutcome",
+    "repairAndExecutePowerShellFlow",
     "editPowerShellFlow",
     "importPowerShellFlow",
-    "testPowerShellFlow",
 ]);
 
 export function instantiate(): AppAgent {
@@ -1051,8 +1826,15 @@ export function instantiate(): AppAgent {
         async updateAgentContext(
             enable: boolean,
             sessionContext: SessionContext,
+            schemaName: string,
         ) {
-            if (!enable) return;
+            // Namespace activation runs concurrently. Only the root schema
+            // initializes shared flow storage and owns its execution approvals.
+            if (schemaName !== "powershell") return;
+            if (!enable) {
+                closeScriptApprovals(sessionContext);
+                return;
+            }
 
             const instanceStorage = sessionContext.instanceStorage;
             if (!instanceStorage) {
@@ -1079,15 +1861,27 @@ export function instantiate(): AppAgent {
             debug(`Store initialized with ${store.listFlows().length} flow(s)`);
         },
 
-        executeAction(action, context: ActionContext<PowerShellAgentContext>) {
+        async closeAgentContext(context) {
+            closeScriptApprovals(context);
+        },
+
+        async executeAction(
+            action,
+            context: ActionContext<PowerShellAgentContext>,
+        ) {
             (context as any).__store = agentContext.store;
-            return handlePowerShellFlowAction(
-                action as {
-                    actionName: string;
-                    parameters?: Record<string, unknown>;
-                },
-                context,
-            );
+            try {
+                return await handlePowerShellFlowAction(
+                    action as PowerShellAction,
+                    context,
+                );
+            } catch (error) {
+                if (!(error instanceof PowerShellIntegrityError)) throw error;
+                return createPowerShellFailure(
+                    "integrityFailure",
+                    error.message,
+                );
+            }
         },
 
         async validateWildcardMatch(
@@ -1118,6 +1912,7 @@ export function instantiate(): AppAgent {
             return {
                 format: "ts",
                 content: agentContext.store.generateDynamicSchemaText(),
+                cacheBinding: await agentContext.store.getActionCacheBinding(),
             };
         },
 

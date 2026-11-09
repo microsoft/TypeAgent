@@ -12,6 +12,7 @@ import {
     ChatModelWithStreaming,
     CompletionSettings,
     openai,
+    withChatModelTelemetryContext,
 } from "@typeagent/aiclient";
 import { createTypeChat, promptLib } from "@typeagent/agent-runtime";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
@@ -149,9 +150,24 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         userInput: string,
         chat: TypeChatJsonTranslator<UserRequestList>,
     ): Promise<Result<UserRequestList>> {
-        const chatResponse = await chat.translate(
-            userInput,
-            promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
+        const chatResponse = await withChatModelTelemetryContext(
+            {
+                phase: "unknown",
+                purpose: "sample-request-generation",
+                scope: "foreground",
+            },
+            () =>
+                chat.translate(userInput, [
+                    {
+                        role: "system",
+                        content: promptLib.dateTimePrompt(),
+                    },
+                    {
+                        role: "system",
+                        content:
+                            "Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve required content even when that needs a longer answer.",
+                    },
+                ]),
         );
 
         return chatResponse;
@@ -165,7 +181,6 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         }
         const completionSettings: CompletionSettings = {
             temperature: 1.0,
-            max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
         };
         const chatModel = openai.createChatModel(

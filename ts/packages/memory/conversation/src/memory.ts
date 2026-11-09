@@ -10,7 +10,10 @@ import {
 } from "@typeagent/knowledge-processor";
 import * as ms from "@typeagent/memory-storage";
 import { error, PromptSection, Result, success } from "typechat";
-import { createEmbeddingModelWithCache } from "./common.js";
+import {
+    createEmbeddingModelWithCache,
+    ConversationEmbeddingState,
+} from "./common.js";
 
 export interface MemorySettings {
     languageModel: ChatModel;
@@ -122,6 +125,7 @@ export function addNoiseWordsFromFile(
 export class MessageMetadata
     implements kp.IMessageMetadata, kp.IKnowledgeSource
 {
+    public temporalContext?: kp.MessageTemporalContext | undefined;
     public get source(): string | string[] | undefined {
         return undefined;
     }
@@ -239,6 +243,8 @@ export abstract class Memory<
     public tags: string[];
     public settings: TSettings;
     public noiseTerms: Set<string>;
+    private embeddingState = new ConversationEmbeddingState();
+    protected embeddingRebuildRequired = false;
 
     constructor(settings: TSettings, nameTag?: string, tags?: string[]) {
         this.settings = settings;
@@ -261,6 +267,34 @@ export abstract class Memory<
      */
     public abstract get conversation(): kp.IConversation<TMessage>;
 
+    public async prepareEmbeddings(): Promise<kp.PersistedEmbeddingIdentities> {
+        return this.prepareEmbeddingState(false);
+    }
+
+    protected async prepareEmbeddingRebuild(): Promise<kp.PersistedEmbeddingIdentities> {
+        return this.prepareEmbeddingState(true);
+    }
+
+    private async prepareEmbeddingState(
+        rebuilding: boolean,
+    ): Promise<kp.PersistedEmbeddingIdentities> {
+        if (this.embeddingRebuildRequired && !rebuilding) {
+            throw new Error(
+                "Embedding rebuild is incomplete. Run rebuildEmbeddings() successfully before indexing, saving, or searching.",
+            );
+        }
+        const identities = await this.embeddingState.prepare(
+            this.settings.conversationSettings,
+            this.conversation,
+            rebuilding,
+        );
+        const size =
+            this.settings.conversationSettings.messageTextIndexSettings
+                .embeddingIndexSettings.embeddingSize;
+        this.settings.embeddingSize = size;
+        return identities;
+    }
+
     /**
      * Search memory using a select expression. Searches for and returns both conversation knowledge and messages
      * @param {kp.SearchSelectExpr} selectExpr - The select expression to use for searching.
@@ -270,6 +304,7 @@ export abstract class Memory<
         selectExpr: kp.SearchSelectExpr,
         options?: kp.SearchOptions,
     ): Promise<kp.ConversationSearchResult | undefined> {
+        await this.prepareEmbeddings();
         return kp.searchConversation(
             this.conversation,
             selectExpr.searchTermGroup,
@@ -293,6 +328,7 @@ export abstract class Memory<
         when?: kp.WhenFilter,
         options?: kp.SearchOptions,
     ): Promise<kp.ConversationSearchResult | undefined> {
+        await this.prepareEmbeddings();
         return kp.searchConversationByTextSimilarity(
             this.conversation,
             queryText,
@@ -311,6 +347,7 @@ export abstract class Memory<
         selectExpr: kp.SearchSelectExpr,
         options?: kp.SearchOptions,
     ): Promise<Map<kp.KnowledgeType, kp.SemanticRefSearchResult> | undefined> {
+        await this.prepareEmbeddings();
         return kp.searchConversationKnowledge(
             this.conversation,
             selectExpr.searchTermGroup,
@@ -415,6 +452,7 @@ export abstract class Memory<
         langSearchFilter?: kp.LanguageSearchFilter,
         debugContext?: kp.LanguageSearchDebugContext,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
+        await this.prepareEmbeddings();
         options = this.adjustLanguageSearchOptions(options);
         if (!this.useScoped) {
             return kp.searchConversationWithLanguage(
@@ -580,7 +618,9 @@ export abstract class Memory<
      * @returns {Promise<Result<kp.AnswerResponse>>} - The answer response.
      */
     public async getAnswerFromSearchResults(
-        searchResult: kp.ConversationSearchResult,
+        searchResult:
+            | kp.ConversationSearchResult
+            | kp.ConversationSearchResult[],
         question?: string,
         progress?: (
             chunk: kp.AnswerContext,
@@ -589,7 +629,9 @@ export abstract class Memory<
         ) => void,
         answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<kp.AnswerResponse>> {
-        question ??= searchResult.rawSearchQuery;
+        question ??= Array.isArray(searchResult)
+            ? searchResult[0]?.rawSearchQuery
+            : searchResult.rawSearchQuery;
         if (!question) {
             return error("No searchResult.rawSearchQuery or question provided");
         }

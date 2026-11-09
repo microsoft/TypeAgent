@@ -10,6 +10,331 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import { aliasManager } from "./commandAliasMgr";
+import {
+    WorkspaceCommandRunner,
+    WorkspaceCommandResult,
+} from "./workspaceCommandRunner";
+import { validateFocusedWorkspaceCommand } from "./workspaceCommandPolicy";
+
+const workspaceCommandRunner = new WorkspaceCommandRunner();
+
+type WorkspaceCommandParameters = {
+    command?: unknown;
+    workspaceFolder?: unknown;
+    workingDirectory?: unknown;
+    commandRiskLevel?: unknown;
+    timeoutMs?: unknown;
+    executionId?: unknown;
+    allowPendingCancellation?: unknown;
+};
+
+function workspaceCommandResponse(
+    result:
+        | WorkspaceCommandResult
+        | {
+              success: boolean;
+              error?: string;
+              executionId?: string;
+              cancelled?: boolean;
+              pendingCancellation?: boolean;
+          },
+): ActionResult {
+    if ("exitCode" in result) {
+        return { handled: true, message: JSON.stringify(result) };
+    }
+    return {
+        handled: true,
+        message: JSON.stringify({
+            success: result.success,
+            error: result.error,
+            exitCode: null,
+            durationMs: 0,
+            stdout: { text: "", truncated: false, totalBytes: 0 },
+            stderr: { text: "", truncated: false, totalBytes: 0 },
+            timedOut: false,
+            cancelled: result.cancelled ?? false,
+            pendingCancellation: result.pendingCancellation ?? false,
+            executionId: result.executionId,
+        }),
+    };
+}
+
+export function workspaceCommandError(
+    error: string,
+    executionId?: string,
+): ActionResult {
+    return workspaceCommandResponse({ success: false, error, executionId });
+}
+
+const workspaceCommandActionNames = new Set([
+    "runWorkspaceCommand",
+    "cancelWorkspaceCommand",
+]);
+
+// Only these actions answer with the structured command-result shape. Every
+// other action keeps the plain ActionResult contract.
+export function isWorkspaceCommandAction(actionName: string): boolean {
+    return workspaceCommandActionNames.has(actionName);
+}
+
+function validateWorkspaceCommandPaths(
+    parameters: WorkspaceCommandParameters,
+): string | undefined {
+    for (const parameter of ["workspaceFolder", "workingDirectory"] as const) {
+        const value = parameters[parameter];
+        if (
+            value !== undefined &&
+            (typeof value !== "string" || value.trim().length === 0)
+        ) {
+            return `${parameter} must be a non-empty string.`;
+        }
+    }
+    return undefined;
+}
+
+function selectWorkspaceFolder(
+    workspaceFolders: readonly vscode.WorkspaceFolder[],
+    requestedWorkspaceFolder: string | undefined,
+): vscode.WorkspaceFolder | { error: string } {
+    if (requestedWorkspaceFolder !== undefined) {
+        const requestedPath = path.resolve(requestedWorkspaceFolder);
+        const workspaceFolder = workspaceFolders.find(
+            (folder) =>
+                folder.name === requestedWorkspaceFolder ||
+                path.resolve(folder.uri.fsPath) === requestedPath,
+        );
+        return (
+            workspaceFolder ?? {
+                error: `No open workspace root matches '${requestedWorkspaceFolder}'.`,
+            }
+        );
+    }
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const activeWorkspaceFolder = activeUri
+        ? vscode.workspace.getWorkspaceFolder(activeUri)
+        : undefined;
+    if (activeWorkspaceFolder !== undefined) {
+        return activeWorkspaceFolder;
+    }
+    if (workspaceFolders.length === 1) {
+        return workspaceFolders[0];
+    }
+    return {
+        error: "Multiple workspace roots are open. Specify workspaceFolder by name or absolute path.",
+    };
+}
+
+function resolveWorkspaceChildDirectory(
+    root: string,
+    workingDirectory: string | undefined,
+): string | { error: string } {
+    const cwd =
+        workingDirectory !== undefined
+            ? path.resolve(root, workingDirectory)
+            : root;
+    const relativePath = path.relative(root, cwd);
+    if (
+        (workingDirectory !== undefined && path.isAbsolute(workingDirectory)) ||
+        relativePath === ".." ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+    ) {
+        return {
+            error: "workingDirectory must stay within the selected workspace root.",
+        };
+    }
+    return cwd;
+}
+
+async function verifyWorkspaceDirectory(
+    cwd: string,
+    workspaceRoot: string,
+): Promise<{ cwd: string; workspaceRoot: string } | { error: string }> {
+    try {
+        if (!(await fs.stat(cwd)).isDirectory()) {
+            return { error: `workingDirectory is not a directory: ${cwd}` };
+        }
+        const [realCwd, realWorkspaceRoot] = await Promise.all([
+            fs.realpath(cwd),
+            fs.realpath(workspaceRoot),
+        ]);
+        const relativePath = path.relative(realWorkspaceRoot, realCwd);
+        if (
+            relativePath === ".." ||
+            relativePath.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relativePath)
+        ) {
+            return {
+                error: "workingDirectory must stay within the selected workspace root.",
+            };
+        }
+        return { cwd: realCwd, workspaceRoot: realWorkspaceRoot };
+    } catch (error) {
+        return {
+            error: `workingDirectory does not exist: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        };
+    }
+}
+
+async function resolveWorkspaceCommandDirectory(
+    parameters: WorkspaceCommandParameters,
+): Promise<{ cwd: string; workspaceRoot: string } | { error: string }> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        return { error: "No workspace or repository is currently open." };
+    }
+    const pathError = validateWorkspaceCommandPaths(parameters);
+    if (pathError !== undefined) {
+        return { error: pathError };
+    }
+    const workspaceFolder = selectWorkspaceFolder(
+        workspaceFolders,
+        parameters.workspaceFolder as string | undefined,
+    );
+    if ("error" in workspaceFolder) {
+        return workspaceFolder;
+    }
+    if (workspaceFolder.uri.scheme !== "file") {
+        return {
+            error: `Workspace root '${workspaceFolder.name}' is not a local filesystem folder.`,
+        };
+    }
+
+    const workingDirectory =
+        typeof parameters.workingDirectory === "string"
+            ? parameters.workingDirectory
+            : undefined;
+    const root = workspaceFolder.uri.fsPath;
+    const cwd = resolveWorkspaceChildDirectory(root, workingDirectory);
+    if (typeof cwd !== "string") {
+        return cwd;
+    }
+    return verifyWorkspaceDirectory(cwd, root);
+}
+
+export async function handleRunWorkspaceCommand(action: {
+    parameters?: WorkspaceCommandParameters;
+}): Promise<ActionResult> {
+    const parameters = action.parameters ?? {};
+    const executionId =
+        typeof parameters.executionId === "string"
+            ? parameters.executionId
+            : undefined;
+    if (typeof parameters.command !== "string") {
+        return workspaceCommandError("command must be a string.", executionId);
+    }
+    if (
+        parameters.timeoutMs !== undefined &&
+        typeof parameters.timeoutMs !== "number"
+    ) {
+        return workspaceCommandError(
+            "timeoutMs must be a number.",
+            executionId,
+        );
+    }
+    if (
+        parameters.executionId !== undefined &&
+        (typeof parameters.executionId !== "string" ||
+            parameters.executionId.trim().length === 0 ||
+            parameters.executionId.length > 128)
+    ) {
+        return workspaceCommandError(
+            "executionId must be a non-empty string no longer than 128 characters.",
+        );
+    }
+    if (
+        executionId !== undefined &&
+        workspaceCommandRunner.consumePendingCancellation(executionId)
+    ) {
+        return workspaceCommandResponse({
+            success: false,
+            exitCode: null,
+            durationMs: 0,
+            command: parameters.command,
+            cwd: "",
+            stdout: { text: "", truncated: false, totalBytes: 0 },
+            stderr: { text: "", truncated: false, totalBytes: 0 },
+            timedOut: false,
+            cancelled: true,
+            executionId,
+        });
+    }
+    const declaredRiskLevel =
+        parameters.commandRiskLevel === undefined
+            ? "low"
+            : parameters.commandRiskLevel;
+    if (
+        declaredRiskLevel !== "low" &&
+        declaredRiskLevel !== "medium" &&
+        declaredRiskLevel !== "high"
+    ) {
+        return workspaceCommandError(
+            "commandRiskLevel must be low, medium, or high.",
+            executionId,
+        );
+    }
+    const directory = await resolveWorkspaceCommandDirectory(parameters);
+    if ("error" in directory) {
+        return workspaceCommandError(directory.error, executionId);
+    }
+
+    if (declaredRiskLevel === "high") {
+        return workspaceCommandError(
+            "Command execution blocked due to high risk.",
+            executionId,
+        );
+    }
+    const commandPolicyError = validateFocusedWorkspaceCommand(
+        parameters.command,
+        directory.cwd,
+        directory.workspaceRoot,
+    );
+    if (commandPolicyError !== undefined) {
+        return workspaceCommandError(commandPolicyError, executionId);
+    }
+    const result = await workspaceCommandRunner.run({
+        command: parameters.command,
+        cwd: directory.cwd,
+        ...(parameters.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: parameters.timeoutMs }),
+        ...(parameters.executionId === undefined
+            ? {}
+            : { executionId: parameters.executionId }),
+    });
+    return "error" in result
+        ? workspaceCommandError(result.error, executionId)
+        : workspaceCommandResponse(result);
+}
+
+export function handleCancelWorkspaceCommand(action: {
+    parameters?: WorkspaceCommandParameters;
+}): ActionResult {
+    const executionId = action.parameters?.executionId;
+    if (typeof executionId !== "string" || executionId.trim().length === 0) {
+        return workspaceCommandError("executionId must be a non-empty string.");
+    }
+    const cancellation = workspaceCommandRunner.cancel(
+        executionId,
+        action.parameters?.allowPendingCancellation === true,
+    );
+    const cancelled = cancellation === "cancelled";
+    return workspaceCommandResponse({
+        success: cancellation !== "notFound",
+        cancelled,
+        pendingCancellation: cancellation === "pending",
+        executionId,
+        ...(cancellation !== "notFound"
+            ? {}
+            : { error: "No active command has that executionId." }),
+    });
+}
+
+export function cancelWorkspaceCommands(): void {
+    workspaceCommandRunner.cancelAll();
+}
 
 async function handleOpenFileAction(action: any): Promise<ActionResult> {
     const actionResult: ActionResult = {
@@ -316,6 +641,76 @@ async function resolveCommandToExecute(
     return { resolvedCommand };
 }
 
+async function resolveTerminalDirectory(
+    folderName: string | undefined,
+): Promise<string | ActionResult | undefined> {
+    if (!folderName) {
+        return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    }
+    const matches = await findMatchingFolders(path.basename(folderName));
+    if (matches.length === 0) {
+        const msg = `❌ No folders found matching '${folderName}'.`;
+        vscode.window.showErrorMessage(msg);
+        return { handled: false, message: msg };
+    }
+    const targetFolder =
+        matches.length === 1
+            ? matches[0]
+            : (
+                  await vscode.window.showQuickPick(
+                      matches.map((uri) => ({
+                          label: vscode.workspace.asRelativePath(uri),
+                          uri,
+                      })),
+                      {
+                          placeHolder: `Multiple folders found. Select where to open the terminal:`,
+                      },
+                  )
+              )?.uri;
+    if (!targetFolder) {
+        const msg = "⚠️ Terminal opening cancelled by user.";
+        vscode.window.showInformationMessage(msg);
+        return { handled: false, message: msg };
+    }
+    return targetFolder.fsPath;
+}
+
+async function executeVsCodeTerminalCommand(
+    resolvedCommand: string | undefined,
+): Promise<ActionResult | undefined> {
+    if (
+        !resolvedCommand ||
+        resolvedCommand.includes(" ") ||
+        !resolvedCommand.includes(".")
+    ) {
+        return undefined;
+    }
+    try {
+        await vscode.commands.executeCommand(resolvedCommand);
+        const msg = `✅ Executed VSCode command: ${resolvedCommand}.`;
+        vscode.window.showInformationMessage(msg);
+        return { handled: true, message: msg };
+    } catch (err) {
+        const msg = `❌ Failed to execute VSCode command: ${resolvedCommand}. ${err}`;
+        vscode.window.showErrorMessage(msg);
+        return { handled: false, message: msg };
+    }
+}
+
+function createOrReuseTerminal(
+    reuseExistingTerminal: boolean,
+    cwd: string | undefined,
+    folderName: string | undefined,
+): vscode.Terminal {
+    if (reuseExistingTerminal && vscode.window.activeTerminal) {
+        return vscode.window.activeTerminal;
+    }
+    const name = folderName ? `Terminal: ${folderName}` : "Terminal";
+    return cwd
+        ? vscode.window.createTerminal({ name, cwd: vscode.Uri.file(cwd) })
+        : vscode.window.createTerminal(name);
+}
+
 export async function handleOpenInIntegratedTerminal(
     action: any,
 ): Promise<ActionResult> {
@@ -327,44 +722,11 @@ export async function handleOpenInIntegratedTerminal(
     const reuseExistingTerminal = parameters.reuseExistingTerminal ?? true;
 
     await aliasManager.ready;
-    let cwd: string | undefined;
-
-    if (folderName) {
-        const matches = await findMatchingFolders(path.basename(folderName));
-        if (matches.length === 0) {
-            const msg = `❌ No folders found matching '${folderName}'.`;
-            vscode.window.showErrorMessage(msg);
-            return { handled: false, message: msg };
-        }
-
-        const targetFolder =
-            matches.length === 1
-                ? matches[0]
-                : (
-                      await vscode.window.showQuickPick(
-                          matches.map((uri) => ({
-                              label: vscode.workspace.asRelativePath(uri),
-                              uri,
-                          })),
-                          {
-                              placeHolder: `Multiple folders found. Select where to open the terminal:`,
-                          },
-                      )
-                  )?.uri;
-
-        if (!targetFolder) {
-            const msg = "⚠️ Terminal opening cancelled by user.";
-            vscode.window.showInformationMessage(msg);
-            return { handled: false, message: msg };
-        }
-
-        cwd = targetFolder.fsPath;
-    } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-            cwd = workspaceFolders[0].uri.fsPath;
-        }
+    const directoryResult = await resolveTerminalDirectory(folderName);
+    if (directoryResult && typeof directoryResult !== "string") {
+        return directoryResult;
     }
+    const cwd = directoryResult;
 
     let resolvedCommand: string | undefined;
     if (commandToExecute) {
@@ -380,39 +742,20 @@ export async function handleOpenInIntegratedTerminal(
         resolvedCommand = cmd;
     }
 
-    // If the resolved command is a VSCode command, execute it directly
-    if (
-        resolvedCommand &&
-        !resolvedCommand.includes(" ") &&
-        resolvedCommand.includes(".")
-    ) {
-        try {
-            await vscode.commands.executeCommand(resolvedCommand);
-            const msg = `✅ Executed VSCode command: ${resolvedCommand}.`;
-            vscode.window.showInformationMessage(msg);
-            return { handled: true, message: msg };
-        } catch (err) {
-            const msg = `❌ Failed to execute VSCode command: ${resolvedCommand}. ${err}`;
-            vscode.window.showErrorMessage(msg);
-            return { handled: false, message: msg };
-        }
+    const vsCodeCommandResult =
+        await executeVsCodeTerminalCommand(resolvedCommand);
+    if (vsCodeCommandResult !== undefined) {
+        return vsCodeCommandResult;
     }
 
     // Otherwise, open the terminal and send the command
     let terminal: vscode.Terminal;
     try {
-        if (reuseExistingTerminal && vscode.window.activeTerminal) {
-            terminal = vscode.window.activeTerminal;
-        } else {
-            terminal = cwd
-                ? vscode.window.createTerminal({
-                      name: folderName ? `Terminal: ${folderName}` : `Terminal`,
-                      cwd: vscode.Uri.file(cwd),
-                  })
-                : vscode.window.createTerminal(
-                      folderName ? `Terminal: ${folderName}` : `Terminal`,
-                  );
-        }
+        terminal = createOrReuseTerminal(
+            reuseExistingTerminal,
+            cwd,
+            folderName,
+        );
 
         terminal.show();
         if (resolvedCommand) {
@@ -538,6 +881,12 @@ export async function handleWorkbenchActions(
             break;
         case "openInIntegratedTerminal":
             actionResult = await handleOpenInIntegratedTerminal(action);
+            break;
+        case "runWorkspaceCommand":
+            actionResult = await handleRunWorkspaceCommand(action);
+            break;
+        case "cancelWorkspaceCommand":
+            actionResult = handleCancelWorkspaceCommand(action);
             break;
         default: {
             actionResult.message = `Did not understand the request for action: "${actionName}"`;

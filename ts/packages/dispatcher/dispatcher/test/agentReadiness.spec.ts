@@ -15,6 +15,8 @@
 import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
 import { checkAgentReady } from "../src/execute/actionHandlers.js";
+import { getErrorDisplayContent } from "../src/execute/agentNotReadyError.js";
+import { getManualAgentSetupDisplay } from "../src/context/system/handlers/configCommandHandlers.js";
 import type {
     ActionContext,
     ActionResult,
@@ -376,6 +378,33 @@ describe("checkAgentReady (pre-flight gate)", () => {
         expect(out).toBeUndefined();
     });
 
+    describe("@config agent setup manual instructions", () => {
+        test("renders setup details as markdown", () => {
+            const display = getManualAgentSetupDisplay("player", {
+                state: "setup-required",
+                message: "Spotify is not configured.",
+                details:
+                    "Add to `ts/config.local.yaml`:\n\n```yaml\nspotify:\n  clientId: <value>\n```",
+            });
+
+            expect(display).toEqual({
+                type: "markdown",
+                kind: "warning",
+                content: expect.stringContaining("```yaml"),
+            });
+            if (
+                typeof display !== "object" ||
+                display === null ||
+                Array.isArray(display) ||
+                !("type" in display) ||
+                display.type !== "markdown"
+            ) {
+                throw new Error("Expected markdown setup display");
+            }
+            expect(display.content).toContain("@config agent refresh player");
+        });
+    });
+
     test("throws with a setup hint when state is setup-required and the agent has setup", async () => {
         const sys = fakeSystemContext({
             readiness: new Map([
@@ -454,5 +483,77 @@ describe("checkAgentReady (pre-flight gate)", () => {
         await expect(
             checkAgentReady("agentG", sys, fakeActionContext()),
         ).rejects.toThrow(/needs configuration/);
+    });
+
+    test("carries the report's markdown details for rich display", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                [
+                    "agentH",
+                    {
+                        state: "setup-required",
+                        message: "Spotify is not configured.",
+                        details:
+                            "Add to `ts/config.local.yaml`:\n\n```yaml\nspotify:\n  clientId: <value>\n```",
+                    },
+                ],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentH",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        // The plain message stays a single line for logs / non-display clients.
+        expect(error.message).not.toContain("```");
+        expect(error.message).toContain("Spotify is not configured.");
+        const display = getErrorDisplayContent(error) as any;
+        expect(display.type).toBe("markdown");
+        expect(display.kind).toBe("error");
+        expect(display.content).toContain("ts/config.local.yaml");
+        expect(display.content).toContain("clientId: <value>");
+        expect(display.content).toContain("@config agent refresh agentH");
+    });
+
+    test("does not repeat the refresh command the details already gave", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                [
+                    "agentJ",
+                    {
+                        state: "setup-required",
+                        message: "Spotify is not configured.",
+                        details:
+                            "Add the values, then run `@config agent refresh agentJ`.",
+                    },
+                ],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentJ",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        const display = getErrorDisplayContent(error) as any;
+        const occurrences =
+            display.content.split("@config agent refresh agentJ").length - 1;
+        expect(occurrences).toBe(1);
+    });
+
+    test("has no rich display when the report has no details", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                ["agentI", { state: "setup-required", message: "nope" }],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentI",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        expect(getErrorDisplayContent(error)).toBeUndefined();
     });
 });

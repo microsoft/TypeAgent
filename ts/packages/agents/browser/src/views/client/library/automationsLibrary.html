@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Automations - TypeAgent</title>
+    <link rel="stylesheet" href="automationsLibrary.css" />
+  </head>
+  <body>
+    <div class="auto-shell">
+      <header class="auto-top">
+        <div class="auto-brand">
+          <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
+          Automations
+        </div>
+        <input
+          type="search"
+          id="searchInput"
+          class="auto-search"
+          placeholder="Search name, description, site, directory..."
+          autocomplete="off"
+          aria-label="Search automations"
+        />
+      </header>
+
+      <nav class="auto-rail" id="rail" aria-label="Filters"></nav>
+
+      <main class="auto-main">
+        <div id="notices"></div>
+        <div id="bulkBar" class="auto-bulk" hidden></div>
+        <div id="listContainer">
+          <p class="auto-muted">Loading automations...</p>
+        </div>
+      </main>
+
+      <aside
+        class="auto-detail"
+        id="detailPanel"
+        aria-label="Automation details"
+        hidden
+      ></aside>
+    </div>
+
+    <script type="module" src="./vendor.ts"></script>
+    <script type="module" src="./automationsLibrary.ts"></script>
+  </body>
+</html>

@@ -13,7 +13,7 @@ export interface ImportOptions {
     limit?: number;
     days?: number;
     folder?: string;
-    mode?: "basic" | "content" | "full";
+    mode?: "content";
     maxConcurrent?: number;
     contentTimeout?: number;
 }
@@ -21,7 +21,7 @@ export interface ImportOptions {
 // Folder import specific options
 export interface FolderImportOptions {
     folderPath: string;
-    mode?: "basic" | "content" | "full";
+    mode?: "content";
     preserveStructure?: boolean;
     recursive?: boolean;
     fileTypes?: string[];
@@ -39,6 +39,8 @@ export interface ImportProgress {
         | "fetching"
         | "processing"
         | "extracting"
+        | "graph-building"
+        | "persisting"
         | "complete"
         | "error";
     totalItems: number;
@@ -166,8 +168,11 @@ export type ErrorCallback = (error: ImportError) => void;
 // Chrome extension message types
 export interface ImportWebsiteDataMessage {
     type: "importWebsiteDataWithProgress";
-    parameters: ImportOptions;
-    importId: string;
+    parameters: ImportOptions & {
+        importId: string;
+        totalItems?: number;
+        progressCallback?: boolean;
+    };
 }
 
 export interface ImportHtmlFolderMessage {

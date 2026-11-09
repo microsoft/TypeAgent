@@ -11,24 +11,16 @@ import {
     SuggestedQuestion,
 } from "../schema/pageQuestionSchema.mjs";
 import registerDebug from "debug";
-import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { getBrowserPackageFilePath } from "../../utils/packageFilePath.mjs";
 
 const debug = registerDebug("typeagent:browser:page-qna");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..", "..");
     return fs.readFileSync(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/knowledge/schema",
-                    fileName,
-                ),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "knowledge", "schema", fileName),
         ),
         "utf8",
     );

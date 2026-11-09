@@ -1,0 +1,131 @@
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<div class="topic-graph-container">
+  <header class="topic-graph-header" hidden>
+    <div class="header-left">
+      <div class="breadcrumbs">
+        <button id="topicGraphBreadcrumb" class="breadcrumb-link">
+          Topic Graph
+        </button>
+        <span id="topicNameBreadcrumb" class="breadcrumb-entity"></span>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="topic-search">
+        <div class="search-input-group">
+          <input
+            type="search"
+            id="topicSearch"
+            class="topic-search-input"
+            placeholder="Search topics..."
+            aria-label="Search topics"
+          />
+          <button
+            id="searchButton"
+            class="topic-search-btn"
+            aria-label="Search"
+            title="Search"
+          >
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <label
+      >Filter level
+      <input
+        id="topicLevelFilter"
+        type="number"
+        min="0"
+        placeholder="All levels"
+    /></label>
+  </header>
+  <div class="topic-graph-main">
+    <aside class="topic-sidebar collapsed" id="topicSidebar">
+      <div class="sidebar-header">
+        <h3>Topic Details</h3>
+        <button
+          id="closeSidebar"
+          class="btn-close"
+          aria-label="Close topic details"
+        >
+          Close
+        </button>
+      </div>
+      <div class="sidebar-content" id="sidebarContent">
+        <div class="topic-placeholder">
+          <p>Select a topic to view details</p>
+        </div>
+      </div>
+      <div class="graph-stats">
+        <h4>Graph Statistics</h4>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Loaded Topics:</span
+            ><span class="stat-value" id="totalTopics">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Visible Topics:</span
+            ><span class="stat-value" id="visibleTopics">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Max Depth:</span
+            ><span class="stat-value" id="maxDepth">-</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="graph-container">
+      <div
+        id="topicGraphContainer"
+        class="cytoscape-container"
+        tabindex="0"
+        aria-label="Topic graph"
+      ></div>
+      <div id="loadingOverlay" class="loading-overlay" hidden>
+        <p role="status">Loading topic graph...</p>
+      </div>
+      <div id="errorOverlay" class="error-overlay" hidden>
+        <div class="error-content">
+          <h3>Error Loading Topic Graph</h3>
+          <p id="errorMessage"></p>
+          <button id="retryButton">Retry</button>
+        </div>
+      </div>
+      <div class="graph-controls">
+        <div class="graph-action-controls">
+          <button id="topicZoomIn" aria-label="Zoom in" title="Zoom in">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i></button
+          ><button id="topicZoomOut" aria-label="Zoom out" title="Zoom out">
+            <i class="fa-solid fa-minus" aria-hidden="true"></i>
+          </button>
+          <button id="fitButton" aria-label="Fit to view" title="Fit to view">
+            <i class="fa-solid fa-expand" aria-hidden="true"></i></button
+          ><button
+            id="centerButton"
+            aria-label="Center graph"
+            title="Center graph"
+          >
+            <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
+          </button>
+          <button
+            id="exportButton"
+            aria-label="Export as image"
+            title="Export as image"
+          >
+            <i class="fa-regular fa-image" aria-hidden="true"></i></button
+          ><button
+            id="exportJsonButton"
+            aria-label="Export cytoscape JSON"
+            title="Export cytoscape JSON"
+          >
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p id="notificationBody" role="status"></p>
+</div>

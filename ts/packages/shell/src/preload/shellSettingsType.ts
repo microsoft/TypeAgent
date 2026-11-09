@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { SpeechProvider } from "./localAsrTypes.js";
+
 export type TTSSettings = {
     provider?: string | undefined;
     voice?: string | undefined;
@@ -19,6 +21,7 @@ export type UISettings = {
     wakeWord: string;
 };
 export type ShellUserSettings = {
+    speechProvider: SpeechProvider;
     microphoneId: string | undefined;
     microphoneName: string | undefined;
     tts: boolean;
@@ -39,6 +42,7 @@ export type ShellUserSettings = {
 };
 
 export const defaultUserSettings: ShellUserSettings = {
+    speechProvider: "azure",
     microphoneId: undefined,
     microphoneName: undefined,
     notifyFilter: "error;warning;",

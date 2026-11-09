@@ -55,6 +55,10 @@ export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
 export type { MatchResult, GrammarStore } from "./cache/types.js";
 export { GrammarStoreImpl } from "./cache/grammarStore.js";
 export { computeActionSchemaFileHash } from "./explanation/schemaInfoProvider.js";
+export {
+    getSchemaNamespaceKey,
+    splitSchemaNamespaceKey,
+} from "./cache/schemaNamespace.js";
 export { WildcardMode } from "./constructions/constructions.js";
 
 // Testing

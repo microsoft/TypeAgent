@@ -1,9 +1,6 @@
 {
   "description": "Workspace catalog of non-bundled agents",
   "agents": {
-    "androidMobile": {
-      "path": "androidMobile"
-    },
     "echo": {
       "path": "../../examples/agentExamples/echo"
     },

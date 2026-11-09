@@ -13,6 +13,7 @@ import {
     VideoModel,
     VideoGenerationJob,
     ImageInPaintItem,
+    rejectCompletionLimits,
 } from "./models.js";
 import {
     BuildPoolRequest,
@@ -28,6 +29,8 @@ import {
 } from "./endpointPool.js";
 import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
+import { identifyEmbeddingModel } from "./identifiedEmbedding.js";
+import { embeddingInputLimitError } from "./embeddingInput.js";
 import {
     PromptSection,
     Result,
@@ -38,9 +41,19 @@ import {
     ImagePromptContent,
 } from "typechat";
 import { readServerEventStream } from "./serverEvents.js";
+import {
+    adapterFor,
+    createApiHeaders,
+    verifyFilterResults,
+    type ModelRequest,
+    type FilterResult,
+    type FilterError,
+} from "./wireApiProvider/index.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
@@ -56,7 +69,19 @@ import {
     copilotApiSettingsFromConfig,
 } from "./copilotSettings.js";
 import { getProviderChatModel } from "./providerChatModelRegistry.js";
-import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
+import type { WireApi, ModelRequestConstraints } from "@typeagent/config";
+import {
+    getActiveModelProvider,
+    resolveTarget,
+    usesProviderDefault,
+} from "./providerMode.js";
+import { instrumentChatModel } from "./otelChatModel.js";
+import {
+    applyChatModelRequestDefaults,
+    DEFAULT_AZURE_CHAT_DEPLOYMENT,
+    isLunaChatModel,
+    isGpt4ChatModel,
+} from "./chatModelDefaults.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -75,6 +100,7 @@ export type { ModelInfo, ModelProviders, CompletionUsageStats };
 const debugOpenAI = registerDebug("typeagent:openai");
 
 export type CommonApiSettings = {
+    requestConstraints?: ModelRequestConstraints | undefined;
     provider: ModelProviders;
     modelType: ModelType;
     endpoint: string;
@@ -84,6 +110,11 @@ export type CommonApiSettings = {
     timeout?: number | undefined;
     maxRetryAttempts?: number | undefined;
     retryPauseMs?: number | undefined;
+    /**
+     * Wire protocol for chat calls. Absent ⇒ chat_completions
+     * (/chat/completions). Also supports responses and messages.
+     */
+    wireApi?: WireApi | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -125,9 +156,12 @@ export function apiSettingsFromEnv(
     // and video stay on whatever the legacy resolver picks (Azure/OpenAI).
     const mode = getActiveModelProvider();
     if (mode !== undefined && modelType === ModelType.Chat) {
-        const target = resolveTarget(mode, endpointName ?? "DEFAULT");
+        const canonical = endpointName ?? "DEFAULT";
+        const target = resolveTarget(mode, canonical);
         if (mode === "copilot") {
-            return copilotApiSettingsFromConfig(target);
+            return copilotApiSettingsFromConfig(
+                usesProviderDefault(canonical) ? undefined : target,
+            );
         }
         if (mode === "ollama") {
             return ollamaApiSettingsFromEnv(modelType, env, target);
@@ -140,12 +174,18 @@ export function apiSettingsFromEnv(
         return azureApiSettingsFromEnv(modelType, env, target);
     }
 
-    env ??= process.env;
-    if (EnvVars.OPENAI_API_KEY in env) {
+    if (EnvVars.OPENAI_API_KEY in (env ?? process.env)) {
         return openAIApiSettingsFromEnv(modelType, env, endpointName);
     }
 
-    return azureApiSettingsFromEnv(modelType, env, endpointName);
+    return azureApiSettingsFromEnv(
+        modelType,
+        env,
+        modelType === ModelType.Chat &&
+            (!endpointName || endpointName.toUpperCase() === "DEFAULT")
+            ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+            : endpointName,
+    );
 }
 
 /**
@@ -177,38 +217,9 @@ export function localOpenAIApiSettingsFromEnv(
     return openAIApiSettingsFromEnv(modelType, env, endpointName, true);
 }
 
-/**
- * Create an Open AI client. Supports both OpenAI and AzureOpenAI endpoints
- * @param settings settings to use for creating client
- * @returns headers used for API connections
- */
-async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
-    let apiHeaders;
-    if (settings.provider === "azure") {
-        if (settings.tokenProvider) {
-            const tokenResult = await settings.tokenProvider.getAccessToken();
-            if (!tokenResult.success) {
-                return tokenResult;
-            }
-            apiHeaders = {
-                Authorization: `Bearer ${tokenResult.data}`,
-            };
-        } else {
-            apiHeaders = { "api-key": settings.apiKey };
-        }
-    } else if (settings.provider === "openai") {
-        apiHeaders = {
-            Authorization: `Bearer ${settings.apiKey}`,
-            "OpenAI-Organization": settings.organization ?? "",
-        };
-    }
-
-    return success(apiHeaders);
-}
-
 // Parse the endpoint name with the following naming conventions
 //
-// - By default, if endpoint name is not specified, it defaults to `OPENAI_ENDPOINT` if it exists, and `AZURE_OPENAI_ENDPOINT` otherwise.
+// - With no endpoint name, select the configured provider default or named Azure Luna pool.
 // - Endpoint names `azure` and `openai` refers to `AZURE_OPENAI_ENDPOINT` and `OPENAI_ENDPOINT`
 // - Endpoint names `azure:<name>` and `openai:<name>` refers to `AZURE_OPENAI_ENDPOINT_<name>` and `OPENAI_ENDPOINT_<name>`
 // - Endpoint names without the `azure:` or `openai:` prefix will assume it is prefixed with `azure:` and uses `AZURE_OPENAI_ENDPOINT_<name>`
@@ -220,12 +231,14 @@ function parseEndPointName(endpoint?: string): {
     if (endpoint === undefined || endpoint === "") {
         const mode = getActiveModelProvider();
         if (mode !== undefined) {
+            if (mode === "copilot") {
+                return { provider: mode };
+            }
             return { provider: mode, name: resolveTarget(mode, "DEFAULT") };
         }
-        return {
-            provider:
-                EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
-        };
+        return EnvVars.OPENAI_ENDPOINT in process.env
+            ? { provider: "openai" }
+            : { provider: "azure", name: DEFAULT_AZURE_CHAT_DEPLOYMENT };
     }
     if (
         endpoint === "openai" ||
@@ -251,18 +264,35 @@ function parseEndPointName(endpoint?: string): {
     // the active mode's mapping. Explicit prefixes above always win.
     const mode = getActiveModelProvider();
     if (mode !== undefined) {
+        if (mode === "copilot" && usesProviderDefault(endpoint)) {
+            return { provider: mode };
+        }
         const target = resolveTarget(mode, endpoint);
         return { provider: mode, name: target };
     }
     if (EnvVars.OPENAI_ENDPOINT in process.env) {
         return { provider: "openai", name: endpoint };
     }
-    return { provider: "azure", name: endpoint };
+    return {
+        provider: "azure",
+        name:
+            endpoint.toUpperCase() === "DEFAULT"
+                ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+                : endpoint,
+    };
 }
 
 // Cache of per-model endpoint pools. Keyed by
 // `${modelType}:${provider}:${endpointName}`.
 const modelPools = new Map<string, EndpointPool>();
+let poolConfig: ReturnType<typeof getRuntimeConfig> | undefined;
+
+function refreshModelPools(): void {
+    const config = getRuntimeConfig();
+    if (poolConfig === config) return;
+    modelPools.clear();
+    poolConfig = config;
+}
 
 function defaultProvider(): ModelProviders {
     return EnvVars.OPENAI_API_KEY in process.env ? "openai" : "azure";
@@ -273,10 +303,23 @@ function getModelPool(
     modelType: ModelType,
     endpointName?: string,
 ): EndpointPool {
+    refreshModelPools();
     const key = `${modelType}:${provider}:${endpointName ?? ""}`;
     const existing = modelPools.get(key);
     if (existing) return existing;
     const pool = buildModelPool(provider, modelType, endpointName);
+    const config = getRuntimeConfig();
+    const constraintName =
+        provider === "azure" &&
+        !config.azureOpenAI.deployments.has(endpointName?.toLowerCase() ?? "")
+            ? ""
+            : (endpointName ?? "");
+    const requestConstraints = config.modelRequestConstraints?.get(
+        `${provider}:${modelType}:${constraintName}`.toLowerCase(),
+    );
+    if (requestConstraints)
+        for (const member of pool.members)
+            member.settings.requestConstraints = requestConstraints;
     modelPools.set(key, pool);
     return pool;
 }
@@ -300,7 +343,12 @@ function buildModelPool(
                 modelType,
                 typedName,
             );
-        } catch {
+        } catch (e) {
+            if (
+                provider === "azure" &&
+                endpointName?.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT
+            )
+                throw e;
             // Fall through to legacy.
         }
     }
@@ -308,6 +356,7 @@ function buildModelPool(
 }
 
 export function getChatModelPool(endpoint?: string): EndpointPool {
+    refreshModelPools();
     const endpointName = parseEndPointName(endpoint);
     const key = `${ModelType.Chat}:${endpointName.provider}:${endpointName.name ?? ""}`;
     const existing = modelPools.get(key);
@@ -368,75 +417,40 @@ export function getChatModelSettings(endpoint?: string): ApiSettings {
     return pool.members[0].settings;
 }
 
+/**
+ * True if the given chat model has an explicitly configured endpoint.
+ */
+export function hasChatModelEndpoint(endpoint?: string): boolean {
+    const { provider, name } = parseEndPointName(endpoint);
+
+    if (provider === "copilot" || provider === "ollama") {
+        return true;
+    }
+
+    if (name === undefined || name === "") {
+        try {
+            getChatModelPool(endpoint);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    if (provider === "openai") {
+        return getRuntimeConfig().openAI?.endpoint !== undefined;
+    }
+
+    const dep = getRuntimeConfig().azureOpenAI.deployments.get(
+        name.toLowerCase(),
+    );
+    return dep !== undefined && dep.endpoints.length > 0;
+}
+
 export function supportsStreaming(
     model: TypeChatLanguageModel,
 ): model is ChatModelWithStreaming {
     return "completeStream" in model;
 }
-
-type FilterResult = {
-    hate?: Filter;
-    jailbreak?: Filter;
-    protected_material_code?: Filter;
-    protected_material_text?: Filter;
-    self_harm?: Filter;
-    sexual?: Filter;
-    violence?: Filter;
-    error?: FilterError;
-};
-
-type FilterError = {
-    code: string;
-    message: string;
-};
-
-type Filter = {
-    filtered: boolean;
-    severity: string;
-    detected?: boolean;
-};
-
-// NOTE: these are not complete
-type ChatCompletion = {
-    id: string;
-    choices: ChatCompletionChoice[];
-    usage: CompletionUsageStats;
-};
-
-type ToolCall = {
-    id: string;
-    type: "function";
-    function: {
-        name: string;
-        arguments: string;
-    };
-};
-
-type ChatCompletionChoice = {
-    message?: ChatContent;
-    content_filter_results?: FilterResult | FilterError;
-    finish_reason?: string;
-};
-
-type ChatCompletionChunk = {
-    id: string;
-    choices: ChatCompletionDelta[];
-    usage?: CompletionUsageStats;
-};
-
-type ToolCallDelta = { index: number } & ToolCall;
-
-type ChatCompletionDelta = {
-    delta: ChatContent<ToolCallDelta>;
-    content_filter_results?: FilterResult | FilterError;
-    finish_reason?: string;
-};
-
-type ChatContent<ToolCallType = ToolCall> = {
-    content?: string | null;
-    tool_calls?: ToolCallType[];
-    role: "assistant";
-};
 
 type ImageCompletion = {
     created: number;
@@ -475,6 +489,7 @@ export function createChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
+    rejectCompletionLimits(completionSettings);
     // Tag calls with the active mode so TokenCounter rollups can slice
     // by provider. Pre-resolved ApiSettings bypass mode override, so
     // only tag when the override is in effect AND the caller went
@@ -489,35 +504,71 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
-    // GPT-5 models only support temperature=1; 0 is rejected by the API.
-    if (typeof endpoint === "string" && /gpt.?5/i.test(endpoint)) {
-        completionSettings ??= {};
-        completionSettings.temperature ??= 1;
+    if (settings.modelType === ModelType.Decision)
+        throw new Error("Native decisions cannot be used as chat models");
+
+    for (const member of pool.members)
+        applyChatModelRequestDefaults(member.settings);
+
+    // Session reasoning defaults must not reach GPT-4 deployments, which reject
+    // reasoning_effort. Preserve the caller's settings for subsequent models.
+    if (
+        isGpt4ChatModel(settings) &&
+        completionSettings?.reasoning_effort !== undefined
+    ) {
+        completionSettings = { ...completionSettings };
+        delete completionSettings.reasoning_effort;
     }
 
+    // GPT-5+ models only support the default temperature; other values are
+    // rejected. Check resolved settings because callers often use an alias.
+    if (
+        (settings.provider === "azure" || settings.provider === "openai") &&
+        [
+            typeof endpoint === "string" ? endpoint : undefined,
+            "modelName" in settings ? settings.modelName : undefined,
+            settings.endpoint,
+        ].some(
+            (identifier) =>
+                identifier !== undefined &&
+                /gpt[-_.]?(?:5|6)(?:$|[-_.])/i.test(identifier),
+        )
+    ) {
+        completionSettings ??= {};
+        completionSettings.temperature = 1;
+    }
+
+    let model: ChatModelWithStreaming;
     if (settings.provider === "ollama") {
-        return createOllamaChatModel(
+        model = createOllamaChatModel(
             settings,
             completionSettings,
             completionCallback,
             tags,
         );
+    } else {
+        const providerFactory = getProviderChatModel(settings.provider);
+        model =
+            providerFactory !== undefined
+                ? providerFactory(
+                      settings,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  )
+                : createAzureOpenAIChatModel(
+                      pool,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  );
     }
-    const providerFactory = getProviderChatModel(settings.provider);
-    if (providerFactory !== undefined) {
-        return providerFactory(
-            settings,
-            completionSettings,
-            completionCallback,
-            tags,
-        );
-    }
-    return createAzureOpenAIChatModel(
-        pool,
-        completionSettings,
-        completionCallback,
-        tags,
-    );
+    return instrumentChatModel(model, {
+        provider: settings.provider,
+        ...("modelName" in settings && settings.modelName !== undefined
+            ? { model: settings.modelName }
+            : {}),
+    });
 }
 
 function createAzureOpenAIChatModel(
@@ -537,18 +588,6 @@ function createAzureOpenAIChatModel(
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
 
-    // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
-    // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.
-    // Promote it unconditionally — all supported models accept the new name.
-    if (
-        completionSettings.max_tokens !== undefined &&
-        completionSettings.max_completion_tokens === undefined
-    ) {
-        completionSettings.max_completion_tokens =
-            completionSettings.max_tokens;
-    }
-    delete completionSettings.max_tokens;
-
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
         completionSettings.response_format !== undefined;
@@ -558,60 +597,90 @@ function createAzureOpenAIChatModel(
     }
 
     const defaultParams =
-        settings.provider === "azure"
+        settings.provider === "azure" && settings.modelName === undefined
             ? {}
             : {
                   model: settings.modelName,
               };
+
+    // Select the wire adapter AFTER the pool has been built (routing is
+    // unchanged). Absent wireApi ⇒ chat_completions (legacy default).
+    const adapter = adapterFor(settings.wireApi);
+    const modelName = (settings as OpenAIApiSettings).modelName;
+
     const model: ChatModelWithStreaming = {
         completionSettings,
         completionCallback,
+        inspectRequest(prompt, jsonSchema) {
+            const messages =
+                typeof prompt === "string"
+                    ? [{ role: "user" as const, content: prompt }]
+                    : prompt;
+            const serializedRequest = JSON.stringify(
+                adapter.buildRequestBody(
+                    makeModelRequest(messages, jsonSchema, false),
+                ),
+            );
+            return {
+                serializedRequest,
+                estimatedInputTokens: countTokens(serializedRequest),
+                tokenizer: "o200k_base",
+                constraints: checkSerializedRequestConstraints(
+                    serializedRequest,
+                    settings.requestConstraints,
+                ),
+            };
+        },
         complete,
         completeStream,
     };
     return model;
 
-    function buildRequest(params: any): BuildPoolRequest {
-        return async (member) => {
-            const headerResult = await createApiHeaders(member.settings);
-            if (!headerResult.success) return headerResult;
-            return success({ headers: headerResult.data, body: params });
+    // Package the normalized request for the adapter. `stream`/`streamOptions`
+    // only differ between complete() and completeStream().
+    function makeModelRequest(
+        messages: PromptSection[],
+        jsonSchema: CompletionJsonSchema | undefined,
+        stream: boolean,
+        streamOptions?: Record<string, unknown>,
+    ): ModelRequest {
+        rejectCompletionLimits(completionSettings);
+        let requestSettings = completionSettings!;
+        if (
+            adapter.wireApi === "chat_completions" &&
+            isLunaChatModel(settings) &&
+            Array.isArray(jsonSchema)
+        ) {
+            if (
+                requestSettings.reasoning_effort !== undefined &&
+                requestSettings.reasoning_effort !== "none"
+            )
+                throw new Error(
+                    "GPT-6 Luna Chat Completions function calling requires reasoning_effort 'none'",
+                );
+            requestSettings = { ...requestSettings, reasoning_effort: "none" };
+        }
+        return {
+            messages,
+            jsonSchema,
+            completionSettings: requestSettings,
+            providerOutputTokens: settings.requestConstraints?.outputTokens,
+            defaultParams,
+            disableResponseFormat,
+            modelName,
+            stream,
+            streamOptions,
         };
     }
 
-    function getParams(
-        messages: PromptSection[],
-        jsonSchema?: CompletionJsonSchema,
-        additionalParams?: any,
-    ) {
-        const params: any = {
-            ...defaultParams,
-            messages,
-            ...completionSettings,
-            ...additionalParams,
+    function buildRequest(body: unknown): BuildPoolRequest {
+        return async (member) => {
+            const headerResult = await adapter.buildHeaders(member.settings);
+            if (!headerResult.success) return headerResult;
+            return success({ headers: headerResult.data, body });
         };
-        if (jsonSchema !== undefined) {
-            if (disableResponseFormat) {
-                throw new Error(
-                    `Json schema not supported by model '${settings.modelName}'`,
-                );
-            }
-            if (Array.isArray(jsonSchema)) {
-                // function calling
-                params.tools = jsonSchema;
-                params.tool_choice = "required";
-                params.parallel_tool_calls = false;
-            } else {
-                if (params.response_format?.type === "json_object") {
-                    params.response_format = {
-                        type: "json_schema",
-                        json_schema: jsonSchema,
-                    };
-                }
-            }
-        }
-        return params;
     }
+
     async function complete(
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
@@ -626,58 +695,61 @@ function createAzureOpenAIChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params = getParams(messages, jsonSchema);
-        const result = await callJsonApiWithPool(pool, buildRequest(params), {
+        const request = makeModelRequest(messages, jsonSchema, false);
+        const body = adapter.buildRequestBody(request);
+        const result = await callJsonApiWithPool(pool, buildRequest(body), {
             retryPauseMs: settings.retryPauseMs,
             signal,
         });
         if (!result.success) {
             return result;
         }
-        const data = result.data as ChatCompletion;
-        if (!data.choices || data.choices.length === 0) {
-            return error("No choices returned");
+        const data = result.data;
+
+        // Legacy chat_completions gate: empty/missing choices returns before
+        // side effects. Tool-call parse failures happen AFTER side effects.
+        // Only on the default adapter — messages/responses have no `choices`.
+        // Bare `.choices` access: null/undefined body throws TypeError (main).
+        if (adapter.wireApi === "chat_completions") {
+            const choices = (data as { choices?: unknown[] }).choices;
+            if (!choices || choices.length === 0) {
+                return error("No choices returned");
+            }
         }
 
         if (model.completionCallback) {
-            model.completionCallback(params, data);
+            model.completionCallback(body, data);
         }
 
         try {
+            const usage = adapter.extractUsage(data);
             if (settings.enableModelRequestLogging && logFn) {
-                // Log request
+                // Log raw assistant content (not unwrapped tool-call JSON).
+                // Bare choices[0]: null entry TypeErrors inside try (main),
+                // skipping logFn/TokenCounter/usageCallback before parse.
+                const rawContent =
+                    (
+                        data as {
+                            choices: {
+                                message?: { content?: string | null };
+                            }[];
+                        }
+                    ).choices[0].message?.content ?? "";
                 logFn({
                     prompt: messages as PromptSection[],
-                    response: data.choices[0].message?.content ?? "",
-                    tokenUsage: data.usage,
+                    response: rawContent,
+                    tokenUsage: usage,
                     tags: tags,
                 });
             }
-            // track token usage
-            TokenCounter.getInstance().add(data.usage, tags);
-            usageCallback?.(data.usage);
+            // Unconditional — matches pre-adapter TokenCounter/usageCallback
+            // (undefined usage was passed through at runtime).
+            TokenCounter.getInstance().add(usage as CompletionUsageStats, tags);
+            usageCallback?.(usage as CompletionUsageStats);
         } catch {}
 
-        if (Array.isArray(jsonSchema)) {
-            const tool_calls = data.choices[0].message?.tool_calls;
-            if (tool_calls === undefined) {
-                return error("No tool_calls returned");
-            }
-            if (tool_calls.length !== 1) {
-                return error("Invalid number of tool_calls");
-            }
-            const c = tool_calls[0];
-            if (c.type !== "function") {
-                return error("Invalid tool call type");
-            }
-            return success(
-                JSON.stringify({
-                    name: c.function.name,
-                    arguments: JSON.parse(c.function.arguments),
-                }),
-            );
-        }
-        return success(data.choices[0].message?.content ?? "");
+        // Tool-call validation / JSON.parse throw after bookkeeping.
+        return adapter.parseResponse(data, request);
     }
 
     async function completeStream(
@@ -708,11 +780,17 @@ function createAzureOpenAIChatModel(
             }
         });
 
-        const params = getParams(messages, jsonSchema, {
-            stream: true,
-            stream_options: { include_usage: true && !historyIncludesImages },
+        const request = makeModelRequest(messages, jsonSchema, true, {
+            include_usage: true && !historyIncludesImages,
         });
-        const result = await callApiWithPool(pool, buildRequest(params), {
+        const decoder = adapter.createStreamDecoder?.(request);
+        if (decoder === undefined) {
+            return error(
+                `Streaming is not supported by wire-api '${adapter.wireApi}'`,
+            );
+        }
+        const body = adapter.buildRequestBody(request);
+        const result = await callApiWithPool(pool, buildRequest(body), {
             retryPauseMs: settings.retryPauseMs,
             signal,
         });
@@ -742,112 +820,42 @@ function createAzureOpenAIChatModel(
                                 });
                             }
                         } catch {}
-                        if (Array.isArray(jsonSchema)) {
-                            fullResponseText += "}";
-                            yield "}";
+                        const tail = decoder.finish();
+                        if (tail) {
+                            fullResponseText += tail;
+                            yield tail;
                         }
                         break;
                     }
-                    const data = JSON.parse(evt.data) as ChatCompletionChunk;
-                    if (verifyContentSafety(data)) {
-                        if (data.choices && data.choices.length > 0) {
-                            if (Array.isArray(jsonSchema)) {
-                                const delta = data.choices[0].delta.tool_calls;
-                                if (delta) {
-                                    for (const d of delta) {
-                                        if (d.index !== 0) {
-                                            throw new Error(
-                                                "Invalid number of tool_calls",
-                                            );
-                                        }
-                                        if (fullResponseText === "") {
-                                            if (d.type !== "function") {
-                                                throw new Error(
-                                                    "Invalid tool call type",
-                                                );
-                                            }
-                                            if (!d.function.name) {
-                                                throw new Error(
-                                                    "Invalid function name",
-                                                );
-                                            }
-                                            fullResponseText = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
-                                            yield fullResponseText;
-                                        } else {
-                                            const result = d.function.arguments;
-                                            fullResponseText += result;
-                                            yield result;
-                                        }
-                                    }
-                                }
-                            } else {
-                                const delta = data.choices[0].delta.content;
-                                if (delta) {
-                                    fullResponseText += delta;
-                                    yield delta;
-                                }
-                            }
+                    const piece = decoder.push(evt.data);
+                    // Function-calling may emit multiple yields per SSE event
+                    // (including undefined argument tails — legacy coercion).
+                    // Yield texts, then throw piece.error before usage — matches
+                    // legacy mid-loop yield-then-throw (usage skipped on throw).
+                    if (piece.texts !== undefined) {
+                        for (const chunk of piece.texts) {
+                            fullResponseText += chunk as string;
+                            yield chunk as string;
                         }
-                        if (data.usage) {
-                            tokenUsage = data.usage;
-                            try {
-                                // track token usage
-                                TokenCounter.getInstance().add(
-                                    data.usage,
-                                    tags,
-                                );
-                                usageCallback?.(data.usage);
-                            } catch {}
-                        }
+                    } else if (piece.text) {
+                        fullResponseText += piece.text;
+                        yield piece.text;
+                    }
+                    if (piece.error) {
+                        throw piece.error;
+                    }
+                    if (piece.usage) {
+                        tokenUsage = piece.usage;
+                        try {
+                            // track token usage
+                            TokenCounter.getInstance().add(piece.usage, tags);
+                            usageCallback?.(piece.usage);
+                        } catch {}
                     }
                 }
             })(),
         };
         // Stream chunks back
-    }
-
-    function verifyContentSafety(data: ChatCompletionChunk): boolean {
-        data.choices.map((c: ChatCompletionDelta) => {
-            if (c.finish_reason === "content_filter_error") {
-                const err = c.content_filter_results as FilterError;
-                throw new Error(
-                    `There was a content filter error (${err.code}): ${err.message}`,
-                );
-            }
-
-            verifyFilterResults(c.content_filter_results as FilterResult);
-        });
-
-        return true;
-    }
-}
-
-function verifyFilterResults(filterResult: FilterResult) {
-    const filters: string[] = new Array<string>();
-    if (filterResult) {
-        if (filterResult.hate?.filtered) {
-            filters.push("hate");
-        }
-        if (filterResult.self_harm?.filtered) {
-            filters.push("self_harm");
-        }
-        if (filterResult.sexual?.filtered) {
-            filters.push("sexual");
-        }
-        if (filterResult.violence?.filtered) {
-            filters.push("violence");
-        }
-        if (filterResult.protected_material_code?.filtered) {
-            filters.push("protected_material_code");
-        }
-        if (filterResult.protected_material_text?.filtered) {
-            filters.push("protected_material_text");
-        }
-
-        if (filters.length > 0) {
-            const msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
-            throw new Error(`${msg}`);
-        }
     }
 }
 
@@ -917,8 +925,16 @@ export type AzureChatModelName =
     | "GPT_5"
     | "GPT_5_MINI"
     | "GPT_5_NANO"
-    | "GPT_5_CHAT";
+    | "GPT_5_CHAT"
+    | "GPT_4_1"
+    | "GPT_6_LUNA"
+    | "GPT_6_1_SOL"
+    | "GPT_6_1_TERRA";
 
+export const GPT_6_LUNA: AzureChatModelName = "GPT_6_LUNA";
+export const GPT_6_1_SOL: AzureChatModelName = "GPT_6_1_SOL";
+export const GPT_6_1_TERRA: AzureChatModelName = "GPT_6_1_TERRA";
+export const GPT_4_1: AzureChatModelName = "GPT_4_1";
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";
 export const GPT_5_MINI: AzureChatModelName = "GPT_5_MINI";
@@ -929,17 +945,57 @@ export const GPT_5_CHAT: AzureChatModelName = "GPT_5_CHAT";
  * @param apiSettings: settings to use to create the client
  * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
+export type EmbeddingModelOptions = {
+    provider?: "openai" | "azure" | undefined;
+    modelName?: string | undefined;
+    maxBatchSize?: number | undefined;
+    revision?: string | undefined;
+    expectedDimensions?: number | undefined;
+};
+
+function identifyHostedEmbeddingModel(
+    model: TextEmbeddingModel,
+    pool: EndpointPool,
+    dimensions: number | undefined,
+    options: EmbeddingModelOptions | undefined,
+): TextEmbeddingModel {
+    const settings = pool.members[0].settings;
+    const name = options?.modelName ?? settings.modelName ?? pool.modelKey;
+    return identifyEmbeddingModel(model, {
+        provider: settings.provider,
+        model: name,
+        revision: options?.revision ?? "provider-managed-unversioned",
+        dimensions:
+            options?.expectedDimensions ??
+            dimensions ??
+            (name === "text-embedding-3-large" ? 3072 : 1536),
+        pooling: "provider-managed",
+        normalization: "l2",
+        preprocessing:
+            "provider-managed text embedding; deployment identity is configuration-attested",
+        configuration: {
+            model: name,
+            endpoints: pool.members
+                .map((member) => member.settings.endpoint)
+                .sort(),
+        },
+    });
+}
+
 export function createEmbeddingModel(
     endpoint: string,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel;
 export function createEmbeddingModel(
     apiSettings?: ApiSettings | undefined,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel;
 export function createEmbeddingModel(
     apiSettingsOrEndpoint?: ApiSettings | string | undefined,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel {
     let pool: EndpointPool;
     if (typeof apiSettingsOrEndpoint === "object") {
@@ -948,7 +1004,7 @@ export function createEmbeddingModel(
             `custom:${apiSettingsOrEndpoint.provider}`,
         );
     } else {
-        const provider = defaultProvider();
+        const provider = options?.provider ?? defaultProvider();
         pool = getModelPool(
             provider,
             ModelType.Embedding,
@@ -960,12 +1016,21 @@ export function createEmbeddingModel(
     const settings = pool.members[0].settings;
 
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
-    const maxBatchSize = 2048;
+    const maxBatchSize = Math.min(options?.maxBatchSize ?? 2048, 2048);
+    // Trace config overrides of the pool's settings for troubleshooting.
+    if (
+        options?.modelName !== undefined ||
+        options?.maxBatchSize !== undefined
+    ) {
+        debugOpenAI(
+            `Embedding overrides for ${pool.modelKey}: model=${options.modelName ?? settings.modelName}, maxBatchSize=${maxBatchSize}`,
+        );
+    }
     const defaultParams: any =
         settings.provider === "azure"
             ? {}
             : {
-                  model: settings.modelName,
+                  model: options?.modelName ?? settings.modelName,
               };
     if (dimensions && dimensions > 0) {
         defaultParams.dimensions = dimensions;
@@ -975,7 +1040,7 @@ export function createEmbeddingModel(
         generateEmbeddingBatch,
         maxBatchSize,
     };
-    return model;
+    return identifyHostedEmbeddingModel(model, pool, dimensions, options);
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
         if (!input) {
@@ -1008,6 +1073,10 @@ export function createEmbeddingModel(
     }
 
     async function callApi(input: string | string[]): Promise<Result<unknown>> {
+        const inputError = embeddingInputLimitError(input);
+        if (inputError !== undefined) {
+            return error(inputError);
+        }
         const params = {
             ...defaultParams,
             input,
@@ -1200,7 +1269,7 @@ function verifyPromptLength(
     } else if (promptLength > MAX_PROMPT_LENGTH_DEFAULT) {
         // Approx 20K tokens
         const errorMsg = `LARGE REQUEST:\nTotal prompt length ${promptLength} chars. Set AZURE_OPENAI_MAX_CHARS env variable to block.`;
-        console.log(errorMsg);
+        console.warn(errorMsg);
         debugOpenAI(errorMsg);
     }
 }

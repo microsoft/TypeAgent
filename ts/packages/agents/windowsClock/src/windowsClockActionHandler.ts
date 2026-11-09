@@ -276,6 +276,12 @@ export function instantiate(): AppAgent {
                 );
             }
         },
+        async cancelChoice(
+            choiceId: string,
+            context: SessionContext<AgentState>,
+        ) {
+            context.agentContext.choiceManager.cancelChoice(choiceId);
+        },
         async handleChoice(
             choiceId: string,
             response: boolean | number[],

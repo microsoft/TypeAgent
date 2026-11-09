@@ -22,6 +22,18 @@
 
 import type { FlatEnv } from "../types.js";
 import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    parseEmbeddingModels,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
+import {
+    MODEL_REQUEST_CONSTRAINTS_KEY,
+    parseModelRequestConstraints,
+} from "./requestConstraints.js";
+import { SIMPLE_CONFIG_MAPPINGS as MAPPING } from "../mappings.js";
+import {
     isRegion,
     regionFromEnvSuffix,
     regionFromUrl,
@@ -30,13 +42,18 @@ import {
 import {
     AuthMode,
     authModeFromString,
+    DEFAULT_WIRE_API,
+    wireApiFromString,
     Config,
     Deployment,
     DeploymentEndpoint,
     DeploymentMode,
+    type WireApi,
     type AzureOpenAIConfig,
     type EmbeddingConfig,
     type EmbeddingProviderMode,
+    type EmbeddingRuntime,
+    type EmbeddingModality,
 } from "./types.js";
 
 /**
@@ -100,6 +117,8 @@ function makeEndpoint(
     capacity?: number,
     priority?: number,
     tpm?: number,
+    wireApi?: WireApi,
+    model?: string,
 ): DeploymentEndpoint {
     const ep: DeploymentEndpoint = {
         endpoint,
@@ -109,6 +128,12 @@ function makeEndpoint(
         priority: priority ?? defaultPriority(mode),
         ...(capacity !== undefined ? { capacity } : {}),
         ...(tpm !== undefined ? { tpm } : {}),
+        ...(model !== undefined ? { model } : {}),
+        // Collapse explicit default so omit and wireApi:chat_completions
+        // project identically (back-compat flat env).
+        ...(wireApi !== undefined && wireApi !== DEFAULT_WIRE_API
+            ? { wireApi }
+            : {}),
     };
     return ep;
 }
@@ -162,9 +187,25 @@ export function buildConfig(flat: FlatEnv): Config {
     const copilot = buildCopilot(remaining);
     const modelProvider = buildModelProvider(remaining);
     const embedding = buildEmbedding(remaining);
+    const decision = buildDecision(remaining);
+    const requestConstraints = popString(
+        remaining,
+        MODEL_REQUEST_CONSTRAINTS_KEY,
+    );
 
-    return {
+    const embeddingModelsRaw = popString(remaining, EMBEDDING_MODELS_KEY);
+    const defaultEmbeddingModel = popString(
+        remaining,
+        DEFAULT_EMBEDDING_MODEL_KEY,
+    );
+    const config: Config = {
         azureOpenAI,
+        ...(embeddingModelsRaw !== undefined
+            ? { embeddingModels: parseEmbeddingModels(embeddingModelsRaw) }
+            : {}),
+        ...(defaultEmbeddingModel !== undefined
+            ? { defaultEmbeddingModel }
+            : {}),
         ...(openAI ? { openAI } : {}),
         speech,
         maps,
@@ -180,8 +221,18 @@ export function buildConfig(flat: FlatEnv): Config {
         ...(copilot ? { copilot } : {}),
         ...(modelProvider !== undefined ? { modelProvider } : {}),
         ...(embedding ? { embedding } : {}),
+        ...(decision ? { decision } : {}),
+        ...(requestConstraints !== undefined
+            ? {
+                  modelRequestConstraints: parseModelRequestConstraints(
+                      JSON.parse(requestConstraints),
+                  ),
+              }
+            : {}),
         extra: new Map(remaining),
     };
+    resolveEmbeddingConfig(config);
+    return config;
 }
 
 // ----------------------------------------------------------------------------
@@ -250,7 +301,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
     };
     const finalDefaultChat =
         defaultChat ??
-        synthDefault(["gpt_4_o", "gpt_4_1", "gpt_5"]) ??
+        synthDefault(["gpt_6_luna", "gpt_4_o", "gpt_4_1", "gpt_5"]) ??
         synthAnyChat();
     const finalDefaultEmbedding =
         defaultEmbedding ?? synthDefault(["embedding", "embedding_3_large"]);
@@ -319,6 +370,7 @@ function popServiceDefault(
 }
 
 interface PartialEndpoint {
+    model?: string;
     endpoint?: string;
     auth?: AuthMode;
     region?: Region;
@@ -326,16 +378,19 @@ interface PartialEndpoint {
     capacity?: number;
     priority?: number;
     tpm?: number;
+    wireApi?: WireApi;
 }
 
 /** Per-suffix overrides parsed from `AZURE_OPENAI_POOL_<DEPLOYMENT>` JSON. */
 interface PoolOverride {
+    model?: string;
     suffix: string;
     region?: Region;
     mode?: DeploymentMode;
     capacity?: number;
     priority?: number;
     tpm?: number;
+    wireApi?: WireApi;
 }
 
 /**
@@ -372,12 +427,19 @@ function parsePoolOverride(
         ) {
             const o = e as Record<string, unknown>;
             const ov: PoolOverride = { suffix: o.suffix as string };
+            if (typeof o.model === "string") ov.model = o.model;
             if (typeof o.region === "string" && isRegion(o.region))
                 ov.region = o.region as Region;
             if (o.mode === "PTU" || o.mode === "PAYG") ov.mode = o.mode;
             if (typeof o.capacity === "number") ov.capacity = o.capacity;
             if (typeof o.priority === "number") ov.priority = o.priority;
             if (typeof o.tpm === "number") ov.tpm = o.tpm;
+            if (typeof o.wireApi === "string") {
+                const at = wireApiFromString(o.wireApi);
+                if (at !== undefined && at !== DEFAULT_WIRE_API) {
+                    ov.wireApi = at;
+                }
+            }
             out.push(ov);
         }
     }
@@ -458,6 +520,8 @@ function collectDeployments(
                 if (ov.capacity !== undefined) partial.capacity = ov.capacity;
                 if (ov.priority !== undefined) partial.priority = ov.priority;
                 if (ov.tpm !== undefined) partial.tpm = ov.tpm;
+                if (ov.model !== undefined) partial.model = ov.model;
+                if (ov.wireApi !== undefined) partial.wireApi = ov.wireApi;
             }
         }
     }
@@ -508,6 +572,8 @@ function collectDeployments(
                     partial.capacity,
                     partial.priority,
                     partial.tpm,
+                    partial.wireApi,
+                    partial.model,
                 ),
             );
         }
@@ -595,16 +661,17 @@ function buildOpenAIVariant(flat: Map<string, string>, suffix: string) {
 }
 
 function buildSpeech(flat: Map<string, string>) {
-    const keyRaw = popString(flat, "SPEECH_SDK_KEY");
-    const region = popString(flat, "SPEECH_SDK_REGION");
-    const endpoint = popString(flat, "SPEECH_SDK_ENDPOINT");
+    const keyRaw = popString(flat, MAPPING.speechAuth.envVar);
+    const region = popString(flat, MAPPING.speechRegion.envVar);
+    const endpoint = popString(flat, MAPPING.speechEndpoint.envVar);
     if (!region) return undefined;
     if (!isRegion(region)) {
         // Unknown region — leave the keys in `extra` rather than
         // producing a malformed typed object.
-        if (keyRaw !== undefined) flat.set("SPEECH_SDK_KEY", keyRaw);
-        flat.set("SPEECH_SDK_REGION", region);
-        if (endpoint !== undefined) flat.set("SPEECH_SDK_ENDPOINT", endpoint);
+        if (keyRaw !== undefined) flat.set(MAPPING.speechAuth.envVar, keyRaw);
+        flat.set(MAPPING.speechRegion.envVar, region);
+        if (endpoint !== undefined)
+            flat.set(MAPPING.speechEndpoint.envVar, endpoint);
         return undefined;
     }
     return {
@@ -615,22 +682,24 @@ function buildSpeech(flat: Map<string, string>) {
 }
 
 function buildMaps(flat: Map<string, string>) {
-    const clientId = popString(flat, "AZURE_MAPS_CLIENTID");
-    const endpoint = popString(flat, "AZURE_MAPS_ENDPOINT");
+    const clientId = popString(flat, MAPPING.mapsClientId.envVar);
+    const endpoint = popString(flat, MAPPING.mapsEndpoint.envVar);
     if (!clientId || !endpoint) {
-        if (clientId !== undefined) flat.set("AZURE_MAPS_CLIENTID", clientId);
-        if (endpoint !== undefined) flat.set("AZURE_MAPS_ENDPOINT", endpoint);
+        if (clientId !== undefined)
+            flat.set(MAPPING.mapsClientId.envVar, clientId);
+        if (endpoint !== undefined)
+            flat.set(MAPPING.mapsEndpoint.envVar, endpoint);
         return undefined;
     }
     return { clientId, endpoint };
 }
 
 function buildMsGraph(flat: Map<string, string>) {
-    const clientId = popString(flat, "MSGRAPH_APP_CLIENTID");
-    const clientSecret = popString(flat, "MSGRAPH_APP_CLIENTSECRET");
-    const tenantId = popString(flat, "MSGRAPH_APP_TENANTID");
-    const username = popString(flat, "MSGRAPH_APP_USERNAME");
-    const password = popString(flat, "MSGRAPH_APP_PASSWD");
+    const clientId = popString(flat, MAPPING.msGraphClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.msGraphClientSecret.envVar);
+    const tenantId = popString(flat, MAPPING.msGraphTenantId.envVar);
+    const username = popString(flat, MAPPING.msGraphUsername.envVar);
+    const password = popString(flat, MAPPING.msGraphPassword.envVar);
     if (!clientId && !clientSecret && !tenantId) return undefined;
     return {
         clientId: clientId ?? "",
@@ -642,16 +711,19 @@ function buildMsGraph(flat: Map<string, string>) {
 }
 
 function buildGoogleCalendar(flat: Map<string, string>) {
-    const clientId = popString(flat, "GOOGLE_CALENDAR_CLIENT_ID");
-    const clientSecret = popString(flat, "GOOGLE_CALENDAR_CLIENT_SECRET");
+    const clientId = popString(flat, MAPPING.googleCalendarClientId.envVar);
+    const clientSecret = popString(
+        flat,
+        MAPPING.googleCalendarClientSecret.envVar,
+    );
     if (!clientId || !clientSecret) return undefined;
     return { clientId, clientSecret };
 }
 
 function buildSpotify(flat: Map<string, string>) {
-    const clientId = popString(flat, "SPOTIFY_APP_CLI");
-    const clientSecret = popString(flat, "SPOTIFY_APP_CLISEC");
-    const portStr = popString(flat, "SPOTIFY_APP_PORT");
+    const clientId = popString(flat, MAPPING.spotifyClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.spotifyClientSecret.envVar);
+    const portStr = popString(flat, MAPPING.spotifyPort.envVar);
     if (!clientId || !clientSecret) return undefined;
     const port = portStr ? parseInt(portStr, 10) : 9999;
     return {
@@ -662,9 +734,9 @@ function buildSpotify(flat: Map<string, string>) {
 }
 
 function buildWikipedia(flat: Map<string, string>) {
-    const clientId = popString(flat, "WIKIPEDIA_CLIENT_ID");
-    const clientSecret = popString(flat, "WIKIPEDIA_CLIENT_SECRET");
-    const endpoint = popString(flat, "WIKIPEDIA_ENDPOINT");
+    const clientId = popString(flat, MAPPING.wikipediaClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.wikipediaClientSecret.envVar);
+    const endpoint = popString(flat, MAPPING.wikipediaEndpoint.envVar);
     if (!clientId && !clientSecret && !endpoint) return undefined;
     return {
         clientId: clientId ?? "",
@@ -674,20 +746,23 @@ function buildWikipedia(flat: Map<string, string>) {
 }
 
 function buildStorage(flat: Map<string, string>) {
-    const azureAccount = popString(flat, "AZURE_STORAGE_ACCOUNT");
-    const azureContainer = popString(flat, "AZURE_STORAGE_CONTAINER");
+    const azureAccount = popString(flat, MAPPING.azureStorageAccount.envVar);
+    const azureContainer = popString(
+        flat,
+        MAPPING.azureStorageContainer.envVar,
+    );
     const cosmosDbConnectionString = popString(
         flat,
-        "COSMOSDB_CONNECTION_STRING",
+        MAPPING.cosmosDbConnectionString.envVar,
     );
     const mongoDbConnectionString = popString(
         flat,
-        "MONGODB_CONNECTION_STRING",
+        MAPPING.mongoDbConnectionString.envVar,
     );
-    const awsBucket = popString(flat, "AWS_S3_BUCKET_NAME");
-    const awsRegion = popString(flat, "AWS_S3_REGION");
-    const awsAccessKey = popString(flat, "AWS_ACCESS_KEY_ID");
-    const awsSecret = popString(flat, "AWS_SECRET_ACCESS_KEY");
+    const awsBucket = popString(flat, MAPPING.awsStorageBucketName.envVar);
+    const awsRegion = popString(flat, MAPPING.awsStorageRegion.envVar);
+    const awsAccessKey = popString(flat, MAPPING.awsStorageAccessKeyId.envVar);
+    const awsSecret = popString(flat, MAPPING.awsStorageSecretAccessKey.envVar);
 
     const azure =
         azureAccount && azureContainer
@@ -730,7 +805,7 @@ function buildStorage(flat: Map<string, string>) {
 }
 
 function buildVault(flat: Map<string, string>) {
-    const shared = popString(flat, "TYPEAGENT_SHAREDVAULT");
+    const shared = popString(flat, MAPPING.sharedVault.envVar);
     if (!shared) return undefined;
     return { shared };
 }
@@ -819,6 +894,52 @@ function buildAzureAISearch(flat: Map<string, string>) {
     return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function buildDecision(flat: Map<string, string>): Config["decision"] {
+    const provider = popString(flat, "TYPEAGENT_DECISION_PROVIDER");
+    const deploymentKey = popString(
+        flat,
+        "TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY",
+    );
+    const deploymentName = popString(
+        flat,
+        "TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME",
+    );
+    const model = popString(flat, "TYPEAGENT_DECISION_COPILOT_MODEL");
+    if (
+        [provider, deploymentKey, deploymentName, model].every(
+            (v) => v === undefined,
+        )
+    )
+        return undefined;
+    if (
+        provider !== undefined &&
+        provider !== "inherit" &&
+        provider !== "azure" &&
+        provider !== "copilot"
+    )
+        throw new Error("decision.provider must be inherit, azure or copilot");
+    for (const value of [deploymentKey, deploymentName, model]) {
+        if (value !== undefined && !value.trim())
+            throw new Error(
+                "Decision model and deployment names must not be empty",
+            );
+    }
+    return {
+        ...(provider !== undefined ? { provider } : {}),
+        ...(deploymentKey !== undefined || deploymentName !== undefined
+            ? {
+                  azure: {
+                      ...(deploymentKey !== undefined ? { deploymentKey } : {}),
+                      ...(deploymentName !== undefined
+                          ? { deploymentName }
+                          : {}),
+                  },
+              }
+            : {}),
+        ...(model !== undefined ? { copilot: { model } } : {}),
+    };
+}
+
 function buildModelProvider(
     flat: Map<string, string>,
 ): "azure" | "openai" | "ollama" | "copilot" | undefined {
@@ -836,6 +957,7 @@ function buildModelProvider(
 
 function buildCopilot(flat: Map<string, string>) {
     const defaultModel = popString(flat, "COPILOT_DEFAULT_MODEL");
+    const fallbackModelsRaw = popString(flat, "COPILOT_FALLBACK_MODELS");
     const cliPath = popString(flat, "COPILOT_CLI_PATH");
     const cliUrl = popString(flat, "COPILOT_CLI_URL");
     const reasoningEffortRaw = popString(flat, "COPILOT_REASONING_EFFORT");
@@ -850,6 +972,7 @@ function buildCopilot(flat: Map<string, string>) {
 
     if (
         defaultModel === undefined &&
+        fallbackModelsRaw === undefined &&
         cliPath === undefined &&
         cliUrl === undefined &&
         reasoningEffortRaw === undefined &&
@@ -878,9 +1001,27 @@ function buildCopilot(flat: Map<string, string>) {
         enableLogging === undefined
             ? undefined
             : enableLogging === "1" || enableLogging.toLowerCase() === "true";
+    let fallbackModels: string[] | undefined;
+    if (fallbackModelsRaw !== undefined) {
+        try {
+            const parsed: unknown = JSON.parse(fallbackModelsRaw);
+            if (
+                Array.isArray(parsed) &&
+                parsed.every((value) => typeof value === "string")
+            ) {
+                fallbackModels = parsed;
+            }
+        } catch {
+            fallbackModels = fallbackModelsRaw
+                .split(",")
+                .map((value) => value.trim())
+                .filter((value) => value.length > 0);
+        }
+    }
 
     return {
         ...(defaultModel !== undefined ? { defaultModel } : {}),
+        ...(fallbackModels !== undefined ? { fallbackModels } : {}),
         ...(cliPath !== undefined ? { cliPath } : {}),
         ...(cliUrl !== undefined ? { cliUrl } : {}),
         ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
@@ -912,30 +1053,73 @@ function buildReasoning(flat: Map<string, string>) {
 function buildEmbedding(
     flat: Map<string, string>,
 ): EmbeddingConfig | undefined {
-    const providerRaw = popString(flat, "TYPEAGENT_EMBEDDING_PROVIDER");
-    const model = popString(flat, "TYPEAGENT_EMBEDDING_MODEL");
-    const cacheDir = popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR");
-
-    let provider: EmbeddingProviderMode | undefined;
-    if (providerRaw !== undefined) {
-        const v = providerRaw.toLowerCase();
-        if (v === "local" || v === "openai" || v === "azure" || v === "none") {
-            provider = v;
-        } else {
-            // Unknown value — leave it in extra rather than emitting a
-            // malformed typed field.
-            flat.set("TYPEAGENT_EMBEDDING_PROVIDER", providerRaw);
-        }
-    }
-
-    if (provider === undefined && model === undefined && cacheDir === undefined)
-        return undefined;
-
-    return {
-        ...(provider !== undefined ? { provider } : {}),
-        ...(model !== undefined ? { model } : {}),
-        ...(cacheDir !== undefined ? { cacheDir } : {}),
+    const config: EmbeddingConfig = {
+        deployment: popString(flat, "TYPEAGENT_EMBEDDING_DEPLOYMENT"),
+        provider: popString(
+            flat,
+            "TYPEAGENT_EMBEDDING_PROVIDER",
+        )?.toLowerCase() as EmbeddingProviderMode | undefined,
+        model: popString(flat, "TYPEAGENT_EMBEDDING_MODEL"),
+        cacheDir: popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR"),
+        size: popPositiveInt(flat, "TYPEAGENT_EMBEDDING_SIZE"),
+        maxBatchSize: popPositiveInt(
+            flat,
+            "TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE",
+        ),
+        maxPending: popPositiveInt(flat, "TYPEAGENT_EMBEDDING_MAX_PENDING"),
+        runtime: popString(flat, "TYPEAGENT_EMBEDDING_RUNTIME") as
+            | EmbeddingRuntime
+            | undefined,
+        revision: popString(flat, "TYPEAGENT_EMBEDDING_REVISION"),
+        localFilesOnly: popEmbeddingBoolean(flat),
+        modalities: popEmbeddingModalities(flat),
     };
+    validateEmbeddingConfig(config);
+    const defined = Object.fromEntries(
+        Object.entries(config).filter(([, value]) => value !== undefined),
+    );
+    return Object.keys(defined).length > 0 ? defined : undefined;
+}
+
+function popEmbeddingBoolean(flat: Map<string, string>): boolean | undefined {
+    const raw = popString(flat, "TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY");
+    if (raw === undefined) return undefined;
+    if (!["true", "false", "1", "0"].includes(raw)) {
+        throw new Error(
+            "embedding.localFilesOnly (TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY): expected true, false, 1, or 0",
+        );
+    }
+    return raw === "true" || raw === "1";
+}
+
+function popEmbeddingModalities(
+    flat: Map<string, string>,
+): readonly EmbeddingModality[] | undefined {
+    const raw = popString(flat, "TYPEAGENT_EMBEDDING_MODALITIES");
+    if (raw === undefined) return undefined;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        throw new Error(
+            "embedding.modalities (TYPEAGENT_EMBEDDING_MODALITIES): expected a JSON array",
+        );
+    }
+    if (!Array.isArray(parsed)) {
+        throw new Error("embedding.modalities: expected a JSON array");
+    }
+    return parsed as readonly EmbeddingModality[];
+}
+
+function popPositiveInt(
+    flat: Map<string, string>,
+    key: string,
+): number | undefined {
+    const raw = popString(flat, key);
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    if (Number.isFinite(n) && Number.isInteger(n) && n > 0) return n;
+    throw new Error(`${key}: expected a positive finite integer, got "${raw}"`);
 }
 
 // Re-exported helpers for tests / future builders.

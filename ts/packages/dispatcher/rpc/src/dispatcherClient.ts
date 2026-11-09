@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createRpc } from "@typeagent/agent-rpc/rpc";
+import {
+    createRpc,
+    type RpcOptions,
+    type RpcStructuredLogger,
+} from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type {
     ClientIO,
@@ -43,6 +47,15 @@ export interface DispatcherRpcClient {
     notifyRequestCancelled(requestId: string, reason: QueueCancelReason): void;
 }
 
+export interface DispatcherRpcOptions {
+    /**
+     * Propagate the active OTel context across this TypeAgent-owned channel.
+     * Enable only when the destination is the trusted agent-server endpoint.
+     */
+    trustedContextPropagation?: boolean;
+    logger?: RpcStructuredLogger;
+}
+
 type PendingEntry = {
     resolve: (value: CommandResult | undefined) => void;
     reject: (err: unknown) => void;
@@ -55,10 +68,30 @@ type SettledEntry =
 export function createDispatcherRpcClient(
     channel: RpcChannel,
     connectionId?: ConnectionId,
+    options?: DispatcherRpcOptions,
 ): DispatcherRpcClient {
+    const rpcOptions: RpcOptions | undefined =
+        options?.trustedContextPropagation === true ||
+        options?.logger !== undefined
+            ? {
+                  ...(options.trustedContextPropagation === true
+                      ? {
+                            tracing: {
+                                propagateContext: true,
+                            },
+                        }
+                      : {}),
+                  ...(options.logger === undefined
+                      ? {}
+                      : { logger: options.logger }),
+              }
+            : undefined;
     const rpc = createRpc<DispatcherInvokeFunctions, DispatcherCallFunctions>(
         "dispatcher",
         channel,
+        undefined,
+        undefined,
+        rpcOptions,
     );
 
     // requestId → pending submitCommand awaiter (set on submit, resolved by
@@ -177,6 +210,18 @@ export function createDispatcherRpcClient(
         },
         async getAgentSchemas(...args) {
             return rpc.invoke("getAgentSchemas", ...args);
+        },
+        async searchActions(...args) {
+            return rpc.invoke("searchActions", ...args);
+        },
+        async executeAction(...args) {
+            return rpc.invoke("executeAction", ...args);
+        },
+        async continueAction(...args) {
+            return rpc.invoke("continueAction", ...args);
+        },
+        async cancelAction(...args) {
+            return rpc.invoke("cancelAction", ...args);
         },
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);

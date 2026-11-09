@@ -28,6 +28,8 @@ import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
+import { configSetupError, tryReloadConfigKeysSync } from "@typeagent/config";
+import { GRAPH_CONFIG_KEYS } from "./readiness.js";
 import { EventEmitter } from "node:events";
 
 try {
@@ -169,6 +171,10 @@ const invalidSettings: AppSettings = {
 };
 
 function loadMSGraphSettings(envPrefix: string = "MSGRAPH_APP"): AppSettings {
+    // Forked agent processes hold a snapshot of process.env, so re-read the
+    // config files: otherwise settings the user added after startup (and
+    // confirmed with `@config agent refresh`) stay invisible to login.
+    tryReloadConfigKeysSync(GRAPH_CONFIG_KEYS);
     const authModeRaw = (
         process.env[`${envPrefix}_AUTH_MODE`] ?? "browser"
     ).toLowerCase();
@@ -564,7 +570,11 @@ export class GraphClient extends EventEmitter {
 
         const settings = this._settings;
         if (settings === invalidSettings) {
-            throw new Error("Missing graph settings in environment variables");
+            throw configSetupError(
+                "Microsoft Graph is not configured.",
+                ["MSGRAPH_APP_CLIENTID", "MSGRAPH_APP_TENANTID"],
+                "Values come from your app registration in the Azure portal.",
+            );
         }
         if (settings.username && settings.password) {
             return await this.initializeGraphFromUserCred();

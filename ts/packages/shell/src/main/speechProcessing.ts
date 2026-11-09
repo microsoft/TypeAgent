@@ -49,13 +49,12 @@ Only classify statements as questions or requests if they are complete statement
         const apiSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
-            "GPT_5_NANO",
+            "GPT_6_LUNA",
         );
         this.model = openai.createChatModel(
             apiSettings,
             {
                 temperature: 1.0,
-                max_completion_tokens: 8196,
                 response_format: { type: "json_object" },
                 reasoning_effort: "low",
             },
@@ -80,7 +79,13 @@ Only classify statements as questions or requests if they are complete statement
                 30,
             );
 
-            const response = await azoai.translate(speechText);
+            const response = await azoai.translate(speechText, [
+                {
+                    role: "system",
+                    content:
+                        "Aim for approximately 8196 tokens in the final JSON only, excluding reasoning. Preserve the complete processed text even when that needs a longer answer.",
+                },
+            ]);
 
             if (response.success) {
                 return response.data.parameters.processedText;

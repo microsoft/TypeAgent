@@ -40,7 +40,7 @@ To set up the `visualstudio-agent`, follow these steps:
 1. **Install Required Software**:
 
    - Install Visual Studio 2022 (or later) with the **Visual Studio extension development** workload.
-   - Install Node.js (version 20 or later) and pnpm (version 10 or later).
+   - Install the latest Node.js LTS release (recommended; see [supported versions](../../../README.md#setup)) and pnpm (version 10 or later).
 
 2. **Configure Environment Variables**:
 
@@ -62,7 +62,7 @@ To set up the `visualstudio-agent`, follow these steps:
    - Start the TypeAgent agent-server.
    - Ensure `visualstudio-agent` is enabled in your dispatcher configuration.
    - Launch Visual Studio with the VSIX installed.
-   - Open the **TypeAgent Chat** panel in Visual Studio via **View → Other Windows → TypeAgent Chat**.
+   - Open the **TypeAgent Chat** panel in Visual Studio via **View → TypeAgent Chat**.
 
 ## Key Files
 
@@ -76,10 +76,11 @@ packages/agents/visualStudio/
 │   ├── visualStudioSchema.agr         # Grammar rules for action parsing
 │   └── visualStudioManifest.json      # Agent manifest and configuration
 ├── host/
-│   ├── csharp/                        # VSIX project (C# and WPF code)
 │   └── webview/                       # WebView2 chat content (TypeScript + Vite)
 ├── package.json
 └── README.md
+
+dotnet/visualStudioTypeAgent/           # VSIX project (C# and WPF code)
 ```
 
 ### File Responsibilities

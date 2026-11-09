@@ -26,10 +26,10 @@ export async function ensureKeywordExtractorAgent(
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(project, {
-        model: "gpt-4o",
+        model: "gpt-6-luna",
         name: "TypeAgent-AliasKeywordExtractor",
         description: "Auto created Alias Keyword Extractor Agent",
-        temperature: 0.01,
+        temperature: 1,
         instructions: `
 You extract the Keywords identified in the supplied HTML.
 

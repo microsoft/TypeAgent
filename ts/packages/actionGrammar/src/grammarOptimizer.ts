@@ -264,6 +264,12 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
     promoteTailRulesParts: true,
 };
 
+export const nfaCompatibleOptimizations: GrammarOptimizationOptions = {
+    ...recommendedOptimizations,
+    tailFactoring: false,
+    promoteTailRulesParts: false,
+};
+
 /**
  * Run enabled optimization passes against the compiled grammar AST.
  * The returned grammar is semantically equivalent to the input - only the

@@ -52,10 +52,13 @@ param(
     [switch]$SkipTypeAgentCheck,
     # Extra arguments splatted to install-typeagent.ps1 when the agent-server is
     # missing (e.g. @{ Provider = "copilot"; BootstrapPrereqs = $true }).
-    [hashtable]$TypeAgentArgs = @{}
+    [hashtable]$TypeAgentArgs = @{},
+    [ValidateSet("All", "Download", "Install", "Verify")]
+    [string]$Phase = "All"
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "windows-package-trust.ps1")
 
 function Initialize-Log {
     param([string]$Path)
@@ -109,9 +112,14 @@ function Get-BlobFile {
 
     if ($Anonymous) {
         if (-not $BlobBaseUrl) { throw "No -BlobBaseUrl provided for anonymous download." }
+        $baseUri = [uri]$BlobBaseUrl
+        if (-not $baseUri.IsAbsoluteUri -or $baseUri.Scheme -ne "https" -or $baseUri.UserInfo -or $baseUri.Query -or $baseUri.Fragment) {
+            throw "-BlobBaseUrl must be an absolute HTTPS URL without credentials, query, or fragment."
+        }
         $url = "$($BlobBaseUrl.TrimEnd('/'))/$Name"
         Write-Log "Downloading (anonymous) $url"
-        Invoke-WebRequest -Uri $url -OutFile $Destination -UseBasicParsing
+        # Do not allow redirects to downgrade transport or select a different origin.
+        Invoke-WebRequest -Uri $url -OutFile $Destination -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
         return
     }
 
@@ -232,57 +240,81 @@ function Get-PackagePathFromYml {
         Fail "Could not find 'path:' in metadata file $YmlPath."
     }
     $value = $match.Matches[0].Groups[1].Value.Trim().Trim("'`"")
-    if (-not $value) {
-        Fail "Empty 'path:' value in metadata file $YmlPath."
+    if ($value -notmatch '^typeagentshell-[A-Za-z0-9][A-Za-z0-9._-]*-win32-(x64|arm64)-setup\.exe$') {
+        throw "Unsafe or unexpected installer filename in metadata: $value"
     }
     return $value
 }
 
-Initialize-Log -Path $LogPath
+function Assert-ShellMetadataHash {
+    param([string]$YmlPath, [string]$PackagePath)
 
-# The shipped shell is connect-only: it auto-spawns and connects to a separately
-# installed TypeAgent agent-server. Ensure that server is installed first so the
-# shell has something to connect to, mirroring the MSI ordering (agent service
-# before shell). The agent-server install lays down typeagent-serve.mjs at its
-# InstallDir root (see install-typeagent.ps1).
-if (-not $SkipTypeAgentCheck) {
-    $agentServerMarker = Join-Path $env:LOCALAPPDATA "TypeAgent\agent-server\typeagent-serve.mjs"
-    if (Test-Path $agentServerMarker) {
-        Write-Log "Found TypeAgent agent-server at $agentServerMarker."
-    } else {
-        Write-Log "TypeAgent agent-server not found at $agentServerMarker; installing it first via install-typeagent.ps1."
-        $installTypeAgent = Join-Path $PSScriptRoot "install-typeagent.ps1"
-        if (-not (Test-Path $installTypeAgent)) {
-            Fail "Cannot find install-typeagent.ps1 next to install-shell.ps1 to satisfy the agent-server dependency. Re-run with -SkipTypeAgentCheck to bypass."
-        }
-        & $installTypeAgent @TypeAgentArgs
-        if ($LASTEXITCODE -ne 0) {
-            Fail "Agent-server install (install-typeagent.ps1) failed with exit code $LASTEXITCODE; aborting shell install."
-        }
-        if (-not (Test-Path $agentServerMarker)) {
-            Fail "install-typeagent.ps1 completed but agent-server marker still missing at $agentServerMarker."
-        }
-        Write-Log "TypeAgent agent-server installed."
+    $matches = @(Select-String -LiteralPath $YmlPath -Pattern '^sha512:\s*([A-Za-z0-9+/=]+)\s*$')
+    if ($matches.Count -ne 1) { throw "Expected exactly one top-level SHA512 in shell metadata." }
+    $expectedHash = $matches[0].Matches[0].Groups[1].Value
+    $hash = (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA512).Hash
+    $hashBytes = New-Object byte[] 64
+    for ($i = 0; $i -lt 64; $i++) {
+        $hashBytes[$i] = [Convert]::ToByte($hash.Substring($i * 2, 2), 16)
+    }
+    if ([Convert]::ToBase64String($hashBytes) -cne $expectedHash) {
+        throw "Shell package does not match channel SHA512."
     }
 }
 
-if (-not $BlobBaseUrl -and -not $Storage -and -not ($Feed -and $FeedPackage)) {
-    Fail "Provide a shell source: -Storage (with optional -Container), -BlobBaseUrl, or -Feed with -FeedPackage/-Organization."
-}
-
-$arch = Get-Arch
-$channelArch = "$Channel-$arch"
-$ymlName = "$channelArch.yml"
-
-Write-Log "Installing TypeAgent Shell (channel '$Channel', arch '$arch')"
-
 $dest = Join-Path $env:TEMP "typeagent-install-shell"
-if (Test-Path $dest) {
-    Remove-Item -Recurse -Force $dest
-}
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
+$statePath = Join-Path $dest "install-state.json"
 
-try {
+if ($Phase -in @("All", "Download")) {
+    Initialize-Log -Path $LogPath
+} elseif ($LogPath -and -not (Test-Path $LogPath)) {
+    Initialize-Log -Path $LogPath
+}
+
+function Confirm-AgentServer {
+    if ($SkipTypeAgentCheck) {
+        return
+    }
+    $agentServerMarker = Join-Path $env:LOCALAPPDATA "TypeAgent\agent-server\typeagent-serve.mjs"
+    if (Test-Path $agentServerMarker) {
+        Write-Log "Found TypeAgent agent-server at $agentServerMarker."
+        return
+    }
+
+    Write-Log "TypeAgent agent-server not found at $agentServerMarker; installing it first via install-typeagent.ps1."
+    $installTypeAgent = Join-Path $PSScriptRoot "install-typeagent.ps1"
+    if (-not (Test-Path $installTypeAgent)) {
+        Fail "Cannot find install-typeagent.ps1 next to install-shell.ps1 to satisfy the agent-server dependency. Re-run with -SkipTypeAgentCheck to bypass."
+    }
+    & $installTypeAgent @TypeAgentArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Agent-server install (install-typeagent.ps1) failed with exit code $LASTEXITCODE; aborting shell install."
+    }
+    if (-not (Test-Path $agentServerMarker)) {
+        Fail "install-typeagent.ps1 completed but agent-server marker still missing at $agentServerMarker."
+    }
+    Write-Log "TypeAgent agent-server installed."
+}
+
+function Download-ShellPayload {
+    if (-not $BlobBaseUrl -and -not $Storage -and -not ($Feed -and $FeedPackage)) {
+        Fail "Provide a shell source: -Storage (with optional -Container), -BlobBaseUrl, or -Feed with -FeedPackage/-Organization."
+    }
+
+    Confirm-AgentServer
+    $arch = Get-Arch
+    if ($Channel -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') {
+        Fail "Invalid shell channel: $Channel"
+    }
+    $channelArch = "$Channel-$arch"
+    $ymlName = "$channelArch.yml"
+    Write-Log "Downloading TypeAgent Shell (channel '$Channel', arch '$arch')"
+
+    if (Test-Path $dest) {
+        Remove-Item -Recurse -Force $dest
+    }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
     $ymlPath = Join-Path $dest $ymlName
     $script:packagePath = $null
 
@@ -328,6 +360,12 @@ try {
                 }
             }
             if ($script:packagePath -and (Test-Path $script:packagePath)) {
+                $verified = Open-TypeAgentPackage -Path $script:packagePath
+                try {
+                    Assert-ShellMetadataHash -YmlPath $ymlPath -PackagePath $script:packagePath
+                } finally {
+                    $verified.Dispose()
+                }
                 $obtained = $true
                 Write-Log "Shell payload obtained via '$src'."
                 break
@@ -347,26 +385,111 @@ try {
         Fail "Shell package not found after download: $packagePath"
     }
 
-    Write-Log "Running silent install: $packagePath /S"
-    $proc = Start-Process -FilePath $packagePath -ArgumentList "/S" -Wait -PassThru
+    [pscustomobject]@{ packagePath = $packagePath; sha512 = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA512).Hash } |
+        ConvertTo-Json |
+        Set-Content -Path $statePath -Encoding utf8
+    Write-Log "Shell download phase complete."
+}
+
+function Get-DownloadedShellPackage {
+    if (-not (Test-Path $statePath)) {
+        Fail "Shell download state not found at $statePath."
+    }
+    $state = Get-Content -Path $statePath -Raw | ConvertFrom-Json
+    $packagePath = [string]$state.packagePath
+    $expectedDirectory = [IO.Path]::GetFullPath($dest).TrimEnd('\')
+    if (-not $packagePath -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($packagePath)) -ne $expectedDirectory -or
+        [IO.Path]::GetFileName($packagePath) -notmatch '^typeagentshell-[A-Za-z0-9][A-Za-z0-9._-]*-win32-(x64|arm64)-setup\.exe$') {
+        Fail "Saved shell package path is outside the expected download directory or has an invalid filename."
+    }
+    if (-not $packagePath -or -not (Test-Path $packagePath)) {
+        Fail "Downloaded Shell package is missing: $packagePath"
+    }
+    return $packagePath
+}
+
+function Install-ShellPayload {
+    $packagePath = Get-DownloadedShellPackage
+    $lockedPackage = Open-TypeAgentPackage -Path $packagePath
+    try {
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        if (-not $state.sha512 -or (Get-FileHash -LiteralPath $packagePath -Algorithm SHA512).Hash -ne $state.sha512) {
+            throw "Shell package changed after Download; download it again."
+        }
+        Write-Log "Running silent install: $packagePath /S"
+        $proc = Start-Process -FilePath $packagePath -ArgumentList "/S" -Wait -PassThru
+    } finally {
+        $lockedPackage.Dispose()
+    }
     if ($proc.ExitCode -ne 0) {
         Fail "Shell installer exited with code $($proc.ExitCode)."
     }
-
     Write-Log "TypeAgent Shell installed successfully."
+}
 
+function Find-ShellExecutable {
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\typeagentshell\typeagentshell.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\TypeAgent Shell\TypeAgent Shell.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\typeagent-shell\typeagent-shell.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+    $programs = Join-Path $env:LOCALAPPDATA "Programs"
+    if (Test-Path $programs) {
+        return Get-ChildItem -Path $programs -Recurse -File -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "typeagent.*shell|shell.*typeagent" } |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+    return $null
+}
+
+function Verify-ShellInstallation {
+    $exe = Find-ShellExecutable
+    if ($exe) {
+        Write-Log "Verified TypeAgent Shell executable: $exe"
+    } else {
+        Write-Log "WARNING: TypeAgent Shell executable was not found under $env:LOCALAPPDATA\Programs."
+    }
     if (-not $NoStart) {
-        $exe = Join-Path $env:LOCALAPPDATA "Programs\typeagentshell\typeagentshell.exe"
-        if (Test-Path $exe) {
+        if ($exe) {
             Write-Log "Launching TypeAgent Shell."
             Start-Process -FilePath $exe | Out-Null
         } else {
-            Write-Log "Shell executable not found at $exe; skipping launch."
+            Write-Log "Shell executable not found; skipping launch."
         }
     }
+    Write-Log "Shell verification phase complete."
+}
+
+try {
+    switch ($Phase) {
+        "Download" {
+            Download-ShellPayload
+        }
+        "Install" {
+            Install-ShellPayload
+        }
+        "Verify" {
+            Verify-ShellInstallation
+        }
+        "All" {
+            Download-ShellPayload
+            Install-ShellPayload
+            Verify-ShellInstallation
+        }
+    }
+} catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    exit 1
 } finally {
-    if (Test-Path $dest) {
-        Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+    if ($Phase -in @("All", "Verify")) {
+        if (Test-Path $dest) {
+            Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+        }
     }
 }
 

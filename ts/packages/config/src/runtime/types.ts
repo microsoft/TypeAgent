@@ -20,6 +20,7 @@
  */
 
 import type { Region } from "./regions.js";
+import type { ModelRequestConstraints } from "./requestConstraints.js";
 
 /** Authentication mode for an Azure resource. */
 export type AuthMode =
@@ -38,10 +39,37 @@ export function authModeFromString(s: string | undefined): AuthMode {
 /** Whether a deployment is pay-as-you-go or provisioned-throughput. */
 export type DeploymentMode = "PAYG" | "PTU";
 
+/**
+ * Wire protocol / request-response shape a deployment endpoint speaks.
+ * The pool routing layer is unaffected by this — it picks *which*
+ * endpoint to call; `wireApi` then selects the wire-api provider that
+ * encodes the request body/headers and decodes the response.
+ *
+ * - `chat_completions` (default): `/chat/completions` shape TypeAgent
+ *   has always spoken. Omitting `wireApi` is exactly equivalent to this
+ *   value, so existing configs are byte-for-byte unchanged.
+ * - `responses`: `/responses` request/response shape.
+ * - `messages`: `/v1/messages` request/response shape.
+ */
+export type WireApi = "chat_completions" | "responses" | "messages";
+
+/** The wire-api assumed when a deployment/endpoint omits `wireApi`. */
+export const DEFAULT_WIRE_API = "chat_completions" as const satisfies WireApi;
+
+/** Narrow an arbitrary string to a known `WireApi`, else `undefined`. */
+export function wireApiFromString(s: string | undefined): WireApi | undefined {
+    if (s === "chat_completions" || s === "responses" || s === "messages") {
+        return s;
+    }
+    return undefined;
+}
+
 /** A single regional endpoint of an Azure OpenAI deployment. */
 export interface DeploymentEndpoint {
     /** Full chat/completions/embeddings/images URL. */
     readonly endpoint: string;
+    /** Wire model/deployment name for URLs that do not identify a deployment. */
+    readonly model?: string | undefined;
     /** Authentication for this endpoint; falls back to `defaultAuth`. */
     readonly auth: AuthMode;
     /**
@@ -57,6 +85,13 @@ export interface DeploymentEndpoint {
     readonly capacity?: number | undefined;
     /** Declared TPM (for pool routing weight); from legacy POOL override JSON. */
     readonly tpm?: number | undefined;
+    /**
+     * Wire protocol this endpoint speaks. Absent ⇒ `chat_completions`
+     * (see {@link DEFAULT_WIRE_API}); the builder never fabricates this
+     * field for a default endpoint, so the round-trip stays lossless and
+     * pre-existing configs project back to identical env vars.
+     */
+    readonly wireApi?: WireApi | undefined;
 }
 
 /**
@@ -258,10 +293,18 @@ export type ModelProviderMode = "azure" | "openai" | "ollama" | "copilot";
 /**
  * Source of text embeddings, independent of the chat `modelProvider`.
  * - "local": CPU-only transformers.js model bundled with the app.
- * - "openai" / "azure": hosted embedding endpoints.
+ * - "openai" / "azure" / "copilot": hosted embedding endpoints.
  * - "none": embeddings disabled; consumers must degrade gracefully.
  */
-export type EmbeddingProviderMode = "local" | "openai" | "azure" | "none";
+export type EmbeddingProviderMode =
+    | "local"
+    | "openai"
+    | "azure"
+    | "copilot"
+    | "none";
+
+export type EmbeddingRuntime = "minilm" | "embeddinggemma";
+export type EmbeddingModality = "text" | "image";
 
 /**
  * Embedding provider configuration. Kept separate from chat provider
@@ -272,12 +315,50 @@ export type EmbeddingProviderMode = "local" | "openai" | "azure" | "none";
  * local provider) the model and weight cache directory.
  */
 export interface EmbeddingConfig {
+    /** Key of an existing Azure OpenAI deployment pool. */
+    readonly deployment?: string | undefined;
     /** Which embedding provider to use. */
     readonly provider?: EmbeddingProviderMode | undefined;
-    /** Local-provider model id (e.g. `Xenova/all-MiniLM-L6-v2`). */
+    /** Embedding model id (e.g. `text-embedding-3-small`). */
     readonly model?: string | undefined;
+    /** Local model runtime. Omit to retain legacy model-based selection. */
+    readonly runtime?: EmbeddingRuntime | undefined;
+    /** Enabled capabilities, not inferred model capabilities. Must include text. */
+    readonly modalities?: readonly EmbeddingModality[] | undefined;
+    /** Model revision; individual runtimes may require a pinned commit. */
+    readonly revision?: string | undefined;
+    /** Forbid downloads and use pre-staged local weights only. */
+    readonly localFilesOnly?: boolean | undefined;
     /** Directory used to cache / pre-stage local model weights. */
     readonly cacheDir?: string | undefined;
+    /**
+     * Embedding vector size (dimensions). Used to size embedding indexes and,
+     * for named OpenAI/Azure text-embedding-3 profiles, requested from the
+     * endpoint. Named Ada and unknown hosted models only validate output size.
+     */
+    readonly size?: number | undefined;
+    /** Maximum number of inputs per embedding batch. */
+    readonly maxBatchSize?: number | undefined;
+    /** Maximum pending local embedding requests. */
+    readonly maxPending?: number | undefined;
+}
+
+export interface EmbeddingModelDefinition extends EmbeddingConfig {
+    readonly provider: Exclude<EmbeddingProviderMode, "none">;
+    readonly model: string;
+    readonly size: number;
+    readonly modalities: readonly EmbeddingModality[];
+}
+
+export interface DecisionConfig {
+    readonly provider?: "inherit" | "azure" | "copilot" | undefined;
+    readonly azure?:
+        | {
+              readonly deploymentKey?: string | undefined;
+              readonly deploymentName?: string | undefined;
+          }
+        | undefined;
+    readonly copilot?: { readonly model?: string | undefined } | undefined;
 }
 
 export interface ReasoningConfig {
@@ -296,6 +377,8 @@ export interface ReasoningConfig {
 export interface CopilotConfig {
     /** Model id used when `copilot:` is selected with no name. */
     readonly defaultModel?: string | undefined;
+    /** Concrete model ids to try when the requested model is unavailable. */
+    readonly fallbackModels?: readonly string[] | undefined;
     /** Override the auto-detected `copilot` CLI binary path. */
     readonly cliPath?: string | undefined;
     /**
@@ -321,6 +404,13 @@ export interface CopilotConfig {
 
 /** Root typed configuration. */
 export interface Config {
+    readonly embeddingModels?:
+        | Readonly<Record<string, EmbeddingModelDefinition>>
+        | undefined;
+    readonly defaultEmbeddingModel?: string | undefined;
+    readonly modelRequestConstraints?:
+        | ReadonlyMap<string, ModelRequestConstraints>
+        | undefined;
     readonly azureOpenAI: AzureOpenAIConfig;
     readonly openAI?: OpenAIConfig | undefined;
     readonly speech?: SpeechConfig | undefined;
@@ -334,6 +424,7 @@ export interface Config {
     readonly azureFoundry?: AzureFoundryConfig | undefined;
     readonly azureAISearch?: AzureAISearchConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
+    readonly decision?: DecisionConfig | undefined;
     readonly copilot?: CopilotConfig | undefined;
     /**
      * Embedding provider selection, independent of `modelProvider`. When

@@ -39,11 +39,11 @@ echo ""
 # (e.g. `pnpm install` -> EACCES on ts/node_modules).
 echo "Fixing ownership of mounted volume directories..."
 VOLUME_PATHS=(
-    "/home/codespace/.local/share/pnpm"
-    "/home/codespace/.local/share/pnpm/store"
-    "/home/codespace/.claude"
-    "/home/codespace/.copilot"
-    "/home/codespace/.vscode-server"
+    "$HOME/.local/share/pnpm"
+    "$HOME/.local/share/pnpm/store"
+    "$HOME/.claude"
+    "$HOME/.copilot"
+    "$HOME/.vscode-server"
 )
 # Discover the workspace ts/node_modules path dynamically (works for worktrees
 # and for variants that mount the workspace outside /workspaces, e.g. the
@@ -89,7 +89,7 @@ fi
 
 for p in "${VOLUME_PATHS[@]}"; do
     if [[ -e "$p" ]]; then
-        if sudo chown -R codespace:codespace "$p"; then
+        if sudo chown -R "$(id -u):$(id -g)" "$p"; then
             echo "  chowned $p"
         else
             if [[ "$p" == *"/pnpm/store" ]] || [[ "$p" == *"/node_modules" ]]; then
@@ -104,33 +104,6 @@ echo ""
 
 # Navigate to TypeScript workspace
 cd "$TS_DIR"
-
-# Enable pnpm
-echo ""
-echo "Enabling corepack and pnpm..."
-if command -v corepack &> /dev/null; then
-    corepack enable || echo "Warning: corepack enable failed"
-    # Use the pnpm version pinned in package.json (packageManager field)
-    corepack install || echo "Warning: corepack install failed"
-else
-    echo "Warning: corepack not found, checking for pnpm..."
-    if ! command -v pnpm &> /dev/null; then
-        echo "Installing pnpm via npm..."
-        npm install -g pnpm || { echo "Failed to install pnpm"; exit 1; }
-    fi
-fi
-
-# Verify pnpm is available
-if ! command -v pnpm &> /dev/null; then
-    echo "Error: pnpm is not available after setup"
-    exit 1
-fi
-
-echo "pnpm version: $(pnpm --version)"
-
-# Point pnpm store at the Docker named volume so it persists across rebuilds
-pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
-echo "pnpm store-dir: $(pnpm store path)"
 
 echo ""
 echo "Installing system libraries required by TypeAgent..."
@@ -193,6 +166,81 @@ if [[ -z "$CURRENT_GIT_NAME" && -z "$DESIRED_GIT_NAME" ]] || \
     echo "    git config --global user.email \"you@example.com\""
 fi
 
+# Enable pnpm
+echo ""
+echo "Installing pnpm..."
+PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+if [[ "$PACKAGE_MANAGER" != pnpm@* ]]; then
+    echo "Error: package.json packageManager does not specify pnpm: $PACKAGE_MANAGER" >&2
+    exit 1
+fi
+PNPM_VERSION=${PACKAGE_MANAGER#pnpm@}
+PNPM_VERSION=${PNPM_VERSION%%+sha512.*}
+# Ensure npm/pnpm use the host-provided registry inside the container.
+EFFECTIVE_NPM_REGISTRY="${NPM_CONFIG_REGISTRY:-}"
+if [[ -z "$EFFECTIVE_NPM_REGISTRY" ]]; then
+    EFFECTIVE_NPM_REGISTRY=$(npm config get registry 2>/dev/null || true)
+fi
+if [[ -z "$EFFECTIVE_NPM_REGISTRY" ]] || [[ "$EFFECTIVE_NPM_REGISTRY" == "undefined" ]]; then
+    EFFECTIVE_NPM_REGISTRY="https://registry.npmjs.org/"
+fi
+case "$EFFECTIVE_NPM_REGISTRY" in
+    */) ;;
+    *) EFFECTIVE_NPM_REGISTRY="${EFFECTIVE_NPM_REGISTRY}/" ;;
+esac
+export NPM_CONFIG_REGISTRY="$EFFECTIVE_NPM_REGISTRY"
+export npm_config_registry="$EFFECTIVE_NPM_REGISTRY"
+echo "Using npm registry: $EFFECTIVE_NPM_REGISTRY"
+if ! npm config set registry "$EFFECTIVE_NPM_REGISTRY" --global; then
+    echo "  warn: failed to persist npm registry"
+fi
+# Ensure pnpm's expected home/bin paths exist and are on PATH for this script.
+# This avoids global/bin-dir errors in non-interactive shells.
+export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+mkdir -p "$PNPM_HOME/bin"
+export PATH="$PNPM_HOME/bin:$PATH"
+
+if [[ "${TYPEAGENT_USE_COREPACK:-0}" == "1" ]] && command -v corepack &> /dev/null; then
+    corepack enable || echo "Warning: corepack enable failed"
+    # Use the pnpm version pinned in package.json (packageManager field)
+    corepack install || echo "Warning: corepack install failed"
+else
+    if [[ "${TYPEAGENT_USE_COREPACK:-0}" == "1" ]]; then
+        echo "Warning: corepack not found, falling back to npm..."
+    fi
+    echo "Installing pnpm@$PNPM_VERSION via npm..."
+    npm install -g "pnpm@$PNPM_VERSION" --registry "$EFFECTIVE_NPM_REGISTRY" || { echo "Failed to install pnpm@$PNPM_VERSION"; exit 1; }
+    # pnpm setup is interactive-shell oriented and may fail in post-create.
+    # We manage PNPM_HOME/PATH directly in this script instead.
+fi
+
+# Verify pnpm is available
+if ! command -v pnpm &> /dev/null; then
+    echo "Error: pnpm is not available after setup"
+    exit 1
+fi
+
+echo "pnpm version: $(pnpm --version)"
+
+if ! pnpm config set registry "$EFFECTIVE_NPM_REGISTRY" --global; then
+    echo "  warn: failed to persist pnpm registry"
+fi
+echo "pnpm registry: $(pnpm config get registry)"
+
+# Keep PATH stable for later interactive shells as well.
+if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'PNPM_HOME' "$HOME/.bashrc"; then
+    {
+        echo ''
+        echo '# pnpm home (set by TypeAgent post-create)'
+        echo "export PNPM_HOME=$HOME/.local/share/pnpm"
+        echo 'export PATH="$PNPM_HOME/bin:$PATH"'
+    } >> "$HOME/.bashrc"
+fi
+
+# Point pnpm store at the Docker named volume so it persists across rebuilds
+pnpm config set store-dir "$HOME/.local/share/pnpm/store" --global
+echo "pnpm store-dir: $(pnpm store path)"
+
 # Install dependencies
 echo ""
 echo "Installing pnpm dependencies..."
@@ -214,11 +262,12 @@ fi
 # (e.g. apt-get -o hook injection, chown on /etc/shadow).
 echo ""
 echo "Hardening sudo access..."
-SUDOERS_FILE="/etc/sudoers.d/codespace-restricted"
-sudo tee "$SUDOERS_FILE" > /dev/null << 'SUDOERS'
-# Restricted sudo for the codespace user (post-setup hardening).
+CURRENT_USER=$(id -un)
+SUDOERS_FILE="/etc/sudoers.d/${CURRENT_USER}-restricted"
+sudo tee "$SUDOERS_FILE" > /dev/null <<SUDOERS
+# Restricted sudo for the container user (post-setup hardening).
 # Only allow managing the SSH service — nothing else.
-codespace ALL=(root) NOPASSWD: /usr/sbin/service ssh start, \
+$CURRENT_USER ALL=(root) NOPASSWD: /usr/sbin/service ssh start, \
     /usr/sbin/service ssh stop, \
     /usr/sbin/service ssh restart, \
     /usr/sbin/service ssh status, \
@@ -231,8 +280,14 @@ sudo chmod 0440 "$SUDOERS_FILE"
 # Remove the blanket rule that grants unrestricted root.  The common-utils
 # devcontainer feature writes it to /etc/sudoers.d/codespace (filename
 # matches the username).
-if [[ -f /etc/sudoers.d/codespace ]]; then
-    sudo rm /etc/sudoers.d/codespace
+REMOVED_BROAD_RULE=0
+for broad_rule in "/etc/sudoers.d/$CURRENT_USER" /etc/sudoers.d/codespace; do
+    if [[ -f "$broad_rule" ]]; then
+        sudo rm "$broad_rule"
+        REMOVED_BROAD_RULE=1
+    fi
+done
+if [[ $REMOVED_BROAD_RULE -eq 1 ]]; then
     echo "  Removed blanket NOPASSWD:ALL rule"
 fi
 echo "  Sudo restricted to: service ssh/sshd only"

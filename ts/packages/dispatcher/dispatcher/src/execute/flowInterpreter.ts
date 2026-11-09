@@ -8,9 +8,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { type CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { executeAction } from "./actionHandlers.js";
+import { executeAction, executeActions } from "./actionHandlers.js";
 import { toExecutableActions } from "@typeagent/agent-cache";
 import type { FullAction, ParamObjectType } from "@typeagent/agent-cache";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 // ── Flow definition types ────────────────────────────────────────────────────
 
@@ -289,6 +290,11 @@ export async function processFlow(
         let result: ActionResult;
 
         if (step.type === "script") {
+            if (getStructuredExecution(systemContext) !== undefined) {
+                throw new Error(
+                    "Structured flow script steps require a discoverable action contract",
+                );
+            }
             // Script step — execute via PowerShell runner
             displayStatus(
                 `[flow:${flowDef.name}] ${step.id}: powershell script`,
@@ -310,11 +316,52 @@ export async function processFlow(
             };
 
             const [executableAction] = toExecutableActions([action]);
-            result = await executeAction(executableAction, context, stepIndex);
+            if (getStructuredExecution(systemContext) !== undefined) {
+                let observed: ActionResult | undefined;
+                const error = await executeActions(
+                    [executableAction],
+                    undefined,
+                    context,
+                    (observedAction, actionResult) => {
+                        if (observedAction === executableAction) {
+                            observed = actionResult;
+                        }
+                    },
+                    stepIndex,
+                );
+                result =
+                    error !== undefined
+                        ? createActionResultFromError(error.error)
+                        : (observed ??
+                          createActionResultFromError(
+                              "Flow step was not executed",
+                          ));
+                if (
+                    result.error === undefined &&
+                    result.additionalActions !== undefined
+                ) {
+                    // Descendants already ran inside executeActions. Returning
+                    // them from the flow would schedule them a second time.
+                    const settled = { ...result };
+                    delete settled.additionalActions;
+                    result = settled;
+                }
+            } else {
+                result = await executeAction(
+                    executableAction,
+                    context,
+                    stepIndex,
+                );
+            }
         }
 
         const text = extractText(result);
-        const data = tryParseJson(text) ?? text;
+        const data =
+            getStructuredExecution(systemContext) !== undefined &&
+            result.error === undefined &&
+            result.resultValue !== undefined
+                ? result.resultValue
+                : (tryParseJson(text) ?? text);
         stepResults.set(step.id, { actionResult: result, text, data });
 
         if (result.error !== undefined) {

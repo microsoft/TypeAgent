@@ -261,23 +261,6 @@ export interface ExtractionQualityMetrics {
     knowledgeStrategy: "basic" | "hybrid"; // Which strategy was used
 }
 
-/**
- * Batch processing progress information
- */
-export interface BatchProgress {
-    total: number;
-    processed: number;
-    percentage: number;
-    currentItem: string;
-    errors: number;
-    mode: ExtractionMode;
-    intermediateResults?: ExtractionResult[];
-    currentItemChunk?: number;
-    currentItemTotalChunks?: number;
-    itemsCompleted?: number;
-    totalItems?: number;
-}
-
 export interface ChunkProgressInfo {
     itemUrl: string;
     itemIndex: number;
@@ -287,15 +270,6 @@ export interface ChunkProgressInfo {
     totalChunksGlobal: number;
     chunkContent?: string;
     chunkResult?: any;
-}
-
-/**
- * Batch processing error information
- */
-export interface BatchError {
-    item: ExtractionInput;
-    error: Error;
-    timestamp: string;
 }
 
 /**

@@ -16,6 +16,21 @@
 # See packages/config/README.md for full documentation.
 # ──────────────────────────────────────────────────────────────────────
 
+# PowerShell flows need no execution feature flags. The Windows broker runs local
+# code with the current user's privileges only after trusted user authorization.
+# It is NOT a sandbox. Missing or rejected authorization prevents execution.
+# Remembered approvals last only for the current session and exact invocation.
+
+# Native decision provider, independent of chat. "inherit" follows the active
+# provider override, then modelProvider, then Azure; OpenAI/Ollama are unsupported.
+decision:
+  provider: inherit
+  azure:
+    deploymentKey: decision_1 # existing azureOpenAI.deployments pool key
+    deploymentName: decision-1 # exact wire model; not inferred from the key
+  copilot:
+    model: gpt-6-luna-decisions
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure OpenAI                                                    ║
 # ╚═══════════════════════════════════════════════════════════════════╝
@@ -37,38 +52,36 @@ azureOpenAI:
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
   deployments:
-    gpt_4_o:
+    decision_1:
+      endpoints:
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/providers/microsoft/v1/systemone
+          region: eastus
+    gpt_6_luna:
       # Per-deployment defaultCapacity overrides the section-level value.
       # defaultCapacity: 200
       endpoints:
         # PTU (provisioned throughput) endpoints get priority 1 by default.
-        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           mode: PTU
           capacity: 300
 
         # PAYG endpoints get priority 2 by default.  Capacity is optional.
-        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           capacity: 450
 
         # Region is auto-derived from the hostname (e.g. "eastus" from
         # "my-resource-eastus").  Override when the hostname is ambiguous:
-        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           region: eastus2
 
         # Use `capacity: null` to explicitly opt out of capacity
         # inheritance for this endpoint.
-        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           capacity: null
 
         # Per-endpoint auth override (uses an API key instead of identity):
-        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           auth: sk-abc123...
-
-    gpt_4_o_mini:
-      endpoints:
-        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
-          capacity: 2000
-        - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
 
     embedding:
       defaultCapacity: 120
@@ -76,6 +89,10 @@ azureOpenAI:
         - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
           capacity: 115
         - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
+
+    embedding_3_large:
+      endpoints:
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2024-10-21
 
     gpt_image_1_5:
       defaultCapacity: 30
@@ -85,6 +102,38 @@ azureOpenAI:
     # Shorthand: a deployment with a single endpoint can be a bare list.
     gpt_v:
       - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-v/chat/completions?api-version=2025-01-01-preview
+
+    # `wireApi` selects the wire protocol an endpoint speaks. It is
+    # applied *after* the routing pool has picked an endpoint, so it does
+    # not affect priority/capacity/cooldown routing at all. Omit it (as
+    # every deployment above does) to get the default `chat_completions`
+    # shape TypeAgent has always spoken — existing configs are unchanged.
+    # Supported values: chat_completions (default) | responses |
+    # messages.
+    # Generic v1 URLs require the exact wire model/deployment name in `model`.
+    # This deployment appears as GPT_6_1_TERRA in model selection/completions.
+    gpt_6_1_terra:
+      endpoints:
+        - endpoint: https://my-resource-sweden.services.ai.azure.com/openai/v1/responses
+          capacity: 850
+          model: gpt-6.1-terra
+          wireApi: responses
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/openai/v1/responses
+          capacity: 150
+          model: gpt-6.1-terra
+          wireApi: responses
+
+    gpt_5_codex:
+      endpoints:
+        - endpoint: https://my-resource.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
+          region: eastus
+          wireApi: responses
+
+    claude_sonnet:
+      endpoints:
+        - endpoint: https://my-resource.cognitiveservices.azure.com/anthropic/v1/messages?api-version=2025-04-01-preview
+          region: eastus
+          wireApi: messages
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  OpenAI (non-Azure)                                              ║
@@ -97,7 +146,7 @@ openAI:
   apiKey: sk-proj-...
   endpoint: https://api.openai.com/v1/chat/completions
   endpointEmbedding: https://api.openai.com/v1/embeddings
-  model: gpt-4o
+  model: gpt-6-luna
   modelEmbedding: text-embedding-3-small
   organization: org-...
   responseFormat: true
@@ -119,9 +168,10 @@ openAI:
 # ╚═══════════════════════════════════════════════════════════════════╝
 #
 # For machines WITHOUT AI Systems Key Vault access, TypeAgent can run entirely
-# against a local (Ollama) or Copilot-SDK chat backend. The install scripts and
-# MSI generate one of these config.local.yaml shapes automatically via
-# `typeagent-serve.mjs provision --provider ollama|copilot`
+# against a local (Ollama) or Copilot-SDK chat backend. The script installers
+# and provisioning CLI can generate either config.local.yaml shape via
+# `typeagent-serve.mjs provision --provider ollama|copilot`; the MSI exposes
+# Copilot only and selects local embeddings automatically
 # (tools/scripts/generate-selfhost-config.mjs). The blocks below are the
 # equivalent hand-written config; omit the `vault:` section in these modes.
 #
@@ -137,14 +187,17 @@ openAI:
 #   provider: local           # bundled CPU-only model; no GPU / key / network
 #   model: Xenova/all-MiniLM-L6-v2
 #
-# --- Copilot (Copilot SDK chat + local embeddings) -------------------------
+# --- Copilot (Copilot SDK chat + Copilot embeddings) -----------------------
 # modelProvider: copilot
 # copilot:
-#   defaultModel: claude-haiku-4.5   # requires an authenticated `copilot` CLI;
-#                          # fast, non-reasoning default optimized for low
-#                          # latency. Falls back to `auto` if the tenant doesn't
-#                          # offer it. Use a reasoning model (e.g. gpt-5-mini)
-#                          # for higher-quality but slower translation.
+#   defaultModel: gpt-6-luna         # requires an authenticated `copilot` CLI
+#   fallbackModels:                 # after the matching GPT-5.6 tier, use the first available model
+#     - gpt-5.4-mini
+#     - gpt-5-mini
+#     - gpt-5.4
+#   # GPT-6/6.1 Luna, Sol, and Terra requests first try the matching GPT-5.6
+#   # tier when unavailable. This is Copilot model-availability fallback,
+#   # not retry-on-any-error. Azure routing pools do not switch model families.
 #   # Optional: connect to an already-running Copilot CLI server over TCP
 #   # instead of spawning a CLI child per host. Eliminates the one-time
 #   # (multi-second) CLI startup latency. Format: "host:port" / "port".
@@ -152,10 +205,10 @@ openAI:
 #   # server/headless mode first, then point cliUrl at it.
 #   # cliUrl: 127.0.0.1:8123
 # embedding:
-#   provider: local
-#   model: Xenova/all-MiniLM-L6-v2
+#   provider: copilot
+#   model: text-embedding-3-small
 #
-# To use Ollama for embeddings instead of the bundled local model, set
+# To use Ollama for embeddings instead of Copilot, set
 # `embedding.provider: openai` and add
 # `openAI.endpointEmbedding: http://localhost:11434/v1/embeddings` (FULL path)
 # plus `openAI.modelEmbedding: nomic-embed-text`. Set `embedding.provider: none`
@@ -321,7 +374,7 @@ wikipedia:
 
 reasoning:
   timeoutMs: 1200000 # reasoning-loop timeout (0 = disabled)
-  copilotModel: claude-sonnet-4.5 # override default Copilot reasoning model
+  copilotModel: gpt-6-sol # override default Copilot reasoning model
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Embedding provider                                              ║
@@ -342,10 +395,47 @@ reasoning:
 # When omitted, the provider is inferred from the configured embedding
 # endpoints (openAI/azureOpenAI), or disabled if none is present.
 
-embedding:
-  provider: local
-  model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
-  # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
+# Named models merge by alias and field with config.defaults.yaml.
+# Uncomment one selector, and remove any legacy embedding: overrides.
+# defaultEmbeddingModel: local-minilm
+# defaultEmbeddingModel: local-embeddinggemma
+# defaultEmbeddingModel: azure-ada
+# defaultEmbeddingModel: azure-large-1536
+# defaultEmbeddingModel: none
+# No selector preserves existing embedding endpoint/provider inference.
+embeddingModels:
+  azure-ada:
+    provider: azure
+    deployment: embedding # references azureOpenAI.deployments.embedding above
+    model: text-embedding-ada-002 # must match the actual deployment
+    size: 1536
+    modalities: [text]
+  azure-large-1536:
+    provider: azure
+    deployment: embedding_3_large # configure this Azure deployment pool first
+    model: text-embedding-3-large # must match every deployment in the pool
+    size: 1536 # sent as dimensions; requires an API supporting embedding-3
+    modalities: [text]
+  # Equal dimensions do not make Ada and embedding-3 vectors compatible.
+  # Rebuild existing indexes explicitly; never reuse or truncate old vectors.
+  local-minilm:
+    provider: local
+    runtime: minilm
+    model: Xenova/all-MiniLM-L6-v2
+    revision: 751bff37182d3f1213fa05d7196b954e230abad9
+    size: 384
+    modalities: [text]
+    localFilesOnly: true
+  local-embeddinggemma:
+    provider: local
+    runtime: embeddinggemma
+    model: onnx-community/embeddinggemma-2-ONNX
+    revision: daa72c51243991dfcaf9f9137d2c573d8f7790c0
+    size: 768
+    modalities: [text, image]
+    localFilesOnly: true
+    maxBatchSize: 1
+    maxPending: 8
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║
@@ -370,3 +460,62 @@ typeagent:
   feed:
     registry: https://pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/npm/registry/
     scopes: "@typeagent" # comma-separated for multiple scopes
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Telemetry (OpenTelemetry)                                       ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Optional OTel configuration for TypeAgent-owned processes. Every field
+# is optional; env vars (OTEL_* / TYPEAGENT_OTEL_*) always win over YAML.
+#
+#   - otlpEndpoint       fallback endpoint for traces + metrics + logs
+#   - logFile            local JSONL log file; enables the logs signal
+#                        independently of any OTLP endpoint. Leading
+#                        `~`/`~/`/`~\` expands to your home dir. Supports
+#                        `{service}`, `{process}`, `{timestamp}`, and `{pid}`
+#                        placeholders.
+#   - logRetentionBytes  total-size cap in bytes for local JSONL logs in
+#                        the log file's parent directory. On telemetry
+#                        startup, an asynchronous cleanup deletes the
+#                        oldest inactive `.jsonl` files first until the
+#                        total is at or below the cap. Applies only when
+#                        `logFile` is set. Defaults to 524288000
+#                        (500 MiB). Set to 0 to disable cleanup. Env
+#                        override: TYPEAGENT_OTEL_LOG_RETENTION_BYTES.
+#   - debugBridge        copy enabled typeagent:* debug output to OTel logs
+#   - structuredLogs     export privacy-filtered dispatcher lifecycle events
+#   - tracesSampler      one of always_on, always_off, traceidratio,
+#                        parentbased_always_on, parentbased_always_off,
+#                        parentbased_traceidratio
+#   - tracesSamplerArg   required with the ratio samplers (0.0 - 1.0)
+
+# telemetry:
+#   otlpEndpoint: http://localhost:4318
+#   logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#   logRetentionBytes: 524288000
+#   debugBridge: true
+#   structuredLogs: true
+#   tracesSampler: parentbased_traceidratio
+#   tracesSamplerArg: 0.1
+#
+# Local Grafana LGTM sink (managed by `pnpm run telemetry:grafana`).
+#
+# You normally do not edit this section - `pnpm run telemetry:grafana` sets
+# `enabled: "true"` and the stable loopback endpoint while preserving other
+# custom values. The setting remains enabled when LGTM stops, so TypeAgent
+# can start first and export as soon as LGTM becomes available. When enabled
+# it runs alongside any standard backend above (deduplicated when they
+# resolve to the same URL); it becomes the primary exporter when no standard
+# backend is configured.
+#
+# `enabled` is a STRING because the flat env layer drops YAML booleans whose
+# value is `false` — a plain boolean would silently "stick" once enabled.
+
+# telemetry:
+#   local:
+#     enabled: "true"
+#     otlpEndpoint: http://127.0.0.1:24318
+#     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#     logRetentionBytes: 524288000
+#     debugBridge: "true"
+#     structuredLogs: "true"

@@ -11,7 +11,6 @@ import {
     ContentExtractor,
     ExtractionInput,
     ExtractionResult,
-    ExtractionMode,
     PageContent,
     MetaTagCollection,
     ImageInfo,
@@ -19,6 +18,7 @@ import {
     ActionInfo,
     StructuredDataCollection,
 } from "@typeagent/website-memory";
+import type { IngestionMode as ExtractionMode } from "@typeagent/memory-service";
 
 // Re-export types for consumers
 export type {
@@ -109,6 +109,11 @@ export async function processHtmlContent(
     options: ProcessingOptions = {},
     fileMetadata?: FileMetadata,
 ): Promise<WebsiteData> {
+    if (options.mode !== undefined && options.mode !== "content") {
+        throw new Error(
+            "Unsupported processing mode. Only 'content' is supported.",
+        );
+    }
     const config: any = {
         mode: options.mode || "content",
     };
@@ -254,6 +259,11 @@ export async function processHtmlContentEnhanced(
     websiteData: WebsiteData;
     extractionResult: ExtractionResult;
 }> {
+    if (options.mode !== undefined && options.mode !== "content") {
+        throw new Error(
+            "Unsupported processing mode. Only 'content' is supported.",
+        );
+    }
     const config: any = {
         mode: options.mode || "content",
     };

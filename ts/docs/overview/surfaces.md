@@ -73,10 +73,12 @@ plans model to the web.
 
 ### Android
 
-The Android mobile dispatcher agent brings the personal agent to Android
-devices.
+The Android sample apps bring the personal agent to Android devices. Rather
+than relying on a server-side agent, they host their own agent in-process and
+register it with the agent server over the client-agent RPC channel, so the
+app's actions are defined by the device itself.
 
-- Reference: [androidMobile](../agents/androidMobile/overview.md).
+- Reference: [android samples](../../../android/README.md).
 
 ## Programmatic
 

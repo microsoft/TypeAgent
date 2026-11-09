@@ -1,28 +1,46 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
-import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
-import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type {
+    RunbookHostCapabilities,
+    SkillAcquisitionRevisionResponse,
+} from "@typeagent/agent-server-protocol";
 import {
-    AgentServerInvokeFunctions,
     AgentServerChannelName,
+    AgentServerInvokeFunctions,
     DiscoveryChannelName,
-    createDiscoveryHandlers,
     DispatcherConnectOptions,
     JoinConversationResult,
     UserIdentity,
-    getDispatcherChannelName,
+    createDiscoveryHandlers,
     getClientIOChannelName,
+    getDispatcherChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
-import type { Dispatcher } from "agent-dispatcher";
-import type { PortRegistrar } from "agent-dispatcher";
+import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
+import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
+import type {
+    LiveSkillCatalog,
+    SkillAcquirer,
+    SkillAcquisitionResult,
+} from "@typeagent/skill-catalog";
+import type { Dispatcher, PortRegistrar } from "agent-dispatcher";
+import registerDebug from "debug";
+import { protectVisualStudioDiscoveryResponse } from "@typeagent/websocket-utils/visualStudioBridgeAuth";
 import type { ConversationManager } from "./conversationManager.js";
-import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
+import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
 import { getSpeechToken } from "./speechToken.js";
+import { validateStructuredActionJoin } from "./structuredActionBindings.js";
+import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
+
+// Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
+// the socket it would be reported on is already gone. Without a trace, a client
+// agent left behind on the shared dispatcher only shows up much later as a
+// routing failure with nothing pointing back at the cause.
+const debugError = registerDebug("agent-server:connection:error");
 
 /**
  * Per-connection handler signature expected by transports (the WebSocket
@@ -35,9 +53,70 @@ export type ConnectionHandler = (
     closeFn: () => void,
 ) => void;
 
+const MAX_IDENTITY_LENGTH = 64;
+
+/**
+ * Validate an optional client-supplied identity field, falling back to a
+ * server-derived default. The bounds are cheap insurance against a buggy
+ * client filling the group with junk.
+ */
+function checkIdentityField(
+    field: string,
+    value: string | undefined,
+    fallback: string,
+): string {
+    if (value === undefined) {
+        return fallback;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+        throw new Error(`Invalid ${field}: must not be empty`);
+    }
+    if (trimmed.length > MAX_IDENTITY_LENGTH) {
+        throw new Error(
+            `Invalid ${field}: must be at most ${MAX_IDENTITY_LENGTH} characters`,
+        );
+    }
+    return trimmed;
+}
+
+function getSkillMimeType(filePath: string): string {
+    if (filePath.endsWith(".json")) return "application/json";
+    if (filePath.endsWith(".md")) return "text/markdown";
+    if (
+        filePath.endsWith(".txt") ||
+        filePath.endsWith(".agr") ||
+        filePath.endsWith(".ts")
+    ) {
+        return "text/plain";
+    }
+    return "application/octet-stream";
+}
+
+function acquisitionResponse(
+    result: SkillAcquisitionResult,
+): SkillAcquisitionRevisionResponse {
+    const metadata = result.entry.revision.acquisition;
+    if (metadata === undefined) {
+        throw new Error("Acquired skill revision is missing source metadata.");
+    }
+    return {
+        entry: result.entry,
+        revision: result.entry.revision.revision,
+        state: result.entry.state,
+        active: result.entry.active,
+        updated: result.updated,
+        sourceFingerprint: metadata.sourceFingerprint,
+        manifestDigest: metadata.manifestDigest,
+    };
+}
+
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
+    skillCatalog: LiveSkillCatalog;
+    skillAcquirer?: SkillAcquirer;
+    runbookCapabilities?: RunbookHostCapabilities;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -172,6 +251,7 @@ export function createAgentServerConnectionHandler(
 } {
     const {
         conversationManager,
+        skillCatalog,
         shutdown,
         restart,
         isStale,
@@ -181,6 +261,14 @@ export function createAgentServerConnectionHandler(
         onConnect,
         onDisconnect,
     } = deps;
+    const runbooks =
+        deps.runbookCapabilities ?? createRunbookHostCapabilities(deps);
+    const requireSkillAcquirer = () => {
+        if (deps.skillAcquirer === undefined) {
+            throw new Error("Skill acquisition is unavailable on this host.");
+        }
+        return deps.skillAcquirer;
+    };
 
     // Built once from the startup config-drift snapshot (undefined when the
     // local config matches the vault, no vault is configured, or drift
@@ -212,12 +300,16 @@ export function createAgentServerConnectionHandler(
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
+        const joiningConversations = new Set<string>();
+        let disconnected = false;
 
         // Client-hosted agents this connection registered, per conversation.
-        // conversationId → set of agent names. Used to tear them down when the
-        // connection drops so they don't linger on the (longer-lived) shared
-        // dispatcher.
-        const clientAgents = new Map<string, Set<string>>();
+        // Keyed by instance so disconnect removes only this connection's
+        // devices; the channel name lets replacements overlap until commit.
+        const clientAgents = new Map<
+            string,
+            Map<string, { instanceId: string; channelName: string }>
+        >();
 
         // Resolve the conversation a client-agent operation targets. When no id
         // is given, use the single joined conversation; error if there are zero
@@ -256,24 +348,133 @@ export function createAgentServerConnectionHandler(
         let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
+            getSkillLifecycle: (request) => runbooks.getSkillLifecycle(request),
+            changeSkillLifecycle: (request) =>
+                runbooks.changeSkillLifecycle(request),
+            listBindingTargets: (request) =>
+                runbooks.listBindingTargets(request),
+            checkBindingTargets: (request) =>
+                runbooks.checkBindingTargets(request),
+            suggestBindings: (request) => runbooks.suggestBindings(request),
+            listSkills: async (request) => {
+                const entries = await skillCatalog.list();
+                return entries.filter(
+                    (entry) =>
+                        (request?.activeOnly !== true || entry.active) &&
+                        (request?.states === undefined ||
+                            request.states.includes(entry.state)) &&
+                        (request?.scopes === undefined ||
+                            request.scopes.includes(
+                                entry.revision.identity.scope,
+                            )),
+                );
+            },
+            searchSkills: async (request) =>
+                skillCatalog.search({
+                    text: request.query,
+                    ...(request.scopes === undefined
+                        ? {}
+                        : { scopes: request.scopes }),
+                    ...(request.limit === undefined
+                        ? {}
+                        : { limit: request.limit }),
+                }),
+            matchSkillGrammar: async (utterance) =>
+                skillCatalog.routeGrammar(utterance),
+            getSkill: async (request) =>
+                skillCatalog.get(request.identity, request.revision),
+            readSkillFile: async (request) => {
+                const content = await skillCatalog.readFile(
+                    request.identity,
+                    request.revision,
+                    request.path,
+                );
+                return {
+                    content: Buffer.from(content).toString("base64"),
+                    encoding: "base64",
+                    mimeType: getSkillMimeType(request.path),
+                };
+            },
+            publishSkill: async (request) =>
+                skillCatalog.publish({
+                    identity: request.identity,
+                    ...(request.displayName === undefined
+                        ? {}
+                        : { displayName: request.displayName }),
+                    ...(request.description === undefined
+                        ? {}
+                        : { description: request.description }),
+                    schemaFingerprint: request.schemaFingerprint,
+                    files: request.files.map((file) => ({
+                        path: file.path,
+                        content:
+                            file.encoding === "base64"
+                                ? Buffer.from(file.content, "base64")
+                                : file.content,
+                    })),
+                }),
+            changeSkillState: async (request) =>
+                skillCatalog.transition(
+                    request.identity,
+                    request.revision,
+                    request.state,
+                ),
+            activateSkill: async (request) =>
+                skillCatalog.activate(request.identity, request.revision),
+            rollbackSkill: async (request) =>
+                skillCatalog.rollback(request.identity, request.revision),
+            previewSkillAcquisition: async (request) =>
+                requireSkillAcquirer().preview(request),
+            checkSkillUpdate: async (request) => {
+                const check =
+                    await requireSkillAcquirer().checkForUpdate(request);
+                const current = await skillCatalog.get(request.identity);
+                return {
+                    ...check,
+                    ...(current === undefined
+                        ? {}
+                        : { currentState: current.state }),
+                };
+            },
+            acquireAndPublishSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().acquireAndPublish(request),
+                ),
+            updateSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().update(request),
+                ),
+
             joinConversation: async (options?: DispatcherConnectOptions) => {
+                validateStructuredActionJoin(options);
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
+
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
                     await conversationManager.resolveConversationId(
                         options?.conversationId,
                     );
 
-                if (joinedConversations.has(conversationId)) {
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
+                if (
+                    joinedConversations.has(conversationId) ||
+                    joiningConversations.has(conversationId)
+                ) {
                     throw new Error(
                         `Already joined conversation '${conversationId}'. Call leaveConversation() before joining again.`,
                     );
                 }
 
-                // Create conversation-namespaced channels
-                const clientIOChannel = channelProvider.createChannel(
-                    getClientIOChannelName(conversationId),
-                );
+                joiningConversations.add(conversationId);
+                let acquiredConnectionId: string | undefined;
                 try {
+                    const clientIOChannel = channelProvider.createChannel(
+                        getClientIOChannelName(conversationId),
+                    );
                     const clientIORpcClient =
                         createClientIORpcClient(clientIOChannel);
 
@@ -311,6 +512,10 @@ export function createAgentServerConnectionHandler(
                         },
                         options,
                     );
+                    acquiredConnectionId = result.connectionId;
+                    if (disconnected) {
+                        throw new Error("Agent connection is disconnected");
+                    }
 
                     const dispatcherChannel = channelProvider.createChannel(
                         getDispatcherChannelName(conversationId),
@@ -319,6 +524,9 @@ export function createAgentServerConnectionHandler(
                         createDispatcherRpcServer(
                             result.dispatcher,
                             dispatcherChannel,
+                            {
+                                trustedContextPropagation: true,
+                            },
                         );
                     } catch (e) {
                         channelProvider.deleteChannel(
@@ -418,12 +626,27 @@ export function createAgentServerConnectionHandler(
                     if (result.queueSnapshot !== undefined) {
                         joinResult.queueSnapshot = result.queueSnapshot;
                     }
+                    if (result.structuredActions !== undefined) {
+                        joinResult.structuredActions = result.structuredActions;
+                    }
                     return joinResult;
                 } catch (e) {
-                    channelProvider.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
+                    try {
+                        if (acquiredConnectionId !== undefined) {
+                            await conversationManager.leaveConversation(
+                                conversationId,
+                                acquiredConnectionId,
+                            );
+                        }
+                    } finally {
+                        joinedConversations.delete(conversationId);
+                        channelProvider.deleteChannel(
+                            getClientIOChannelName(conversationId),
+                        );
+                    }
                     throw e;
+                } finally {
+                    joiningConversations.delete(conversationId);
                 }
             },
 
@@ -505,67 +728,189 @@ export function createAgentServerConnectionHandler(
                     param.conversationId,
                 );
                 const { name, manifest, agentInterface } = param;
-                if (clientAgents.get(conversationId)?.has(name)) {
-                    throw new Error(
-                        `Client agent '${name}' is already registered on conversation '${conversationId}'`,
-                    );
-                }
-                // Build the rpc proxy on the connection's own channel provider
-                // (the client hosts the real agent via createAgentRpcServer on
-                // the matching agent:<name> channel).
-                const appAgent = await createAgentRpcClient(
-                    name,
-                    channelProvider,
-                    agentInterface,
+                const connectionId =
+                    joinedConversations.get(conversationId)!.connectionId;
+                // No instanceId means a single instance tied to this
+                // connection: it stays distinct from other devices, and does
+                // not survive a reconnect, which is the old behaviour.
+                const instanceId = checkIdentityField(
+                    "instanceId",
+                    param.instanceId,
+                    `connection:${connectionId}`,
                 );
+                const displayName = checkIdentityField(
+                    "displayName",
+                    param.displayName,
+                    name,
+                );
+                const registrationId =
+                    param.registrationId === undefined
+                        ? undefined
+                        : checkIdentityField(
+                              "registrationId",
+                              param.registrationId,
+                              "",
+                          );
+                const channelName =
+                    registrationId === undefined
+                        ? `agent:${name}`
+                        : `agent:${name}:${registrationId}`;
+
+                const registered = clientAgents.get(conversationId);
+                const previous = registered?.get(name);
+                const replacedExistingChannel =
+                    previous?.channelName === channelName;
+                if (replacedExistingChannel) {
+                    // Legacy clients reuse agent:<name>. The current client
+                    // uses a unique registration channel, so its old proxy can
+                    // stay live until the replacement commits.
+                    channelProvider.deleteChannel(channelName);
+                }
+                let proxyCreated = false;
                 try {
+                    // Build the rpc proxy on the connection's own channel
+                    // provider. The client hosts the real agent on the matching
+                    // registration channel.
+                    const appAgent = await createAgentRpcClient(
+                        name,
+                        channelProvider,
+                        agentInterface,
+                        { channelName },
+                    );
+                    proxyCreated = true;
                     await conversationManager.addClientAgent(
                         conversationId,
                         name,
                         manifest,
                         appAgent,
+                        instanceId,
+                        displayName,
+                        connectionId,
+                        param.multiInstance === true,
+                        agentInterface,
                     );
                 } catch (e) {
-                    channelProvider.deleteChannel(`agent:${name}`);
+                    if (proxyCreated || replacedExistingChannel) {
+                        channelProvider.deleteChannel(channelName);
+                    }
+                    if (
+                        replacedExistingChannel &&
+                        previous !== undefined &&
+                        registered !== undefined
+                    ) {
+                        // The client and server have both replaced the old RPC
+                        // channel by this point. If validation rejected the new
+                        // proxy, remove the now-unreachable previous instance.
+                        const removed =
+                            await conversationManager.removeClientAgent(
+                                conversationId,
+                                name,
+                                previous.instanceId,
+                                { ownerConnectionId: connectionId },
+                            );
+                        if (removed) {
+                            registered.delete(name);
+                        }
+                    }
                     throw e;
                 }
-                let set = clientAgents.get(conversationId);
-                if (set === undefined) {
-                    set = new Set();
-                    clientAgents.set(conversationId, set);
+                if (
+                    previous !== undefined &&
+                    previous.channelName !== channelName
+                ) {
+                    channelProvider.deleteChannel(previous.channelName);
                 }
-                set.add(name);
+                let map = clientAgents.get(conversationId);
+                if (map === undefined) {
+                    map = new Map();
+                    clientAgents.set(conversationId, map);
+                }
+                map.set(name, { instanceId, channelName });
             },
             unregisterClientAgent: async (param) => {
                 const conversationId = resolveClientAgentConversation(
                     param.conversationId,
                 );
                 const { name } = param;
-                await conversationManager.removeClientAgent(
-                    conversationId,
-                    name,
-                );
-                channelProvider.deleteChannel(`agent:${name}`);
-                clientAgents.get(conversationId)?.delete(name);
+                const connectionId =
+                    joinedConversations.get(conversationId)!.connectionId;
+                const tracked = clientAgents.get(conversationId)?.get(name);
+                // Fall back to the instance this connection registered. The
+                // ownership check below makes an instanceId naming another
+                // device's instance inert, so a client can never unregister
+                // someone else's agent.
+                const instanceId =
+                    param.instanceId ??
+                    tracked?.instanceId ??
+                    conversationManager.findClientAgentInstance(
+                        conversationId,
+                        name,
+                        connectionId,
+                    );
+                const removed =
+                    instanceId !== undefined &&
+                    (await conversationManager.removeClientAgent(
+                        conversationId,
+                        name,
+                        instanceId,
+                        { ownerConnectionId: connectionId },
+                    ));
+                // The channel and the local entry describe this connection's
+                // one instance, so they go together, and only once that
+                // instance is gone. A call naming another device's instance
+                // removes nothing: dropping the channel would kill our own
+                // live proxy, and dropping the entry would strand our instance
+                // past disconnect. With nothing tracked there is nothing to
+                // protect, so any dangling channel can go.
+                if (removed || tracked === undefined) {
+                    channelProvider.deleteChannel(
+                        tracked?.channelName ?? `agent:${name}`,
+                    );
+                    clientAgents.get(conversationId)?.delete(name);
+                }
             },
         };
 
         // Clean up all conversations on disconnect
         channelProvider.on("disconnect", () => {
+            disconnected = true;
             onDisconnect?.();
             if (staleNotifier !== undefined) {
                 staleNotifiers.delete(staleNotifier);
                 staleNotifier = undefined;
             }
             // Remove client-hosted agents first so they don't linger on the
-            // shared dispatcher after this connection's socket is gone.
-            for (const [conversationId, names] of clientAgents.entries()) {
-                for (const name of names) {
+            // shared dispatcher after this connection's socket is gone. Only
+            // this connection's own instances go, and only if they still name
+            // this connection: a phone that slept may already have reconnected
+            // and re-registered the same instanceId on a live socket.
+            for (const [conversationId, agents] of clientAgents.entries()) {
+                const connectionId =
+                    joinedConversations.get(conversationId)?.connectionId;
+                for (const [
+                    name,
+                    { instanceId, channelName },
+                ] of agents.entries()) {
                     conversationManager
-                        .removeClientAgent(conversationId, name)
-                        .catch(() => {
-                            // Best effort on disconnect
-                        });
+                        .removeClientAgent(conversationId, name, instanceId, {
+                            ownerConnectionId: connectionId,
+                        })
+                        .catch((e) => {
+                            // Best effort on disconnect, but not silent: this
+                            // failing is how a client agent leaks onto the
+                            // shared dispatcher. Not retried on purpose --
+                            // removal is idempotent and ownership-checked, so a
+                            // second attempt could only race a reconnect that
+                            // has legitimately reclaimed the instance.
+                            debugError(
+                                `Failed to remove client agent "${name}" instance ${instanceId} (connection ${connectionId}) from conversation ${conversationId} on disconnect: ${
+                                    e instanceof Error ? e.message : String(e)
+                                }`,
+                            );
+                        })
+                        .finally(() =>
+                            channelProvider.deleteChannel(channelName),
+                        );
                 }
             }
             clientAgents.clear();
@@ -575,8 +920,15 @@ export function createAgentServerConnectionHandler(
             ] of joinedConversations.entries()) {
                 conversationManager
                     .leaveConversation(conversationId, connectionId)
-                    .catch(() => {
-                        // Best effort on disconnect
+                    .catch((e) => {
+                        // Best effort on disconnect, but traced: a conversation
+                        // this connection never leaves keeps its dispatcher
+                        // alive and its idle timer from ever starting.
+                        debugError(
+                            `Failed to leave conversation ${conversationId} for connection ${connectionId} on disconnect: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
                     });
             }
             joinedConversations.clear();
@@ -602,6 +954,7 @@ export function createAgentServerConnectionHandler(
                     // configured; local clients (and a down/absent tunnel) fall
                     // back to localhost. See tunnelResolver.ts.
                     resolveTunnelUrlForDiscovery,
+                    protectVisualStudioDiscoveryResponse,
                 ),
             );
         }

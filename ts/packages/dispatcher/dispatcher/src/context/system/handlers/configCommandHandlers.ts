@@ -13,6 +13,11 @@ import {
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { getActionContext } from "../../../execute/actionContext.js";
 import { emitActionResult } from "../../../execute/actionHandlers.js";
+import { getStructuredExecution } from "../../../structuredAction/executionHooks.js";
+import {
+    ExecutionFailure,
+    nestedSetupUnavailable,
+} from "../../../structuredAction/executionFailure.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import {
@@ -20,7 +25,6 @@ import {
     getChatModelNames,
     getCopilotClient,
     getActiveModelProvider,
-    setActiveModelProvider,
     setEgressSecretRedactionEnabled,
     getRuntimeConfig,
     PROVIDER_MODES,
@@ -37,6 +41,7 @@ import {
     PartialParsedCommandParams,
     ReadinessReport,
     SessionContext,
+    DisplayContent,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -52,6 +57,7 @@ import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 import registerDebug from "debug";
+import { applyModelProviderSelection } from "./modelProviderSelection.js";
 const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
 
 const enum AgentToggle {
@@ -635,6 +641,26 @@ function getAgentReadinessOrThrow(
     return systemContext.agents.getReadiness(name);
 }
 
+export function getManualAgentSetupDisplay(
+    name: string,
+    report: ReadinessReport,
+): DisplayContent {
+    const lines = [
+        `Agent '${name}' needs configuration before it can be used.`,
+    ];
+    if (report.message) lines.push("", report.message);
+    if (report.details) lines.push("", report.details);
+    lines.push(
+        "",
+        `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
+    );
+    return {
+        type: "markdown",
+        content: lines.join("\n"),
+        kind: "warning",
+    };
+}
+
 class AgentSetupCommandHandler implements CommandHandler {
     public readonly description =
         "Run setup for an agent that needs configuration before use";
@@ -653,6 +679,13 @@ class AgentSetupCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
+        if (getStructuredExecution(systemContext) !== undefined) {
+            throw new ExecutionFailure(
+                "unavailable",
+                nestedSetupUnavailable,
+                "unavailable",
+            );
+        }
         const agents = systemContext.agents;
         const name = params.args.agentName;
 
@@ -728,21 +761,10 @@ class AgentSetupCommandHandler implements CommandHandler {
             closeActionContext();
         }
         if (result === undefined) {
-            // Agent reports setup-required but doesn't implement a setup
-            // hook — typically a manual-config case (env vars, files
-            // outside the agent's reach). Show the readiness message as
-            // the primary content and point at @config agent refresh so
-            // the user can re-check after fixing the underlying issue.
-            const lines = [
-                `Agent '${name}' needs configuration before it can be used.`,
-            ];
-            if (report.message) lines.push("", report.message);
-            if (report.details) lines.push("", report.details);
-            lines.push(
-                "",
-                `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
+            context.actionIO.appendDisplay(
+                getManualAgentSetupDisplay(name, report),
+                "block",
             );
-            displayWarn(lines.join("\n"), context);
             return;
         }
         // emitActionResult above already rendered the display content and
@@ -1808,7 +1830,7 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
 
 class ConfigExecutionReasoningModelCommandHandler implements CommandHandler {
     public readonly description =
-        "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.";
+        "Set the Copilot reasoning model (e.g. gpt-6-sol). Omit to show the current value.";
     public readonly parameters = {
         args: {
             model: {
@@ -2293,10 +2315,10 @@ class ConfigModelProviderCommandHandler implements CommandHandler {
 
         // <name>: set active provider.
         const previous = getActiveModelProvider();
-        setActiveModelProvider(name);
-        // Clear cached translators so the next translation picks up the
-        // new provider mapping.
-        context.sessionContext.agentContext.translatorCache.clear();
+        await applyModelProviderSelection(
+            name,
+            context.sessionContext.agentContext,
+        );
 
         const previousLabel = previous ?? "azure (default)";
         displayResult(`Model provider: ${previousLabel} → ${name}`, context);

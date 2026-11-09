@@ -15,8 +15,8 @@ import {
     ObjectFolderSettings,
     createObjectFolder,
 } from "./objectFolder.js";
-import { VectorIndex } from "../vector/vectorIndex.js";
-import { asyncArray } from "../index.js";
+import type { VectorIndex } from "../vector/vectorIndex.js";
+import * as asyncArray from "../arrayAsync.js";
 
 /**
  * EmbeddingFolder stores embeddings in folder, one per file.

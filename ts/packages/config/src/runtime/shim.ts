@@ -17,11 +17,23 @@
  */
 
 import { regionToEnvSuffix } from "./regions.js";
-import type {
+import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
+import {
+    MODEL_REQUEST_CONSTRAINTS_KEY,
+    modelRequestConstraintsToTree,
+} from "./requestConstraints.js";
+import { SIMPLE_CONFIG_MAPPING_LIST } from "../mappings.js";
+import {
     AuthMode,
     Config,
     Deployment,
     DeploymentEndpoint,
+    DEFAULT_WIRE_API,
 } from "./types.js";
 
 /** A flat env-var name → value map. Same shape as `FlatEnv`. */
@@ -34,6 +46,33 @@ export type EnvOutput = Record<string, string>;
  */
 function authToString(auth: AuthMode): string {
     return auth.kind === "identity" ? "identity" : auth.value;
+}
+
+function emitSimpleConfigMappings(config: Config, out: EnvOutput): void {
+    for (const mapping of SIMPLE_CONFIG_MAPPING_LIST) {
+        let value: unknown = config;
+        for (const segment of mapping.configPath.split(".")) {
+            if (
+                value === undefined ||
+                value === null ||
+                typeof value !== "object"
+            ) {
+                value = undefined;
+                break;
+            }
+            value = (value as Record<string, unknown>)[segment];
+        }
+        if (
+            value === undefined ||
+            (mapping.omitEmptyInProjection && value === "")
+        ) {
+            continue;
+        }
+        out[mapping.envVar] =
+            mapping.valueKind === "auth"
+                ? authToString(value as AuthMode)
+                : String(value);
+    }
 }
 
 function emitEndpoint(
@@ -56,12 +95,15 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
                 ? `${regionToEnvSuffix(endpoint.region)}_PTU`
                 : regionToEnvSuffix(endpoint.region);
         emitEndpoint(out, suffix, regionSuffix, endpoint);
-        // Capture capacity/priority/tpm into the legacy POOL override
-        // JSON so unmigrated consumers can still see them.
+        // Capture capacity/priority/tpm/wireApi into the legacy POOL
+        // override JSON so unmigrated consumers can still see them.
         if (
             endpoint.capacity !== undefined ||
             endpoint.tpm !== undefined ||
-            endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2)
+            endpoint.model !== undefined ||
+            endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2) ||
+            (endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API)
         ) {
             const o: Record<string, unknown> = {
                 suffix: `${suffix}_${regionSuffix}`,
@@ -70,7 +112,14 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
             };
             if (endpoint.capacity !== undefined) o.capacity = endpoint.capacity;
             if (endpoint.tpm !== undefined) o.tpm = endpoint.tpm;
+            if (endpoint.model !== undefined) o.model = endpoint.model;
             o.priority = endpoint.priority;
+            if (
+                endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API
+            ) {
+                o.wireApi = endpoint.wireApi;
+            }
             overrides.push(o);
         }
     }
@@ -82,7 +131,9 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
                     "{" +
                     Object.entries(o)
                         .map(([k, v]) =>
-                            typeof v === "string" ? `${k}:${v}` : `${k}:${v}`,
+                            k === "model"
+                                ? `${k}:${JSON.stringify(v)}`
+                                : `${k}:${v}`,
                         )
                         .join(",") +
                     "}",
@@ -98,7 +149,16 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
  * global.
  */
 export function configToEnv(config: Config): EnvOutput {
+    resolveEmbeddingConfig(config);
     const out: EnvOutput = {};
+    if (config.embeddingModels !== undefined)
+        out[EMBEDDING_MODELS_KEY] = JSON.stringify(config.embeddingModels);
+    if (config.defaultEmbeddingModel !== undefined)
+        out[DEFAULT_EMBEDDING_MODEL_KEY] = config.defaultEmbeddingModel;
+    if (config.modelRequestConstraints)
+        out[MODEL_REQUEST_CONSTRAINTS_KEY] = JSON.stringify(
+            modelRequestConstraintsToTree(config.modelRequestConstraints),
+        );
 
     // Azure OpenAI section.
     const ao = config.azureOpenAI;
@@ -138,84 +198,7 @@ export function configToEnv(config: Config): EnvOutput {
         emitDeployment(out, deployment);
     }
 
-    // Speech.
-    if (config.speech) {
-        out.SPEECH_SDK_KEY = authToString(config.speech.auth);
-        out.SPEECH_SDK_REGION = config.speech.region;
-        if (config.speech.endpoint) {
-            out.SPEECH_SDK_ENDPOINT = config.speech.endpoint;
-        }
-    }
-
-    // Maps.
-    if (config.maps) {
-        out.AZURE_MAPS_CLIENTID = config.maps.clientId;
-        out.AZURE_MAPS_ENDPOINT = config.maps.endpoint;
-    }
-
-    // Microsoft Graph.
-    if (config.msGraph) {
-        out.MSGRAPH_APP_CLIENTID = config.msGraph.clientId;
-        out.MSGRAPH_APP_CLIENTSECRET = config.msGraph.clientSecret;
-        out.MSGRAPH_APP_TENANTID = config.msGraph.tenantId;
-        if (config.msGraph.username !== undefined) {
-            out.MSGRAPH_APP_USERNAME = config.msGraph.username;
-        }
-        if (config.msGraph.password !== undefined) {
-            out.MSGRAPH_APP_PASSWD = config.msGraph.password;
-        }
-    }
-
-    // Google Calendar.
-    if (config.googleCalendar) {
-        out.GOOGLE_CALENDAR_CLIENT_ID = config.googleCalendar.clientId;
-        out.GOOGLE_CALENDAR_CLIENT_SECRET = config.googleCalendar.clientSecret;
-    }
-
-    // Spotify.
-    if (config.spotify) {
-        out.SPOTIFY_APP_CLI = config.spotify.clientId;
-        out.SPOTIFY_APP_CLISEC = config.spotify.clientSecret;
-        out.SPOTIFY_APP_PORT = String(config.spotify.port);
-    }
-
-    // Wikipedia.
-    if (config.wikipedia) {
-        if (config.wikipedia.clientId) {
-            out.WIKIPEDIA_CLIENT_ID = config.wikipedia.clientId;
-        }
-        if (config.wikipedia.clientSecret) {
-            out.WIKIPEDIA_CLIENT_SECRET = config.wikipedia.clientSecret;
-        }
-        if (config.wikipedia.endpoint) {
-            out.WIKIPEDIA_ENDPOINT = config.wikipedia.endpoint;
-        }
-    }
-
-    // Storage.
-    if (config.storage.azure) {
-        out.AZURE_STORAGE_ACCOUNT = config.storage.azure.account;
-        out.AZURE_STORAGE_CONTAINER = config.storage.azure.container;
-    }
-    if (config.storage.aws) {
-        out.AWS_S3_BUCKET_NAME = config.storage.aws.bucketName;
-        out.AWS_S3_REGION = config.storage.aws.region;
-        out.AWS_ACCESS_KEY_ID = config.storage.aws.accessKeyId;
-        out.AWS_SECRET_ACCESS_KEY = config.storage.aws.secretAccessKey;
-    }
-    if (config.storage.database?.cosmosDbConnectionString) {
-        out.COSMOSDB_CONNECTION_STRING =
-            config.storage.database.cosmosDbConnectionString;
-    }
-    if (config.storage.database?.mongoDbConnectionString) {
-        out.MONGODB_CONNECTION_STRING =
-            config.storage.database.mongoDbConnectionString;
-    }
-
-    // Vault.
-    if (config.vault?.shared) {
-        out.TYPEAGENT_SHAREDVAULT = config.vault.shared;
-    }
+    emitSimpleConfigMappings(config, out);
 
     // OpenAI (main + named variants like LOCAL).
     if (config.openAI) {
@@ -283,12 +266,51 @@ export function configToEnv(config: Config): EnvOutput {
 
     // Embedding provider selection.
     if (config.embedding) {
+        validateEmbeddingConfig(config.embedding);
+        if (config.embedding.deployment !== undefined)
+            out.TYPEAGENT_EMBEDDING_DEPLOYMENT = config.embedding.deployment;
         if (config.embedding.provider !== undefined)
             out.TYPEAGENT_EMBEDDING_PROVIDER = config.embedding.provider;
         if (config.embedding.model !== undefined)
             out.TYPEAGENT_EMBEDDING_MODEL = config.embedding.model;
         if (config.embedding.cacheDir !== undefined)
             out.TYPEAGENT_EMBEDDING_CACHE_DIR = config.embedding.cacheDir;
+        if (config.embedding.size !== undefined)
+            out.TYPEAGENT_EMBEDDING_SIZE = String(config.embedding.size);
+        if (config.embedding.maxBatchSize !== undefined)
+            out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
+                config.embedding.maxBatchSize,
+            );
+        if (config.embedding.runtime !== undefined)
+            out.TYPEAGENT_EMBEDDING_RUNTIME = config.embedding.runtime;
+        if (config.embedding.modalities !== undefined)
+            out.TYPEAGENT_EMBEDDING_MODALITIES = JSON.stringify(
+                config.embedding.modalities,
+            );
+        if (config.embedding.revision !== undefined)
+            out.TYPEAGENT_EMBEDDING_REVISION = config.embedding.revision;
+        if (config.embedding.localFilesOnly !== undefined)
+            out.TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY = config.embedding
+                .localFilesOnly
+                ? "1"
+                : "0";
+        if (config.embedding.maxPending !== undefined)
+            out.TYPEAGENT_EMBEDDING_MAX_PENDING = String(
+                config.embedding.maxPending,
+            );
+    }
+
+    if (config.decision) {
+        const d = config.decision;
+        if (d.provider !== undefined)
+            out.TYPEAGENT_DECISION_PROVIDER = d.provider;
+        if (d.azure?.deploymentKey !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY = d.azure.deploymentKey;
+        if (d.azure?.deploymentName !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME =
+                d.azure.deploymentName;
+        if (d.copilot?.model !== undefined)
+            out.TYPEAGENT_DECISION_COPILOT_MODEL = d.copilot.model;
     }
 
     // Extra: untyped passthrough. Last so it can override typed values

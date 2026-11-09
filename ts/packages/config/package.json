@@ -39,7 +39,7 @@
     "@azure/keyvault-secrets": "^4.9.0",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -51,6 +51,6 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   }
 }

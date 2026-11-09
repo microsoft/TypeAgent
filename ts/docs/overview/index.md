@@ -96,14 +96,14 @@ User input
 
 ## Major moving parts
 
-| Piece                   | Role                                                | Learn more                                              |
-| ----------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| Dispatcher              | Central routing and orchestration engine.           | [Dispatcher](../architecture/core/dispatcher.md)        |
-| Action grammar          | NFA/DFA matcher compiled from `.agr` grammar files. | [Action grammar](../architecture/core/actionGrammar.md) |
-| Cache                   | Caches action translations to minimize LLM calls.   | [Packages › cache](../packages/index.md)                |
-| Memory (Structured RAG) | Conversational memory with high precision/recall.   | [Memory](../architecture/memory/memory.md)              |
-| Application agents      | The plugins that actually do the work.              | [Agents](../agents/index.md)                            |
-| Shell / CLI             | The Electron shell and console front ends.          | [Packages](../packages/index.md)                        |
+| Piece                   | Role                                                           | Learn more                                              |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
+| Dispatcher              | Central routing and orchestration engine.                      | [Dispatcher](../architecture/core/dispatcher.md)        |
+| Action grammar          | NFA/DFA matcher compiled from `.agr` grammar files.            | [Action grammar](../architecture/core/actionGrammar.md) |
+| Cache                   | Caches action translations to minimize LLM calls.              | [Packages › cache](../packages/index.md)                |
+| Memory (Structured RAG) | Retained evidence, structured recall and maintained knowledge. | [Memory](../architecture/memory/memory.md)              |
+| Application agents      | The plugins that actually do the work.                         | [Agents](../agents/index.md)                            |
+| Shell / CLI             | The Electron shell and console front ends.                     | [Packages](../packages/index.md)                        |
 
 ## Where the code lives
 

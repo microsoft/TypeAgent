@@ -12,6 +12,7 @@ import {
     DispatcherOptions,
 } from "agent-dispatcher";
 import {
+    ExtensionKind,
     InstallSourceConfig,
     InstalledAgentRecord,
     SourceStatus,
@@ -21,19 +22,29 @@ import {
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
+    McpInstallCandidate,
     UpdateResult,
     deriveMatchKind,
 } from "./installSources/config.js";
+import { cleanupOwnedMcpPaths } from "./installSources/mcpRegistryMaterializer.js";
 import {
     createPackageAppAgentProvider,
     AgentSourceGroup,
     AvailableAgentInfo,
+    AgentPackageState,
     InstalledAgentInfo,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
+import {
+    loadAgentGroupCatalog,
+    type AgentGroupCatalog,
+} from "./installSources/agentGroups.js";
+import type { McpServerSourceApi } from "./mcp/mcpAppAgentSource.js";
+import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 
 import fs from "node:fs";
 import path from "node:path";
+import { createMemoryViewPackageManager } from "./memoryViewPackages.js";
 import {
     getInstanceConfigProvider,
     getInstallDir,
@@ -58,11 +69,21 @@ import {
     type InstallSourceFactory,
     type PreviewMatch,
 } from "./installSources/registry.js";
+import { isLegalAgentName } from "./installSources/packageMeta.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { createLimiter } from "@typeagent/common-utils";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:defaultAgentProvider:source");
+
+export function getBundledAppAgentProvider(
+    configName?: string,
+    executionModeOverrides: Parameters<
+        typeof createBundledAppAgentProvider
+    >[1] = {},
+): AppAgentProvider {
+    return createBundledAppAgentProvider(configName, executionModeOverrides);
+}
 
 // The directory under `installDir` that holds every per-agent, version-scoped
 // install root. GC (prune-on-swap + startup orphan sweep) operates
@@ -174,10 +195,13 @@ function isRootReferenced(
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
     configName?: string,
+    executionModeOverrides: Parameters<
+        typeof createBundledAppAgentProvider
+    >[1] = {},
 ): AppAgentProvider[] {
     // The bundled agents are always present as their own static provider.
     const providers: AppAgentProvider[] = [
-        createBundledAppAgentProvider(configName),
+        getBundledAppAgentProvider(configName, executionModeOverrides),
     ];
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"
@@ -260,6 +284,13 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
     configName?: string | undefined;
     // Tunables for the coordinated update/uninstall barrier.
     updateCoordination?: UpdateCoordinationOptions | undefined;
+    mcpDiscovery?:
+        | {
+              workspacePath?: string | undefined;
+              repositoryRoot?: string | undefined;
+              isFolderTrusted?: ((folderPath: string) => boolean) | undefined;
+          }
+        | undefined;
 };
 
 type InstalledAgentSourceForTest = AppAgentSource & {
@@ -374,6 +405,8 @@ export function createDefaultInstalledAgentSource(
     sourceFactory?: InstallSourceFactory,
     /** @internal Test-only store writer for exercising commit failures. */
     storeWriter: typeof writeAgentsJson = writeAgentsJson,
+    /** MCP runtime API shared with this source's per-session @package agent. */
+    mcpSource?: McpServerSourceApi,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
@@ -387,6 +420,10 @@ export function createDefaultInstalledAgentSource(
         );
     }
     const resolvedInstallDir = installDir;
+    const memoryViews = createMemoryViewPackageManager({
+        directory: path.join(installDir, "memory-views"),
+        sources: () => getResolvedInstallSources(instanceConfigs),
+    });
     const sources = getResolvedInstallSources(instanceConfigs);
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall.
@@ -460,6 +497,9 @@ export function createDefaultInstalledAgentSource(
             name,
             loadRecord,
             resolvedInstallDir,
+            record.initiallyDisabled === true
+                ? { defaultEnabled: false }
+                : undefined,
         );
     }
 
@@ -484,6 +524,16 @@ export function createDefaultInstalledAgentSource(
         return provider;
     }
 
+    // Records in `agents.json` whose source could not re-resolve them at startup
+    // (name -> reason), e.g. a catalog entry deleted after the install. Seeding
+    // one must not fail the whole source construction - that makes the host
+    // unstartable over a single stale record - so the name is not vended.
+    //
+    // The record is NOT dropped: unresolvability can be transient (an unreadable
+    // catalog resolves nothing), so it resolves again once its source is fixed;
+    // `@package uninstall` removes it when it is gone for good.
+    const unresolvedRecords = new Map<string, string>();
+
     // Seed active entries from agents.json. One single-agent,
     // single-root provider per record; shared (the same instance) across every
     // connected session.
@@ -491,11 +541,23 @@ export function createDefaultInstalledAgentSource(
         instanceDir,
         options?.configName,
     );
+    const records = new Map(Object.entries(installedRecords));
     for (const [name, record] of Object.entries(installedRecords)) {
-        entries.set(name, {
-            status: "active",
-            provider: buildAgentProvider(name, record),
-        });
+        let provider: AppAgentProvider;
+        try {
+            provider = buildAgentProvider(name, record);
+        } catch (e) {
+            const reason = e instanceof Error ? e.message : String(e);
+            unresolvedRecords.set(name, reason);
+            // Warn on the console, not just the debug trace: this is the only
+            // notice that an installed agent silently went missing.
+            console.warn(
+                `Installed agent '${name}' is not available: ${reason} ` +
+                    `Run '@package uninstall ${name}' to remove it.`,
+            );
+            continue;
+        }
+        entries.set(name, { status: "active", provider });
     }
 
     // Startup orphan sweep: keep only each installed agent's
@@ -856,7 +918,161 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
+    let agentGroups: AgentGroupCatalog | undefined;
+    let agentGroupsError: string | undefined;
+    try {
+        agentGroups = loadAgentGroupCatalog();
+    } catch (e) {
+        agentGroupsError =
+            e instanceof Error
+                ? e.message
+                : `Failed to load agent group catalog: ${String(e)}`;
+        debug(agentGroupsError);
+    }
+
+    const toInstallPreviewMatch = (
+        match: PreviewMatch,
+    ): InstallPreviewMatch => {
+        const preview: {
+            -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
+        } = {
+            source: match.source,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
+            matchKind: deriveMatchKind({
+                matchedByName: match.matchedByName,
+                path: match.candidate.path,
+            }),
+            name: match.name,
+        };
+        if (match.candidate.packageName !== undefined) {
+            preview.packageName = match.candidate.packageName;
+        }
+        if (match.candidate.path !== undefined) {
+            preview.path = match.candidate.path;
+        }
+        if (match.candidate.ref !== undefined) {
+            preview.ref = match.candidate.ref;
+        }
+        if (match.candidate.version !== undefined) {
+            preview.version = match.candidate.version;
+        }
+        return preview;
+    };
+
     const source: InstalledAgentSourceApi = {
+        getAgentPackageState(name: string): AgentPackageState | undefined {
+            if (isBuiltin(name)) {
+                return "bundled";
+            }
+            if (busy.has(name) || entries.get(name)?.status === "removing") {
+                return "transitioning";
+            }
+            if (unresolvedRecords.has(name)) {
+                return "installed-unavailable";
+            }
+            if (entries.get(name)?.status === "active") {
+                return "installed";
+            }
+            if (records.has(name)) {
+                return "installed-unavailable";
+            }
+            return undefined;
+        },
+        async installExpected(
+            nameOrTarget: string,
+            expected: InstallPreviewMatch,
+            issuingController: AppAgentProviderSetController,
+            onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
+        ): Promise<InstallResult> {
+            if (isBuiltin(nameOrTarget)) {
+                throw new Error(
+                    `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
+                );
+            }
+            assertNameFree(nameOrTarget);
+            busy.add(nameOrTarget);
+            let busyName: string | undefined = nameOrTarget;
+            try {
+                const warningSet = new Set<string>();
+                const resolved = await registry.resolveExpected(
+                    nameOrTarget,
+                    expected,
+                    (m) => warningSet.add(m),
+                    onStatus,
+                    abortSignal,
+                );
+                const record: InstalledAgentRecord = {
+                    ...resolved.record,
+                    initiallyDisabled: true,
+                };
+                const name = record.name;
+
+                if (name !== nameOrTarget) {
+                    if (isBuiltin(name)) {
+                        throw new Error(
+                            `Agent '${name}' is built-in and cannot be shadowed by an install`,
+                        );
+                    }
+                    assertNameFree(name);
+                    busy.add(name);
+                    busyName = name;
+                }
+
+                const provider = await buildValidatedAgentProvider(
+                    name,
+                    record,
+                );
+                await limiter(async () => {
+                    registry.assertSourceCurrent(
+                        record.source,
+                        resolved.sourceKind,
+                        resolved.sourceIdentity,
+                        resolved.sourceGeneration,
+                    );
+                    mutateAgentsJson((agents) => {
+                        if (agents[name] !== undefined) {
+                            throw new Error(`Agent '${name}' already exists`);
+                        }
+                        agents[name] = record;
+                    });
+                });
+
+                records.set(name, record);
+                entries.set(name, { status: "active", provider });
+                fanOutAdd(provider, issuingController);
+
+                const result: InstallResult = {
+                    name,
+                    source: record.source,
+                    matchedByName: resolved.matchedByName,
+                };
+                const sourceKind = registry.get(record.source)?.kind;
+                if (sourceKind !== undefined) {
+                    result.sourceKind = sourceKind;
+                }
+                if (resolved.packageName !== undefined) {
+                    result.packageName = resolved.packageName;
+                }
+                if (record.path !== undefined) {
+                    result.path = record.path;
+                }
+                if (record.module !== undefined && record.ref !== undefined) {
+                    result.ref = record.ref;
+                }
+                if (warningSet.size > 0) {
+                    result.warnings = [...warningSet];
+                }
+                return result;
+            } finally {
+                if (busyName !== undefined) {
+                    busy.delete(busyName);
+                }
+                busy.delete(nameOrTarget);
+            }
+        },
         async install(
             nameOrTarget: string,
             ref: string | undefined,
@@ -867,19 +1083,26 @@ export function createDefaultInstalledAgentSource(
         ): Promise<InstallResult> {
             const explicit = ref !== undefined;
             let busyName: string | undefined;
-            // Explicit (two-argument) mode knows the installed name up front, so
-            // fail fast on a built-in / busy / draining name before resolving.
-            if (explicit) {
-                if (isBuiltin(nameOrTarget)) {
-                    throw new Error(
-                        `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
-                    );
-                }
-                assertNameFree(nameOrTarget);
-                busy.add(nameOrTarget);
-                busyName = nameOrTarget;
-            }
+            let requestedNameReserved = false;
             try {
+                // Explicit mode knows the installed name up front. Infer mode
+                // can reserve a legal requested name while its source resolves,
+                // but the final package name is checked after resolution.
+                if (explicit) {
+                    if (isBuiltin(nameOrTarget)) {
+                        throw new Error(
+                            `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
+                        );
+                    }
+                    assertNameFree(nameOrTarget);
+                    busy.add(nameOrTarget);
+                    busyName = nameOrTarget;
+                } else if (isLegalAgentName(nameOrTarget)) {
+                    assertNameFree(nameOrTarget);
+                    busy.add(nameOrTarget);
+                    requestedNameReserved = true;
+                }
+
                 // resolve + materialize is serialized by the registry's limiter.
                 // In infer mode this derives the installed name from the resolved
                 // package; in explicit mode it stamps the supplied name. Collect
@@ -892,23 +1115,27 @@ export function createDefaultInstalledAgentSource(
                     (m) => warningSet.add(m),
                     onStatus,
                     abortSignal,
+                    explicit
+                        ? undefined
+                        : (selected) => {
+                              const name = selected.name;
+                              if (isBuiltin(name)) {
+                                  throw new Error(
+                                      `Agent '${name}' is built-in and cannot be shadowed by an install`,
+                                  );
+                              }
+                              if (
+                                  !requestedNameReserved ||
+                                  name !== nameOrTarget
+                              ) {
+                                  assertNameFree(name);
+                                  busy.add(name);
+                              }
+                              busyName = name;
+                          },
                 );
                 const record = resolved.record;
                 const name = record.name;
-                // Infer (one-argument) mode learns the name only now: run the
-                // same built-in / busy / draining guards on the derived name.
-                // These are synchronous (no await between deriving the name and
-                // reserving it), so a concurrent op cannot slip in.
-                if (!explicit) {
-                    if (isBuiltin(name)) {
-                        throw new Error(
-                            `Agent '${name}' is built-in and cannot be shadowed by an install`,
-                        );
-                    }
-                    assertNameFree(name);
-                    busy.add(name);
-                    busyName = name;
-                }
                 // Build the shared per-agent provider AND structurally validate
                 // its freshly-materialized manifest BEFORE persisting: a
                 // corrupt/unresolvable agent — from
@@ -924,6 +1151,12 @@ export function createDefaultInstalledAgentSource(
                 // install that resolved to the same inferred name) cannot enter
                 // until the first commits, so the existing-agent check catches it.
                 await limiter(async () => {
+                    registry.assertSourceCurrent(
+                        record.source,
+                        resolved.sourceKind,
+                        resolved.sourceIdentity,
+                        resolved.sourceGeneration,
+                    );
                     mutateAgentsJson((agents) => {
                         if (agents[name] !== undefined) {
                             throw new Error(`Agent '${name}' already exists`);
@@ -931,6 +1164,7 @@ export function createDefaultInstalledAgentSource(
                         agents[name] = record;
                     });
                 });
+                records.set(name, record);
                 // Mark the name active so later connects vend it.
                 entries.set(name, { status: "active", provider });
                 // Fan out the add to every connected session — including the
@@ -967,6 +1201,9 @@ export function createDefaultInstalledAgentSource(
                 if (busyName !== undefined) {
                     busy.delete(busyName);
                 }
+                if (requestedNameReserved) {
+                    busy.delete(nameOrTarget);
+                }
             }
         },
         async uninstall(
@@ -992,12 +1229,26 @@ export function createDefaultInstalledAgentSource(
                 }
                 const uninstalledRoot = deletedRecord.installRoot;
 
+                // A record its source could not re-resolve at startup was never
+                // seeded, so nothing is loaded in any session and the barrier
+                // below has no provider to drain. Drop the record directly.
+                if (unresolvedRecords.has(name)) {
+                    mutateAgentsJson((agents) => {
+                        delete agents[name];
+                    });
+                    records.delete(name);
+                    unresolvedRecords.delete(name);
+                    pruneRootIfUnreferenced(uninstalledRoot, name);
+                    onOutcome?.("uninstalled");
+                    return;
+                }
+
                 // Invariant: a recorded name is `active` in this source (a name
                 // mid-teardown — `removing` — was already rejected by
-                // `assertNameFree` above, and every record is seeded active at
-                // construction). Reaching here with no active entry means
-                // `agents.json` and this source's live set disagree, which can
-                // only come from an OUT-OF-BAND mutation of the store: the
+                // `assertNameFree` above, and every resolvable record is seeded
+                // active at construction). Reaching here with no active entry
+                // means `agents.json` and this source's live set disagree, which
+                // can only come from an OUT-OF-BAND mutation of the store: the
                 // instance-dir lock keeps one process per `agents.json`, and both
                 // multi-dispatcher hosts (agent server + web API) run a single
                 // shared source per process, so no concurrent sibling source can
@@ -1042,6 +1293,7 @@ export function createDefaultInstalledAgentSource(
                             mutateAgentsJson((agents) => {
                                 delete agents[name];
                             });
+                            records.delete(name);
                         } else {
                             // Restore both source state and the durable v1 record.
                             // The write is normally idempotent, and also repairs a
@@ -1054,6 +1306,7 @@ export function createDefaultInstalledAgentSource(
                             mutateAgentsJson((agents) => {
                                 agents[name] = deletedRecord;
                             });
+                            records.set(name, deletedRecord);
                         }
                     },
                     finalizeGc: (outcome) => {
@@ -1111,6 +1364,16 @@ export function createDefaultInstalledAgentSource(
                     throw new Error(`Agent '${name}' not found`);
                 }
                 const oldEntry = entries.get(name);
+                // An unresolvable record has no live version to swap out. Report
+                // that instead of the out-of-band store mutation below, which is
+                // a different problem.
+                const unresolvedReason = unresolvedRecords.get(name);
+                if (unresolvedReason !== undefined) {
+                    throw new Error(
+                        `Agent '${name}' could not be loaded from its install source: ${unresolvedReason} ` +
+                            `Fix the source and restart, or run '@package uninstall ${name}' and install it again.`,
+                    );
+                }
                 if (oldEntry?.status !== "active") {
                     throw new Error(
                         `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
@@ -1120,7 +1383,13 @@ export function createDefaultInstalledAgentSource(
                     range,
                 });
                 const resolved = updateResult.record;
-                const record: InstalledAgentRecord = { ...resolved, name };
+                const record: InstalledAgentRecord = {
+                    ...resolved,
+                    name,
+                    ...(existing.initiallyDisabled === true
+                        ? { initiallyDisabled: true }
+                        : {}),
+                };
                 // Persist the v2 record only at the barrier COMMIT (in
                 // `onDecided` below), NOT here: while the swap is in flight the
                 // recorded-current version must stay v1, so a crash mid-swap
@@ -1132,6 +1401,7 @@ export function createDefaultInstalledAgentSource(
                     mutateAgentsJson((agents) => {
                         agents[name] = record;
                     });
+                    records.set(name, record);
                 };
                 // Same-version no-op: a source-owned update that lands on a
                 // byte-identical content-addressed install root means
@@ -1214,6 +1484,7 @@ export function createDefaultInstalledAgentSource(
                             mutateAgentsJson((agents) => {
                                 agents[name] = existing;
                             });
+                            records.set(name, existing);
                         }
                     },
                     finalizeGc: (outcome) => {
@@ -1264,9 +1535,18 @@ export function createDefaultInstalledAgentSource(
                 registry,
                 recordsUsingSource: (sourceName: string) => {
                     const agents = readAgentsJson(instanceDir)?.agents ?? {};
-                    return Object.values(agents)
+                    const agentNames = Object.values(agents)
                         .filter((record) => record.source === sourceName)
                         .map((record) => record.name);
+                    const mcpNames =
+                        mcpSource
+                            ?.listServers()
+                            .filter(
+                                (config) =>
+                                    config.provenance.source === sourceName,
+                            )
+                            .map((config) => config.name) ?? [];
+                    return [...agentNames, ...mcpNames];
                 },
             });
         },
@@ -1323,6 +1603,7 @@ export function createDefaultInstalledAgentSource(
         },
         async listAvailableAgents(opts?: {
             sourceName?: string;
+            type?: ExtensionKind;
         }): Promise<AgentSourceGroup<AvailableAgentInfo>[]> {
             // Source groups for `@package available` and filtered completion in
             // `@package install`.
@@ -1339,25 +1620,39 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    const sourceAgents = (await src.listAgents()).map(
-                        ({
-                            ref,
-                            defaultAgentName,
-                            packageName,
-                            description,
-                        }) => ({
-                            ref,
-                            ...(defaultAgentName !== undefined
-                                ? { defaultAgentName }
-                                : {}),
-                            ...(packageName !== undefined
-                                ? { packageName }
-                                : {}),
-                            ...(description !== undefined
-                                ? { description }
-                                : {}),
-                        }),
-                    );
+                    const sourceAgents = (await src.listAgents())
+                        // A row with no extensionKind is a native agent (the
+                        // historical default); the `--type` filter compares
+                        // against that default so agent-only sources still match
+                        // `--type agent`.
+                        .filter(
+                            (row) =>
+                                opts?.type === undefined ||
+                                (row.extensionKind ?? "agent") === opts.type,
+                        )
+                        .map(
+                            ({
+                                ref,
+                                defaultAgentName,
+                                packageName,
+                                description,
+                                extensionKind,
+                            }) => ({
+                                ref,
+                                ...(defaultAgentName !== undefined
+                                    ? { defaultAgentName }
+                                    : {}),
+                                ...(packageName !== undefined
+                                    ? { packageName }
+                                    : {}),
+                                ...(description !== undefined
+                                    ? { description }
+                                    : {}),
+                                ...(extensionKind !== undefined
+                                    ? { extensionKind }
+                                    : {}),
+                            }),
+                        );
                     if (sourceAgents.length > 0) {
                         groups.push({
                             source: info.name,
@@ -1389,42 +1684,40 @@ export function createDefaultInstalledAgentSource(
             if (result === undefined) {
                 return undefined;
             }
-            const toMatch = (m: PreviewMatch): InstallPreviewMatch => {
-                // The registry only commits to name-vs-ref; the finer label is
-                // derived here from the resolved candidate's own fields.
-                const matchKind = deriveMatchKind({
-                    matchedByName: m.matchedByName,
-                    path: m.candidate.path,
-                });
-                const match: {
-                    -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
-                } = {
-                    source: m.source,
-                    matchKind,
-                    name: m.name,
-                };
-                const sourceKind = registry.get(m.source)?.kind;
-                if (sourceKind !== undefined) {
-                    match.sourceKind = sourceKind;
-                }
-                if (m.candidate.packageName !== undefined) {
-                    match.packageName = m.candidate.packageName;
-                }
-                if (m.candidate.path !== undefined) {
-                    match.path = m.candidate.path;
-                }
-                if (
-                    m.candidate.module !== undefined &&
-                    m.candidate.ref !== undefined
-                ) {
-                    match.ref = m.candidate.ref;
-                }
-                return match;
-            };
             return {
-                winner: toMatch(result.winner),
-                matches: result.matches.map(toMatch),
+                winner: toInstallPreviewMatch(result.winner),
+                matches: result.matches.map(toInstallPreviewMatch),
             };
+        },
+        async resolveMcp(
+            ref: string,
+            sourceName?: string,
+            onStatus?: SourceStatus,
+        ): Promise<McpInstallCandidate[]> {
+            return registry.resolveMcp(ref, sourceName, undefined, onStatus);
+        },
+        async materializeMcp(
+            candidate: McpInstallCandidate,
+            abortSignal?: AbortSignal,
+        ): Promise<NormalizedMcpServerConfig> {
+            return candidate.materialize === undefined
+                ? candidate.config
+                : candidate.materialize(abortSignal);
+        },
+        cleanupMcp(config: NormalizedMcpServerConfig): void {
+            const referencedPaths = new Set(
+                mcpSource
+                    ?.listServers()
+                    .filter((other) => other.id !== config.id)
+                    .flatMap((other) => other.provenance.ownedPaths ?? []) ??
+                    [],
+            );
+            cleanupOwnedMcpPaths(
+                resolvedInstallDir,
+                config.provenance.ownedPaths?.filter(
+                    (ownedPath) => !referencedPaths.has(ownedPath),
+                ),
+            );
         },
         async refresh(sourceName?: string): Promise<void> {
             // Refresh cache-backed source metadata; a fetch failure propagates
@@ -1444,6 +1737,10 @@ export function createDefaultInstalledAgentSource(
             const packageProvider = createPackageAppAgentProvider({
                 appAgentProviderSetController: controller,
                 source,
+                memoryViews,
+                ...(mcpSource === undefined ? {} : { mcpSource }),
+                ...(agentGroups === undefined ? {} : { agentGroups }),
+                ...(agentGroupsError === undefined ? {} : { agentGroupsError }),
             });
             // Torn down before the initial set resolved: a connection disposed
             // while still parked on an in-flight barrier must NOT join the
@@ -1535,13 +1832,30 @@ export function createDefaultInstalledAgentSource(
         // groups into installable summaries the reasoning engine can offer. Never
         // installs; the concrete install path stays behind the `@package` agent.
         async listAvailableAgents(): Promise<InstallableAgentSummary[]> {
-            const groups = await source.listAvailableAgents();
+            // Only native agents are installable through the `@package install`
+            // path today; MCP servers surfaced by an `mcp-config` source route
+            // through the separate MCP store, so exclude them from reasoning's
+            // install suggestions to avoid offering a command that cannot run.
+            const groups = await source.listAvailableAgents({ type: "agent" });
             const summaries: InstallableAgentSummary[] = [];
+            const unavailableNames = new Set(
+                [
+                    ...getBundledAgentNames(options?.configName),
+                    ...entries.keys(),
+                    ...unresolvedRecords.keys(),
+                    ...records.keys(),
+                    ...busy,
+                ].map((name) => name.toLowerCase()),
+            );
             for (const group of groups) {
                 for (const agent of group.agents) {
                     const installName =
                         agent.defaultAgentName ?? agent.packageName;
                     if (installName === undefined) {
+                        continue;
+                    }
+                    // Exclude names already occupied by built-in, active, draining, or unresolved records
+                    if (unavailableNames.has(installName.toLowerCase())) {
                         continue;
                     }
                     summaries.push({

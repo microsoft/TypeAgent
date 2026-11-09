@@ -113,7 +113,7 @@ export function createMongoDBLoggerSink(
     const dbUrl = process.env["MONGODB_CONNECTION_STRING"] ?? null;
     if (dbUrl === null || dbUrl === "") {
         throw new Error(
-            "MONGODB_CONNECTION_STRING environment variable not set",
+            "MongoDB is not configured. Set `storage.database.mongoDbConnectionString` in `ts/config.local.yaml`.",
         );
     }
     return new MongoDBLoggerSink(

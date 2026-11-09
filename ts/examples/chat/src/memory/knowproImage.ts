@@ -24,6 +24,7 @@ import {
 } from "./knowproCommon.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import { ensureDir, getFileName } from "@typeagent/agent-runtime";
+import { createImageEvidenceCommands } from "./imageEvidenceCommands.js";
 
 export type KnowproImageContext = {
     printer: KnowProPrinter;
@@ -45,6 +46,7 @@ export async function createKnowproImageCommands(
     commands.kpImagesSave = imagesSave;
     commands.kpImagesLoad = imagesLoad;
     commands.kpImagesBuildIndex = imagesBuildIndex;
+    createImageEvidenceCommands(kpContext, commands);
 
     function showImagesDef(): CommandMetadata {
         return {

@@ -10,7 +10,7 @@ import {
     removeFile,
     writeJsonFile,
 } from "../objStream.js";
-import { asyncArray } from "../index.js";
+import * as asyncArray from "../arrayAsync.js";
 import {
     createFileNameGenerator,
     generateTimestampString,

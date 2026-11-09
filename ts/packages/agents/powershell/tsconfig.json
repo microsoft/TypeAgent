@@ -4,5 +4,5 @@
     "composite": true
   },
   "include": [],
-  "references": [{ "path": "./src" }]
+  "references": [{ "path": "./src" }, { "path": "./test" }]
 }

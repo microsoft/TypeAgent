@@ -15,6 +15,7 @@ import { ShellSettingManager } from "./shellSettings.js";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { ShellWindow } from "./shellWindow.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
+import { createBrowserControlRpcFacade } from "@typeagent/browser-control-rpc/types";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgent, createShellAgentProvider } from "./agent.js";
@@ -89,6 +90,7 @@ async function initializeDispatcher(
     connect?: number,
     hidden?: boolean,
     idleTimeout?: number,
+    structuredLogs: boolean = false,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -556,7 +558,7 @@ async function initializeDispatcher(
 
             const [
                 {
-                    getDefaultAppAgentSource,
+                    getDefaultAppAgentSources,
                     getDefaultAppAgentProviders,
                     getDefaultConstructionProvider,
                     getIndexingServiceRegistry,
@@ -620,17 +622,24 @@ async function initializeDispatcher(
                         ...getDefaultAppAgentProviders(instanceDir, configName),
                     ],
                     agentInitOptions: {
-                        browser: browserControl.control,
+                        browser: {
+                            browserControl: createBrowserControlRpcFacade(
+                                browserControl.control,
+                            ),
+                        },
                     },
                     portRegistrar,
-                    appAgentSources: [
-                        getDefaultAppAgentSource(instanceDir, { configName }),
-                    ],
+                    appAgentSources: getDefaultAppAgentSources(instanceDir, {
+                        configName,
+                    }),
                     persistSession: true,
                     storageProvider: getFsStorageProvider(),
                     metrics: true,
                     dblogging: true,
                     traceId: getTraceId(),
+                    telemetry: {
+                        structuredLogs,
+                    },
                     indexingServiceRegistry,
                     constructionProvider: getDefaultConstructionProvider(),
                     allowSharedLocalView: ["browser"],
@@ -871,6 +880,7 @@ export function initializeInstance(
     hidden?: boolean,
     idleTimeout?: number,
     _resume?: boolean, // reserved: shell conversation resume not yet implemented
+    structuredLogs: boolean = false,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -980,6 +990,7 @@ export function initializeInstance(
         connect,
         hidden,
         idleTimeout,
+        structuredLogs,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

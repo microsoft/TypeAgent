@@ -213,6 +213,12 @@ export abstract class ExtensionServiceBase {
                 limit: 50,
                 minScore: filters.minRelevance || 0.3,
                 domain: filters.domain,
+                source:
+                    filters.sourceType === "bookmarks"
+                        ? "bookmark"
+                        : filters.sourceType,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo,
             },
         })) as any;
 
@@ -228,7 +234,7 @@ export abstract class ExtensionServiceBase {
 
     async indexPageContent(
         url: string,
-        mode: string,
+        mode: "content",
         extractedKnowledge?: any,
     ): Promise<any> {
         const message: any = {
@@ -246,7 +252,7 @@ export abstract class ExtensionServiceBase {
 
     async extractPageKnowledge(
         url: string,
-        mode: string,
+        mode: "content",
         extractionSettings: any,
     ): Promise<any> {
         return this.sendMessage({
@@ -294,7 +300,7 @@ export abstract class ExtensionServiceBase {
         url: string,
         title: string,
         extractedKnowledge: any,
-        mode?: string,
+        mode?: "content",
         timestamp?: string,
     ): Promise<any> {
         return this.sendMessage({
@@ -399,17 +405,6 @@ export abstract class ExtensionServiceBase {
     async rebuildKnowledgeGraph(): Promise<any> {
         return this.sendMessage({
             type: "rebuildKnowledgeGraph",
-        });
-    }
-
-    async mergeTopicHierarchies(): Promise<{
-        success: boolean;
-        mergeCount: number;
-        message?: string;
-        error?: string;
-    }> {
-        return this.sendMessage({
-            type: "mergeTopicHierarchies",
         });
     }
 
@@ -578,7 +573,7 @@ export abstract class ExtensionServiceBase {
             parameters: {
                 ...options, // TODO: remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object
                 importId,
-                totalItems: 0,
+                totalItems: options.limit ?? 0,
                 progressCallback: true,
             },
         });

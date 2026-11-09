@@ -7,24 +7,87 @@
  * directly — skipping the Copilot LLM entirely.
  */
 
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import type { Dispatcher } from "@typeagent/agent-server-client";
-import { awaitCommand } from "@typeagent/dispatcher-types";
+import { awaitCommand, type CommandResult } from "@typeagent/dispatcher-types";
+import { emitProgress } from "../shared/hook-progress.js";
 import {
     collectMessage,
     extractMessageText,
 } from "../shared/message-formatter.js";
 import {
-    createClientIO,
     connectToTypeAgent,
+    createClientIO,
+    formatPendingNaturalLanguageInteraction,
 } from "../shared/typeagent-client.js";
-import { emitProgress } from "../shared/hook-progress.js";
-import type { HookInput, HookOutput } from "./types.js";
 
-export async function handleDirect(input: HookInput): Promise<HookOutput> {
-    emitProgress("Routing to TypeAgent...", { temporary: true });
+export interface DirectHandlingOptions {
+    forceHandled?: boolean;
+}
+
+export interface DirectDependencies {
+    connectToTypeAgent: typeof connectToTypeAgent;
+    emitProgress: typeof emitProgress;
+}
+
+const defaultDependencies: DirectDependencies = {
+    connectToTypeAgent,
+    emitProgress,
+};
+
+function toForcedCommandOutput(
+    result: CommandResult | undefined,
+    messages: string[],
+): UserPromptSubmittedOutput {
+    let responseContent: string;
+
+    if (result === undefined) {
+        responseContent =
+            "TypeAgent accepted the command but did not return a completion result. Check agent-server before retrying.";
+    } else if (result.cancelled) {
+        responseContent = "TypeAgent request was cancelled.";
+    } else if (result.lastError) {
+        responseContent = result.lastError;
+    } else {
+        const collected = messages.join("\n\n");
+        if (collected.trim().length > 0) {
+            responseContent = collected;
+        } else if (result.disposition?.status === "notHandled") {
+            responseContent = "TypeAgent did not handle the command.";
+        } else if (result.disposition?.status === "failed") {
+            responseContent = "TypeAgent could not complete the command.";
+        } else {
+            responseContent = "TypeAgent completed the command.";
+        }
+    }
+
+    return {
+        handled: true,
+        responseContent,
+        handledBy: "typeagent",
+    };
+}
+
+export async function handleDirect(
+    input: UserPromptSubmittedInput,
+    options: DirectHandlingOptions = {},
+    dependencies: DirectDependencies = defaultDependencies,
+): Promise<UserPromptSubmittedOutput> {
+    dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
+    const pendingPrompts: unknown[] = [];
+    const pendingResult = (): UserPromptSubmittedOutput => ({
+        handled: true,
+        responseContent:
+            formatPendingNaturalLanguageInteraction(pendingPrompts),
+        handledBy: "typeagent",
+    });
     const clientIO = createClientIO({
+        onPendingPrompt: (prompt) => pendingPrompts.push(prompt),
         onSetDisplay: (message) => {
             collectMessage(message, undefined, responseCollector);
         },
@@ -35,13 +98,16 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             if (mode === "temporary") {
                 const text = message?.message;
                 if (typeof text === "string" && text.trim()) {
-                    emitProgress(text.trim(), { temporary: true });
+                    dependencies.emitProgress(text.trim(), {
+                        temporary: true,
+                    });
                 }
                 return;
             }
 
-            // Route reasoning display by message kind. These are all progress —
-            // never part of the final response — so we return before collecting.
+            // Route reasoning display by message kind. Status and info remain
+            // progress-only. Forced commands keep warnings and errors for the
+            // final response instead of duplicating them as persistent progress.
             const msg = message?.message;
             if (typeof msg === "object" && msg && "kind" in msg) {
                 const kind = (msg as { kind: unknown }).kind;
@@ -50,18 +116,23 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
                 // replaces the previous status line.
                 if (kind === "status") {
                     if (text) {
-                        emitProgress(text, { temporary: true });
+                        dependencies.emitProgress(text, { temporary: true });
                     }
                     return;
                 }
-                // "info"/"warning"/"error" are persistent: tool calls and their
-                // results (including error results) accumulate, so every call is
-                // shown together with its result rather than an orphaned result.
-                if (kind === "info" || kind === "warning" || kind === "error") {
+                if (kind === "info") {
                     if (text) {
-                        emitProgress(text);
+                        dependencies.emitProgress(text);
                     }
                     return;
+                }
+                if (kind === "warning" || kind === "error") {
+                    if (!options.forceHandled) {
+                        if (text) {
+                            dependencies.emitProgress(text);
+                        }
+                        return;
+                    }
                 }
             }
 
@@ -70,11 +141,36 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
     });
 
     let dispatcher: Dispatcher | null = null;
+    let acceptedMacro = false;
     try {
-        emitProgress("Connecting to TypeAgent...", { temporary: true });
-        dispatcher = await connectToTypeAgent(clientIO);
-        emitProgress("Processing command...", { temporary: true });
+        dependencies.emitProgress("Connecting to TypeAgent...", {
+            temporary: true,
+        });
+        dispatcher = await dependencies.connectToTypeAgent(
+            clientIO,
+            input.sessionId,
+        );
+        dependencies.emitProgress("Processing command...", {
+            temporary: true,
+        });
         const result = await awaitCommand(dispatcher, input.prompt);
+        acceptedMacro =
+            result?.actions?.some((action) => action.schemaName === "macros") ??
+            false;
+
+        if (pendingPrompts.length > 0) return pendingResult();
+        if (result?.agentHandoff) {
+            acceptedMacro = true;
+            return {
+                handled: true,
+                responseContent:
+                    "TypeAgent returned an unsupported agent handoff. No fallback was attempted; inspect the accepted request before retrying.",
+                handledBy: "typeagent",
+            };
+        }
+        if (options.forceHandled || acceptedMacro) {
+            return toForcedCommandOutput(result, responseCollector.messages);
+        }
 
         if (result?.cancelled) {
             return {};
@@ -88,23 +184,10 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             return {};
         }
 
-        // Debug: Log result details when action is recognized
-        console.error("DEBUG: Action recognized", {
-            prompt: input.prompt.substring(0, 100),
-            hasLastError: !!result?.lastError,
-            lastError: result?.lastError,
-            messageCount: responseCollector.messages.length,
-            actionNames: result?.actions?.map((a) => a.actionName),
-        });
-
         // Check for failure indicators:
         // 1. Action failed (result.lastError is set)
         // 2. No messages were collected, indicating the action couldn't execute
         if (result?.lastError || responseCollector.messages.length === 0) {
-            console.error("DEBUG: Returning unhandled due to error condition", {
-                hasLastError: !!result?.lastError,
-                hasMessages: responseCollector.messages.length > 0,
-            });
             return {};
         }
 
@@ -116,7 +199,17 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             handledBy: "typeagent",
         };
     } catch (error) {
+        if (pendingPrompts.length > 0) return pendingResult();
         console.error("TypeAgent error:", error);
+        if (options.forceHandled || acceptedMacro) {
+            return {
+                handled: true,
+                responseContent: `TypeAgent could not execute the command: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+                handledBy: "typeagent",
+            };
+        }
         return {};
     } finally {
         if (dispatcher) {

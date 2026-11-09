@@ -13,6 +13,11 @@
   "author": "Microsoft",
   "type": "module",
   "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "!dist/test",
+    "data"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -40,6 +45,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
@@ -47,7 +53,7 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

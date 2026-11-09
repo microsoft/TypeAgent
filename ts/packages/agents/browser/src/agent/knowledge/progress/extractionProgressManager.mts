@@ -19,14 +19,7 @@ const debug = registerDebug("typeagent:browser:knowledge");
 
 interface KnowledgeExtractionProgress {
     extractionId: string;
-    phase:
-        | "content"
-        | "basic"
-        | "summary"
-        | "analyzing"
-        | "extracting"
-        | "complete"
-        | "error";
+    phase: "content" | "analyzing" | "extracting" | "complete" | "error";
     totalItems: number;
     processedItems: number;
     currentItem: string | undefined;

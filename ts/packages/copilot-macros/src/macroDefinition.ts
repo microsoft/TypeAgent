@@ -1,0 +1,541 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import type {
+    CopilotToolMacro,
+    MacroExecutionClass,
+    MacroInput,
+    MacroPostcondition,
+    MacroStep,
+    MacroValidationIssue,
+    MacroValidationReport,
+    MacroValueType,
+    RecordedInteractionTrace,
+    ReplayToolHost,
+    ValueExpression,
+} from "./contracts.js";
+import { validateRecipeArtifact } from "./recipeValidation.js";
+import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
+import {
+    assertMacroCapabilities,
+    constructResultPath,
+    setMacroCapabilities,
+    validateResultSuffix,
+} from "./resultPath.js";
+
+async function classifyTool(
+    toolName: string,
+    mcpServerName: string | undefined,
+    cwd: string,
+    replayHost: ReplayToolHost | undefined,
+): Promise<MacroExecutionClass> {
+    if (!replayHost || (!mcpServerName && !replayHost.supportsNativeTools))
+        return "agentRequired";
+    const descriptor = await replayHost.inspectTool(mcpServerName, toolName, {
+        cwd,
+    });
+    return descriptor ? "replayable" : "agentRequired";
+}
+
+function getValueType(value: unknown): MacroValueType {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value as Exclude<MacroValueType, "null" | "array">;
+}
+
+function getInputName(stepId: string, path: string[]): string {
+    const suffix = path
+        .map((segment) => segment.replace(/[^a-zA-Z0-9]+/g, "_"))
+        .filter(Boolean)
+        .join("_");
+    return `${stepId.replace(/-/g, "_")}_${suffix || "value"}`;
+}
+
+function findValuePath(root: unknown, target: unknown): string[] | undefined {
+    if (Object.is(root, target)) return [];
+    if (root === null || typeof root !== "object") return undefined;
+    for (const [key, child] of Object.entries(root)) {
+        const nested = findValuePath(child, target);
+        if (nested !== undefined) return [key, ...nested];
+    }
+    return undefined;
+}
+
+function collectLeafPaths(value: unknown, path: string[] = []): string[][] {
+    if (value === null || typeof value !== "object") return [path];
+    return Object.entries(value).flatMap(([key, child]) =>
+        collectLeafPaths(child, [...path, key]),
+    );
+}
+
+function inferPostconditions(result: unknown): MacroPostcondition[] {
+    const postconditions: MacroPostcondition[] = [
+        { kind: "resultType", valueType: getValueType(result) },
+    ];
+    if (result !== null && typeof result === "object") {
+        for (const path of collectLeafPaths(result).slice(0, 50)) {
+            if (path.length > 0) {
+                postconditions.push({ kind: "resultPathExists", path });
+            }
+        }
+    }
+    return postconditions;
+}
+
+type BoundValueExpression = Exclude<ValueExpression, { kind: "template" }>;
+
+function findPriorResultExpression(
+    leaf: unknown,
+    priorSteps: Pick<MacroStep, "id">[],
+    priorCalls: RecordedInteractionTrace["toolCalls"],
+): BoundValueExpression | undefined {
+    if (typeof leaf !== "string" || leaf === "[REDACTED]" || leaf.length < 3) {
+        return undefined;
+    }
+    for (let index = priorCalls.length - 1; index >= 0; index--) {
+        const resultPath = findValuePath(priorCalls[index].result, leaf);
+        if (resultPath !== undefined) {
+            if (omittedResultPath(priorCalls[index], resultPath)) continue;
+            return {
+                kind: "stepResult",
+                stepId: priorSteps[index].id,
+                ...(resultPath.length > 0 ? { path: resultPath } : {}),
+            };
+        }
+        const constructed = findConstructedPath(priorCalls[index].result, leaf);
+        if (
+            constructed &&
+            !omittedResultPath(priorCalls[index], constructed.path)
+        ) {
+            return {
+                kind: "resultPath",
+                stepId: priorSteps[index].id,
+                ...constructed,
+            };
+        }
+    }
+
+    function findConstructedPath(
+        root: unknown,
+        target: string,
+        path: string[] = [],
+    ): { path: string[]; suffix: string } | undefined {
+        if (typeof root === "string" && target.startsWith(root)) {
+            const suffix = target.slice(root.length);
+            try {
+                if (constructResultPath(root, suffix) === target)
+                    return { path, suffix };
+            } catch {
+                /* Not an admitted relative drive-item construction. */
+            }
+        }
+        if (!root || typeof root !== "object") return undefined;
+        for (const [key, child] of Object.entries(root)) {
+            const found = findConstructedPath(child, target, [...path, key]);
+            if (found) return found;
+        }
+        return undefined;
+    }
+    return undefined;
+}
+
+function createInputExpression(
+    leaf: unknown,
+    stepId: string,
+    path: string[],
+    prompt: string,
+    inputs: MacroInput[],
+    warnings: string[],
+): BoundValueExpression | undefined {
+    const redacted = leaf === "[REDACTED]";
+    const mentionedInPrompt =
+        typeof leaf === "string" &&
+        leaf.length >= 3 &&
+        prompt.toLowerCase().includes(leaf.toLowerCase());
+    if (!redacted && !mentionedInPrompt) return undefined;
+
+    const name = getInputName(stepId, path);
+    inputs.push({
+        name,
+        description: redacted
+            ? `Secret value required by ${stepId} at ${path.join(".") || "arguments"}`
+            : `Value captured from the request for ${stepId} at ${path.join(".") || "arguments"}`,
+        required: true,
+        secret: redacted,
+        ...(redacted ? {} : { valueType: getValueType(leaf) }),
+    });
+    if (redacted) {
+        warnings.push(
+            `${stepId} contains a redacted value and requires review of the generated secret input.`,
+        );
+    }
+    return { kind: "input", name };
+}
+
+function convertArguments(
+    value: unknown,
+    stepId: string,
+    prompt: string,
+    priorSteps: MacroStep[],
+    priorCalls: RecordedInteractionTrace["toolCalls"],
+    inputs: MacroInput[],
+    warnings: string[],
+): ValueExpression {
+    if (value === undefined) {
+        return { kind: "literal", value: {} };
+    }
+    const bindings: Extract<ValueExpression, { kind: "template" }>["bindings"] =
+        [];
+    for (const path of collectLeafPaths(value)) {
+        let leaf: unknown = value;
+        for (const segment of path) {
+            leaf = (leaf as Record<string, unknown>)[segment];
+        }
+        const expression =
+            findPriorResultExpression(leaf, priorSteps, priorCalls) ??
+            createInputExpression(leaf, stepId, path, prompt, inputs, warnings);
+        if (expression) bindings.push({ path, expression });
+    }
+    return bindings.length === 0
+        ? { kind: "literal", value }
+        : { kind: "template", value, bindings };
+}
+
+export function getRecordedArgumentDependencies(
+    trace: RecordedInteractionTrace,
+) {
+    return trace.toolCalls.map((call, index) => {
+        const priorCalls = trace.toolCalls
+            .slice(0, index)
+            .filter((prior) => prior.status === "completed")
+            .map((prior) => ({ ...prior, result: learningToolResult(prior) }));
+        const priorSteps = priorCalls.map((prior) => ({
+            id: prior.toolCallId,
+        }));
+        const dependencies =
+            call.status !== "completed"
+                ? []
+                : collectLeafPaths(call.arguments).flatMap((argumentPath) => {
+                      let leaf: unknown = call.arguments;
+                      for (const segment of argumentPath)
+                          leaf = (leaf as Record<string, unknown>)[segment];
+                      const expression = findPriorResultExpression(
+                          leaf,
+                          priorSteps,
+                          priorCalls,
+                      );
+                      return expression?.kind === "stepResult" ||
+                          expression?.kind === "resultPath"
+                          ? [
+                                {
+                                    argumentPath,
+                                    sourceToolCallId: expression.stepId,
+                                    expressionKind: expression.kind,
+                                },
+                            ]
+                          : [];
+                  });
+        return { toolCallId: call.toolCallId, dependencies };
+    });
+}
+
+export async function induceMacroFromTrace(
+    traceId: string,
+    trace: RecordedInteractionTrace,
+    macroId: string,
+    name: string,
+    description: string,
+    createdAt: string,
+    replayHost?: ReplayToolHost,
+): Promise<CopilotToolMacro> {
+    const warnings: string[] = [];
+    const inputs: MacroInput[] = [];
+    const steps: MacroStep[] = [];
+    const executionClasses: MacroExecutionClass[] = [];
+    for (const call of trace.toolCalls) {
+        executionClasses.push(
+            await classifyTool(
+                call.name,
+                call.mcpServerName,
+                trace.cwd,
+                replayHost,
+            ),
+        );
+    }
+    const agentRequired = executionClasses.includes("agentRequired");
+    const calls = trace.toolCalls.map((call) => {
+        const projected = {
+            ...call,
+            result: agentRequired
+                ? learningToolResult(call)
+                : call.resultArtifact
+                  ? call.resultArtifact.view
+                  : call.result,
+        };
+        if (!agentRequired) {
+            delete projected.modelResult;
+            delete projected.modelResultArtifact;
+        }
+        return projected;
+    });
+    for (const [index, call] of calls.entries()) {
+        const id = `step-${index + 1}`;
+        const executionClass = executionClasses[index];
+        if (executionClass === "agentRequired") {
+            warnings.push(
+                `${id} uses ${call.mcpServerName ? `${call.mcpServerName}/` : ""}${call.name} and requires agent-guided execution.`,
+            );
+        }
+        if (agentRequired && call.modelResult === undefined) {
+            warnings.push(
+                `${id} has no captured model-facing result. Review its result guards and recapture if the runner cannot observe the required fields.`,
+            );
+        }
+        if (call.status !== "completed") {
+            warnings.push(
+                `${id} was captured with status ${call.status} and requires review.`,
+            );
+        }
+        steps.push({
+            id,
+            toolName: call.name,
+            ...(call.mcpServerName
+                ? { mcpServerName: call.mcpServerName }
+                : {}),
+            arguments: convertArguments(
+                call.arguments,
+                id,
+                trace.prompt,
+                steps,
+                calls.slice(0, index),
+                inputs,
+                warnings,
+            ),
+            executionClass,
+            sourceToolCallId: call.toolCallId,
+            ...(call.result === undefined
+                ? {}
+                : {
+                      postconditions: inferPostconditions(call.result).filter(
+                          (guard) =>
+                              guard.kind !== "resultPathExists" ||
+                              !omittedResultPath(call, guard.path),
+                      ),
+                  }),
+        });
+    }
+
+    const macro: CopilotToolMacro = {
+        schemaVersion: 1,
+        macroId,
+        version: 1,
+        name,
+        description,
+        state: "draft",
+        executionClass: agentRequired ? "agentRequired" : "replayable",
+        inputs,
+        steps,
+        sourceTraceId: traceId,
+        createdAt,
+        warnings,
+    };
+    setMacroCapabilities(macro);
+    return macro;
+}
+
+function validateTemplateExpression(
+    expression: Extract<ValueExpression, { kind: "template" }>,
+    macro: CopilotToolMacro,
+    stepIndex: number,
+): string | undefined {
+    if (expression.bindings.length === 0) {
+        return "A template expression requires at least one binding.";
+    }
+    for (const binding of expression.bindings) {
+        if (binding.path.length === 0) {
+            return "A template binding requires a non-empty path.";
+        }
+        let target = expression.value;
+        for (const segment of binding.path) {
+            if (
+                target === null ||
+                typeof target !== "object" ||
+                !Object.prototype.hasOwnProperty.call(target, segment)
+            ) {
+                return `Template binding path is unavailable: ${binding.path.join(".")}`;
+            }
+            target = (target as Record<string, unknown>)[segment];
+        }
+        const error = validateExpression(binding.expression, macro, stepIndex);
+        if (error) return error;
+    }
+    return undefined;
+}
+
+function validateExpression(
+    expression: ValueExpression,
+    macro: CopilotToolMacro,
+    stepIndex: number,
+): string | undefined {
+    if (expression.kind === "template")
+        return validateTemplateExpression(expression, macro, stepIndex);
+    if (expression.kind === "input") {
+        return macro.inputs.some((input) => input.name === expression.name)
+            ? undefined
+            : `Unknown input: ${expression.name}`;
+    }
+    if (expression.kind === "stepResult" || expression.kind === "resultPath") {
+        if (expression.kind === "resultPath") {
+            try {
+                validateResultSuffix(expression.suffix);
+            } catch {
+                return "Unsupported result-path suffix.";
+            }
+        }
+        const referencedIndex = macro.steps.findIndex(
+            (step) => step.id === expression.stepId,
+        );
+        if (referencedIndex < 0) return `Unknown step: ${expression.stepId}`;
+        if (referencedIndex >= stepIndex) {
+            return `Step result must reference an earlier step: ${expression.stepId}`;
+        }
+    }
+    if (
+        !["literal", "input", "stepResult", "resultPath"].includes(
+            expression.kind,
+        )
+    )
+        return "Unsupported macro expression.";
+    return undefined;
+}
+
+export function validateMacro(
+    macro: CopilotToolMacro,
+    trace?: RecordedInteractionTrace,
+): MacroValidationReport {
+    const issues: MacroValidationIssue[] = [];
+    if ((macro.executionKind === "program") !== (macro.program !== undefined)) {
+        issues.push({
+            severity: "error",
+            code: "invalidProgram",
+            message: "Program execution kind requires a program artifact.",
+        });
+    }
+    if (macro.program) {
+        const errors = validateRecipeArtifact(macro.program);
+        if (
+            errors.length ||
+            macro.program.recipeId !== macro.macroId ||
+            macro.program.provenance.legacySource?.macroId !== macro.macroId ||
+            (macro.learning !== undefined &&
+                (!macro.learning.authoring ||
+                    macro.learning.authoring.captureId !==
+                        macro.sourceTraceId ||
+                    macro.program.provenance.captureId !==
+                        macro.learning.authoring.captureId ||
+                    macro.program.provenance.taskId !==
+                        macro.learning.authoring.taskId ||
+                    macro.program.provenance.tokenId !==
+                        macro.learning.authoring.tokenId ||
+                    !macro.program.provenance.evidenceIds.includes(
+                        macro.learning.authoring.contextDigest,
+                    )))
+        ) {
+            issues.push({
+                severity: "error",
+                code: "invalidProgram",
+                message:
+                    errors.map((issue) => issue.message).join("; ") ||
+                    "Program identity does not match its macro.",
+            });
+        }
+    }
+    try {
+        assertMacroCapabilities(macro);
+    } catch (error) {
+        issues.push({
+            severity: "error",
+            code: "unsupportedCapabilities",
+            message: String(error),
+        });
+    }
+    if (!macro.name.trim()) {
+        issues.push({
+            severity: "error",
+            code: "missingName",
+            message: "Macro name is required.",
+        });
+    }
+    if (macro.steps.length === 0) {
+        issues.push({
+            severity: "error",
+            code: "emptyMacro",
+            message: "A macro must contain at least one step.",
+        });
+    }
+    const stepIds = new Set<string>();
+    macro.steps.forEach((step, index) => {
+        if (stepIds.has(step.id)) {
+            issues.push({
+                severity: "error",
+                code: "duplicateStepId",
+                message: `Duplicate step ID: ${step.id}`,
+                stepId: step.id,
+            });
+        }
+        stepIds.add(step.id);
+        const expressionError = validateExpression(
+            step.arguments,
+            macro,
+            index,
+        );
+        if (expressionError) {
+            issues.push({
+                severity: "error",
+                code: "invalidExpression",
+                message: expressionError,
+                stepId: step.id,
+            });
+        }
+        if (
+            step.postconditions?.some(
+                (condition) =>
+                    condition.kind === "resultPathExists" &&
+                    condition.path.length === 0,
+            )
+        ) {
+            issues.push({
+                severity: "error",
+                code: "invalidPostcondition",
+                message:
+                    "A result path postcondition requires a non-empty path.",
+                stepId: step.id,
+            });
+        }
+        const sourceCall = trace?.toolCalls.find(
+            (call) => call.toolCallId === step.sourceToolCallId,
+        );
+        if (sourceCall && sourceCall.status !== "completed") {
+            issues.push({
+                severity: "error",
+                code: "unsuccessfulSourceStep",
+                message: `Source tool call ended with status ${sourceCall.status}.`,
+                stepId: step.id,
+            });
+        }
+    });
+    for (const warning of macro.warnings) {
+        issues.push({
+            severity: "warning",
+            code: "reviewRequired",
+            message: warning,
+        });
+    }
+    return {
+        macroId: macro.macroId,
+        version: macro.version,
+        valid: !issues.some((issue) => issue.severity === "error"),
+        executionClass: macro.executionClass,
+        issues,
+    };
+}

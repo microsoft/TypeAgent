@@ -9,14 +9,15 @@
   Installs/verifies the prerequisites expected by install-typeagent.ps1:
 
     1. winget (required installer backend)
-    2. Node.js >= 22 (OpenJS.NodeJS.LTS via winget when needed)
+    2. Node.js 22.23.4+, 24.22.1+, or 26.12.1+ (LTS via winget when needed)
     3. Azure CLI (Microsoft.AzureCLI via winget when missing)
     4. Azure DevOps az extension
     5. Optional: az login
-    6. For Variant=external: claude + copilot CLIs via npm -g
-    7. Optional: devtunnel CLI when -DevTunnel is specified
+    6. Optional: devtunnel CLI when -DevTunnel is specified
 
   This script is standalone and does not require a local TypeAgent repository.
+  External runtime packages are installed later by install-typeagent.ps1 after
+  the artifact supplies its exact compatibility manifest and package feed.
 
 .EXAMPLE
   pwsh ./setup-typeagent-prereqs.ps1
@@ -67,8 +68,8 @@ function Test-IsAdministrator {
 
 function Get-NodeNeedsInstall {
     if (-not (Test-Command node)) { return $true }
-    $major = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-    return ([int]$major -lt 22)
+    & node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
+    return ($LASTEXITCODE -ne 0)
 }
 
 function Get-AzureCliNeedsInstall {
@@ -188,20 +189,12 @@ function Install-WingetPackage {
 }
 
 function Ensure-Node {
-    Write-Step "Ensuring Node.js >= 22"
+    Write-Step "Ensuring Node.js 22.23.4+, 24.22.1+, or 26.12.1+"
 
-    $needsInstall = $false
-    if (-not (Test-Command node)) {
-        $needsInstall = $true
-    } else {
-        $major = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-        if ([int]$major -lt 22) {
-            Write-WarnMsg "Found Node $(& node --version), but Node >= 22 is required."
-            $needsInstall = $true
+    if (Get-NodeNeedsInstall) {
+        if (Test-Command node) {
+            Write-WarnMsg "Found unsupported Node $(& node --version). Installing Node.js LTS."
         }
-    }
-
-    if ($needsInstall) {
         Install-WingetPackage -Id "OpenJS.NodeJS.LTS" -DisplayName "Node.js LTS"
     }
 
@@ -209,9 +202,8 @@ function Ensure-Node {
         Fail "Node was not found on PATH after install. Open a new PowerShell session and re-run."
     }
 
-    $majorAfter = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-    if ([int]$majorAfter -lt 22) {
-        Fail "Node >= 22 required; found v$(& node --version)."
+    if (Get-NodeNeedsInstall) {
+        Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(& node --version)."
     }
 
     if (-not (Test-Command npm)) {
@@ -298,38 +290,6 @@ function Ensure-AzureCli {
     }
 }
 
-function Ensure-NpmGlobalCli {
-    param(
-        [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $true)][string]$PackageName,
-        [Parameter(Mandatory = $true)][string]$FriendlyName
-    )
-
-    $shouldInstall = $ForceReinstallCli -or -not (Test-Command $Command)
-
-    if ($shouldInstall) {
-        Write-Info "Installing $FriendlyName (npm i -g $PackageName)"
-        & npm install -g $PackageName
-        if ($LASTEXITCODE -ne 0) {
-            Fail "npm global install failed for $PackageName"
-        }
-        Refresh-Path
-    }
-
-    if (-not (Test-Command $Command)) {
-        Fail "$FriendlyName command '$Command' was not found on PATH after install."
-    }
-
-    Write-Ok "${FriendlyName}: $((Get-Command $Command).Source)"
-}
-
-function Ensure-ExternalClis {
-    Write-Step "Ensuring external CLIs (claude, copilot)"
-    Ensure-NpmGlobalCli -Command "claude" -PackageName "@anthropic-ai/claude-code" -FriendlyName "Claude Code CLI"
-    Ensure-NpmGlobalCli -Command "copilot" -PackageName "@github/copilot" -FriendlyName "GitHub Copilot CLI"
-    Write-WarnMsg "Remember to sign in once: run 'claude' and 'copilot' interactively."
-}
-
 function Ensure-DevTunnel {
     Write-Step "Ensuring devtunnel CLI"
 
@@ -372,7 +332,10 @@ Ensure-Node
 Ensure-AzureCli
 
 if ($Variant -eq "external") {
-    Ensure-ExternalClis
+    Write-Info "External runtimes will be installed from the TypeAgent package feed after the agent-server artifact is downloaded."
+}
+if ($ForceReinstallCli) {
+    Write-WarnMsg "-ForceReinstallCli is deprecated; install-typeagent.ps1 now owns exact runtime installation."
 }
 
 if ($DevTunnel) {

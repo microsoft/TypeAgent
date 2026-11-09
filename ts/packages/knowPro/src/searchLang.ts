@@ -2,12 +2,15 @@
 // Licensed under the MIT License.
 
 import { PromptSection, Result, success } from "typechat";
+import { timeSearchStage } from "./searchTiming.js";
+import { withQueryEmbeddingCache } from "./queryEmbeddingCache.js";
 import {
     IConversation,
     KnowledgeType,
     SearchSelectExpr,
     SearchTermGroup,
     WhenFilter,
+    DateRange,
 } from "./interfaces.js";
 import {
     ConversationSearchResult,
@@ -28,6 +31,9 @@ import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
 import { PropertyTermSet } from "./collections.js";
 import { dateRangeFromDateTimeRange } from "./common.js";
+import type { DateTime } from "./dateTimeSchema.js";
+import { parseTemporalValue } from "./temporal.js";
+import type { TemporalQueryRange } from "./temporalSchema.js";
 import { PropertyNames } from "./propertyIndex.js";
 import {
     createOrTermGroup,
@@ -45,6 +51,39 @@ import {
     APIs for searching with Natural Language
     Work in progress; frequent improvements/tweaks
 */
+
+function compileTimeRange(
+    filter: querySchema2.ScopeFilter,
+): DateRange | TemporalQueryRange | undefined {
+    if (!filter.timeRange) return undefined;
+    if (filter.timeDimension === undefined && filter.timeDomain === undefined)
+        return dateRangeFromDateTimeRange(filter.timeRange);
+    const domain = filter.timeDomain ?? "calendar";
+    const canonical = (value: DateTime) => {
+        const pad = (number: number, length = 2) =>
+            String(number).padStart(length, "0");
+        const date = `${pad(value.date.year, 4)}-${pad(value.date.month)}-${pad(value.date.day)}`;
+        const time = value.time
+            ? `T${pad(value.time.hour)}:${pad(value.time.minute)}:${pad(value.time.seconds)}`
+            : "";
+        const parsed = parseTemporalValue(
+            `${date}${time}${domain === "instant" ? (time ? "Z" : "T00:00:00Z") : ""}`,
+        );
+        return domain === "instant" ? parsed.instantUtc! : parsed.localDateTime;
+    };
+    const start = canonical(filter.timeRange.startDate);
+    const end = filter.timeRange.stopDate
+        ? canonical(filter.timeRange.stopDate)
+        : undefined;
+    if (end !== undefined && start > end)
+        throw new Error("Temporal query range ends before it starts");
+    return {
+        dimension: filter.timeDimension ?? "message",
+        domain,
+        start,
+        ...(end === undefined ? {} : { end }),
+    };
+}
 
 /**
  * Filter options for language search.
@@ -69,6 +108,15 @@ export type LanguageSearchFilter = {
  * @returns {ConversationSearchResult} Conversation search results.
  */
 export async function searchConversationWithLanguage(
+    ...args: Parameters<typeof searchConversationWithLanguageCore>
+): Promise<Result<ConversationSearchResult[]>> {
+    return withQueryEmbeddingCache(
+        () => searchConversationWithLanguageCore(...args),
+        args[3]?.reuseQueryEmbeddings !== false,
+    );
+}
+
+async function searchConversationWithLanguageCore(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
@@ -223,11 +271,15 @@ export async function searchQueryExprFromLanguage(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryFromLanguage(
-        conversation,
-        translator,
-        queryText,
-        options?.modelInstructions,
+    const queryResult = await timeSearchStage(
+        "knowpro.language.translation",
+        () =>
+            searchQueryFromLanguage(
+                conversation,
+                translator,
+                queryText,
+                options?.modelInstructions,
+            ),
     );
     if (queryResult.success) {
         const query = queryResult.data;
@@ -270,6 +322,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 }
 
 export interface LanguageSearchOptions extends SearchOptions {
+    reuseQueryEmbeddings?: boolean;
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
     modelInstructions?: PromptSection[] | undefined;
@@ -491,7 +544,7 @@ class SearchQueryCompiler {
         }
         if (filter.timeRange) {
             when ??= {};
-            when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+            when.dateRange = compileTimeRange(filter);
         }
         if (this.langSearchFilter) {
             if (this.langSearchFilter.knowledgeType) {
@@ -606,6 +659,10 @@ class SearchQueryCompiler {
                 this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
                 if (term.facets) {
                     for (const facet of term.facets) {
+                        if (facet.compareOp && facet.compareOp !== "eq")
+                            throw new Error(
+                                "Ordered and inequality facet comparisons require a dataframe",
+                            );
                         if (!isWildcard(facet.facetValue)) {
                             this.addPropertyTermToGroup(
                                 facet.facetValue,
@@ -784,6 +841,10 @@ class SearchQueryCompiler {
         }
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
+                if (facetTerm.compareOp && facetTerm.compareOp !== "eq")
+                    throw new Error(
+                        "Ordered and inequality facet comparisons require a dataframe",
+                    );
                 const nameWildcard = isWildcard(facetTerm.facetName);
                 const valueWildcard = isWildcard(facetTerm.facetValue);
                 if (!(nameWildcard || valueWildcard)) {
@@ -888,6 +949,10 @@ class SearchQueryCompiler {
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
                 this.addSearchTermToGroup(facetTerm.facetName, termGroup);
+                if (facetTerm.compareOp && facetTerm.compareOp !== "eq")
+                    throw new Error(
+                        "Ordered and inequality facet comparisons require a dataframe",
+                    );
                 this.addSearchTermToGroup(facetTerm.facetValue, termGroup);
             }
         }
@@ -984,7 +1049,7 @@ class SearchQueryCompiler {
     ): WhenFilter | undefined {
         when ??= {};
         if (filter.timeRange) {
-            when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+            when.dateRange = compileTimeRange(filter);
         }
         if (
             filter.entitySearchTerms !== undefined &&
@@ -1064,11 +1129,15 @@ export async function searchQueryExprFromLanguage2(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryFromLanguage2(
-        conversation,
-        translator,
-        queryText,
-        options?.modelInstructions,
+    const queryResult = await timeSearchStage(
+        "knowpro.language.translation",
+        () =>
+            searchQueryFromLanguage2(
+                conversation,
+                translator,
+                queryText,
+                options?.modelInstructions,
+            ),
     );
     if (queryResult.success) {
         const query = queryResult.data;
@@ -1116,6 +1185,30 @@ export async function searchConversationWithLanguage2(
     langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
+    return withQueryEmbeddingCache(
+        () =>
+            timeSearchStage("knowpro.language.total", () =>
+                searchConversationWithLanguage2Core(
+                    conversation,
+                    searchText,
+                    queryTranslator,
+                    options,
+                    langSearchFilter,
+                    debugContext,
+                ),
+            ),
+        options?.reuseQueryEmbeddings !== false,
+    );
+}
+
+async function searchConversationWithLanguage2Core(
+    conversation: IConversation,
+    searchText: string,
+    queryTranslator: SearchQueryTranslator,
+    options?: LanguageSearchOptions,
+    langSearchFilter?: LanguageSearchFilter,
+    debugContext?: LanguageSearchDebugContext,
+): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
     const langQueryResult = await searchQueryExprFromLanguage2(
         conversation,
@@ -1142,50 +1235,54 @@ export async function searchConversationWithLanguage2(
         langSearchFilter,
     );
 
-    const searchResults: ConversationSearchResult[] = [];
-    for (let i = 0; i < searchQueryExprs.length; ++i) {
-        const searchQuery = searchQueryExprs[i];
-        const fallbackQuery = fallbackQueryExpr
-            ? fallbackQueryExpr[i]
-            : undefined;
-        let queryResult = await runSearchQuery(
-            conversation,
-            searchQuery,
-            options,
-        );
-        if (!hasConversationResults(queryResult) && fallbackQuery) {
-            // Rerun the query but with verb matching turned off for scopes
-            queryResult = await runSearchQuery(
-                conversation,
-                fallbackQuery,
-                options,
+    return timeSearchStage("knowpro.language.execution", async () => {
+        const searchResults: ConversationSearchResult[] = [];
+        for (let i = 0; i < searchQueryExprs.length; ++i) {
+            const searchQuery = searchQueryExprs[i];
+            const fallbackQuery = fallbackQueryExpr
+                ? fallbackQueryExpr[i]
+                : undefined;
+            let queryResult = await timeSearchStage(
+                "knowpro.language.structured",
+                () => runSearchQuery(conversation, searchQuery, options),
             );
-        }
-        //
-        // If no matches and fallback enabled... run the raw query
-        //
-        if (
-            !hasConversationResults(queryResult) &&
-            searchQuery.rawQuery &&
-            options.fallbackRagOptions
-        ) {
-            const textSearchOptions = createTextQueryOptions(options);
-            const ragMatches = await runSearchQueryTextSimilarity(
-                conversation,
-                fallbackQuery ?? searchQuery,
-                textSearchOptions,
-            );
-            if (ragMatches) {
-                searchResults.push(...ragMatches);
-                if (debugContext?.usedSimilarityFallback) {
-                    debugContext.usedSimilarityFallback![i] = true;
-                }
+            if (!hasConversationResults(queryResult) && fallbackQuery) {
+                // Rerun the query but with verb matching turned off for scopes
+                queryResult = await timeSearchStage(
+                    "knowpro.language.scopeFallback",
+                    () => runSearchQuery(conversation, fallbackQuery, options),
+                );
             }
-        } else {
-            searchResults.push(...queryResult);
+            //
+            // If no matches and fallback enabled... run the raw query
+            //
+            if (
+                !hasConversationResults(queryResult) &&
+                searchQuery.rawQuery &&
+                options.fallbackRagOptions
+            ) {
+                const textSearchOptions = createTextQueryOptions(options);
+                const ragMatches = await timeSearchStage(
+                    "knowpro.language.similarityFallback",
+                    () =>
+                        runSearchQueryTextSimilarity(
+                            conversation,
+                            fallbackQuery ?? searchQuery,
+                            textSearchOptions,
+                        ),
+                );
+                if (ragMatches) {
+                    searchResults.push(...ragMatches);
+                    if (debugContext?.usedSimilarityFallback) {
+                        debugContext.usedSimilarityFallback![i] = true;
+                    }
+                }
+            } else {
+                searchResults.push(...queryResult);
+            }
         }
-    }
-    return success(searchResults);
+        return success(searchResults);
+    });
 
     //
     // Scoping queries can be precise. However, there may be random variations in how LLMs

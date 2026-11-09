@@ -7,7 +7,11 @@ Automated build and signing for the TypeAgent headless agent-server MSI installe
 This implementation builds a lightweight Windows Installer (MSI) that:
 
 - Downloads the `agent-server.<rid>` artifact from the ADO feed
-- Bundles it with a launcher (`typeagent-serve.mjs`)
+- Bundles it with the Copilot plugin, the TypeAgent VS Code Chat VSIX, and the
+  TypeAgent VS Code Shell VSIX
+- Installs TypeAgent Chat and creates a desktop shortcut when VS Code 1.133+
+  is present
+- Installs the TypeAgent VS Code Shell extension when VS Code 1.90+ is present
 - Signs with the TypeAgent development certificate (from Key Vault)
 - Produces a signed `.msi` ready for distribution
 
@@ -22,8 +26,11 @@ ts/tools/scripts/
 ts/tools/installers/wix/
   ├── TypeAgent-AgentServer.wxs   # WiX project definition
   ├── extract-payload.ps1         # Deferred CA: unpack payload/*.zip at install time
-  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on Node<22
+  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on unsupported Node
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
+
+ts/tools/installers/common/
+  └── install-vscode-typeagent.ps1 # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -31,12 +38,82 @@ pipelines/
 
 ## Prerequisites
 
+### Shell installer and updater trust
+
+The optional Windows shell now requires a valid Authenticode signature from
+the independently pinned TypeAgent development certificate. Private-feed
+hosting and authenticated blob downloads remain supported; they do not replace
+publisher authentication. Unsigned installers are rejected, including during
+the MSI's separate Download and Install phases.
+
+The approved subject is `CN=dev.typeagent.microsoft.com`, with thumbprint
+`BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE`. The policy lives in
+[`windows-package-trust.json`](../../scripts/windows-package-trust.json).
+Certificate renewal requires a reviewed policy update and distribution of the
+new public trust anchor before switching signing identities.
+
+Before installing or updating, obtain the public `.cer` from an approved
+administrator or release. Verify its thumbprint against the policy distributed
+with your trusted installation scripts, not against channel metadata. For the
+shell's current-user development trust:
+
+```powershell
+$cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    (Resolve-Path '.\windows-package-trust.cer').Path)
+if ($cert.Thumbprint -ne 'BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE' -or
+    $cert.Subject -ne 'CN=dev.typeagent.microsoft.com') {
+    throw 'Unexpected development signing certificate'
+}
+# Run only after explicitly approving this development trust anchor.
+Import-Certificate -FilePath '.\windows-package-trust.cer' -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Client trust setup uses **only a public certificate**, never a PFX or private
+key. The installer and updater never enroll certificates themselves. Pipeline
+agents temporarily trust only the pinned public certificate while signing or
+verifying; their temporary trust is removed afterward.
+
+Windows shell packaging signs the app and NSIS installer before generating
+update hashes/blockmaps. Publication rechecks signatures and final metadata
+before either blob or Universal Package upload. Missing signing access,
+incorrect publisher identity, invalid signatures, and stale hashes block
+publication. The public `.cer` accompanies releases for explicit trust setup;
+receiving it does not automatically make it trusted.
+
+GitHub's packaging-only CI check explicitly sets
+`TYPEAGENT_SHELL_VALIDATION_ONLY=1` to validate unsigned builds without signing
+credentials. This mode disables publication and rejects release channels.
+It does not change installer/updater trust checks, and the protected signing
+script rejects this mode before retrieving credentials. Validation artifacts
+must not be distributed as releases.
+
+Existing unsigned shell installations may lack updater publisher checks.
+Migrate them by separately enrolling the approved public certificate and
+reinstalling with the updated, trusted `install-shell.ps1` and its adjacent
+trust-policy files. Do not rely on an old unsigned application's automatic
+updater to establish the initial trust boundary.
+
+The legacy development AgentLauncher installer is separate from the MSI and
+shell. It now runs **non-elevated**, never imports certificates or uninstalls
+the existing package first, and requires an independently obtained signing
+thumbprint:
+
+```powershell
+.\Install.ps1 -ExpectedSignerThumbprint '<approved launcher certificate thumbprint>'
+```
+
+Its MSIX must already have a valid, trusted signature and the
+`TypeAgent.AgentLauncher` package identity. Its development publisher can
+differ from the shell's certificate. Establish any Windows-required MSIX trust
+separately through an administrator or managed deployment; the installer does
+not change machine-wide trust.
+
 ### On Your Development Machine
 
-1. **Node.js ≥ 22**
+1. The **latest Node.js LTS** release (recommended; see [supported versions](../../../README.md#setup))
 
    ```powershell
-   node --version  # Should be v22.x
+   node --version  # Should be a supported LTS release
    ```
 
 2. **WiX Toolset 3.11** (for local testing)
@@ -79,37 +156,95 @@ Use the local source build to validate WiX changes before pushing to CI. This is
 
 ### Option A: Build from local repo (recommended for WiX development)
 
-#### 1. Build the workspace
+Run the complete local build from `ts/`:
+
+```powershell
+pnpm run build:msi:local
+```
+
+The default output is
+`$env:TEMP\typeagent-msi-stage\out\TypeAgent-<version>-win32-x64.msi`.
+The wrapper builds the workspace, packages the VSIX, stages the Copilot plugin,
+creates the same bundled agent-server artifact used by CI, and runs WiX. Its
+temporary pnpm deployment state is kept out of the development workspace, and
+the wrapper restores development dependency status after pnpm's legacy deploy.
+By default it detects the installed TypeAgent MSI and increments its
+MSI-comparable version; when TypeAgent is not installed, it uses `0.0.1-local`.
+Pass `--skip-build` when compiled outputs are already current, or use
+`--version`, `--stage-dir`, and `--output` to override their defaults.
+
+```powershell
+pnpm run build:msi:local -- --skip-build --version 0.0.1-local
+```
+
+The equivalent individual steps are below for troubleshooting.
+
+#### 1. Verify dependencies and build the workspace
 
 ```powershell
 cd D:\repos\TypeAgent\ts
+pnpm install --prod=false --frozen-lockfile
 pnpm run build
 ```
 
-#### 2. Stage agent-server
+The install command ensures the workspace has development dependencies such as
+`vsce`. It also repairs dependency state left by an interrupted production
+deploy. Omit `pnpm run build` when compiled outputs are already current (the
+equivalent of `--skip-build`).
+
+#### 2. Package VS Code Chat and stage the Copilot plugin
+
+Package tools that require development dependencies before staging the
+agent-server:
+
+```powershell
+pnpm --filter vscode-chat run package
+pnpm --filter vscode-shell run package
+
+node tools/scripts/stageCopilotPlugin.mjs `
+  --out "$env:TEMP\typeagent-msi-stage\copilot-plugin"
+```
+
+`stageCopilotPlugin.mjs` copies only the runtime files used by the installer and
+writes `bundle-manifest.json`; do not copy the entire plugin `dist` directory.
+
+#### 3. Stage agent-server
+
+The MSI uses `bundleAgentServer.mjs`, matching the published CI artifact. It
+bundles server entry points and profile agents to minimize files and installed
+size. `deployAgentServer.mjs` is the unbundled variant: it preserves workspace
+package boundaries and a conventional production `node_modules` for debugging
+a repo-less deployment, but produces a substantially larger artifact and is not
+intended for MSI packaging.
+
+The bundled artifact validator and CI use a 10,000-file budget. The pinned
+Transformers.js embedding runtime and its dependencies intentionally remain
+external; adding them raised the October 2026 CI artifacts to 8,967-8,971 files,
+exceeding the previous 8,200-file CI budget. The new budget leaves bounded
+headroom without removing runtime files or disabling development-file,
+agent-runtime, native SQLite, or background-resource checks.
 
 ```powershell
 # From D:\repos\TypeAgent\ts
-node tools/scripts/deployAgentServer.mjs `
-  --out "$env:TEMP\typeagent-msi-stage\agent-server" `
-  --platform win32 --arch x64 `
-  --profile inbox `
-  --external-cli
+$pnpmState = "$env:TEMP\typeagent-msi-stage\pnpm-state"
+Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+
+try {
+  node tools/scripts/bundleAgentServer.mjs `
+    --out "$env:TEMP\typeagent-msi-stage\agent-server" `
+    --platform win32 --arch x64 `
+    --profile inbox `
+    --external-cli `
+    --pnpm-state-dir $pnpmState
+} finally {
+  pnpm install --prod=false --frozen-lockfile
+  Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+}
 ```
 
-#### 3. Stage copilot-plugin
-
-```powershell
-$plugin = "packages/copilot-plugin"
-$out    = "$env:TEMP\typeagent-msi-stage\copilot-plugin"
-New-Item -ItemType Directory -Force $out | Out-Null
-Copy-Item -Recurse "$plugin/dist"       "$out/dist"
-Copy-Item          "$plugin/hooks.json" "$out/hooks.json"
-Copy-Item          "$plugin/.mcp.json"  "$out/.mcp.json"
-Copy-Item          "$plugin/plugin.json" "$out/plugin.json"
-Copy-Item -Recurse "$plugin/agents"     "$out/agents"
-Copy-Item -Recurse "$plugin/skills"     "$out/skills"
-```
+The isolated pnpm state keeps the production deploy out of the workspace. The
+`finally` block restores the frozen development install even if bundling fails,
+matching the wrapper's cleanup behavior.
 
 #### 4. Run the WiX build with local staged artifacts
 
@@ -118,10 +253,36 @@ node tools/scripts/build-msi.mjs `
   --skip-download `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
   --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
+  --vscode-chat-vsix "packages\vscode-chat\dist-pub\vscode-chat.vsix" `
+  --vscode-shell-vsix "packages\vscode-shell\dist-pub\vscode-shell.vsix" `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
+  --vscode-chat-version 0.0.1-local `
+  --vscode-shell-version 0.0.1-local `
+  --skip-shell-feed-resolution `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
+
+The local wrapper skips shell feed resolution so this path does not require an
+Azure CLI login. Remove `--skip-shell-feed-resolution` to resolve and bake the
+latest shell fallback package version, which requires feed access.
+
+The MSI lifecycle wrappers derive the installing user's profile from
+`[LocalAppDataFolder]` and use the Windows profile registry as a fallback.
+Do not use `[UserProfileFolder]` in custom-action command lines: this MSI does
+not populate that property, and an empty value becomes a relative path under
+the Windows Installer working directory. Append `.` when quoting directory
+properties (`[LocalAppDataFolder].`) so the command-line value does not end in a
+backslash that escapes its closing quote.
+
+Lifecycle subcommands are passed with the named `-ServeCommand` parameter.
+Do not pass `provision`, `start`, or `autostart` as the first bare argument to a
+PowerShell `-File` invocation because Windows PowerShell drops that token before
+the script's remaining-arguments parameter.
+
+The managed Copilot CLI cache uses `TYPEAGENT_COPILOT_RUNTIME_ROOT`.
+`TYPEAGENT_RUNTIME_ROOT` is reserved for the bundled agent-server's application
+assets and must not be overridden by installer lifecycle actions.
 
 **Output:**
 
@@ -164,9 +325,11 @@ node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 **What it does:**
 
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
-2. Extracts to `./msi-out/artifact`
-3. Compiles WiX definition (`.wxs` → `.wixobj`)
-4. Links to create `TypeAgent-<version>-win32-x64.msi`
+2. Downloads `typeagent-copilot-plugin`, `typeagent-vscode-chat`, and
+   `typeagent-vscode-shell`
+3. Extracts/stages the artifacts under `./msi-out/artifact`
+4. Compiles WiX definition (`.wxs` → `.wixobj`)
+5. Links to create `TypeAgent-<version>-win32-x64.msi`
 
 **Output:**
 
@@ -198,55 +361,246 @@ msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.ms
 Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
 
-## Endpoint provider selection (self-host)
+Payload extraction failures always write the complete exception and PowerShell
+stack trace to
+`$env:LOCALAPPDATA\TypeAgent\logs\msi-extract-payload.log`. For interactive
+debugging, select **Show full error details if setup fails** on the endpoint
+providers page. The installer displays those details before rollback instead of
+leaving the underlying exception only in the log. The equivalent command-line
+property is `SHOWSTACKTRACE=1`. Error details are suppressed for quiet or basic
+UI installs so unattended deployment cannot block on the dialog; the full
+exception remains available in the log.
 
-TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
-By default it is downloaded from the AI Systems Key Vault, but machines without
-Key Vault access can instead run against a local **Ollama** server or the
-**Copilot** SDK.
+## Native VS Code Chat integration
 
-During an **interactive** install the MSI shows a provider-selection dialog
-(after the license page) with radio-button groups for the chat provider
-(AI Systems / Ollama / Copilot), the embedding provider (Local / Ollama / OpenAI
-/ None), and an Ollama host field. The same choices can be driven **silently**
-through public properties:
+`VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
+`install-vscode-typeagent.ps1` helper as the current user. The helper:
 
-| Property     | Values                              | Default                  | Notes                                                                           |
-| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
-| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
-| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.133.0 or newer.
+3. Installs the bundled `typeagent.vscode-chat` VSIX.
+4. Creates `TypeAgent Chat.lnk` on the current user's desktop with:
+
+   ```text
+   --new-window --enable-proposed-api=typeagent.vscode-chat
+   ```
+
+If compatible VS Code is absent, the step logs a warning and the rest of the
+TypeAgent installation continues. Disable the component for a silent install
+with:
 
 ```powershell
-# AI Systems (default) — provisions via az login + getKeys after install
-msiexec /i TypeAgent-<version>-win32-x64.msi
-
-# Local Ollama chat with the bundled local embedding model
-msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=OLLAMA
-
-# Copilot SDK chat (requires an authenticated `copilot` CLI) + local embeddings
-msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
-
-# Fully silent
-msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODECHAT=0
 ```
 
-The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → LicenseAgreementDlg →
-**ProviderDlg** → VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated
-custom action runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider
-[PROVIDER] --embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the
-installing user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
-(the default), the MSI **attempts** provisioning during install via a deferred,
-impersonated (interactive) custom action `ProvisionAiSystemsConfig` that runs
-`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in as
-the installing user). It is **non-fatal**: if sign-in is unavailable during the
-install, the final page (ExitDialog) reminds the user to run `provision`
-manually. Because the embedding config for `AISYSTEMS` comes from Key Vault, the
-embedding radio and Ollama host field are **disabled** in the dialog when
-`PROVIDER=AISYSTEMS` (they apply only to the self-host providers). Fine-grained
-overrides (chat model, embedding endpoint, API keys) are available on the
-`provision`/`generate-selfhost-config` CLI; re-run provisioning post-install to
-adjust them.
+The MSI removes the shortcut on uninstall. It removes the extension only when
+the installed version still matches the version originally installed by
+TypeAgent, so it does not delete an independently upgraded extension.
+
+## TypeAgent VS Code Shell extension
+
+`VSCODESHELL=1` is enabled by default and is exposed as a checkbox in the
+interactive installer. During install, the MSI runs the shared
+`install-vscode-typeagent.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
+distinct ownership subkey (`HKCU\Software\Microsoft\TypeAgent\VSCodeShell`), and
+`-NoShortcut`. The helper:
+
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.90.0 or newer (the extension's `engines.vscode`).
+3. Installs the bundled `typeagent.vscode-shell` VSIX.
+
+No desktop shortcut is created for this extension. If compatible VS Code is
+absent, the step logs a warning to `%LOCALAPPDATA%\TypeAgent\logs\vscode-shell-install.log`
+and the rest of the TypeAgent installation continues. Disable the component for
+a silent install with:
+
+```powershell
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODESHELL=0
+```
+
+On uninstall the MSI removes the extension only when the installed version
+still matches the version originally installed by TypeAgent, so it does not
+delete an independently upgraded extension.
+
+## Copilot plugin registration and repair
+
+The MSI registers `typeagent@typeagent-local` with Copilot CLI and verifies
+that it is enabled. CLI discovery skips broken or unresponsive candidates
+(10 seconds per version probe); each registration command has a two-minute
+deadline. On Windows, a timed-out launcher and its child processes are stopped.
+Registration is attempted again after prerequisite setup.
+
+If registration fails, TypeAgent remains installed, but the completion page
+shows **Copilot plugin setup did not complete** instead of silently losing the
+integration. No terminal command is required to retry: reopen the same MSI,
+choose **Repair**, and complete the wizard. Repair reruns payload extraction,
+CLI discovery, registration, and verification. A failed repair shows the same
+notice; a successful repair clears it. Restart Copilot to load the plugin.
+Repair also restores a plugin that was removed after installation.
+
+Diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+The adjacent `.status` file records the latest attempt: `incomplete` until
+verification succeeds, then `complete`. The interactive installer clears old
+status before starting so a previous success cannot hide a failed launch.
+Silent installations have no completion dialog; check the log and status
+file for registration results. MSI success alone does not certify registration.
+
+## Endpoint provider selection
+
+TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
+The MSI supports two completion providers:
+
+- **AI Systems** downloads configuration from the AI Systems Key Vault.
+- **GitHub Copilot** uses the authenticated Copilot CLI for chat and
+  automatically configures TypeAgent's local embedding provider.
+
+During an **interactive** install the provider-selection dialog appears after
+the license page. The same choice can be driven **silently** through the public
+`PROVIDER` property:
+
+| Property                 | Values                     | Default   | Notes                                                                                                              |
+| ------------------------ | -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `PROVIDER`               | `AISYSTEMS`, `COPILOT`     | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled.                                             |
+| `LOCALEMBEDDINGMODEL`    | `MINILM`, `EMBEDDINGGEMMA` | `MINILM`  | Fresh Copilot installs select one pinned CPU/FP32 model.                                                           |
+| `DOWNLOADLOCALEMBEDDING` | `0`, `1`                   | `0`       | Explicit permission to download the selected snapshot. Gemma is multiple GB; never downloaded silently by default. |
+
+```powershell
+# Copilot chat (default; requires an authenticated `copilot` CLI) + local embeddings
+msiexec /i TypeAgent-<version>-win32-x64.msi
+
+# AI Systems — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=AISYSTEMS
+
+# Explicit Copilot selection
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
+
+# Fully silent Copilot install
+msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
+
+# Explicit Gemma selection and permission to download its text + image snapshot
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT LOCALEMBEDDINGMODEL=EMBEDDINGGEMMA DOWNLOADLOCALEMBEDDING=1
+```
+
+The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
+VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
+--embedding LOCAL --local-embedding-model [LOCALEMBEDDINGMODEL]
+--local-embedding-cache-dir "%LOCALAPPDATA%\TypeAgent\embedding-cache"
+--download-local-embedding [DOWNLOADLOCALEMBEDDING]
+--preserve-embedding-selection --force` as the installing user,
+writing `config.local.yaml` to `~/.typeagent`. Keeping model weights outside
+the MSI-managed `agent-server` directory preserves the cache across upgrades
+and ensures it inherits the user's per-user cache permissions. The action explicitly pins
+`TYPEAGENT_CONFIG_DIR` and `TYPEAGENT_USER_DATA_DIR` because deferred MSI
+actions can retain the Windows Installer service environment even while
+impersonating the user. Copilot provisioning is local and must succeed; it does
+not contact Key Vault. For `AISYSTEMS`, the MSI
+**attempts** provisioning during install via a deferred, impersonated
+(interactive) custom action `ProvisionAiSystemsConfig` that runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
+as the installing user). It is **non-fatal**: if sign-in is unavailable during
+the install, the final page (`TypeAgentExitDlg`) shows the `provision` command to run
+manually.
+
+The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
+properties. Ollama and custom embedding configurations remain available through
+the script installers and the `provision`/`generate-selfhost-config` CLI.
+
+### Named local embeddings and offline staging
+
+The generated YAML uses `defaultEmbeddingModel: local-minilm` or
+`local-embeddinggemma` and an `embeddingModels` catalog. Definitions include
+`provider`, `model`, `runtime`, `size`, `modalities`, immutable `revision`,
+`cacheDir`, and `localFilesOnly: true`. Provider connection settings stay in
+their existing sections. Hosted profiles remain available, but no hosted
+inference is used to provision or validate an installation.
+
+One agent-server process selects one embedding model at startup. Defining
+additional profiles never downloads or loads them. Restart the server after
+changing the selector; existing indexes may require rebuilding when model
+identity changes. Routine chat-provider changes and MSI upgrades preserve
+an existing named (including hosted) or legacy embedding selection. MSI model
+properties choose the initial model, not an upgrade override.
+If an existing hosted/disabled selection is preserved, even
+`DOWNLOADLOCALEMBEDDING=1` does not stage a local model. This corrects an older
+MSI inconsistency: its UI/documentation promised local embeddings, while its
+custom-action command selected hosted Copilot embeddings. Fresh installations
+now consistently default to the documented lightweight local MiniLM choice;
+existing hosted selections are not changed.
+
+Both model choices use the **same** pinned Transformers.js **4.3.1** /
+Sharp **0.35.5** / ONNX Runtime Node **1.30.0** graph, CPU, FP32.
+Both artifact packagers validate these packages, reject conflicting nested
+versions, and emit `embedding-runtime.json`; they do not download model
+weights. Transformers stays external to the JavaScript bundle so its runtime
+assets and native dependencies remain deployable.
+
+| Alias                  | Model ID                               | Revision                                   | Dimensions | Modalities  |
+| ---------------------- | -------------------------------------- | ------------------------------------------ | ---------- | ----------- |
+| `local-minilm`         | `Xenova/all-MiniLM-L6-v2`              | `751bff37182d3f1213fa05d7196b954e230abad9` | 384        | text        |
+| `local-embeddinggemma` | `onnx-community/embeddinggemma-2-ONNX` | `daa72c51243991dfcaf9f9137d2c573d8f7790c0` | 768        | text, image |
+
+Stage an offline snapshot at
+`<cacheDir>\<model-owner>\<model-name>\<revision>\`. MiniLM requires
+`config.json`, `tokenizer.json`, `tokenizer_config.json`, and
+`onnx\model.onnx`. Gemma additionally requires `processor_config.json`,
+`onnx\model.onnx_data` (external weights), and, when image-enabled,
+`onnx\vision_encoder.onnx`. Quantized/FP16 files and revision `main` do not
+substitute for the pinned FP32 snapshot. Missing files fail offline with
+staging/consent guidance, never a network fallback.
+
+For explicit online staging, the CLI accepts `--download-local-embedding`
+(or `--download-local-embedding 1`; `0` forbids downloads). Downloads stream
+only missing selected-model assets from the pinned revision, publish each
+completed file atomically, remove interrupted partials, and can be retried
+without refetching completed files. Download failure leaves the prior config
+unchanged. Without consent, generation only writes offline configuration;
+the complete snapshot must be staged before first inference.
+
+```powershell
+# Repo-less fresh configuration, explicit Gemma consent (no server starts here)
+node .\typeagent-serve.mjs provision --provider copilot --embedding local `
+  --local-embedding-model embeddinggemma --download-local-embedding --force
+
+# Existing configuration: explicitly select a named profile; restart separately
+node .\tools\setModelProvider.mjs --provider copilot `
+  --default-embedding-model local-embeddinggemma
+
+# Source checkout equivalents
+node .\tools\scripts\generate-selfhost-config.mjs --provider copilot `
+  --embedding local --local-embedding-model minilm --out .\config.local.yaml
+node .\tools\scripts\setModelProvider.mjs --provider copilot
+```
+
+`--local-embedding-model` accepts `minilm` or `embeddinggemma`
+(case-insensitive), or either exact known model ID for backward compatibility.
+`--local-embedding-cache-dir` overrides the persistent cache.
+`--default-embedding-model` selects an existing catalog alias (or `none`);
+aliases inherited from `config.defaults.yaml` (including `copilot-small`)
+and partial per-alias overrides are resolved through the config loader.
+The two builtin local aliases can also be materialized automatically.
+Both artifact packagers ship the defaults next to the provisioning tools;
+the launcher honors `TYPEAGENT_CONFIG_DEFAULTS` overrides and otherwise pins
+that shipped defaults file for provisioning and server startup.
+For custom hosted models, pass `--embedding-size <positive integer>` when
+dimensions are not known. `--embedding none` emits the reserved selector
+`defaultEmbeddingModel: none`, without a legacy `embedding` section.
+The PowerShell installer exposes `-LocalEmbeddingModel`,
+`-LocalEmbeddingCacheDir`, `-EmbeddingSize`, and `-DownloadLocalEmbedding`;
+the Bash installer accepts the corresponding kebab-case CLI options.
+Provider-only setter changes preserve the existing embedding selector;
+`--embedding`, `--local-embedding-model`, or `--default-embedding-model`
+make an explicit change. Generator `--force` also preserves an existing
+selection unless embedding options are explicit; MSI adds
+`--preserve-embedding-selection` to protect upgrades.
+
+Offline regression coverage (no network, native inference, MSI execution,
+or service lifecycle):
+
+```powershell
+node --test .\tools\scripts\test\localEmbeddingProvisioning.spec.mjs .\tools\scripts\test\msiInstallerProviderUi.spec.mjs
+```
 
 ## Agent-server prerequisites & lifecycle
 
@@ -256,11 +610,11 @@ runs these deferred, impersonated custom actions (each **non-fatal** so a hiccup
 never rolls back the agent-server install; issues surface as warnings + the
 ExitDialog reminder):
 
-| Action             | Property gate             | What it does                                                                                                                                                                                        |
-| ------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
-| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                               |
-| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                 |
+| Action             | Property gate             | What it does                                                                                                                                                                                                                 |
+| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if no supported Node version is found. Mirrors `install-typeagent.ps1`. |
+| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                                                        |
+| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                                          |
 
 ```powershell
 # Skip starting/autostarting the daemon (e.g. provisioning happens later)
@@ -268,7 +622,14 @@ msiexec /i TypeAgent-<version>-win32-x64.msi STARTSERVER=0 AUTOSTART=0
 ```
 
 Both CLIs require a one-time interactive sign-in (`claude`, then `copilot`)
-before agent actions work; the ExitDialog reminds the user of this.
+before agent actions work. The final page (`TypeAgentExitDlg`, a custom
+replacement for the stock WixUI `ExitDialog`) reminds the user to sign in on
+first use. Provisioning runs automatically during install. Copilot provisioning
+failures roll back the install, so only for `AISYSTEMS` (non-fatal Azure
+sign-in) does the page check `%USERPROFILE%\.typeagent\config.local.yaml`
+(`CheckTypeAgentConfig`); if it's missing, the page shows the `provision` retry
+command, with the resolved install path, in a selectable text box with a
+**Copy** button. Both actions live in `exit-dialog.vbs`.
 
 ## Optional: install the TypeAgent Shell (desktop app)
 
@@ -344,6 +705,74 @@ az pipelines run --name "azure-build-publish-all" --branch main
 
 ## Troubleshooting
 
+### Windows transaction CI
+
+The `Windows MSI lifecycle` workflow runs real `msiexec` transactions on a
+disposable `windows-2022` hosted runner, under one account and within one job.
+It builds the current production WiX authoring plus a pinned pre-change baseline
+(`d7bbde6bf88b442cab7f412acf4fd74b00becb96`). Packages use a separate test product
+identity and installation directory. A deterministic Node server and a child
+holding a non-delete-sharing Windows file handle replace the application runtime.
+Authentication, Copilot registration, VS Code, provisioning, and downloads are
+explicitly disabled: this is an installer transaction gate, not a full-product
+or released-binary compatibility certification.
+
+The gate exercises initial install, rollback after shutdown/extraction/restart,
+upgrade with a running scheduled task, automatic recovery by a subsequent MSI
+after an interrupted prepared transaction (with and without a running server),
+repair of a missing payload file, and repeated uninstall/reinstall. Assertions check MSI product registration,
+payload versions/hashes, server health, process cleanup, task state, retained user
+data, and maintenance markers. It fails if ICE validation cannot run or if a
+failure injection is not reached. Logs, transformed authoring, test MSIs,
+compiled action sequences, and results are retained even on failure.
+
+`ts/tools/scripts/test/msiLifecycle/build.ps1` can compile packages locally
+without installing them. If local machine policy prevents ICE validation, the
+manifest marks those packages unvalidated. `run.ps1` rejects unvalidated packages
+and refuses to install outside a clean disposable GitHub-hosted runner. Do not
+bypass these guards on a development machine.
+
+The production sequence first queues rollback, shutdown, and commit maintenance,
+then uses an early `InstallExecute` to run shutdown without ending the transaction.
+`RemoveExistingProducts` follows immediately, before `ProcessComponents` or
+installation of new files. `InstallFinalize` executes the remaining installation
+script. This avoids error 2613: rollback/commit actions may not be queued before
+an unflushed `RemoveExistingProducts` immediately after `InstallInitialize`.
+
+Actual reboot/power-loss injection, interactive UAC/logon, and authenticated
+integrations remain separate coverage gaps. Passing this job does not establish
+those behaviors.
+
+### Copilot plugin registration fails with "spawn UNKNOWN"
+
+WinGet's `Microsoft\WinGet\Links\copilot.exe` can fail to launch even when the
+actual package executable works. The launcher is not necessarily a symbolic
+link: a broken ordinary file remains unchanged by `realpath`.
+Registration canonicalizes Windows paths and probes explicit overrides and PATH
+candidates first. If those and the usual launcher fallbacks fail, it probes
+`copilot.exe` directly inside `GitHub.Copilot_*` package directories under
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages` and `%ProgramW6432%\WinGet\Packages`
+(also `%ProgramFiles%` when different). Discovery is non-recursive and does not
+search unrelated packages. Missing launchers fail before spawning a shell;
+other probe and package-enumeration errors are logged.
+
+The Windows workflow also runs discovery regressions using a real broken
+non-symlink launcher and a runnable substitute package executable. These tests
+do not exercise authenticated Copilot registration or the MSI service context.
+
+For an older installer without this fix, set `COPILOT_CLI_PATH` to the real
+WinGet package executable and rerun registration from PowerShell:
+
+```powershell
+$env:COPILOT_CLI_PATH = "C:\path\to\the\actual\WinGet\package\copilot.exe"
+& "$env:LOCALAPPDATA\TypeAgent\register-plugin.ps1"
+```
+
+Use the actual existing executable path, not the `Links` launcher. This override
+also supports custom WinGet package locations outside the default directories.
+Repair with the same older MSI may repeat the failure. Registration diagnostics
+are in `%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+
 ### "WiX Toolset not found"
 
 **Error:**
@@ -384,6 +813,72 @@ az artifacts universal download: ... (404 or auth error)
 1. Run `az login` and authenticate
 2. Verify artifact exists: `az artifacts universal list --feed typeagent`
 3. Check RID matches published artifacts (e.g., `agent-server.win32-x64`)
+
+### "Unable to clear payload directory"
+
+Setup stops the installed agent server automatically before upgrade, repair, or
+uninstall. It pauses the installation's scheduled task, requests graceful
+shutdown on ports owned by that instance, and waits before terminating remaining
+verified processes and their captured children. Processes are checked by their
+installation paths, user identity, and creation times; unrelated Node processes
+are not stopped.
+
+The maintenance action runs before an older MSI's uninstall actions and before
+any payload is removed. It checks for remaining file locks, then preserves the
+old agent-server and plugin directories in a transaction-specific temporary
+folder. Rollback restores those directories and the previous scheduled-task
+definition, and attempts to restart each previously running server. It restores
+the running task and independently restores manually launched instances, using
+their original Node executable, arguments, working directory, and environment.
+For older launchers without saved launch metadata, maintenance reads the owned
+process's Windows process parameters through a read-only handle before shutdown.
+The captured environment is encrypted with current-user Windows DPAPI in the
+transaction state, never written to the log, and removed after recovery or commit.
+Failure to capture a live server's context aborts before stopping it.
+Unrecognized root Node entry points also fail before shutdown rather than losing
+their restart commands. Restored manual servers receive only null input and file
+output handles, not MSI's inherited pipes; their output is written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-restored-server.log`.
+
+Rollback also blocks startup again if installation had already restarted the
+new server. Even when the original shutdown failed, rollback reconciles surviving
+processes and captured children before restarting anything. Failed rollback keeps
+the marker and recovery state instead of starting duplicate servers. Persisted
+process identities use UTC ticks rather than JSON dates, which lose precision in
+Windows PowerShell 5.1. A process exiting during ownership checks or termination
+is harmless only after its original identity is confirmed gone; errors affecting
+a still-live process remain fatal.
+
+A successful
+install uses `STARTSERVER` and `AUTOSTART` as usual; uninstall never restarts the
+server. The updated launcher and server reject startup while
+`%LOCALAPPDATA%\TypeAgent\.msi-maintenance` exists.
+
+Shutdown errors abort setup before payload deletion and are logged in
+`%LOCALAPPDATA%\TypeAgent\logs\msi-maintenance.log`. External/protected processes
+can still prevent replacement; setup reports the locked file rather than
+partially deleting the payload. If maintenance is interrupted outside normal MSI rollback (for example by power
+loss), the marker and backup are retained. The next installer automatically
+validates and restores a complete previous transaction using its current embedded
+recovery implementation, then continues installation with fresh rollback
+protection. It does not execute the previous transaction's staged script.
+Before restoring directories, rollback atomically records their Windows
+volume/file identities. A later retry can recognize those same directories if
+task restoration failed after the backups were moved, without accepting arbitrary
+replacement folders as valid backups. Recovery also carries forward a scheduled
+task's running intent while its asynchronous startup is still pending.
+
+Automatic recovery accepts only a matching installation root and a sibling
+`TypeAgent-msi-*.tmp` transaction with valid state and complete saved payloads.
+It refuses redirected paths, missing backups, invalid state, and running-server
+state without supported launch context. Those failures preserve the marker and
+remaining backups and report why recovery could not proceed. Recovery is not a
+force-delete option and never discards the only previous payload to make setup
+continue.
+
+Detailed extraction diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI
+log when setup is run with `/L*V`.
 
 ### "Certificate not found"
 

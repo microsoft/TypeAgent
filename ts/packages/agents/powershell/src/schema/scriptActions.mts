@@ -43,7 +43,7 @@ export type CreatePowerShellFlow = {
         // Script parameters
         scriptParameters: {
             name: string;
-            type: "string" | "number" | "boolean" | "path";
+            type: "string" | "number" | "boolean" | "path" | "executable";
             required: boolean;
             description: string;
             default?: string;
@@ -53,13 +53,76 @@ export type CreatePowerShellFlow = {
             pattern: string;
             isAlias: boolean;
         }[];
-        // PowerShell cmdlets the script uses
-        allowedCmdlets: string[];
-        // PowerShell modules to import for the script's cmdlets (e.g.
-        // ["NetTCPIP"] for Get-NetTCPConnection). Include every module required
-        // by allowedCmdlets — use the same list that made testPowerShellFlow
-        // pass, or the flow will fail at invocation with "not recognized".
-        allowedModules?: string[];
+        // Installed modules to load before running the script.
+        requiredModules?: string[];
+    };
+};
+
+// Create a reusable flow transactionally and execute once, after user authorization.
+export type CreateAndExecutePowerShellFlow = {
+    actionName: "createAndExecutePowerShellFlow";
+    parameters: {
+        // camelCase identifier for the new flow
+        actionName: string;
+        // What this script does
+        description: string;
+        // Human-readable name
+        displayName: string;
+        // PowerShell script body (should include param() block)
+        script: string;
+        // Script parameters
+        scriptParameters: {
+            name: string;
+            type: "string" | "number" | "boolean" | "path" | "executable";
+            required: boolean;
+            description: string;
+            default?: string;
+        }[];
+        // Grammar patterns for matching future requests
+        grammarPatterns: {
+            pattern: string;
+            isAlias: boolean;
+        }[];
+        requiredModules?: string[];
+        // JSON string of named parameters for this one execution
+        executionParametersJson?: string;
+    };
+};
+
+// Add validated phrases to an existing flow without creating a duplicate
+export type AddPowerShellFlowPatterns = {
+    actionName: "addPowerShellFlowPatterns";
+    parameters: {
+        flowName: string;
+        grammarPatterns: {
+            pattern: string;
+            isAlias: boolean;
+        }[];
+    };
+};
+
+// Report the machine-readable result of PowerShell capability reasoning
+export type ReportPowerShellCapabilityOutcome = {
+    actionName: "reportPowerShellCapabilityOutcome";
+    parameters: {
+        status: "handledExisting" | "created" | "notSuitable" | "failed";
+        schema?: string;
+        actionName?: string;
+        flowName?: string;
+        reasonCode?: string;
+        phase?: "classify" | "discover" | "validate" | "execute" | "persist";
+        mayHaveSideEffects?: boolean;
+        reason?: string;
+    };
+};
+
+// Execute a script without registering it. Fresh user authorization is required.
+export type TestPowerShellFlow = {
+    actionName: "testPowerShellFlow";
+    parameters: {
+        script: string;
+        requiredModules?: string[];
+        testParameters?: string;
     };
 };
 
@@ -71,10 +134,22 @@ export type EditPowerShellFlow = {
         flowName: string;
         // New PowerShell script body (should include param() block matching existing parameters)
         script: string;
-        // Updated list of PowerShell cmdlets the script uses
-        allowedCmdlets: string[];
-        // Updated list of PowerShell modules to import (optional; preserved if omitted)
-        allowedModules?: string[];
+        // Omit to preserve the existing module dependencies.
+        requiredModules?: string[];
+    };
+};
+
+// Propose a repair and retry once. Authorize the replacement before execution.
+export type RepairAndExecutePowerShellFlow = {
+    actionName: "repairAndExecutePowerShellFlow";
+    parameters: {
+        // Existing flow to repair
+        flowName: string;
+        // Replacement script body
+        script: string;
+        requiredModules?: string[];
+        // JSON string of named parameters for the retry
+        executionParametersJson?: string;
     };
 };
 
@@ -93,6 +168,11 @@ export type PowerShellActions =
     | ListPowerShellFlows
     | DeletePowerShellFlow
     | ExecutePowerShellFlow
+    | TestPowerShellFlow
     | CreatePowerShellFlow
+    | CreateAndExecutePowerShellFlow
+    | AddPowerShellFlowPatterns
+    | ReportPowerShellCapabilityOutcome
     | EditPowerShellFlow
+    | RepairAndExecutePowerShellFlow
     | ImportPowerShellFlow;

@@ -11,7 +11,8 @@ build, run, and develop the TypeAgent repo, with the repo in `~/src/TypeAgent`
   - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
   - `\. "$HOME/.nvm/nvm.sh"`
   - `nvm install --lts`
-- Enable corepack: `corepack enable`
+  - `nvm use --lts`
+- Install pnpm: `npm install --global pnpm`
 - Clone and build:
   - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent`
   - `cd ~/src/TypeAgent/ts`

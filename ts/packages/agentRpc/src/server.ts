@@ -31,7 +31,7 @@ import {
     ContextParams,
     OptionsFunctionCallBack,
 } from "./types.js";
-import { createRpc } from "./rpc.js";
+import { createRpc, type RpcOptions, type RpcStructuredLogger } from "./rpc.js";
 import { ChannelProvider, RpcChannel } from "./common.js";
 import {
     base64ToUint8Array,
@@ -40,11 +40,65 @@ import {
     setObjectProperty,
 } from "@typeagent/common-utils";
 
-function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
+export type AgentRpcServerOptions = {
+    trustedContextPropagation?: boolean;
+    logger?: RpcStructuredLogger;
+    channelName?: string;
+};
+
+function getAgentChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName ?? `agent:${name}`;
+}
+
+function getOptionsChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName === undefined
+        ? `options:${name}`
+        : `${options.channelName}:options`;
+}
+
+function getTrustedRpcOptions(
+    options: AgentRpcServerOptions | undefined,
+): RpcOptions | undefined {
+    if (
+        options?.trustedContextPropagation !== true &&
+        options?.logger === undefined
+    ) {
+        return undefined;
+    }
+    return {
+        ...(options.trustedContextPropagation === true
+            ? {
+                  tracing: {
+                      propagateContext: true,
+                      trustRemoteContext: true,
+                  },
+              }
+            : {}),
+        ...(options.logger === undefined ? {} : { logger: options.logger }),
+    };
+}
+
+function createOptionsRpc(
+    channelProvider: ChannelProvider,
+    name: string,
+    options?: AgentRpcServerOptions,
+) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(
-        `options:${name}`,
+        getOptionsChannelName(name, options),
     );
-    return createRpc<OptionsFunctionCallBack>(name, optionsChannel);
+    return createRpc<OptionsFunctionCallBack>(
+        name,
+        optionsChannel,
+        undefined,
+        undefined,
+        getTrustedRpcOptions(options),
+    );
 }
 
 function populateOptionsFunctions(
@@ -68,8 +122,9 @@ export function createAgentRpcServer(
     name: string,
     agent: AppAgent,
     channelProvider: ChannelProvider,
+    options?: AgentRpcServerOptions,
 ) {
-    const channelName = `agent:${name}`;
+    const channelName = getAgentChannelName(name, options);
     const channel = channelProvider.createChannel(channelName);
     let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
 
@@ -98,7 +153,11 @@ export function createAgentRpcServer(
                     );
                 }
                 if (optionsRpc === undefined) {
-                    optionsRpc = createOptionsRpc(channelProvider, name);
+                    optionsRpc = createOptionsRpc(
+                        channelProvider,
+                        name,
+                        options,
+                    );
                 }
                 populateOptionsFunctions(
                     optionsRpc,
@@ -252,15 +311,26 @@ export function createAgentRpcServer(
                 param.entityTypeName,
             );
         },
+        async cancelChoice(param) {
+            await agent.cancelChoice?.(
+                param.choiceId,
+                getSessionContextShim(param),
+            );
+        },
         async handleChoice(param) {
             if (agent.handleChoice === undefined) {
                 throw new Error("Invalid invocation of handleChoice");
             }
-            return agent.handleChoice(
-                param.choiceId,
-                param.response,
-                getActionContextShim(param),
-            );
+            try {
+                return await agent.handleChoice(
+                    param.choiceId,
+                    param.response,
+                    getActionContextShim(param),
+                );
+            } finally {
+                if (param.actionContextId !== undefined)
+                    actionAbortControllers.delete(param.actionContextId);
+            }
         },
         async getDynamicSchema(param) {
             if (agent.getDynamicSchema === undefined) {
@@ -321,12 +391,13 @@ export function createAgentRpcServer(
         },
     };
 
+    const rpcOptions = getTrustedRpcOptions(options);
     const rpc = createRpc<
         AgentContextInvokeFunctions,
         AgentContextCallFunctions,
         AgentInvokeFunctions,
         AgentCallFunctions
-    >(name, channel, agentInvokeHandlers, agentCallHandlers);
+    >(name, channel, agentInvokeHandlers, agentCallHandlers, rpcOptions);
 
     function getStorage(contextId: number, session: boolean): Storage {
         const tokenCachePersistence: TokenCachePersistence = {
@@ -439,6 +510,8 @@ export function createAgentRpcServer(
         hasInstanceStorage: boolean,
         hasSessionStorage: boolean,
         sessionContextId: string,
+        currentConnectionId: string | undefined,
+        conversationId: string | undefined,
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
@@ -452,6 +525,8 @@ export function createAgentRpcServer(
                 ? getStorage(contextId, false)
                 : undefined,
             sessionContextId,
+            conversationId,
+            currentConnectionId,
             notify: (
                 event: AppAgentEvent,
                 message: string | DisplayContent,
@@ -510,6 +585,8 @@ export function createAgentRpcServer(
                     defaultId,
                 });
             },
+            requestSecurityApproval: (request) =>
+                rpc.invoke("requestSecurityApproval", { contextId, request }),
             toggleTransientAgent: async (
                 name: string,
                 enable: boolean,
@@ -572,6 +649,7 @@ export function createAgentRpcServer(
                         name,
                         agent,
                         channelProvider,
+                        options,
                     );
                     // Trigger the addDynamicAgent on the client side
                     const p = rpc.invoke("addDynamicAgent", {
@@ -683,6 +761,8 @@ export function createAgentRpcServer(
             hasSessionStorage,
             sessionContextId,
             agentContextId,
+            currentConnectionId,
+            conversationId,
         } = param;
         if (contextId === undefined) {
             throw new Error("Invalid context param: missing contextId");
@@ -709,6 +789,8 @@ export function createAgentRpcServer(
             hasInstanceStorage,
             hasSessionStorage,
             sessionContextId,
+            currentConnectionId,
+            conversationId,
             agentContext,
         );
     }
@@ -768,6 +850,8 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            executionOrigin: param.executionOrigin,
+            workingDirectory: param.workingDirectory,
             get abortSignal() {
                 return abortController.signal;
             },

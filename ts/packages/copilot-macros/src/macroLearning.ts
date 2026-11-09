@@ -1,0 +1,1284 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { createHash } from "node:crypto";
+import path from "node:path";
+import { RevisionRecords } from "./revisionRecords.js";
+import type {
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
+    CopilotToolMacro,
+    MacroExecutionRecipe,
+    MacroLearningJob,
+    MacroLearningBuild,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningRuntime,
+    MacroVersionRef,
+    RecordedInteractionTrace,
+    ReplayToolHost,
+} from "./contracts.js";
+import {
+    MacroAuthoringPending,
+    MacroChildAuthoring,
+} from "./macroChildAuthoring.js";
+import type { SealedRecipeAuthoringContext } from "./recipeAuthoring.js";
+import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
+import { getMacroFeatures } from "./macroFeatures.js";
+import {
+    parseMacroExecutionRecipe,
+    parseMacroLearningBuild,
+} from "./macroLearningParsers.js";
+import {
+    assertLearningBuild,
+    assertLearningGrammar,
+    assertLearningRecipe,
+    assertLearningTrace,
+    learningValuesEqual,
+} from "./macroLearningValidation.js";
+import { validateRecipeArtifact } from "./recipeValidation.js";
+import type { RecipeArtifact } from "./recipeContracts.js";
+import { redactTraceValue } from "./redaction.js";
+import {
+    cloneVerifiedLearningTrace,
+    learningToolResult,
+} from "./resultEvidence.js";
+import { setMacroCapabilities } from "./resultPath.js";
+
+interface StoredJob extends MacroLearningJob {
+    fingerprint: string;
+    preferenceRevision: number;
+    recipe?: MacroExecutionRecipe;
+    draft?: CopilotToolMacro;
+    buildCheckpoint?: { draft: CopilotToolMacro; build: MacroLearningBuild };
+    grammarCheckpoint?: string[];
+    verifierAnswers?: Record<string, string>;
+    attempts: Partial<
+        Record<"extract" | "build" | "grammar" | "program", number>
+    >;
+}
+
+interface LearningState {
+    schemaVersion: 1;
+    preferences: MacroLearningPreference[];
+    jobs: StoredJob[];
+    suppressed: string[];
+    suppressedMacroIds: string[];
+}
+
+interface LearningCatalog {
+    readTrace(traceId: string): Promise<RecordedInteractionTrace>;
+    saveDraft(macro: CopilotToolMacro): Promise<MacroVersionRef>;
+    approveMacro(ref: MacroVersionRef): Promise<MacroVersionRef>;
+    readVersion(
+        macroId: string,
+        version: number,
+    ): Promise<CopilotToolMacro | undefined>;
+    recoverApproved(macro: CopilotToolMacro): Promise<void>;
+}
+
+class LearningReviewRequired extends Error {}
+class LearningDeadlineExceeded extends Error {}
+
+const modes: MacroLearningMode[] = ["off", "prepare", "read-only", "all"];
+const activeStatuses = new Set([
+    "queued",
+    "extracting",
+    "building",
+    "awaitingAuthor",
+]);
+
+function validVerifierAnswer(value: unknown): value is string {
+    return (
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        Buffer.byteLength(value) <= 1_048_576 &&
+        redactTraceValue(value) === value
+    );
+}
+
+function validVerifierCache(value: unknown): boolean {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.keys(value).length <= 8 &&
+        Object.entries(value).every(
+            ([digest, answer]) =>
+                /^[a-f0-9]{64}$/.test(digest) && validVerifierAnswer(answer),
+        )
+    );
+}
+
+function normalizeCwd(cwd: string): string {
+    if (typeof cwd !== "string" || !cwd.trim() || cwd.length > 4_096) {
+        throw new Error(
+            "A bounded working directory is required for learning.",
+        );
+    }
+    return path.resolve(cwd).toLowerCase();
+}
+
+function digest(value: unknown): string {
+    const canonical = (entry: unknown): unknown => {
+        if (Array.isArray(entry)) return entry.map(canonical);
+        if (entry !== null && typeof entry === "object") {
+            return Object.fromEntries(
+                Object.entries(entry)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([key, child]) => [key, canonical(child)]),
+            );
+        }
+        return entry;
+    };
+    return createHash("sha256")
+        .update(JSON.stringify(canonical(value)))
+        .digest("hex");
+}
+
+function assertCaptureTrace(
+    envelope: SealedRecipeAuthoringContext,
+    traceId: string,
+    trace: RecordedInteractionTrace,
+    profileId: string,
+): void {
+    const { capture, outputs } = envelope.context;
+    if (
+        capture.captureId !== traceId ||
+        capture.scope.workspaceId !== normalizeCwd(trace.cwd) ||
+        capture.scope.profileId !== profileId ||
+        capture.sessionId !== trace.sessionId ||
+        capture.request !== trace.prompt ||
+        !learningValuesEqual(
+            capture.calls.map((call) => call.callId),
+            trace.toolCalls.map((call) => call.toolCallId),
+        ) ||
+        !outputs.some((output) =>
+            learningValuesEqual(output.evidence.modelVisible, trace.response),
+        )
+    )
+        throw new Error(
+            "Child capture does not match its recorded trace/workspace.",
+        );
+}
+
+function assertChildProgram(
+    program: RecipeArtifact,
+    job: MacroLearningJob,
+): void {
+    const invalid = validateRecipeArtifact(program);
+    if (
+        invalid.length ||
+        program.recipeId !== job.jobId ||
+        program.provenance.legacySource?.macroId !== job.jobId ||
+        program.provenance.captureId !== job.authoring.captureId ||
+        program.provenance.taskId !== job.authoring.taskId ||
+        program.provenance.tokenId !== job.authoring.tokenId ||
+        !program.provenance.evidenceIds.includes(job.authoring.contextDigest)
+    )
+        throw new Error(
+            `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
+        );
+}
+
+export class MacroLearningEngine {
+    private state?: LearningState;
+    private loading?: Promise<void>;
+    private mutation: Promise<void> = Promise.resolve();
+    private runtime?: MacroLearningRuntime;
+    private worker: Promise<void> | undefined;
+    private workerError?: unknown;
+    private controller: AbortController | undefined;
+    private activeJobId: string | undefined;
+    private stopped = false;
+    private readonly authoringWakeups = new Set<string>();
+    private readonly childAuthoring: MacroChildAuthoring;
+    private readonly records: RevisionRecords;
+    private changedJobs: Set<string> | undefined;
+    private jobSnapshots: Map<string, StoredJob> | undefined;
+    private readonly changeWaiters = new Set<() => void>();
+
+    constructor(
+        private readonly rootDir: string,
+        private readonly catalog: LearningCatalog,
+        private readonly replayHost?: ReplayToolHost,
+        private readonly authoringProfileId = "typeagent",
+    ) {
+        this.childAuthoring = new MacroChildAuthoring(
+            rootDir,
+            authoringProfileId,
+            () => this.notifyAuthoring(),
+        );
+        this.records = new RevisionRecords(this.statePath());
+    }
+
+    async configure(runtime: MacroLearningRuntime): Promise<void> {
+        if (this.stopped) throw new Error("The learning owner is closed.");
+        if (this.worker)
+            throw new Error(
+                "Learning runtime cannot change while jobs are active.",
+            );
+        if (
+            !runtime ||
+            typeof runtime.buildProgram !== "function" ||
+            typeof runtime.extract !== "function" ||
+            typeof runtime.build !== "function" ||
+            typeof runtime.withAuthorQuery !== "function" ||
+            typeof runtime.generateGrammar !== "function" ||
+            typeof runtime.validateGrammar !== "function"
+        ) {
+            throw new Error("A complete learning runtime is required.");
+        }
+        await this.load();
+        this.runtime = runtime;
+        await this.update(() => {
+            for (const job of this.state!.jobs) {
+                if (
+                    activeStatuses.has(job.status) ||
+                    (job.status === "failed" &&
+                        job.draft &&
+                        job.error?.includes("catalog was saved"))
+                ) {
+                    this.markChanged(job);
+                    job.status = "queued";
+                }
+            }
+        });
+        this.startWorker();
+    }
+
+    async close(): Promise<void> {
+        this.stopped = true;
+        this.notifyAuthoring();
+        this.controller?.abort(new Error("The learning owner closed."));
+        await this.worker;
+        await this.mutation;
+        if (this.workerError !== undefined) throw this.workerError;
+    }
+
+    async getPreference(cwd: string): Promise<MacroLearningPreference> {
+        await this.load();
+        return this.mutation.then(() => structuredClone(this.preference(cwd)));
+    }
+
+    private preference(cwd: string): MacroLearningPreference {
+        const normalized = normalizeCwd(cwd);
+        return (
+            this.state?.preferences.find((item) => item.cwd === normalized) ?? {
+                cwd: normalized,
+                mode: "off",
+                revision: 0,
+            }
+        );
+    }
+
+    assertSelected(cwd: string): void {
+        const features = getMacroFeatures();
+        if (!this.state || this.preference(cwd).mode === "off") {
+            throw new Error(
+                "Learning is off; load and select a learning preference before recording.",
+            );
+        }
+        if (!features.recording || !features.induction) {
+            throw new Error(
+                "Learning recording and induction must be enabled.",
+            );
+        }
+    }
+
+    async setPreference(request: {
+        cwd: string;
+        mode: MacroLearningMode;
+    }): Promise<MacroLearningPreference> {
+        const cwd = normalizeCwd(request.cwd);
+        if (!modes.includes(request.mode))
+            throw new Error("Invalid macro learning mode.");
+        await this.load();
+        let preference!: MacroLearningPreference;
+        await this.update(() => {
+            if (
+                !this.state!.preferences.some((item) => item.cwd === cwd) &&
+                this.state!.preferences.length >= 1_000
+            ) {
+                throw new Error(
+                    "Learning workspace preference capacity exceeded.",
+                );
+            }
+            preference = {
+                cwd,
+                mode: request.mode,
+                revision: this.preference(cwd).revision + 1,
+            };
+            this.state!.preferences = this.state!.preferences.filter(
+                (item) => item.cwd !== cwd,
+            );
+            this.state!.preferences.push(preference);
+            for (const job of this.state!.jobs) {
+                if (
+                    job.cwd === cwd &&
+                    activeStatuses.has(job.status) &&
+                    job.macro?.state !== "approved"
+                ) {
+                    this.markChanged(job);
+                    job.mode = preference.mode;
+                    job.preferenceRevision = preference.revision;
+                    if (preference.mode === "off") {
+                        job.status = "cancelled";
+                        job.error = "Learning was turned off.";
+                        job.updatedAt = new Date().toISOString();
+                        if (this.activeJobId === job.jobId)
+                            this.controller?.abort();
+                    }
+                }
+            }
+        });
+        return structuredClone(preference);
+    }
+
+    async prepare(
+        traceId: string,
+        selectedRecording = false,
+        envelope?: SealedRecipeAuthoringContext,
+    ): Promise<MacroLearningJob> {
+        await this.load();
+        const trace = await this.catalog.readTrace(traceId);
+        const cwd = normalizeCwd(trace.cwd);
+        envelope ??= await this.childAuthoring.contexts.get(
+            { workspaceId: cwd, profileId: this.authoringProfileId },
+            traceId,
+        );
+        if (!envelope)
+            throw new Error(
+                "A sealed child authoring capture is required; re-record the successful task.",
+            );
+        assertCaptureTrace(envelope, traceId, trace, this.authoringProfileId);
+        await this.childAuthoring.contexts.put(envelope);
+        let sourceError: string | undefined;
+        try {
+            assertLearningTrace(trace);
+        } catch (error) {
+            sourceError = redactTraceValue(
+                error instanceof Error ? error.message : String(error),
+            ) as string;
+        }
+        const fingerprint = sourceError
+            ? digest({ traceId, cwd })
+            : digest({
+                  cwd,
+                  request: trace.prompt,
+                  calls: trace.toolCalls.map((call) => ({
+                      name: call.name,
+                      ...(call.mcpServerName
+                          ? { mcpServerName: call.mcpServerName }
+                          : {}),
+                      arguments: call.arguments,
+                  })),
+              });
+        let job!: StoredJob;
+        await this.update(() => {
+            const existing = this.state!.jobs.find(
+                (item) =>
+                    (item.fingerprint === fingerprint &&
+                        item.status !== "failed") ||
+                    (item.traceId === traceId && item.cwd === cwd),
+            );
+            if (existing) {
+                job = existing;
+                return;
+            }
+            if (!selectedRecording) this.assertSelected(cwd);
+            const preference = this.preference(cwd);
+            if (
+                this.state!.jobs.length >= 1_000 ||
+                this.state!.jobs.filter((item) =>
+                    activeStatuses.has(item.status),
+                ).length >= 32
+            ) {
+                throw new Error(
+                    "Learning job capacity exceeded (1000 retained, 32 pending).",
+                );
+            }
+            const now = new Date().toISOString();
+            job = {
+                jobId: digest({ traceId, cwd }),
+                traceId,
+                cwd,
+                sessionId: trace.sessionId,
+                mode: preference.mode,
+                preferenceRevision: preference.revision,
+                status: sourceError ? "failed" : "queued",
+                fingerprint,
+                attempts: {},
+                createdAt: now,
+                updatedAt: now,
+                ...(sourceError ? { error: sourceError.slice(0, 2_000) } : {}),
+                authoring: {
+                    captureId: traceId,
+                    contextDigest: envelope.digest,
+                    taskId: envelope.context.capture.taskId,
+                    tokenId: envelope.context.capture.tokenId,
+                },
+            };
+            this.state!.jobs.push(job);
+            if (selectedRecording) {
+                try {
+                    this.assertSelected(cwd);
+                } catch (error) {
+                    job.status = "cancelled";
+                    job.error =
+                        error instanceof Error ? error.message : String(error);
+                }
+            }
+        });
+        this.startWorker();
+        return this.publicJob(job);
+    }
+
+    async getJob(jobId: string): Promise<MacroLearningJob> {
+        await this.load();
+        const job = await this.mutation.then(() =>
+            this.publicJob(this.findJob(jobId)),
+        );
+        if (this.workerError !== undefined) throw this.workerError;
+        return job;
+    }
+
+    private activeAuthorJobs(): Set<string> {
+        return new Set(
+            this.state!.jobs.filter(
+                (job) =>
+                    activeStatuses.has(job.status) &&
+                    this.preference(job.cwd).mode !== "off" &&
+                    !this.state!.suppressed.includes(job.fingerprint),
+            ).map((job) => job.jobId),
+        );
+    }
+
+    async claimAuthoring(
+        claim: MacroAuthoringClaim,
+    ): Promise<MacroAuthoringRequest | undefined> {
+        await this.load();
+        if (this.stopped) return undefined;
+        if (claim.waitMs !== undefined && typeof claim.waitMs !== "number")
+            throw new Error("Invalid authoring notification wait.");
+        const waitMs = Math.min(Math.max(claim.waitMs ?? 0, 0), 30_000);
+        if (!Number.isFinite(waitMs))
+            throw new Error("Invalid authoring notification wait.");
+        if (this.changeWaiters.size >= 128)
+            throw new Error("Authoring notification wait capacity exceeded.");
+        let wake!: () => void;
+        const changed = new Promise<void>((resolve) => {
+            wake = resolve;
+        });
+        this.changeWaiters.add(wake);
+        const timer = setTimeout(wake, waitMs);
+        timer.unref();
+        try {
+            if (!claim.observeOnly) {
+                const request = await this.childAuthoring.claim(
+                    claim,
+                    this.activeAuthorJobs(),
+                );
+                if (request || !waitMs) return request;
+            }
+            if (!this.stopped) await changed;
+            // A disconnected waiter must not acquire a lease after it wakes.
+            // The connected host issues a fresh durable claim.
+            return undefined;
+        } finally {
+            clearTimeout(timer);
+            this.changeWaiters.delete(wake);
+        }
+    }
+
+    private notifyAuthoring(): void {
+        for (const wake of this.changeWaiters) wake();
+    }
+
+    async submitAuthoring(submission: MacroAuthoringSubmission): Promise<void> {
+        await this.load();
+        const jobId = await this.childAuthoring.submit(
+            submission,
+            this.activeAuthorJobs(),
+        );
+        await this.update(() => {
+            const job = this.findJob(jobId);
+            this.authoringWakeups.add(jobId);
+            if (job.status === "awaitingAuthor") {
+                job.status = "queued";
+                delete job.error;
+            }
+        });
+        this.startWorker();
+    }
+
+    async isSuppressed(macro: CopilotToolMacro): Promise<boolean> {
+        if (!macro.learning) return false;
+        await this.load();
+        const job = this.findJob(macro.learning.jobId);
+        return (
+            job.status === "cancelled" ||
+            this.state!.suppressed.includes(job.fingerprint) ||
+            this.state!.suppressedMacroIds.includes(macro.macroId)
+        );
+    }
+
+    async cancel(jobId: string): Promise<MacroLearningJob> {
+        await this.load();
+        await this.update(() => {
+            const job = this.findJob(jobId);
+            if (job.status === "ready" || job.macro?.state === "approved") {
+                throw new Error("Disable or forget an already approved macro.");
+            }
+            job.status = "cancelled";
+            job.error = "Learning job was cancelled.";
+            job.updatedAt = new Date().toISOString();
+            if (this.activeJobId === jobId) this.controller?.abort();
+        });
+        return this.getJob(jobId);
+    }
+
+    async suppress(macro: CopilotToolMacro): Promise<void> {
+        if (!macro.learning) return;
+        await this.load();
+        await this.update(() => {
+            const job = this.findJob(macro.learning!.jobId);
+            if (!this.state!.suppressedMacroIds.includes(macro.macroId)) {
+                this.state!.suppressedMacroIds.push(macro.macroId);
+            }
+            for (const related of this.state!.jobs) {
+                if (related.jobId === macro.macroId) {
+                    this.markChanged(related);
+                    if (!this.state!.suppressed.includes(related.fingerprint)) {
+                        this.state!.suppressed.push(related.fingerprint);
+                    }
+                    related.status = "cancelled";
+                    related.error =
+                        "The source macro was disabled or forgotten.";
+                    related.updatedAt = new Date().toISOString();
+                    if (this.activeJobId === related.jobId)
+                        this.controller?.abort();
+                }
+            }
+            if (!this.state!.suppressed.includes(job.fingerprint)) {
+                this.state!.suppressed.push(job.fingerprint);
+            }
+            job.status = "cancelled";
+            job.error =
+                "Equivalent learning is suppressed because the macro was disabled or forgotten.";
+            job.updatedAt = new Date().toISOString();
+            if (this.activeJobId === job.jobId) this.controller?.abort();
+        });
+    }
+
+    async assertApproval(
+        macro: CopilotToolMacro,
+        automatic = false,
+    ): Promise<MacroLearningPreference | undefined> {
+        if (!macro.learning) return undefined;
+        await this.load();
+        const job = this.findJob(macro.learning.jobId);
+        await this.childAuthoring.assertContext(job);
+        if (!learningValuesEqual(macro.learning.authoring, job.authoring))
+            throw new Error(
+                "Learning approval does not match its sealed child identity; re-record the successful task.",
+            );
+        this.check(job);
+        if (!job.draft || !learningValuesEqual(macro, job.draft)) {
+            throw new Error(
+                "Learning approval requires the immutable staged draft and grammar target.",
+            );
+        }
+        if (automatic) {
+            const preference = this.preference(job.cwd);
+            const allowed =
+                preference.mode === "all" ||
+                (preference.mode === "read-only" &&
+                    (await this.stageInspection(job, () =>
+                        this.allReadOnly(macro, job.cwd),
+                    )));
+            this.check(job);
+            if (
+                !allowed ||
+                this.preference(job.cwd).revision !== preference.revision
+            ) {
+                throw new LearningReviewRequired(
+                    "Current learning preference requires explicit review.",
+                );
+            }
+        }
+        return structuredClone(this.preference(job.cwd));
+    }
+
+    validateApprovalGrammar(
+        macro: CopilotToolMacro,
+        approved: CopilotToolMacro[],
+    ): void {
+        if (!macro.learning) return;
+        if (!this.runtime) {
+            throw new Error(
+                "A learning runtime is required to validate staged grammar.",
+            );
+        }
+        this.runtime.validateGrammar(macro, approved);
+    }
+
+    async approved(macro: CopilotToolMacro): Promise<void> {
+        if (!macro.learning) return;
+        await this.update(() => {
+            const job = this.findJob(macro.learning!.jobId);
+            if (
+                job.status === "cancelled" ||
+                this.state!.suppressed.includes(job.fingerprint) ||
+                this.state!.suppressedMacroIds.includes(job.jobId)
+            ) {
+                return;
+            }
+            job.macro = {
+                macroId: macro.macroId,
+                version: macro.version,
+                state: macro.state,
+            };
+            job.status = "ready";
+            job.updatedAt = new Date().toISOString();
+            delete job.error;
+        });
+        await this.childAuthoring.forget(macro.learning.jobId);
+    }
+
+    async approvalSaved(macro: CopilotToolMacro): Promise<void> {
+        if (!macro.learning) return;
+        await this.update(() => {
+            const job = this.findJob(macro.learning!.jobId);
+            job.mode = macro.learning!.mode;
+            job.macro = {
+                macroId: macro.macroId,
+                version: macro.version,
+                state: macro.state,
+            };
+            job.updatedAt = new Date().toISOString();
+        });
+    }
+
+    private check(job: StoredJob): void {
+        if (this.stopped) throw new Error("The learning owner is closed.");
+        this.assertSelected(job.cwd);
+        if (
+            job.status === "cancelled" ||
+            this.state!.suppressed.includes(job.fingerprint) ||
+            this.state!.suppressedMacroIds.includes(job.jobId)
+        ) {
+            throw new Error("Learning job is cancelled or suppressed.");
+        }
+        if (this.activeJobId === job.jobId)
+            this.controller?.signal.throwIfAborted();
+    }
+
+    private startWorker(): void {
+        if (
+            this.stopped ||
+            !this.runtime ||
+            this.worker ||
+            this.workerError !== undefined
+        )
+            return;
+        this.worker = this.drain()
+            .catch((error: unknown) => {
+                // Storage failures cannot themselves be persisted; expose them on status reads.
+                this.workerError = error;
+            })
+            .finally(() => {
+                this.worker = undefined;
+                if (this.state!.jobs.some((job) => job.status === "queued"))
+                    this.startWorker();
+            });
+    }
+
+    private async drain(): Promise<void> {
+        let job: StoredJob | undefined;
+        while (
+            !this.stopped &&
+            (job = this.state!.jobs.find((item) => item.status === "queued"))
+        ) {
+            this.controller = new AbortController();
+            this.activeJobId = job.jobId;
+            this.authoringWakeups.delete(job.jobId);
+            try {
+                await this.process(job);
+            } catch (error) {
+                const message = redactTraceValue(
+                    error instanceof Error ? error.message : String(error),
+                ) as string;
+                if (job.status !== "cancelled") {
+                    await this.update(() => {
+                        job!.status = this.stopped
+                            ? "queued"
+                            : error instanceof MacroAuthoringPending
+                              ? this.authoringWakeups.has(job!.jobId)
+                                  ? "queued"
+                                  : "awaitingAuthor"
+                              : error instanceof LearningReviewRequired
+                                ? "needsReview"
+                                : error instanceof LearningDeadlineExceeded
+                                  ? "failed"
+                                  : this.controller!.signal.aborted
+                                    ? "cancelled"
+                                    : "failed";
+                        job!.error = message.slice(0, 2_000);
+                        job!.updatedAt = new Date().toISOString();
+                    });
+                }
+            } finally {
+                this.controller = undefined;
+                this.activeJobId = undefined;
+            }
+        }
+    }
+
+    private async stage<T>(
+        job: StoredJob,
+        stage: "extract" | "build" | "grammar" | "program",
+        operation: (signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
+        this.check(job);
+        await this.update(() => {
+            const attempts = (job.attempts[stage] ?? 0) + 1;
+            if (attempts > 2)
+                throw new Error(`Learning ${stage} restart budget exceeded.`);
+            job.attempts[stage] = attempts;
+            job.updatedAt = new Date().toISOString();
+        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const controller = this.controller!;
+        let timedOut = false;
+        const timeoutMs = stage === "program" ? 120_000 : 30_000;
+        let abort!: () => void;
+        const interrupted = new Promise<never>((_resolve, reject) => {
+            abort = () =>
+                reject(
+                    timedOut
+                        ? new LearningDeadlineExceeded(
+                              `Learning ${stage} exceeded its ${timeoutMs / 1000}s deadline.`,
+                          )
+                        : new Error(`Learning ${stage} was cancelled.`),
+                );
+            controller.signal.addEventListener("abort", abort, { once: true });
+            timer = setTimeout(() => {
+                timedOut = true;
+                controller.abort();
+            }, timeoutMs);
+        });
+        try {
+            controller.signal.throwIfAborted();
+            const result = await Promise.race([
+                operation(controller.signal),
+                interrupted,
+            ]);
+            this.check(job);
+            return result;
+        } catch (error) {
+            if (this.stopped || error instanceof MacroAuthoringPending)
+                await this.update(() => {
+                    job.attempts[stage] = (job.attempts[stage] ?? 1) - 1;
+                });
+            throw error;
+        } finally {
+            clearTimeout(timer);
+            controller.signal.removeEventListener("abort", abort);
+        }
+    }
+
+    private async process(job: StoredJob): Promise<void> {
+        const envelope = await this.childAuthoring.assertContext(job);
+        const trace = await this.catalog.readTrace(job.traceId);
+        assertCaptureTrace(
+            envelope,
+            job.traceId,
+            trace,
+            this.authoringProfileId,
+        );
+        assertLearningTrace(trace);
+        const runtime = this.runtime!.withAuthorQuery(
+            (prompt, signal) => this.childAuthoring.query(job, prompt, signal),
+            (prompt, execute) => this.cacheVerifierQuery(job, prompt, execute),
+        );
+        if (!runtime)
+            throw new Error(
+                "The configured runtime cannot use a Copilot authoring child.",
+            );
+        const macroId = job.jobId;
+        const draftVersion = 1;
+        const existing = await this.catalog.readVersion(
+            macroId,
+            draftVersion + 1,
+        );
+        if (existing) {
+            if (
+                !existing.learning ||
+                existing.learning.jobId !== job.jobId ||
+                existing.state !== "approved" ||
+                !learningValuesEqual(
+                    existing.learning.authoring,
+                    job.authoring,
+                ) ||
+                !validateMacro(existing).valid
+            ) {
+                throw new Error(
+                    "Learning publication conflicts with an existing immutable version.",
+                );
+            }
+            if (
+                job.status === "cancelled" ||
+                this.state!.suppressed.includes(job.fingerprint)
+            ) {
+                throw new Error("Learning publication is suppressed.");
+            }
+            await this.catalog.recoverApproved(existing);
+            await this.approved(existing);
+            return;
+        }
+        this.check(job);
+        if (!job.recipe) {
+            await this.update(() => {
+                job.status = "extracting";
+            });
+            const recipe = parseMacroExecutionRecipe(
+                await this.stage(job, "extract", (signal) =>
+                    runtime.extract(
+                        cloneVerifiedLearningTrace(trace, job.traceId),
+                        job.traceId,
+                        signal,
+                    ),
+                ),
+            );
+            assertLearningRecipe(recipe, trace, job.traceId);
+            await this.update(() => {
+                job.recipe = structuredClone(recipe);
+                job.status = "building";
+            });
+        }
+        assertLearningRecipe(job.recipe!, trace, job.traceId);
+        if (!job.draft) {
+            if (!job.buildCheckpoint) {
+                const baseline = await this.stage(
+                    job,
+                    "build",
+                    async (signal) => {
+                        const macro = await induceMacroFromTrace(
+                            job.traceId,
+                            {
+                                ...trace,
+                                toolCalls: trace.toolCalls.map((call) => ({
+                                    ...call,
+                                    result: learningToolResult(call),
+                                })),
+                            },
+                            macroId,
+                            "Learning draft",
+                            trace.prompt,
+                            job.createdAt,
+                            this.replayHost,
+                        );
+                        macro.version = draftVersion;
+                        signal.throwIfAborted();
+                        const build = parseMacroLearningBuild(
+                            await runtime.build(
+                                structuredClone(job.recipe!),
+                                structuredClone(trace),
+                                structuredClone(macro),
+                                signal,
+                            ),
+                        );
+                        const draft: CopilotToolMacro = {
+                            ...macro,
+                            name: build.name,
+                            description: build.description,
+                            inputs: build.inputs,
+                            steps: build.steps,
+                            executionClass: build.steps.every(
+                                (step) => step.executionClass === "replayable",
+                            )
+                                ? "replayable"
+                                : "agentRequired",
+                            warnings: (build.unsupportedOutputs ?? []).map(
+                                (output) =>
+                                    `Program author must resolve: ${output}`,
+                            ),
+                        };
+                        setMacroCapabilities(draft);
+                        assertLearningBuild(build, draft, trace);
+                        if (
+                            draft.steps.some(
+                                (step, index) =>
+                                    step.executionClass !==
+                                    macro.steps[index].executionClass,
+                            )
+                        ) {
+                            throw new Error(
+                                "Builder changed the inspected source execution class.",
+                            );
+                        }
+                        return { draft, build };
+                    },
+                );
+                await this.update(() => {
+                    job.buildCheckpoint = baseline;
+                });
+            }
+            const baseline = structuredClone(job.buildCheckpoint!);
+            assertLearningBuild(
+                parseMacroLearningBuild(baseline.build),
+                baseline.draft,
+                trace,
+            );
+            if (!job.grammarCheckpoint) {
+                const generated = await this.stage(job, "grammar", (signal) =>
+                    runtime.generateGrammar(
+                        {
+                            ...structuredClone(baseline.draft),
+                            version: baseline.draft.version + 1,
+                            state: "approved",
+                        },
+                        structuredClone(baseline.build.exampleInputs),
+                        [...baseline.build.requests],
+                        signal,
+                    ),
+                );
+                assertLearningGrammar(generated);
+                await this.update(() => {
+                    job.grammarCheckpoint = generated;
+                });
+            }
+            const rules = job.grammarCheckpoint!;
+            assertLearningGrammar(rules);
+            this.check(job);
+            const preference = this.preference(job.cwd);
+            baseline.draft.learning = {
+                jobId: job.jobId,
+                cwd: job.cwd,
+                mode: preference.mode,
+                requiresLivePermissions: true,
+                grammarRules: rules,
+                exampleInputs: baseline.build.exampleInputs,
+                requests: baseline.build.requests,
+                authoring: structuredClone(job.authoring),
+            };
+            {
+                const program = await this.stage(job, "program", (signal) =>
+                    runtime.buildProgram(
+                        structuredClone(baseline.draft),
+                        cloneVerifiedLearningTrace(trace, job.traceId),
+                        signal,
+                    ),
+                );
+                assertChildProgram(program, job);
+                baseline.draft.executionKind = "program";
+                baseline.draft.program = program;
+            }
+            await this.update(() => {
+                job.draft = structuredClone(baseline.draft);
+                delete job.buildCheckpoint;
+                delete job.grammarCheckpoint;
+                delete job.verifierAnswers;
+            });
+        }
+        this.check(job);
+        if (!learningValuesEqual(job.draft!.learning?.authoring, job.authoring))
+            throw new Error(
+                "Learning draft does not match its sealed child identity.",
+            );
+        const ref = await this.catalog.saveDraft(structuredClone(job.draft!));
+        await this.update(() => {
+            job.macro = ref;
+        });
+        this.check(job);
+        const preference = this.preference(job.cwd);
+        let approve = preference.mode === "all";
+        if (preference.mode === "read-only") {
+            approve = await this.stageInspection(job, () =>
+                this.allReadOnly(job.draft!, trace.cwd),
+            );
+        }
+        this.check(job);
+        // A downgrade during metadata inspection must never inherit the earlier approval decision.
+        if (this.preference(job.cwd).revision !== preference.revision) {
+            approve = this.preference(job.cwd).mode === "all";
+        }
+        if (approve) {
+            await this.catalog.approveMacro(ref);
+        } else {
+            await this.update(() => {
+                job.status = "needsReview";
+                job.updatedAt = new Date().toISOString();
+            });
+        }
+    }
+
+    private async allReadOnly(
+        macro: CopilotToolMacro,
+        cwd: string,
+    ): Promise<boolean> {
+        if (!this.replayHost) return false;
+        for (const step of macro.steps) {
+            if (!step.mcpServerName && !this.replayHost.supportsNativeTools)
+                return false;
+            const descriptor = await this.replayHost.inspectTool(
+                step.mcpServerName,
+                step.toolName,
+                { cwd },
+            );
+            if (
+                descriptor?.readOnly !== true ||
+                descriptor.toolName !== step.toolName ||
+                (descriptor.mcpServerName !== undefined &&
+                    descriptor.mcpServerName !== step.mcpServerName)
+            )
+                return false;
+        }
+        return true;
+    }
+
+    private async cacheVerifierQuery(
+        job: StoredJob,
+        prompt: string,
+        execute: () => Promise<string>,
+    ): Promise<string> {
+        this.check(job);
+        const signal = this.controller!.signal;
+        const digest = createHash("sha256").update(prompt).digest("hex");
+        const existing = job.verifierAnswers?.[digest];
+        if (existing !== undefined) return existing;
+        const answer = await execute();
+        signal.throwIfAborted();
+        this.check(job);
+        if (!validVerifierAnswer(answer))
+            throw new Error(
+                "Trusted verifier returned invalid, oversized or sensitive material.",
+            );
+        await this.update(() => {
+            this.check(job);
+            signal.throwIfAborted();
+            const answers = (job.verifierAnswers ??= {});
+            if (Object.keys(answers).length >= 8)
+                throw new Error("Trusted verifier query capacity exceeded.");
+            answers[digest] = answer;
+        });
+        return answer;
+    }
+
+    private async stageInspection<T>(
+        job: StoredJob,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            const result = await Promise.race([
+                operation(),
+                new Promise<never>((_resolve, reject) => {
+                    timer = setTimeout(
+                        () =>
+                            reject(
+                                new Error(
+                                    "Learning tool inspection exceeded its 10s deadline.",
+                                ),
+                            ),
+                        10_000,
+                    );
+                }),
+            ]);
+            this.check(job);
+            return result;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private findJob(jobId: string): StoredJob {
+        const job = this.state!.jobs.find((item) => item.jobId === jobId);
+        if (!job) throw new Error(`Macro learning job not found: ${jobId}`);
+        this.markChanged(job);
+        return job;
+    }
+
+    private markChanged(job: StoredJob): void {
+        if (!this.changedJobs || !this.jobSnapshots) return;
+        this.changedJobs.add(job.jobId);
+        if (!this.jobSnapshots.has(job.jobId))
+            this.jobSnapshots.set(job.jobId, structuredClone(job));
+    }
+
+    private publicJob(job: StoredJob): MacroLearningJob {
+        const {
+            recipe: _recipe,
+            draft: _draft,
+            fingerprint: _fingerprint,
+            preferenceRevision: _revision,
+            attempts: _attempts,
+            buildCheckpoint: _build,
+            grammarCheckpoint: _grammar,
+            verifierAnswers: _verifier,
+            ...publicJob
+        } = job;
+        return structuredClone(publicJob);
+    }
+
+    private async load(): Promise<void> {
+        this.loading ??= (async () => {
+            const records = await this.records.load();
+            await this.records.purgeUnreferenced();
+            const metadata = records.get("$state") as
+                | Omit<LearningState, "jobs">
+                | undefined;
+            if (records.size && !metadata)
+                throw new Error(
+                    "Invalid durable learning publication: metadata is missing.",
+                );
+            this.state = metadata
+                ? {
+                      ...metadata,
+                      jobs: [...records.entries()]
+                          .filter(([id]) => id !== "$state")
+                          .map(([, job]) => job as StoredJob),
+                  }
+                : {
+                      schemaVersion: 1,
+                      preferences: [],
+                      jobs: [],
+                      suppressed: [],
+                      suppressedMacroIds: [],
+                  };
+            this.state.suppressedMacroIds ??= [];
+            if (
+                this.state.schemaVersion !== 1 ||
+                !Array.isArray(this.state.jobs) ||
+                !Array.isArray(this.state.preferences) ||
+                !Array.isArray(this.state.suppressed) ||
+                !Array.isArray(this.state.suppressedMacroIds) ||
+                this.state.jobs.length > 1_000 ||
+                this.state.preferences.length > 1_000 ||
+                this.state.preferences.some(
+                    (item) =>
+                        !modes.includes(item.mode) ||
+                        !Number.isSafeInteger(item.revision) ||
+                        item.revision < 0 ||
+                        typeof item.cwd !== "string",
+                ) ||
+                this.state.jobs.some(
+                    (job) =>
+                        typeof job.jobId !== "string" ||
+                        !/^[a-f0-9]{64}$/.test(job.jobId) ||
+                        !modes.includes(job.mode) ||
+                        ![
+                            "queued",
+                            "extracting",
+                            "building",
+                            "awaitingAuthor",
+                            "needsReview",
+                            "ready",
+                            "failed",
+                            "cancelled",
+                        ].includes(job.status) ||
+                        typeof job.traceId !== "string" ||
+                        typeof job.cwd !== "string" ||
+                        typeof job.fingerprint !== "string" ||
+                        (job.verifierAnswers !== undefined &&
+                            !validVerifierCache(job.verifierAnswers)) ||
+                        !job.attempts,
+                )
+            ) {
+                throw new Error("Invalid durable learning state.");
+            }
+            const rejected: StoredJob[] = [];
+            for (const job of this.state.jobs) {
+                try {
+                    if (!validAuthoringIdentity(job))
+                        throw new Error("Missing child identity.");
+                    await this.childAuthoring.assertContext(job);
+                } catch {
+                    rejected.push(job);
+                }
+            }
+            if (rejected.length)
+                await this.update(() => {
+                    for (const job of rejected) {
+                        this.markChanged(job);
+                        job.status = "failed";
+                        job.error =
+                            "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
+                        job.updatedAt = new Date().toISOString();
+                    }
+                });
+
+            function validAuthoringIdentity(job: StoredJob): boolean {
+                const identity = job.authoring;
+                return (
+                    !!identity &&
+                    identity.captureId === job.traceId &&
+                    /^[a-f0-9]{64}$/.test(identity.contextDigest) &&
+                    [identity.taskId, identity.tokenId].every(
+                        (value) =>
+                            typeof value === "string" &&
+                            value.length > 0 &&
+                            value.length <= 4096,
+                    )
+                );
+            }
+        })();
+        await this.loading;
+    }
+
+    private update(operation: () => void): Promise<void> {
+        const result = this.mutation.then(async () => {
+            const { jobs, ...metadataBefore } = this.state!;
+            const before: LearningState = {
+                ...structuredClone(metadataBefore),
+                jobs: jobs.slice(),
+            };
+            const references = new Map(
+                this.state!.jobs.map((job) => [job.jobId, job]),
+            );
+            try {
+                this.changedJobs = new Set();
+                this.jobSnapshots = new Map();
+                if (this.activeJobId) this.findJob(this.activeJobId);
+                operation();
+                const { jobs, ...metadata } = this.state!;
+                const changes = new Map<string, unknown>([
+                    ["$state", metadata],
+                ]);
+                for (const job of jobs)
+                    if (
+                        this.changedJobs.has(job.jobId) ||
+                        !references.has(job.jobId)
+                    )
+                        changes.set(job.jobId, job);
+                await this.records.commit(changes);
+                this.notifyAuthoring();
+            } catch (error) {
+                before.jobs = before.jobs.map((original) => {
+                    const snapshot = this.jobSnapshots!.get(original.jobId);
+                    if (!snapshot) return original;
+                    for (const key of Object.keys(original)) {
+                        Reflect.deleteProperty(original, key);
+                    }
+                    return Object.assign(original, snapshot);
+                });
+                this.state = before;
+                throw error;
+            } finally {
+                this.changedJobs = undefined;
+                this.jobSnapshots = undefined;
+            }
+        });
+        this.mutation = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
+    }
+
+    private statePath(): string {
+        return path.join(this.rootDir, "learning.json");
+    }
+}

@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, collections } from "../index.js";
+import * as asyncArray from "../arrayAsync.js";
+import * as collections from "../lib/index.js";
 import { callWithRetry } from "../async.js";
 import { ScoredItem } from "../memory.js";
 import {
@@ -16,10 +17,9 @@ import registerDebug from "debug";
 
 const debugEmbeddings = registerDebug("typeagent:embeddings");
 
-// Per-attempt timeout for embedding API calls. Prevents indefinite hangs when
-// the remote endpoint accepts the socket but never responds. 30s is generous
-// for a small batch but still bounded — the retry loop will still fire.
-const DefaultEmbeddingTimeoutMs = 30_000;
+// Match the hosted client's default request budget so a 60s rate-limit wait
+// can finish before an outer retry starts another request.
+const DefaultEmbeddingTimeoutMs = 180_000;
 
 /**
  * An index that allows lookup of nearest neighbors of T using vector similarity matching
@@ -177,7 +177,13 @@ export async function generateTextEmbeddingsWithRetry(
     );
     try {
         const result = await callWithRetry(
-            () => generateTextEmbeddings(model, values, maxCharsPerChunk),
+            () =>
+                generateTextEmbeddings(
+                    model,
+                    values,
+                    undefined,
+                    maxCharsPerChunk,
+                ),
             retryMaxAttempts,
             retryPauseMs,
             undefined,

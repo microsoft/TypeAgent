@@ -9,38 +9,51 @@ import {
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
     NormalizedEmbedding,
-    ScoredItem,
     similarity,
     SimilarityType,
-    TopNCollection,
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
 import registerDebug from "debug";
+import {
+    compareActionCandidateIdentity,
+    type ActionCandidateFilter,
+    type ActionCandidateRanker,
+    type ActionCandidateResult,
+} from "./actionCandidateRanker.js";
 
 const debug = registerDebug("typeagent:dispatcher:semantic");
 const debugError = registerDebug("typeagent:dispatcher:semantic:error");
 
 type Entry = {
     embedding: NormalizedEmbedding;
-    actionSchemaFile: ActionSchemaFile;
+    schemaName: string;
+    actionName: string;
+    definition: ActionSchemaTypeDefinition;
+};
+
+type PendingEntry = {
+    key: string;
+    actionName: string;
     definition: ActionSchemaTypeDefinition;
 };
 
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
-export class ActionSchemaSemanticMap {
+export class ActionSchemaSemanticMap implements ActionCandidateRanker {
     private readonly actionSemanticMaps = new Map<string, Map<string, Entry>>();
+    private readonly schemaVersions = new Map<string, number>();
     private readonly model: TextEmbeddingModel | undefined;
     // Set when no embedding provider is configured, or when embedding
     // generation fails at load time. In that state semantic schema
     // selection is unavailable and callers fall back to inline/search
     // routing instead of the daemon failing to start.
     private disabled: boolean;
-    public constructor(model?: TextEmbeddingModel) {
-        this.model = model ?? tryCreateEmbeddingModel();
+    public constructor(model?: TextEmbeddingModel | null) {
+        this.model =
+            model === null ? undefined : (model ?? tryCreateEmbeddingModel());
         this.disabled = this.model === undefined;
         if (this.disabled) {
             debug(
@@ -65,8 +78,6 @@ export class ActionSchemaSemanticMap {
         if (!this.enabled) {
             return;
         }
-        const keys: string[] = [];
-        const definitions: ActionSchemaTypeDefinition[] = [];
 
         if (this.actionSemanticMaps.has(config.schemaName)) {
             throw new Error(
@@ -74,8 +85,68 @@ export class ActionSchemaSemanticMap {
             );
         }
 
+        const version = this.beginSchemaUpdate(config.schemaName);
+        const actionSemanticMap = await this.createActionSemanticMap(
+            config,
+            actionSchemaFile,
+            cache,
+        );
+        if (
+            actionSemanticMap !== undefined &&
+            this.enabled &&
+            this.schemaVersions.get(config.schemaName) === version
+        ) {
+            if (this.actionSemanticMaps.has(config.schemaName)) {
+                throw new Error(
+                    `Internal Error: Duplicate schemaName ${config.schemaName}`,
+                );
+            }
+            this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        }
+    }
+
+    /**
+     * Rebuilds a schema's entries off to the side and swaps them in together.
+     * Searches continue to see the previous complete schema until the new
+     * embeddings are ready.
+     */
+    public async replaceActionSchemaFile(
+        config: ActionConfig,
+        actionSchemaFile: ActionSchemaFile,
+        cache?: EmbeddingCache,
+    ): Promise<void> {
+        if (!this.enabled) {
+            return;
+        }
+        const version = this.beginSchemaUpdate(config.schemaName);
+        const actionSemanticMap = await this.createActionSemanticMap(
+            config,
+            actionSchemaFile,
+            cache,
+        );
+        if (
+            actionSemanticMap !== undefined &&
+            this.enabled &&
+            this.schemaVersions.get(config.schemaName) === version
+        ) {
+            this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        }
+    }
+
+    private beginSchemaUpdate(schemaName: string): number {
+        const version = (this.schemaVersions.get(schemaName) ?? 0) + 1;
+        this.schemaVersions.set(schemaName, version);
+        return version;
+    }
+
+    private async createActionSemanticMap(
+        config: ActionConfig,
+        actionSchemaFile: ActionSchemaFile,
+        cache?: EmbeddingCache,
+    ): Promise<Map<string, Entry> | undefined> {
         const actionSemanticMap = new Map<string, Entry>();
-        this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        const keys: string[] = [];
+        const pendingEntries: PendingEntry[] = [];
         let reuseCount = 0;
         for (const [name, definition] of actionSchemaFile.parsedActionSchema
             .actionSchemas) {
@@ -84,13 +155,18 @@ export class ActionSchemaSemanticMap {
             if (embedding) {
                 actionSemanticMap.set(key, {
                     embedding,
-                    actionSchemaFile,
+                    schemaName: config.schemaName,
+                    actionName: name,
                     definition,
                 });
                 reuseCount++;
             } else {
                 keys.push(key);
-                definitions.push(definition);
+                pendingEntries.push({
+                    key,
+                    actionName: name,
+                    definition,
+                });
             }
         }
 
@@ -110,23 +186,26 @@ export class ActionSchemaSemanticMap {
                 debug(
                     `Received ${embeddings.length} embeddings for ${config.schemaName} in ${Date.now() - start}ms`,
                 );
-                for (let i = 0; i < keys.length; i++) {
-                    actionSemanticMap.set(keys[i], {
+                for (let i = 0; i < pendingEntries.length; i++) {
+                    const pending = pendingEntries[i];
+                    actionSemanticMap.set(pending.key, {
                         embedding: embeddings[i],
-                        actionSchemaFile,
-                        definition: definitions[i],
+                        schemaName: config.schemaName,
+                        actionName: pending.actionName,
+                        definition: pending.definition,
                     });
                 }
             } catch (e: any) {
+                const reason = `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`;
                 // Do not fail agent initialization (which would exit the
                 // daemon) when embeddings are unavailable at load time.
                 // Disable semantic schema selection and fall back to
                 // inline/search routing instead.
-                this.disable(
-                    `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`,
-                );
+                this.disable(reason);
+                return undefined;
             }
         }
+        return actionSemanticMap;
     }
 
     private disable(reason: string): void {
@@ -144,17 +223,18 @@ export class ActionSchemaSemanticMap {
     }
 
     public removeActionSchemaFile(schemaName: string) {
+        this.beginSchemaUpdate(schemaName);
         this.actionSemanticMaps.delete(schemaName);
     }
 
-    public async nearestNeighbors(
+    public async rankActionCandidates(
         request: string,
-        maxMatches: number,
-        filter: (schemaName: string) => boolean,
+        maxCandidates: number,
+        filter: ActionCandidateFilter,
         minScore: number = 0,
-    ): Promise<ScoredItem<Entry>[]> {
+    ): Promise<ActionCandidateResult[] | undefined> {
         if (!this.enabled) {
-            return [];
+            return undefined;
         }
         let embedding: NormalizedEmbedding;
         try {
@@ -163,25 +243,35 @@ export class ActionSchemaSemanticMap {
             this.disable(
                 `Failed to embed request for semantic schema selection: ${e?.message ?? e}`,
             );
-            return [];
+            return undefined;
         }
-        const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
-        for (const [name, actionSemanticMap] of this.actionSemanticMaps) {
-            if (!filter(name)) {
-                continue;
-            }
+        const matches: ActionCandidateResult[] = [];
+        for (const actionSemanticMap of this.actionSemanticMaps.values()) {
             for (const entry of actionSemanticMap.values()) {
+                if (!filter(entry.schemaName, entry.actionName)) {
+                    continue;
+                }
                 const score = similarity(
                     entry.embedding,
                     embedding,
                     SimilarityType.Dot,
                 );
                 if (score >= minScore) {
-                    matches.push(entry, score);
+                    matches.push({
+                        schemaName: entry.schemaName,
+                        actionName: entry.actionName,
+                        score,
+                        definition: entry.definition,
+                    });
                 }
             }
         }
-        return matches.byRank();
+        return matches
+            .sort(
+                (a, b) =>
+                    b.score - a.score || compareActionCandidateIdentity(a, b),
+            )
+            .slice(0, maxCandidates);
     }
 
     public embeddings(): [string, NormalizedEmbedding][] {

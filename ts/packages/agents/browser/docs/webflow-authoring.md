@@ -266,7 +266,12 @@ figure out the steps:
 start goal-driven task: "Find the cheapest flight from Seattle to NYC next Friday"
 ```
 
-The AI reasoning agent will:
+The AI reasoning agent uses the Copilot SDK with GPT-5.6 Sol by default. Its
+session is limited to the WebFlow browser tools; host filesystem, shell, and
+network tools are unavailable. The legacy Claude provider remains available to
+callers that explicitly set `provider: "claude"`.
+
+The reasoning agent will:
 
 1. Analyze the current page
 2. Plan a sequence of browser actions

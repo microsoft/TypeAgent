@@ -84,7 +84,6 @@
   [
     {
       "request": "add ham to the list",
-      "skipGrammar": true,
       "expected": {
         "anyof": [
           "dispatcher.clarify.clarifyMissingParameter",

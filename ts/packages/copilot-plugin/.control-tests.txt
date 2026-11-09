@@ -1,0 +1,9 @@
+PASS dist/test/controlMetadata.spec.js
+PASS dist/test/extensionCommands.spec.js
+PASS dist/test/hookRouter.spec.js
+
+Test Suites: 3 passed, 3 total
+Tests:       25 passed, 25 total
+Snapshots:   0 total
+Time:        2.884 s, estimated 5 s
+Ran all test suites matching /controlMetadata.spec.js|extensionCommands.spec.js|hookRouter.spec.js/i.

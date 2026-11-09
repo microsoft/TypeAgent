@@ -5,6 +5,7 @@ import {
     CopilotClient,
     RuntimeConnection,
     approveAll,
+    type ModelInfo,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import { execSync } from "node:child_process";
@@ -22,11 +23,11 @@ import {
     CompletionSettings,
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
+    rejectCompletionLimits,
 } from "./models.js";
 import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
-    COPILOT_FALLBACK_MODEL,
 } from "./copilotSettings.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import { EndpointPool, makeSingleMemberPool } from "./endpointPool.js";
@@ -39,6 +40,13 @@ import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
 import { CompletionUsageStats } from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
+import { otel } from "@typeagent/telemetry";
+import type { WireApi } from "@typeagent/config";
+import {
+    adapterFor,
+    type ModelRequest,
+    type ProviderAdapter,
+} from "./wireApiProvider/index.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -52,10 +60,12 @@ const debugTiming = registerDebug("typeagent:aiclient:copilot:timing");
  * callers only add `Content-Type`.
  */
 export interface CopilotEndpoint {
-    /** Full chat-completions URL (baseUrl + "/chat/completions"). */
+    /** Full model endpoint URL selected from the provider's wire API. */
     url: string;
     /** Resolved model id to send in the request body. */
     model: string;
+    /** Request and response wire format advertised by the Copilot endpoint. */
+    wireApi: WireApi;
     /** HTTP headers to send on every request (credential included). */
     headers: Record<string, string>;
     /** Epoch ms when the endpoint credential expires, if known. */
@@ -72,16 +82,61 @@ export interface CopilotEndpointProvider {
     getEndpoint(force?: boolean): Promise<CopilotEndpoint>;
 }
 
+/** A CAPI endpoint bound to one requested model. */
+export interface CopilotModelEndpoint {
+    baseUrl: string;
+    model: string;
+    headers: Record<string, string>;
+    expiresAt?: number | undefined;
+}
+
+/** Acquires and refreshes a model-specific CAPI endpoint. */
+export interface CopilotModelEndpointProvider {
+    getEndpoint(force?: boolean): Promise<CopilotModelEndpoint>;
+}
+
 /**
  * Thrown by an endpoint provider when an endpoint can't be minted for the
  * requested model (e.g. the tenant doesn't offer it and only "auto" is left, or
  * the SDK gate is disabled).
  */
-export class CopilotEndpointUnavailableError extends Error {
+export class CopilotEndpointUnavailableError
+    extends Error
+    implements otel.TelemetryClassifiedError
+{
+    public readonly errorCategory = "provider";
+    public readonly retryable = false;
     constructor(message: string) {
         super(message);
         this.name = "CopilotEndpointUnavailableError";
     }
+}
+
+/**
+ * Turn a thrown value into a failure `Result` that still carries what the
+ * throw said. The message is a private diagnostic never parsed downstream; the
+ * attached classification is the bounded part telemetry reports. An
+ * unrecognized throw gets no classification, leaving the model wrapper's
+ * `provider` fallback as the truthful description.
+ */
+function classifiedFailure(message: string, thrown: unknown): Result<never> {
+    const classification = otel.classifyTelemetryErrorIfRecognized(thrown);
+    const result = error(message);
+    return classification === undefined
+        ? result
+        : otel.attachTelemetryErrorClassification(result, classification);
+}
+
+/**
+ * The failure `Result` for a caller-cancelled call. Stated rather than derived
+ * from the thrown value, because `isAbort` also treats an aborted caller
+ * signal as cancellation when the throw is not shaped like an `AbortError`.
+ */
+function cancelledFailure(): Result<never> {
+    return otel.attachTelemetryErrorClassification(error("Request aborted"), {
+        errorCategory: "cancelled",
+        retryable: false,
+    });
 }
 
 type CopilotSdkLogLevel =
@@ -114,6 +169,7 @@ let startPromise: Promise<CopilotClient> | undefined;
 let cachedCliPath: string | undefined;
 let cachedCliUrl: string | undefined;
 let exitHandlerInstalled = false;
+let endpointRpcUnavailable = false;
 
 export interface CopilotClientOptions {
     /** Path to the copilot CLI binary. Ignored when `cliUrl` is set. */
@@ -126,7 +182,13 @@ export interface CopilotClientOptions {
     cliUrl?: string | undefined;
 }
 
-function findCopilotPath(): string {
+function findCopilotPath(): string | undefined {
+    const configuredPath =
+        process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH;
+    if (configuredPath) {
+        debug(`Using configured copilot CLI: ${configuredPath}`);
+        return configuredPath;
+    }
     try {
         const isWindows = process.platform === "win32";
         const command = isWindows ? "where copilot" : "which copilot";
@@ -135,9 +197,18 @@ function findCopilotPath(): string {
         debug(`Found copilot CLI at: ${first}`);
         return first;
     } catch {
-        debug("Could not find copilot CLI in PATH, falling back to 'copilot'");
-        return "copilot";
+        debug("Could not find copilot CLI in PATH, using SDK-managed runtime");
+        return undefined;
     }
+}
+
+export function createCopilotRuntimeConnection(
+    cliUrl: string | undefined,
+    cliPath: string | undefined,
+) {
+    return cliUrl
+        ? RuntimeConnection.forUri(cliUrl)
+        : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {});
 }
 
 async function getClient(
@@ -156,14 +227,16 @@ async function getClient(
     cachedCliPath = cliPath;
 
     startPromise = (async () => {
-        const target = cliUrl ? `server ${cliUrl}` : `CLI ${cliPath}`;
+        const target = cliUrl
+            ? `server ${cliUrl}`
+            : cliPath
+              ? `CLI ${cliPath}`
+              : "SDK-managed runtime";
         debug(`Starting CopilotClient (${target})`);
         const tStart = Date.now();
         const level = sdkLogLevel();
         const client = new CopilotClient({
-            connection: cliUrl
-                ? RuntimeConnection.forUri(cliUrl)
-                : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {}),
+            connection: createCopilotRuntimeConnection(cliUrl, cliPath),
             ...(level ? { logLevel: level } : {}),
         });
         try {
@@ -174,7 +247,7 @@ async function getClient(
                 `Failed to start GitHub Copilot CLI client (${target}). ` +
                     (cliUrl
                         ? `Ensure a Copilot CLI server is running and reachable at '${cliUrl}'.\n`
-                        : `Ensure 'copilot' is installed and authenticated (try 'copilot auth login').\n`) +
+                        : `Run 'node typeagent-serve.mjs setup --provider copilot', or install and authenticate a compatible 'copilot' CLI.\n`) +
                     `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
@@ -203,6 +276,22 @@ export async function getCopilotClient(
     return getClient(
         typeof options === "string" ? { cliPath: options } : options,
     );
+}
+
+/**
+ * Stop the process-wide Copilot client used by aiclient.
+ *
+ * Long-running hosts normally keep the client warm. Short-lived CLIs should
+ * call this before exiting so the Copilot child process does not keep the Node
+ * event loop alive.
+ */
+export async function stopCopilotClient(): Promise<void> {
+    const pendingClient = cachedClient ?? (await startPromise);
+    cachedClient = undefined;
+    startPromise = undefined;
+    if (pendingClient) {
+        await pendingClient.stop();
+    }
 }
 
 /**
@@ -311,63 +400,208 @@ export async function warmupCopilotFromConfig(): Promise<void> {
     }
 }
 
-// Cached per-model capability info, populated from client.listModels() once per
-// process. Used to (a) fall back to an available model when the configured one
-// isn't offered by the tenant, and (b) decide reasoningEffort (invalid for
-// non-reasoning models; forced to minimal for reasoning models on translation).
-const reasoningSupportCache = new Map<string, boolean>();
-let modelListPromise: Promise<void> | undefined;
+let modelListPromise: Promise<readonly ModelInfo[] | undefined> | undefined;
 
-async function ensureModelList(client: CopilotClient): Promise<void> {
+async function ensureModelList(
+    client: CopilotClient,
+): Promise<readonly ModelInfo[] | undefined> {
     if (modelListPromise === undefined) {
-        modelListPromise = (async () => {
-            try {
-                const models = await client.listModels();
-                for (const m of models) {
-                    reasoningSupportCache.set(
-                        m.id,
-                        m.capabilities?.supports?.reasoningEffort === true,
-                    );
-                }
-            } catch (err) {
-                debug(
-                    `listModels failed; model capabilities unknown: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                );
-            }
-        })();
+        const pending = client.listModels().catch((err) => {
+            debug(
+                `listModels failed; model capabilities unknown: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+            return undefined;
+        });
+        modelListPromise = pending;
+        const models = await pending;
+        if (models === undefined && modelListPromise === pending) {
+            modelListPromise = undefined;
+        }
+        return models;
     }
-    await modelListPromise;
+    return modelListPromise;
 }
 
-// Resolve the model to actually use for a session, falling back to
-// COPILOT_FALLBACK_MODEL when the requested model isn't offered by the tenant,
-// and reporting whether that model supports reasoning effort. When the model
-// list is unavailable (e.g. listModels failed), the requested model is used
-// as-is and reasoning support is left unknown.
+function isConcreteAvailableModel(model: ModelInfo): boolean {
+    return model.id !== "auto" && model.policy?.state !== "disabled";
+}
+
+type VersionedModelId = {
+    family: string;
+    version: number[];
+    tier: string | undefined;
+};
+
+function parseNumericVersion(segment: string): number[] | undefined {
+    const components = segment.split(".");
+    const version: number[] = [];
+    for (const component of components) {
+        if (component.length === 0) return undefined;
+        for (let i = 0; i < component.length; i++) {
+            const code = component.charCodeAt(i);
+            if (code < 48 || code > 57) return undefined;
+        }
+        const value = Number(component);
+        if (!Number.isSafeInteger(value)) return undefined;
+        version.push(value);
+    }
+    return version;
+}
+
+function versionedFamily(modelId: string): VersionedModelId | undefined {
+    const segments = modelId.split("-");
+    for (let i = 1; i < segments.length; i++) {
+        const version = parseNumericVersion(segments[i]);
+        if (version === undefined) continue;
+        const family = segments.slice(0, i).join("-");
+        if (family.length === 0) return undefined;
+        const tier = segments
+            .slice(i + 1)
+            .join("-")
+            .toLowerCase();
+        return { family, version, tier: tier.length === 0 ? undefined : tier };
+    }
+    return undefined;
+}
+
+function compareVersionsDescending(a: number[], b: number[]): number {
+    const count = Math.max(a.length, b.length);
+    for (let i = 0; i < count; i++) {
+        const difference = (b[i] ?? 0) - (a[i] ?? 0);
+        if (difference !== 0) return difference;
+    }
+    return 0;
+}
+
+function modelTierClass(tier: string | undefined): number | undefined {
+    switch (tier) {
+        case undefined:
+        case "sol":
+            return 3;
+        case "terra":
+        case "mini":
+            return 2;
+        case "luna":
+        case "nano":
+            return 1;
+        default:
+            return undefined;
+    }
+}
+
+function compareFamilyCandidates(
+    a: { model: ModelInfo; parsed: VersionedModelId },
+    b: { model: ModelInfo; parsed: VersionedModelId },
+    requested: VersionedModelId,
+): number {
+    const aExactTier = a.parsed.tier === requested.tier;
+    const bExactTier = b.parsed.tier === requested.tier;
+    if (aExactTier !== bExactTier) return aExactTier ? -1 : 1;
+
+    const requestedClass = modelTierClass(requested.tier);
+    const aClass = modelTierClass(a.parsed.tier);
+    const bClass = modelTierClass(b.parsed.tier);
+    if (requestedClass !== undefined) {
+        const aDistance =
+            aClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - aClass);
+        const bDistance =
+            bClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - bClass);
+        if (aDistance !== bDistance) return aDistance - bDistance;
+        if (aClass !== bClass) return (aClass ?? 0) - (bClass ?? 0);
+    }
+
+    const versionOrder = compareVersionsDescending(
+        a.parsed.version,
+        b.parsed.version,
+    );
+    return versionOrder !== 0
+        ? versionOrder
+        : a.model.id.localeCompare(b.model.id);
+}
+
+export function selectCopilotModel(
+    requested: string,
+    fallbackModels: readonly string[],
+    models: readonly ModelInfo[],
+): ModelInfo | undefined {
+    const available = models.filter(isConcreteAvailableModel);
+    const byId = new Map(available.map((model) => [model.id, model]));
+
+    const requestedModel = byId.get(requested);
+    if (requestedModel !== undefined) return requestedModel;
+
+    const previousTier = /^gpt-6(?:\.\d+)?-(luna|sol|terra)$/.exec(
+        requested,
+    )?.[1];
+    if (previousTier !== undefined) {
+        const previousModel = byId.get(`gpt-5.6-${previousTier}`);
+        if (previousModel !== undefined) return previousModel;
+    }
+
+    for (const fallback of fallbackModels) {
+        const fallbackModel = byId.get(fallback);
+        if (fallbackModel !== undefined) return fallbackModel;
+    }
+
+    const requestedFamily = versionedFamily(requested);
+    if (requestedFamily !== undefined) {
+        const familyModels = available
+            .map((model) => ({
+                model,
+                parsed: versionedFamily(model.id),
+            }))
+            .filter(
+                (
+                    candidate,
+                ): candidate is {
+                    model: ModelInfo;
+                    parsed: VersionedModelId;
+                } => candidate.parsed?.family === requestedFamily.family,
+            )
+            .sort((a, b) => compareFamilyCandidates(a, b, requestedFamily));
+        if (familyModels.length > 0) return familyModels[0].model;
+    }
+
+    return available.sort((a, b) => a.id.localeCompare(b.id))[0];
+}
+
+type ResolvedCopilotModel = {
+    model: string;
+    reasoningSupported: boolean | undefined;
+};
+
+// Resolve a concrete model for the direct HTTP transport. If model discovery
+// fails, preserve the requested model so endpoint acquisition can still work.
 async function resolveModel(
     client: CopilotClient,
-    requested: string,
-): Promise<{ model: string; reasoningSupported: boolean | undefined }> {
-    await ensureModelList(client);
-    if (reasoningSupportCache.size === 0) {
-        return { model: requested, reasoningSupported: undefined };
+    settings: CopilotApiSettings,
+): Promise<ResolvedCopilotModel | undefined> {
+    const models = await ensureModelList(client);
+    if (models === undefined) {
+        return { model: settings.modelName, reasoningSupported: undefined };
     }
-    if (reasoningSupportCache.has(requested)) {
-        return {
-            model: requested,
-            reasoningSupported: reasoningSupportCache.get(requested),
-        };
-    }
-    debug(
-        `model "${requested}" not available in this tenant; ` +
-            `falling back to "${COPILOT_FALLBACK_MODEL}"`,
+    const selected = selectCopilotModel(
+        settings.modelName,
+        settings.fallbackModels,
+        models,
     );
+    if (selected === undefined) return undefined;
+    if (selected.id !== settings.modelName) {
+        debug(
+            `model "${settings.modelName}" not available in this tenant; ` +
+                `falling back to "${selected.id}"`,
+        );
+    }
     return {
-        model: COPILOT_FALLBACK_MODEL,
+        model: selected.id,
         reasoningSupported:
-            reasoningSupportCache.get(COPILOT_FALLBACK_MODEL) ?? false,
+            selected.capabilities?.supports?.reasoningEffort === true,
     };
 }
 
@@ -388,7 +622,7 @@ function buildSessionConfig(
             | undefined) ?? settings.reasoningEffort;
     // Simple translation calls don't benefit from model-side "thinking" and it
     // adds significant latency, so we disable it wherever possible:
-    //  - Non-reasoning models (e.g. claude-haiku-4.5): never send reasoningEffort.
+    //  - Non-reasoning models: never send reasoningEffort.
     //    The SDK/CLI rejects it for models where capabilities.supports.reasoningEffort
     //    is false, and these models don't think anyway.
     //  - Reasoning-capable models with no explicit override: force the lowest
@@ -425,6 +659,7 @@ function buildSessionConfig(
 // package root) — only the fields the HTTP transport consumes.
 type SdkProviderEndpoint = {
     baseUrl: string;
+    wireApi?: string | undefined;
     apiKey?: string | undefined;
     headers?: { [k: string]: string | undefined } | undefined;
     sessionToken?:
@@ -440,7 +675,7 @@ const ENDPOINT_EXPIRY_SKEW_MS = 60_000;
 const endpointCache = new Map<string, CopilotEndpoint>();
 const endpointInflight = new Map<string, Promise<CopilotEndpoint>>();
 
-function endpointExpired(ep: CopilotEndpoint): boolean {
+function endpointExpired(ep: { expiresAt?: number | undefined }): boolean {
     return (
         ep.expiresAt !== undefined &&
         Date.now() >= ep.expiresAt - ENDPOINT_EXPIRY_SKEW_MS
@@ -449,7 +684,12 @@ function endpointExpired(ep: CopilotEndpoint): boolean {
 
 function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
     const base = ep.baseUrl.replace(/\/+$/, "");
-    const url = `${base}/chat/completions`;
+    const wireApi: WireApi =
+        ep.wireApi === "responses" ? "responses" : "chat_completions";
+    const url =
+        wireApi === "responses"
+            ? `${base}/responses`
+            : `${base}/chat/completions`;
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(ep.headers ?? {})) {
         if (v !== undefined) headers[k] = v;
@@ -469,14 +709,42 @@ function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
             if (!Number.isNaN(ms)) expiresAt = ms;
         }
     }
-    return { url, model, headers, expiresAt };
+    return { url, model, wireApi, headers, expiresAt };
+}
+
+function mapModelEndpoint(
+    ep: SdkProviderEndpoint,
+    model: string,
+): CopilotModelEndpoint {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(ep.headers ?? {})) {
+        if (value !== undefined) headers[key] = value;
+    }
+    if (
+        ep.apiKey &&
+        headers.Authorization === undefined &&
+        headers.authorization === undefined
+    ) {
+        headers.Authorization = `Bearer ${ep.apiKey}`;
+    }
+    let expiresAt: number | undefined;
+    if (ep.sessionToken) {
+        headers[ep.sessionToken.header] = ep.sessionToken.token;
+        if (ep.sessionToken.expiresAt) {
+            const milliseconds = Date.parse(ep.sessionToken.expiresAt);
+            if (!Number.isNaN(milliseconds)) expiresAt = milliseconds;
+        }
+    }
+    return {
+        baseUrl: ep.baseUrl.replace(/\/+$/, ""),
+        model,
+        headers,
+        expiresAt,
+    };
 }
 
 // Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
-// concrete `modelId` binds the endpoint to that model; when the requested model
-// isn't offered by the tenant (resolveModel falls back to "auto"), we throw
-// `CopilotEndpointUnavailableError` rather than dealing with an auto-bound
-// session token.
+// concrete `modelId` binds the endpoint and its token to that model.
 async function acquireEndpoint(
     settings: CopilotApiSettings,
 ): Promise<CopilotEndpoint> {
@@ -490,11 +758,31 @@ async function acquireEndpoint(
         cliPath: settings.cliPath,
         cliUrl: settings.cliUrl,
     });
-    const resolved = await resolveModel(client, settings.modelName);
-    if (resolved.model === COPILOT_FALLBACK_MODEL) {
+    try {
+        return await acquireEndpointForCurrentModelList(client, settings);
+    } catch (err) {
+        if (!isModelUnavailableError(err)) throw err;
+        modelListPromise = undefined;
+        return acquireEndpointForCurrentModelList(client, settings);
+    }
+}
+
+function isModelUnavailableError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    return /model.*(?:not available|unavailable|not found|disabled)/i.test(
+        message,
+    );
+}
+
+async function acquireEndpointForCurrentModelList(
+    client: CopilotClient,
+    settings: CopilotApiSettings,
+): Promise<CopilotEndpoint> {
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
         throw new CopilotEndpointUnavailableError(
-            `Model "${settings.modelName}" is not available in this tenant; ` +
-                `the HTTP transport requires a concrete model.`,
+            `Model "${settings.modelName}" is not available in this tenant, ` +
+                `and no concrete fallback model was found.`,
         );
     }
     const tCreate = Date.now();
@@ -551,6 +839,69 @@ export function createCopilotEndpointProvider(
     };
 }
 
+/**
+ * Create an endpoint provider for a non-chat CAPI model. The SDK session uses
+ * the configured chat model, while getEndpoint binds returned credentials to
+ * `modelId`.
+ */
+export function createCopilotModelEndpointProvider(
+    settings: CopilotApiSettings,
+    modelId: string,
+): CopilotModelEndpointProvider {
+    let cached: CopilotModelEndpoint | undefined;
+    let inflight: Promise<CopilotModelEndpoint> | undefined;
+
+    return {
+        async getEndpoint(force = false): Promise<CopilotModelEndpoint> {
+            if (!force && cached && !endpointExpired(cached)) {
+                return cached;
+            }
+            if (force) cached = undefined;
+            if (inflight === undefined) {
+                inflight = acquireModelEndpoint(settings, modelId)
+                    .then((endpoint) => {
+                        cached = endpoint;
+                        return endpoint;
+                    })
+                    .finally(() => {
+                        inflight = undefined;
+                    });
+            }
+            return inflight;
+        },
+    };
+}
+
+async function acquireModelEndpoint(
+    settings: CopilotApiSettings,
+    modelId: string,
+): Promise<CopilotModelEndpoint> {
+    if (!process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT) {
+        process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT = "true";
+    }
+    const client = await getClient({
+        cliPath: settings.cliPath,
+        cliUrl: settings.cliUrl,
+    });
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
+        throw new CopilotEndpointUnavailableError(
+            `No Copilot chat model is available to acquire endpoint credentials for "${modelId}".`,
+        );
+    }
+    const session = await client.createSession(
+        buildSessionConfig(settings, {}, false, resolved),
+    );
+    try {
+        const endpoint = (await session.rpc.provider.getEndpoint({
+            modelId,
+        })) as SdkProviderEndpoint;
+        return mapModelEndpoint(endpoint, modelId);
+    } finally {
+        session.disconnect().catch(() => {});
+    }
+}
+
 // The copilot provider registers its chat-model factory here so that
 // openai.ts can dispatch to it via the registry without importing this
 // module directly (breaks a circular dependency).
@@ -573,6 +924,8 @@ export function createCopilotChatModel(
 ): ChatModelWithStreaming {
     // The SDK is used only to mint a provider endpoint; translation requests
     // are then issued as plain HTTP chat/completions calls.
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const endpointProvider = createCopilotEndpointProvider(settings);
     return createCopilotTransportModel(
         settings,
@@ -582,18 +935,6 @@ export function createCopilotChatModel(
         endpointProvider,
     );
 }
-
-// Minimal shape of the CAPI chat-completions response we consume.
-type CapiChatCompletion = {
-    choices?: Array<{ message?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
-};
-
-// Minimal shape of a streamed CAPI chat-completions chunk.
-type CapiChatCompletionChunk = {
-    choices?: Array<{ delta?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
-};
 
 function isAbort(err: unknown, signal?: AbortSignal): boolean {
     return (
@@ -610,16 +951,110 @@ function hasImageContent(messages: PromptSection[]): boolean {
     );
 }
 
+function promptSectionsToText(messages: PromptSection[]): string | undefined {
+    const sections: string[] = [];
+    for (const message of messages) {
+        if (typeof message.content === "string") {
+            sections.push(`${message.role.toUpperCase()}:\n${message.content}`);
+            continue;
+        }
+        if (
+            message.content.some(
+                (content) =>
+                    typeof content !== "string" && content.type === "image_url",
+            )
+        ) {
+            return undefined;
+        }
+        const text = message.content
+            .map((content) =>
+                typeof content === "string"
+                    ? content
+                    : "text" in content
+                      ? content.text
+                      : "",
+            )
+            .join("\n");
+        sections.push(`${message.role.toUpperCase()}:\n${text}`);
+    }
+    return sections.join("\n\n");
+}
+
+export async function completeWithCopilotSession(
+    settings: CopilotApiSettings,
+    completionSettings: CompletionSettings,
+    messages: PromptSection[],
+    signal?: AbortSignal,
+    clientFactory: (
+        options: CopilotClientOptions,
+    ) => Promise<Pick<CopilotClient, "createSession">> = getClient,
+): Promise<Result<string>> {
+    const prompt = promptSectionsToText(messages);
+    if (prompt === undefined) {
+        return error(
+            "The installed Copilot CLI does not support provider endpoints, and its session fallback does not support image input.",
+        );
+    }
+
+    let session:
+        | Awaited<ReturnType<CopilotClient["createSession"]>>
+        | undefined;
+    let abortListener: (() => void) | undefined;
+    try {
+        if (signal?.aborted) {
+            return cancelledFailure();
+        }
+        const client = await clientFactory({
+            cliPath: settings.cliPath,
+            cliUrl: settings.cliUrl,
+        });
+        session = await client.createSession(
+            buildSessionConfig(settings, completionSettings, false),
+        );
+
+        let responsePromise = session.sendAndWait({ prompt }, settings.timeout);
+        if (signal) {
+            const activeSession = session;
+            const abortPromise = new Promise<never>((_, reject) => {
+                abortListener = () => {
+                    void activeSession.abort().catch(() => {});
+                    reject(signal.reason ?? new Error("Request cancelled"));
+                };
+                signal.addEventListener("abort", abortListener, { once: true });
+                if (signal.aborted) {
+                    abortListener();
+                }
+            });
+            responsePromise = Promise.race([responsePromise, abortPromise]);
+        }
+
+        const response = await responsePromise;
+        if (response === undefined) {
+            return error("Copilot returned no response");
+        }
+        return success(response.data.content);
+    } catch (err) {
+        return isAbort(err, signal)
+            ? cancelledFailure()
+            : classifiedFailure(
+                  err instanceof Error ? err.message : String(err),
+                  err,
+              );
+    } finally {
+        if (abortListener && signal) {
+            signal.removeEventListener("abort", abortListener);
+        }
+        await session?.disconnect().catch(() => {});
+    }
+}
+
 /**
- * Build a Copilot chat model that issues HTTP chat/completions calls against an
- * endpoint minted by `endpointProvider`, mirroring the Azure/OpenAI HTTP path
+ * Build a Copilot chat model that issues HTTP calls against an endpoint minted
+ * by `endpointProvider`, mirroring the Azure/OpenAI HTTP path
  * (single-member endpoint pool + shared restClient primitives) so retry,
  * timeout and throttling behavior matches the rest of the stack. A single
  * reactive endpoint refresh is attempted on a non-2xx (e.g. an expired
- * credential); on continued failure the request returns an error. Vision input
- * (image_url content) is passed through natively since CAPI's chat/completions
- * is OpenAI-compatible; for streaming requests carrying images, token-usage
- * reporting is disabled (see completeStream).
+ * credential); on continued failure the request returns an error.
  *
  * Exported for tests, which inject a stub `endpointProvider`.
  */
@@ -630,10 +1065,13 @@ export function createCopilotTransportModel(
     tags: string[] | undefined,
     endpointProvider: CopilotEndpointProvider,
 ): ChatModelWithStreaming {
-    completionSettings ??= {};
-    completionSettings.n ??= 1;
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
+    const resolvedCompletionSettings = completionSettings ?? {};
+    rejectCompletionLimits(resolvedCompletionSettings);
+    resolvedCompletionSettings.n ??= 1;
     // Match the Azure default; translation calls want deterministic output.
-    completionSettings.temperature ??= 0;
+    resolvedCompletionSettings.temperature ??= 0;
 
     // A one-member pool so we reuse the shared restClient retry/throttle path.
     // `endpoint` is overwritten per request from the freshly-resolved endpoint
@@ -646,37 +1084,69 @@ export function createCopilotTransportModel(
     );
 
     const model: ChatModelWithStreaming = {
-        completionSettings,
+        completionSettings: resolvedCompletionSettings,
         completionCallback,
         complete,
         completeStream,
     };
     return model;
 
-    function buildRequest(params: any): BuildPoolRequest {
-        return async (member) => {
-            let ep: CopilotEndpoint;
-            try {
-                ep = await endpointProvider.getEndpoint();
-            } catch (err) {
-                return error(
-                    `getEndpoint failed: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                );
-            }
-            member.settings.endpoint = ep.url;
-            return success({
-                headers: { ...ep.headers },
-                body: { ...params, model: ep.model },
-            });
-        };
-    }
-
-    function getParams(messages: PromptSection[]): any {
+    function makeRequest(
+        messages: PromptSection[],
+        stream: boolean,
+        streamOptions?: Record<string, unknown>,
+    ): {
+        build: BuildPoolRequest;
+        getAdapter: () => ProviderAdapter | undefined;
+        getModelRequest: () => ModelRequest | undefined;
+        getBody: () => unknown;
+    } {
+        let adapter: ProviderAdapter | undefined;
+        let modelRequest: ModelRequest | undefined;
+        let body: unknown;
         return {
-            messages,
-            ...completionSettings,
+            build: async (member) => {
+                let ep: CopilotEndpoint;
+                try {
+                    ep = await endpointProvider.getEndpoint();
+                } catch (err) {
+                    return classifiedFailure(
+                        `getEndpoint failed: ${
+                            err instanceof Error ? err.message : String(err)
+                        }`,
+                        err,
+                    );
+                }
+                adapter = adapterFor(ep.wireApi);
+                rejectCompletionLimits(resolvedCompletionSettings);
+                let wireCompletionSettings = resolvedCompletionSettings;
+                if (ep.wireApi === "responses") {
+                    const { temperature: _temperature, ...remainingSettings } =
+                        resolvedCompletionSettings;
+                    wireCompletionSettings = remainingSettings;
+                }
+                const nextModelRequest: ModelRequest = {
+                    messages,
+                    completionSettings: wireCompletionSettings,
+                    providerOutputTokens:
+                        settings.requestConstraints?.outputTokens,
+                    defaultParams: { model: ep.model },
+                    disableResponseFormat: false,
+                    modelName: ep.model,
+                    stream,
+                    streamOptions,
+                };
+                modelRequest = nextModelRequest;
+                body = adapter.buildRequestBody(nextModelRequest);
+                member.settings.endpoint = ep.url;
+                return success({
+                    headers: { ...ep.headers },
+                    body,
+                });
+            },
+            getAdapter: () => adapter,
+            getModelRequest: () => modelRequest,
+            getBody: () => body,
         };
     }
 
@@ -703,8 +1173,7 @@ export function createCopilotTransportModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params = getParams(messages);
-        const request = buildRequest(params);
+        const request = makeRequest(messages, false);
         const options = {
             retryPauseMs: settings.retryPauseMs,
             signal,
@@ -713,13 +1182,23 @@ export function createCopilotTransportModel(
         const tTotal = Date.now();
 
         let result: Result<unknown>;
+        if (endpointRpcUnavailable) {
+            return completeWithCopilotSession(
+                settings,
+                resolvedCompletionSettings,
+                messages,
+                signal,
+            );
+        }
         try {
-            result = await callJsonApiWithPool(pool, request, options);
+            result = await callJsonApiWithPool(pool, request.build, options);
         } catch (err) {
-            if (isAbort(err, signal)) {
-                return error("Request aborted");
-            }
-            return error(err instanceof Error ? err.message : String(err));
+            return isAbort(err, signal)
+                ? cancelledFailure()
+                : classifiedFailure(
+                      err instanceof Error ? err.message : String(err),
+                      err,
+                  );
         }
 
         // A returned (non-thrown) error means a non-transient status (e.g.
@@ -731,38 +1210,65 @@ export function createCopilotTransportModel(
                 await endpointProvider.getEndpoint(true);
             } catch {}
             try {
-                result = await callJsonApiWithPool(pool, request, options);
+                result = await callJsonApiWithPool(
+                    pool,
+                    request.build,
+                    options,
+                );
             } catch (err) {
-                if (isAbort(err, signal)) {
-                    return error("Request aborted");
-                }
-                return error(err instanceof Error ? err.message : String(err));
+                return isAbort(err, signal)
+                    ? cancelledFailure()
+                    : classifiedFailure(
+                          err instanceof Error ? err.message : String(err),
+                          err,
+                      );
             }
             if (!result.success) {
+                if (
+                    result.message.includes(
+                        "Unhandled method session.provider.getEndpoint",
+                    )
+                ) {
+                    endpointRpcUnavailable = true;
+                    debug(
+                        "Copilot provider endpoint RPC is unavailable; using SDK session transport",
+                    );
+                    return completeWithCopilotSession(
+                        settings,
+                        resolvedCompletionSettings,
+                        messages,
+                        signal,
+                    );
+                }
                 return result;
             }
         }
 
-        const data = result.data as CapiChatCompletion;
-        if (!data.choices || data.choices.length === 0) {
-            return error("Copilot chat call returned no choices");
+        const adapter = request.getAdapter();
+        const modelRequest = request.getModelRequest();
+        if (adapter === undefined || modelRequest === undefined) {
+            return error("Copilot request adapter was not initialized");
         }
-        const content = data.choices[0].message?.content ?? "";
+        const data = result.data;
+        const parsed = adapter.parseResponse(data, modelRequest);
+        if (!parsed.success) return parsed;
+        const content = parsed.data;
 
         if (model.completionCallback) {
-            model.completionCallback(params, data);
+            model.completionCallback(request.getBody(), data);
         }
+        const usage = adapter.extractUsage(data);
         try {
             if (settings.enableModelRequestLogging && logFn) {
                 logFn({
                     prompt: messages,
                     response: content,
-                    tokenUsage: data.usage,
+                    tokenUsage: usage,
                     tags,
                 });
             }
         } catch {}
-        reportUsage(data.usage, usageCallback);
+        reportUsage(usage, usageCallback);
 
         debugTiming(`complete total ${Date.now() - tTotal}ms`);
         return success(content);
@@ -790,18 +1296,15 @@ export function createCopilotTransportModel(
         // prompt carries images. Vision input itself streams fine.
         const includeUsage = !hasImageContent(messages);
 
-        const params = {
-            ...getParams(messages),
-            stream: true,
-            stream_options: { include_usage: includeUsage },
-        };
-        const request = buildRequest(params);
+        const request = makeRequest(messages, true, {
+            include_usage: includeUsage,
+        });
         const options = {
             retryPauseMs: settings.retryPauseMs,
             signal,
         };
 
-        let result = await callApiWithPool(pool, request, options);
+        let result = await callApiWithPool(pool, request.build, options);
         if (!result.success) {
             debug(
                 `stream connect failed (${result.message}); refreshing endpoint`,
@@ -809,13 +1312,22 @@ export function createCopilotTransportModel(
             try {
                 await endpointProvider.getEndpoint(true);
             } catch {}
-            result = await callApiWithPool(pool, request, options);
+            result = await callApiWithPool(pool, request.build, options);
             if (!result.success) {
                 return result;
             }
         }
 
         const response = result.data;
+        const adapter = request.getAdapter();
+        const modelRequest = request.getModelRequest();
+        const decoder =
+            adapter !== undefined && modelRequest !== undefined
+                ? adapter.createStreamDecoder?.(modelRequest)
+                : undefined;
+        if (adapter === undefined || decoder === undefined) {
+            return error("Copilot streaming adapter was not initialized");
+        }
         return {
             success: true,
             data: (async function* () {
@@ -839,22 +1351,28 @@ export function createCopilotTransportModel(
                         } catch {}
                         break;
                     }
-                    let chunk: CapiChatCompletionChunk;
+                    let piece;
                     try {
-                        chunk = JSON.parse(evt.data) as CapiChatCompletionChunk;
+                        piece = decoder.push(evt.data);
                     } catch {
                         // Ignore non-JSON keep-alive/comment lines.
                         continue;
                     }
-                    const delta = chunk.choices?.[0]?.delta?.content;
-                    if (delta) {
-                        fullResponseText += delta;
-                        yield delta;
+                    if (piece.text) {
+                        fullResponseText += piece.text;
+                        yield piece.text;
                     }
-                    if (chunk.usage) {
-                        tokenUsage = chunk.usage;
-                        reportUsage(chunk.usage, usageCallback);
+                    for (const text of piece.texts ?? []) {
+                        if (text !== undefined) {
+                            fullResponseText += text;
+                            yield text;
+                        }
                     }
+                    if (piece.usage) {
+                        tokenUsage = piece.usage;
+                        reportUsage(piece.usage, usageCallback);
+                    }
+                    if (piece.error) throw piece.error;
                 }
             })(),
         };

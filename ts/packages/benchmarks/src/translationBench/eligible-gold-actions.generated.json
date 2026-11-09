@@ -1,0 +1,2640 @@
+{
+  "version": 1,
+  "catalogVersion": "2026-08-06",
+  "policyHash": "8d35c325e7bcd266af6e576f373877ba3a7196e2578ce2e79946b55e20a3f2ef",
+  "graderRulesFingerprint": "7bb9c973d46999d9",
+  "generatedAt": "2026-09-22T19:29:22.741Z",
+  "model": "openai:LOCAL",
+  "allowlist": [
+    "browser.captureScreenshot",
+    "browser.changeSearchProvider",
+    "browser.changeTab",
+    "browser.closeAllWebPages",
+    "browser.closeWebPage",
+    "browser.external.addToBookmarks",
+    "browser.external.closeTab",
+    "browser.external.closeWindow",
+    "browser.external.openFromBookmarks",
+    "browser.external.openFromHistory",
+    "browser.external.openTab",
+    "browser.external.switchToTabByPosition",
+    "browser.followLinkByPosition",
+    "browser.followLinkByText",
+    "browser.goBack",
+    "browser.goForward",
+    "browser.openSearchResult",
+    "browser.openWebPage",
+    "browser.readPageContent",
+    "browser.reloadPage",
+    "browser.scrollDown",
+    "browser.scrollUp",
+    "browser.stopReadPageContent",
+    "browser.webFlows.editWebFlowScope",
+    "browser.zoomReset",
+    "calendar.addParticipant",
+    "calendar.removeEvent",
+    "calendar.scheduleEvent",
+    "chat.showImageFile",
+    "code.changeColorScheme",
+    "code.changeEditorLayout",
+    "code.code-debug.removeAllBreakpoints",
+    "code.code-debug.setBreakpoint",
+    "code.code-debug.showDebugPanel",
+    "code.code-debug.showHover",
+    "code.code-debug.startDebugging",
+    "code.code-debug.step",
+    "code.code-debug.stopDebugging",
+    "code.code-debug.toggleBreakpoint",
+    "code.code-display.closeEditor",
+    "code.code-display.fontZoomReset",
+    "code.code-display.openMarkdownPreview",
+    "code.code-display.openMarkdownPreviewToSide",
+    "code.code-display.openSettings",
+    "code.code-display.replaceInFiles",
+    "code.code-display.showExplorer",
+    "code.code-display.showOutputPanel",
+    "code.code-display.showSearch",
+    "code.code-display.showSourceControl",
+    "code.code-display.toggleSearchDetails",
+    "code.code-display.zenMode",
+    "code.code-editor.moveCursorInFile",
+    "code.code-editor.saveAllFiles",
+    "code.code-editor.saveCurrentFile",
+    "code.code-extension.disableExtension",
+    "code.code-extension.enableExtension",
+    "code.code-extension.installExtension",
+    "code.code-extension.reloadWindow",
+    "code.code-extension.showExtensions",
+    "code.code-general.gotoFileOrLineOrSymbol",
+    "code.code-general.showCommandPalette",
+    "code.code-general.showKeyboardShortcuts",
+    "code.code-general.showUserSettings",
+    "code.code-workbench.workbenchBuildRelatedTask",
+    "code.code-workbench.workbenchCreateFolderFromExplorer",
+    "code.code-workbench.workbenchOpenFile",
+    "code.code-workbench.workbenchOpenFolder",
+    "code.launchVSCode",
+    "code.newTextFile",
+    "code.splitEditor",
+    "desktop.AdjustScreenBrightness",
+    "desktop.AdjustVolume",
+    "desktop.ApplyTheme",
+    "desktop.BluetoothToggle",
+    "desktop.CloseProgram",
+    "desktop.ConnectWifi",
+    "desktop.CreateDesktop",
+    "desktop.Debug",
+    "desktop.DisconnectWifi",
+    "desktop.EnableWifi",
+    "desktop.LaunchProgram",
+    "desktop.ListThemes",
+    "desktop.ListWifiNetworks",
+    "desktop.Maximize",
+    "desktop.Minimize",
+    "desktop.MoveWindowToDesktop",
+    "desktop.Mute",
+    "desktop.NextDesktop",
+    "desktop.PinWindow",
+    "desktop.PreviousDesktop",
+    "desktop.RestartService",
+    "desktop.RestoreVolume",
+    "desktop.SetScreenResolution",
+    "desktop.SetTextSize",
+    "desktop.SetThemeMode",
+    "desktop.SetWallpaper",
+    "desktop.SwitchDesktop",
+    "desktop.SwitchTo",
+    "desktop.Tile",
+    "desktop.ToggleAirplaneMode",
+    "desktop.ToggleNotifications",
+    "desktop.Volume",
+    "desktop.desktop-display.AdjustColorTemperature",
+    "desktop.desktop-display.AdjustScreenOrientation",
+    "desktop.desktop-display.DisplayResolutionAndAspectRatio",
+    "desktop.desktop-display.DisplayScaling",
+    "desktop.desktop-display.EnableBlueLightFilterSchedule",
+    "desktop.desktop-display.RotationLock",
+    "desktop.desktop-input.AdjustMousePointerSize",
+    "desktop.desktop-input.CursorTrail",
+    "desktop.desktop-input.EnableTouchPad",
+    "desktop.desktop-input.EnhancePointerPrecision",
+    "desktop.desktop-input.MouseCursorSpeed",
+    "desktop.desktop-input.MousePointerCustomization",
+    "desktop.desktop-input.MouseWheelScrollLines",
+    "desktop.desktop-input.SetPrimaryMouseButton",
+    "desktop.desktop-input.ToggleMouseSonar",
+    "desktop.desktop-input.TouchpadCursorSpeed",
+    "desktop.desktop-personalization.ApplyColorToTitleBar",
+    "desktop.desktop-personalization.EnableTransparency",
+    "desktop.desktop-personalization.HighContrastTheme",
+    "desktop.desktop-personalization.SystemThemeMode",
+    "desktop.desktop-power.BatterySaverActivationLevel",
+    "desktop.desktop-power.SetPowerModeOnBattery",
+    "desktop.desktop-power.SetPowerModePluggedIn",
+    "desktop.desktop-privacy.ManageCameraAccess",
+    "desktop.desktop-privacy.ManageLocationAccess",
+    "desktop.desktop-privacy.ManageMicrophoneAccess",
+    "desktop.desktop-system.AutomaticDSTAdjustment",
+    "desktop.desktop-system.AutomaticTimeSettingAction",
+    "desktop.desktop-system.EnableFilterKeysAction",
+    "desktop.desktop-system.EnableGameMode",
+    "desktop.desktop-system.EnableMagnifier",
+    "desktop.desktop-system.EnableMeteredConnections",
+    "desktop.desktop-system.EnableNarratorAction",
+    "desktop.desktop-system.EnableQuietHours",
+    "desktop.desktop-system.EnableStickyKeys",
+    "desktop.desktop-system.MinimizeWindowsOnMonitorDisconnectAction",
+    "desktop.desktop-system.MonoAudioToggle",
+    "desktop.desktop-system.RememberWindowLocations",
+    "desktop.desktop-system.ShowFileExtensions",
+    "desktop.desktop-system.ShowHiddenAndSystemFiles",
+    "desktop.desktop-taskbar.AutoHideTaskbar",
+    "desktop.desktop-taskbar.DisplaySecondsInSystrayClock",
+    "desktop.desktop-taskbar.DisplayTaskbarOnAllMonitors",
+    "desktop.desktop-taskbar.ShowBadgesOnTaskbar",
+    "desktop.desktop-taskbar.TaskViewVisibility",
+    "desktop.desktop-taskbar.TaskbarAlignment",
+    "desktop.desktop-taskbar.ToggleWidgetsButtonVisibility",
+    "discord.addThreadMember",
+    "discord.createChannelInvite",
+    "discord.createDM",
+    "discord.createGroupDM",
+    "discord.createGuild",
+    "discord.createMessage",
+    "discord.createWebhook",
+    "discord.deleteChannel",
+    "discord.deleteChannelPermission",
+    "discord.deleteInvite",
+    "discord.editChannelPermissions",
+    "discord.executeWebhook",
+    "discord.followAnnouncementChannel",
+    "discord.getThreadMember",
+    "discord.groupDmAddRecipient",
+    "discord.groupDmRemoveRecipient",
+    "discord.joinThread",
+    "discord.leaveGuild",
+    "discord.leaveThread",
+    "discord.listChannels",
+    "discord.listJoinedPrivateArchivedThreads",
+    "discord.listPrivateArchivedThreads",
+    "discord.listPublicArchivedThreads",
+    "discord.listThreadMembers",
+    "discord.modifyChannel",
+    "discord.modifyCurrentUser",
+    "discord.refreshChannels",
+    "discord.removeThreadMember",
+    "discord.setGuild",
+    "discord.setVoiceChannelStatus",
+    "discord.startThreadFromMessage",
+    "discord.startThreadInForumOrMediaChannel",
+    "discord.startThreadWithoutMessage",
+    "discord.triggerTypingIndicator",
+    "discord.updateCurrentUserApplicationRoleConnection",
+    "discord.updateTargetUsers",
+    "dispatcher.activity.exitActivity",
+    "email.findEmail",
+    "email.forwardEmail",
+    "email.replyEmail",
+    "email.sendEmail",
+    "github-cli.attestationCreate",
+    "github-cli.authLogout",
+    "github-cli.authStatus",
+    "github-cli.browseIssue",
+    "github-cli.browsePr",
+    "github-cli.browseRepo",
+    "github-cli.cacheDelete",
+    "github-cli.cacheList",
+    "github-cli.codespaceCreate",
+    "github-cli.codespaceDelete",
+    "github-cli.codespaceList",
+    "github-cli.configSet",
+    "github-cli.extensionInstall",
+    "github-cli.gistDelete",
+    "github-cli.gistList",
+    "github-cli.gpgKeyAdd",
+    "github-cli.issueAddLabel",
+    "github-cli.issueClose",
+    "github-cli.issueCreate",
+    "github-cli.issueDelete",
+    "github-cli.issueList",
+    "github-cli.issueReopen",
+    "github-cli.issueView",
+    "github-cli.labelCreate",
+    "github-cli.licensesView",
+    "github-cli.orgList",
+    "github-cli.orgView",
+    "github-cli.prCheckout",
+    "github-cli.prChecks",
+    "github-cli.prClose",
+    "github-cli.prCreate",
+    "github-cli.prList",
+    "github-cli.prMerge",
+    "github-cli.prMergedStatus",
+    "github-cli.prView",
+    "github-cli.projectCreate",
+    "github-cli.projectDelete",
+    "github-cli.projectList",
+    "github-cli.releaseCreate",
+    "github-cli.releaseDelete",
+    "github-cli.releaseList",
+    "github-cli.repoClone",
+    "github-cli.repoCreate",
+    "github-cli.repoDelete",
+    "github-cli.repoFork",
+    "github-cli.repoView",
+    "github-cli.rulesetView",
+    "github-cli.runView",
+    "github-cli.secretCreate",
+    "github-cli.sshKeyAdd",
+    "github-cli.starRepo",
+    "github-cli.variableCreate",
+    "github-cli.workflowView",
+    "ipconfig.displayDHCPClassIDs",
+    "ipconfig.displayDNSResolverCacheContents",
+    "ipconfig.displayFullConfigurationInformation",
+    "ipconfig.displayIPv6DHCPClassIDs",
+    "ipconfig.modifyDHCPClassID",
+    "ipconfig.modifyIPv6DHCPClassID",
+    "ipconfig.purgeDNSResolverCache",
+    "ipconfig.refreshDHCPLeasesAndReRegisterDNSNames",
+    "ipconfig.releaseIPv4Address",
+    "ipconfig.releaseIPv6Address",
+    "ipconfig.renewIPv4Address",
+    "ipconfig.renewIPv6Address",
+    "list.addItems",
+    "list.clearList",
+    "list.createList",
+    "list.removeItems",
+    "localPlayer.addToQueue",
+    "localPlayer.clearQueue",
+    "localPlayer.mute",
+    "localPlayer.playFile",
+    "localPlayer.playFolder",
+    "localPlayer.playFromQueue",
+    "localPlayer.repeat",
+    "localPlayer.resume",
+    "localPlayer.setMusicFolder",
+    "markdown.createDocument",
+    "markdown.openDocument",
+    "montage.addPhotos",
+    "montage.changeTitle",
+    "montage.clearSelectedPhotos",
+    "montage.createNewMontage",
+    "montage.deleteAllMontages",
+    "montage.deleteMontage",
+    "montage.mergeMontages",
+    "montage.openMontage",
+    "montage.removePhotos",
+    "montage.selectPhotos",
+    "montage.setMontageViewMode",
+    "montage.setSearchParameters",
+    "montage.startSlideShow",
+    "osNotifications.testOsNotification",
+    "player.addCurrentTrackToPlaylist",
+    "player.addSongsToPlaylist",
+    "player.addToPlaylistFromCurrentTrackList",
+    "player.createPlaylist",
+    "player.deletePlaylist",
+    "player.getQueue",
+    "player.playFromCurrentTrackList",
+    "player.playMusic",
+    "player.playPlaylist",
+    "player.resumePlayback",
+    "player.selectDevice",
+    "player.setDefaultDevice",
+    "player.setMaxVolume",
+    "screencapture.startRecording",
+    "screencapture.stopRecording",
+    "screencapture.takeScreenshot",
+    "system.config.enterAgentPriorityMode",
+    "system.config.exitAgentPriorityMode",
+    "system.config.toggleAgent",
+    "system.config.toggleDeveloperMode",
+    "system.config.toggleExplanation",
+    "system.history.clearHistory",
+    "system.history.deleteHistory",
+    "system.history.listHistory",
+    "system.notify.clearNotifications",
+    "system.notify.showNotificationSummary",
+    "system.notify.showNotifications",
+    "system.settings.setAutoComplete",
+    "system.settings.setConversationResume",
+    "system.settings.setIdleTimeout",
+    "system.settings.setServerHidden",
+    "taskflow.deleteTaskFlow",
+    "taskflow.listTaskFlows",
+    "timer.cancelReminder",
+    "timer.listReminders",
+    "timer.repeatReminder",
+    "timer.setReminder",
+    "visualStudio.addBreakpoint",
+    "visualStudio.break",
+    "visualStudio.build",
+    "visualStudio.clean",
+    "visualStudio.closeAll",
+    "visualStudio.debug",
+    "visualStudio.findInFiles",
+    "visualStudio.findText",
+    "visualStudio.go",
+    "visualStudio.gotoLine",
+    "visualStudio.openFile",
+    "visualStudio.redo",
+    "visualStudio.run",
+    "visualStudio.saveAll",
+    "visualStudio.stepInto",
+    "visualStudio.stepOut",
+    "visualStudio.stepOver",
+    "visualStudio.undo",
+    "windowsClock.addWorldClock",
+    "windowsClock.createAlarm",
+    "windowsClock.navigateToAlarmTab",
+    "windowsClock.navigateToFocusTab",
+    "windowsClock.navigateToStopwatchTab",
+    "windowsClock.navigateToTimerTab",
+    "windowsClock.navigateToWorldClockTab",
+    "windowsClock.recordLap",
+    "windowsClock.renameTimer",
+    "windowsClock.setAlarmEnabled",
+    "windowsClock.setFocusSessionRunning",
+    "windowsClock.setStopwatchRunning",
+    "windowsClock.setTimerViewMode",
+    "windowsClock.startTimer"
+  ],
+  "decisions": [
+    {
+      "id": "browser.actionDiscovery.detectPageActions",
+      "include": false,
+      "reason": "Discovery/meta-action rather than a direct user-facing control."
+    },
+    {
+      "id": "browser.actionDiscovery.getAllWebFlows",
+      "include": false,
+      "reason": "Catalog lookup rather than a direct control command."
+    },
+    {
+      "id": "browser.actionDiscovery.getWebFlowsForDomain",
+      "include": false,
+      "reason": "Lookup/discovery action that returns available flows."
+    },
+    {
+      "id": "browser.actionDiscovery.summarizePage",
+      "include": false,
+      "reason": "Open-ended LLM-style summarization transform."
+    },
+    {
+      "id": "browser.captureScreenshot",
+      "include": true,
+      "reason": "Crisp single-step capture command."
+    },
+    {
+      "id": "browser.changeSearchProvider",
+      "include": true,
+      "reason": "Explicit settings command with a closed provider parameter."
+    },
+    {
+      "id": "browser.changeTab",
+      "include": true,
+      "reason": "Standard tab control with a specific target tab."
+    },
+    {
+      "id": "browser.closeAllWebPages",
+      "include": true,
+      "reason": "Explicit single-step command to close all page views."
+    },
+    {
+      "id": "browser.closeWebPage",
+      "include": true,
+      "reason": "Explicit single-step UI command to close the current page view."
+    },
+    {
+      "id": "browser.external.addToBookmarks",
+      "include": true,
+      "reason": "Standard single-step bookmark command."
+    },
+    {
+      "id": "browser.external.closeTab",
+      "include": true,
+      "reason": "Standard explicit browser tab-closing control."
+    },
+    {
+      "id": "browser.external.closeWindow",
+      "include": true,
+      "reason": "Standard explicit browser window control."
+    },
+    {
+      "id": "browser.external.openFromBookmarks",
+      "include": true,
+      "reason": "Crisp navigation command with a specific bookmark target."
+    },
+    {
+      "id": "browser.external.openFromHistory",
+      "include": true,
+      "reason": "Crisp navigation command with a specific history target."
+    },
+    {
+      "id": "browser.external.openTab",
+      "include": true,
+      "reason": "Standard explicit browser tab-opening control."
+    },
+    {
+      "id": "browser.external.switchToTabByPosition",
+      "include": true,
+      "reason": "Crisp tab-selection command with a positional slot."
+    },
+    {
+      "id": "browser.followLinkByPosition",
+      "include": true,
+      "reason": "Crisp link-click command using a specified page position."
+    },
+    {
+      "id": "browser.followLinkByText",
+      "include": true,
+      "reason": "Crisp link-click command using visible link text."
+    },
+    {
+      "id": "browser.getWebsiteStats",
+      "include": false,
+      "reason": "Retrieves status/statistical information rather than performing a control action."
+    },
+    {
+      "id": "browser.goBack",
+      "include": true,
+      "reason": "Standard browser navigation control with unambiguous semantics."
+    },
+    {
+      "id": "browser.goForward",
+      "include": true,
+      "reason": "Standard browser navigation control with unambiguous semantics."
+    },
+    {
+      "id": "browser.openSearchResult",
+      "include": true,
+      "reason": "Crisp UI command selecting a specific prior search result."
+    },
+    {
+      "id": "browser.openWebPage",
+      "include": true,
+      "reason": "Crisp browser navigation command with a URL or page target."
+    },
+    {
+      "id": "browser.readPageContent",
+      "include": true,
+      "reason": "Standard read-aloud media control for the current page."
+    },
+    {
+      "id": "browser.reloadPage",
+      "include": true,
+      "reason": "Standard browser reload control."
+    },
+    {
+      "id": "browser.scrollDown",
+      "include": true,
+      "reason": "Standard single-step page scrolling control."
+    },
+    {
+      "id": "browser.scrollUp",
+      "include": true,
+      "reason": "Standard single-step page scrolling control."
+    },
+    {
+      "id": "browser.stopReadPageContent",
+      "include": true,
+      "reason": "Standard stop control for active page narration."
+    },
+    {
+      "id": "browser.webFlows.editWebFlowScope",
+      "include": true,
+      "reason": "Explicit configuration command with structured flow and scope targets."
+    },
+    {
+      "id": "browser.webFlows.listWebFlows",
+      "include": false,
+      "reason": "Listing available flows is a lookup/meta-action."
+    },
+    {
+      "id": "browser.zoomReset",
+      "include": true,
+      "reason": "Explicit browser display control with closed semantics."
+    },
+    {
+      "id": "calendar.addParticipant",
+      "include": true,
+      "reason": "Explicit calendar mutation with event and participant targets."
+    },
+    {
+      "id": "calendar.findEvents",
+      "include": false,
+      "reason": "Calendar lookup-and-answer action rather than a control command."
+    },
+    {
+      "id": "calendar.findThisWeeksEvents",
+      "include": false,
+      "reason": "Schedule lookup that returns conversational information."
+    },
+    {
+      "id": "calendar.findTodaysEvents",
+      "include": false,
+      "reason": "Schedule lookup that returns conversational information."
+    },
+    {
+      "id": "calendar.removeEvent",
+      "include": true,
+      "reason": "Explicit calendar deletion command with a structured event target."
+    },
+    {
+      "id": "calendar.scheduleEvent",
+      "include": true,
+      "reason": "Standard single-turn calendar creation command with structured slots."
+    },
+    {
+      "id": "chat.showImageFile",
+      "include": true,
+      "reason": "Single-step media display command with a file target."
+    },
+    {
+      "id": "code.changeColorScheme",
+      "include": true,
+      "reason": "Crisp editor setting command with a theme parameter."
+    },
+    {
+      "id": "code.changeEditorLayout",
+      "include": true,
+      "reason": "Crisp UI command with a closed layout choice."
+    },
+    {
+      "id": "code.code-debug.removeAllBreakpoints",
+      "include": true,
+      "reason": "Clear single-turn debugger command."
+    },
+    {
+      "id": "code.code-debug.setBreakpoint",
+      "include": true,
+      "reason": "Direct breakpoint command with a structured location target."
+    },
+    {
+      "id": "code.code-debug.showDebugPanel",
+      "include": true,
+      "reason": "Crisp command to display a specific UI panel."
+    },
+    {
+      "id": "code.code-debug.showHover",
+      "include": true,
+      "reason": "Direct contextual UI command with explicit semantics."
+    },
+    {
+      "id": "code.code-debug.startDebugging",
+      "include": true,
+      "reason": "Standard debugging control with explicit semantics."
+    },
+    {
+      "id": "code.code-debug.step",
+      "include": true,
+      "reason": "Standard debugger control with a closed step-mode choice."
+    },
+    {
+      "id": "code.code-debug.stopDebugging",
+      "include": true,
+      "reason": "Standard unambiguous debugging control."
+    },
+    {
+      "id": "code.code-debug.toggleBreakpoint",
+      "include": true,
+      "reason": "Standard contextual breakpoint control."
+    },
+    {
+      "id": "code.code-display.closeEditor",
+      "include": true,
+      "reason": "Clear command to close the current editor."
+    },
+    {
+      "id": "code.code-display.fontZoomReset",
+      "include": true,
+      "reason": "Unambiguous display-control command."
+    },
+    {
+      "id": "code.code-display.openMarkdownPreview",
+      "include": true,
+      "reason": "Direct command to open the current Markdown preview."
+    },
+    {
+      "id": "code.code-display.openMarkdownPreviewToSide",
+      "include": true,
+      "reason": "Direct preview command with explicit side-placement semantics."
+    },
+    {
+      "id": "code.code-display.openSettings",
+      "include": true,
+      "reason": "Crisp command to open a specific UI surface."
+    },
+    {
+      "id": "code.code-display.replaceInFiles",
+      "include": true,
+      "reason": "Standard editor command with closed search and replacement slots."
+    },
+    {
+      "id": "code.code-display.showExplorer",
+      "include": true,
+      "reason": "Crisp command to show a specific UI pane."
+    },
+    {
+      "id": "code.code-display.showOutputPanel",
+      "include": true,
+      "reason": "Crisp command to display a specific UI panel."
+    },
+    {
+      "id": "code.code-display.showSearch",
+      "include": true,
+      "reason": "Crisp command to display the editor search pane."
+    },
+    {
+      "id": "code.code-display.showSourceControl",
+      "include": true,
+      "reason": "Crisp command to show a specific UI pane."
+    },
+    {
+      "id": "code.code-display.toggleSearchDetails",
+      "include": true,
+      "reason": "Explicit toggle control for a defined UI element."
+    },
+    {
+      "id": "code.code-display.zenMode",
+      "include": true,
+      "reason": "Standard editor display-mode control."
+    },
+    {
+      "id": "code.code-editor.createFile",
+      "include": false,
+      "reason": "Deprecated and not uniquely selectable over the dedicated file-creation actions."
+    },
+    {
+      "id": "code.code-editor.insertComment",
+      "include": false,
+      "reason": "Unspecified action likely requires generating or inserting freeform comment content."
+    },
+    {
+      "id": "code.code-editor.insertOrDeleteLines",
+      "include": false,
+      "reason": "Insertion can require arbitrary freeform code or text editing."
+    },
+    {
+      "id": "code.code-editor.moveCursorInFile",
+      "include": true,
+      "reason": "Structured navigation command with explicit file or position targets."
+    },
+    {
+      "id": "code.code-editor.saveAllFiles",
+      "include": true,
+      "reason": "Standard unambiguous editor control."
+    },
+    {
+      "id": "code.code-editor.saveCurrentFile",
+      "include": true,
+      "reason": "Standard unambiguous editor control."
+    },
+    {
+      "id": "code.code-extension.checkExtensionAvailable",
+      "include": false,
+      "reason": "Extension lookup and availability query rather than a control action."
+    },
+    {
+      "id": "code.code-extension.disableExtension",
+      "include": true,
+      "reason": "Crisp extension control with a closed extension target."
+    },
+    {
+      "id": "code.code-extension.enableExtension",
+      "include": true,
+      "reason": "Crisp extension control with a closed extension target."
+    },
+    {
+      "id": "code.code-extension.installExtension",
+      "include": true,
+      "reason": "Direct command with a structured extension target."
+    },
+    {
+      "id": "code.code-extension.reloadWindow",
+      "include": true,
+      "reason": "Clear single-turn editor-window control."
+    },
+    {
+      "id": "code.code-extension.showExtensions",
+      "include": true,
+      "reason": "Crisp command to show a specific UI panel."
+    },
+    {
+      "id": "code.code-general.gotoFileOrLineOrSymbol",
+      "include": true,
+      "reason": "Direct navigation command with structured file, line, or symbol input."
+    },
+    {
+      "id": "code.code-general.showCommandPalette",
+      "include": true,
+      "reason": "Explicit single-step UI command to open the command palette."
+    },
+    {
+      "id": "code.code-general.showKeyboardShortcuts",
+      "include": true,
+      "reason": "Explicit single-step UI command to show keyboard shortcuts."
+    },
+    {
+      "id": "code.code-general.showUserSettings",
+      "include": true,
+      "reason": "Explicit single-step UI command to show settings."
+    },
+    {
+      "id": "code.code-workbench.workbenchBuildRelatedTask",
+      "include": true,
+      "reason": "Explicit command to invoke a build-related task."
+    },
+    {
+      "id": "code.code-workbench.workbenchCreateFolderFromExplorer",
+      "include": true,
+      "reason": "Crisp Explorer command to create a folder."
+    },
+    {
+      "id": "code.code-workbench.workbenchOpenFile",
+      "include": true,
+      "reason": "Standard single-step command to open a file."
+    },
+    {
+      "id": "code.code-workbench.workbenchOpenFolder",
+      "include": true,
+      "reason": "Standard single-step command to open a folder."
+    },
+    {
+      "id": "code.getActiveEditor",
+      "include": false,
+      "reason": "Read-only editor-state introspection rather than a control action."
+    },
+    {
+      "id": "code.getDiagnostics",
+      "include": false,
+      "reason": "Open-ended diagnostics lookup rather than a structured control."
+    },
+    {
+      "id": "code.getFileContent",
+      "include": false,
+      "reason": "Read-only file-content lookup."
+    },
+    {
+      "id": "code.getSelection",
+      "include": false,
+      "reason": "Read-only lookup of contextual editor state."
+    },
+    {
+      "id": "code.getWorkspaceChanges",
+      "include": false,
+      "reason": "Open-ended source-control status query."
+    },
+    {
+      "id": "code.launchVSCode",
+      "include": true,
+      "reason": "Clear single-turn application launch command."
+    },
+    {
+      "id": "code.listOpenEditors",
+      "include": false,
+      "reason": "Read-only status query listing editor tabs."
+    },
+    {
+      "id": "code.newMarkdownFile",
+      "include": false,
+      "reason": "Example requires generating freeform document content before creating the file."
+    },
+    {
+      "id": "code.newTextFile",
+      "include": true,
+      "reason": "Direct file-creation command with clear filename and optional content slots."
+    },
+    {
+      "id": "code.splitEditor",
+      "include": true,
+      "reason": "Explicit editor UI control with closed direction or file slots."
+    },
+    {
+      "id": "desktop.AdjustScreenBrightness",
+      "include": true,
+      "reason": "Standard single-turn display control with explicit direction."
+    },
+    {
+      "id": "desktop.AdjustVolume",
+      "include": true,
+      "reason": "Standard relative volume control with explicit direction or amount."
+    },
+    {
+      "id": "desktop.ApplyTheme",
+      "include": true,
+      "reason": "Direct command to apply a named theme or theme file."
+    },
+    {
+      "id": "desktop.BluetoothToggle",
+      "include": true,
+      "reason": "Standard explicit Bluetooth radio control."
+    },
+    {
+      "id": "desktop.CloseProgram",
+      "include": true,
+      "reason": "Direct desktop command to close a specified program window."
+    },
+    {
+      "id": "desktop.ConnectWifi",
+      "include": true,
+      "reason": "Direct network control with a Wi-Fi network target."
+    },
+    {
+      "id": "desktop.CreateDesktop",
+      "include": true,
+      "reason": "Direct command to create a virtual desktop."
+    },
+    {
+      "id": "desktop.Debug",
+      "include": true,
+      "reason": "Crisp command that attaches the debugger to a fixed process."
+    },
+    {
+      "id": "desktop.DisconnectWifi",
+      "include": true,
+      "reason": "Explicit single-step network disconnection control."
+    },
+    {
+      "id": "desktop.EnableWifi",
+      "include": true,
+      "reason": "Clear enable/disable hardware control with closed semantics."
+    },
+    {
+      "id": "desktop.LaunchProgram",
+      "include": true,
+      "reason": "Direct desktop command with a program-name slot."
+    },
+    {
+      "id": "desktop.ListThemes",
+      "include": true,
+      "reason": "Structured system enumeration command for installed themes."
+    },
+    {
+      "id": "desktop.ListWifiNetworks",
+      "include": true,
+      "reason": "Structured system enumeration command for available networks."
+    },
+    {
+      "id": "desktop.Maximize",
+      "include": true,
+      "reason": "Standard single-window hardware UI control."
+    },
+    {
+      "id": "desktop.Minimize",
+      "include": true,
+      "reason": "Standard single-window hardware UI control."
+    },
+    {
+      "id": "desktop.MoveWindowToDesktop",
+      "include": true,
+      "reason": "Structured window command with window and desktop targets."
+    },
+    {
+      "id": "desktop.Mute",
+      "include": true,
+      "reason": "Standard single-step audio mute control."
+    },
+    {
+      "id": "desktop.NextDesktop",
+      "include": true,
+      "reason": "Explicit relative virtual-desktop navigation command."
+    },
+    {
+      "id": "desktop.PinWindow",
+      "include": true,
+      "reason": "Direct window-state control with a window target."
+    },
+    {
+      "id": "desktop.PreviousDesktop",
+      "include": true,
+      "reason": "Explicit relative virtual-desktop navigation command."
+    },
+    {
+      "id": "desktop.RestartService",
+      "include": true,
+      "reason": "Atomic service-control command with a structured service target."
+    },
+    {
+      "id": "desktop.RestoreVolume",
+      "include": true,
+      "reason": "Standard single-step audio restoration control."
+    },
+    {
+      "id": "desktop.SetScreenResolution",
+      "include": true,
+      "reason": "Direct display setting with a structured resolution value."
+    },
+    {
+      "id": "desktop.SetTextSize",
+      "include": true,
+      "reason": "Direct accessibility setting with a closed size value."
+    },
+    {
+      "id": "desktop.SetThemeMode",
+      "include": true,
+      "reason": "Direct setting control with a closed theme-mode value."
+    },
+    {
+      "id": "desktop.SetWallpaper",
+      "include": true,
+      "reason": "Direct desktop personalization command with a wallpaper target."
+    },
+    {
+      "id": "desktop.SwitchDesktop",
+      "include": true,
+      "reason": "Direct virtual-desktop navigation with a target desktop."
+    },
+    {
+      "id": "desktop.SwitchTo",
+      "include": true,
+      "reason": "Direct focus command with a program-window target."
+    },
+    {
+      "id": "desktop.Tile",
+      "include": true,
+      "reason": "Structured window-positioning control."
+    },
+    {
+      "id": "desktop.ToggleAirplaneMode",
+      "include": true,
+      "reason": "Standard explicit system-radio control."
+    },
+    {
+      "id": "desktop.ToggleNotifications",
+      "include": true,
+      "reason": "Explicit UI control to show or hide the notification center."
+    },
+    {
+      "id": "desktop.Volume",
+      "include": true,
+      "reason": "Standard system volume control."
+    },
+    {
+      "id": "desktop.desktop-display.AdjustColorTemperature",
+      "include": true,
+      "reason": "Single display adjustment with a structured value."
+    },
+    {
+      "id": "desktop.desktop-display.AdjustScreenOrientation",
+      "include": true,
+      "reason": "Direct control with closed portrait or landscape options."
+    },
+    {
+      "id": "desktop.desktop-display.DisplayResolutionAndAspectRatio",
+      "include": true,
+      "reason": "Crisp UI navigation command for specific display settings."
+    },
+    {
+      "id": "desktop.desktop-display.DisplayScaling",
+      "include": true,
+      "reason": "Direct display control with a closed set of percentages."
+    },
+    {
+      "id": "desktop.desktop-display.EnableBlueLightFilterSchedule",
+      "include": true,
+      "reason": "Clear toggle for a specific display schedule."
+    },
+    {
+      "id": "desktop.desktop-display.ListResolutions",
+      "include": false,
+      "reason": "Lookup-style listing rather than a direct control action."
+    },
+    {
+      "id": "desktop.desktop-display.RotationLock",
+      "include": true,
+      "reason": "Clear lock/unlock display control."
+    },
+    {
+      "id": "desktop.desktop-input.AdjustMousePointerSize",
+      "include": true,
+      "reason": "Direct pointer-size adjustment."
+    },
+    {
+      "id": "desktop.desktop-input.CursorTrail",
+      "include": true,
+      "reason": "Explicit cursor-trail toggle and structured length control."
+    },
+    {
+      "id": "desktop.desktop-input.EnableTouchPad",
+      "include": true,
+      "reason": "Clear enable/disable hardware input control."
+    },
+    {
+      "id": "desktop.desktop-input.EnhancePointerPrecision",
+      "include": true,
+      "reason": "Clear enable/disable mouse setting."
+    },
+    {
+      "id": "desktop.desktop-input.MouseCursorSpeed",
+      "include": true,
+      "reason": "Direct input-device adjustment with structured control semantics."
+    },
+    {
+      "id": "desktop.desktop-input.MousePointerCustomization",
+      "include": true,
+      "reason": "Direct pointer-color customization with a bounded setting slot."
+    },
+    {
+      "id": "desktop.desktop-input.MouseWheelScrollLines",
+      "include": true,
+      "reason": "Direct setting with a numeric parameter."
+    },
+    {
+      "id": "desktop.desktop-input.SetPrimaryMouseButton",
+      "include": true,
+      "reason": "Direct setting with closed left or right options."
+    },
+    {
+      "id": "desktop.desktop-input.ToggleMouseSonar",
+      "include": true,
+      "reason": "Clear toggle for a specific pointer accessibility feature."
+    },
+    {
+      "id": "desktop.desktop-input.TouchpadCursorSpeed",
+      "include": true,
+      "reason": "Direct touchpad-speed adjustment."
+    },
+    {
+      "id": "desktop.desktop-personalization.ApplyColorToTitleBar",
+      "include": true,
+      "reason": "Direct toggle for applying accent color to title bars."
+    },
+    {
+      "id": "desktop.desktop-personalization.EnableTransparency",
+      "include": true,
+      "reason": "Clear enable/disable personalization setting."
+    },
+    {
+      "id": "desktop.desktop-personalization.HighContrastTheme",
+      "include": true,
+      "reason": "Explicit UI command to open a specific accessibility settings page."
+    },
+    {
+      "id": "desktop.desktop-personalization.SystemThemeMode",
+      "include": true,
+      "reason": "Direct theme control with closed light or dark options."
+    },
+    {
+      "id": "desktop.desktop-power.BatterySaverActivationLevel",
+      "include": true,
+      "reason": "Direct power setting with a structured threshold."
+    },
+    {
+      "id": "desktop.desktop-power.SetPowerModeOnBattery",
+      "include": true,
+      "reason": "Direct power-mode control for a specific power state."
+    },
+    {
+      "id": "desktop.desktop-power.SetPowerModePluggedIn",
+      "include": true,
+      "reason": "Direct power-mode control for a specific power state."
+    },
+    {
+      "id": "desktop.desktop-privacy.ManageCameraAccess",
+      "include": true,
+      "reason": "Explicit enable/disable privacy control for camera access."
+    },
+    {
+      "id": "desktop.desktop-privacy.ManageLocationAccess",
+      "include": true,
+      "reason": "Explicit enable/disable privacy control for location access."
+    },
+    {
+      "id": "desktop.desktop-privacy.ManageMicrophoneAccess",
+      "include": true,
+      "reason": "Explicit enable/disable privacy control for microphone access."
+    },
+    {
+      "id": "desktop.desktop-system.AutomaticDSTAdjustment",
+      "include": true,
+      "reason": "Clear enable/disable daylight-saving adjustment control."
+    },
+    {
+      "id": "desktop.desktop-system.AutomaticTimeSettingAction",
+      "include": true,
+      "reason": "Clear enable/disable time synchronization control."
+    },
+    {
+      "id": "desktop.desktop-system.EnableFilterKeysAction",
+      "include": true,
+      "reason": "Clear enable/disable accessibility control."
+    },
+    {
+      "id": "desktop.desktop-system.EnableGameMode",
+      "include": true,
+      "reason": "Clear toggle for a specific system mode."
+    },
+    {
+      "id": "desktop.desktop-system.EnableMagnifier",
+      "include": true,
+      "reason": "Standard single-turn accessibility toggle."
+    },
+    {
+      "id": "desktop.desktop-system.EnableMeteredConnections",
+      "include": true,
+      "reason": "Clear enable/disable network setting."
+    },
+    {
+      "id": "desktop.desktop-system.EnableNarratorAction",
+      "include": true,
+      "reason": "Standard single-turn accessibility toggle."
+    },
+    {
+      "id": "desktop.desktop-system.EnableQuietHours",
+      "include": true,
+      "reason": "Crisp system toggle with explicit enable/disable semantics."
+    },
+    {
+      "id": "desktop.desktop-system.EnableStickyKeys",
+      "include": true,
+      "reason": "Clear enable/disable accessibility control."
+    },
+    {
+      "id": "desktop.desktop-system.MinimizeWindowsOnMonitorDisconnectAction",
+      "include": true,
+      "reason": "Structured desktop behavior setting with clear control semantics."
+    },
+    {
+      "id": "desktop.desktop-system.MonoAudioToggle",
+      "include": true,
+      "reason": "Standard single-turn audio toggle."
+    },
+    {
+      "id": "desktop.desktop-system.RememberWindowLocations",
+      "include": true,
+      "reason": "Structured desktop setting with clear toggle semantics."
+    },
+    {
+      "id": "desktop.desktop-system.ShowFileExtensions",
+      "include": true,
+      "reason": "Direct show/hide File Explorer setting."
+    },
+    {
+      "id": "desktop.desktop-system.ShowHiddenAndSystemFiles",
+      "include": true,
+      "reason": "Direct show/hide File Explorer setting."
+    },
+    {
+      "id": "desktop.desktop-taskbar.AutoHideTaskbar",
+      "include": true,
+      "reason": "Crisp taskbar visibility toggle."
+    },
+    {
+      "id": "desktop.desktop-taskbar.DisplaySecondsInSystrayClock",
+      "include": true,
+      "reason": "Crisp system clock display toggle."
+    },
+    {
+      "id": "desktop.desktop-taskbar.DisplayTaskbarOnAllMonitors",
+      "include": true,
+      "reason": "Structured multi-monitor taskbar toggle."
+    },
+    {
+      "id": "desktop.desktop-taskbar.ShowBadgesOnTaskbar",
+      "include": true,
+      "reason": "Crisp taskbar badge visibility toggle."
+    },
+    {
+      "id": "desktop.desktop-taskbar.TaskViewVisibility",
+      "include": true,
+      "reason": "Crisp show/hide control for a taskbar button."
+    },
+    {
+      "id": "desktop.desktop-taskbar.TaskbarAlignment",
+      "include": true,
+      "reason": "Closed-choice UI setting for left or center alignment."
+    },
+    {
+      "id": "desktop.desktop-taskbar.ToggleWidgetsButtonVisibility",
+      "include": true,
+      "reason": "Crisp show/hide control for the Widgets button."
+    },
+    {
+      "id": "discord.addThreadMember",
+      "include": true,
+      "reason": "Direct thread-membership command with explicit member and thread slots."
+    },
+    {
+      "id": "discord.createChannelInvite",
+      "include": true,
+      "reason": "Direct invite-creation command with structured channel parameters."
+    },
+    {
+      "id": "discord.createDM",
+      "include": true,
+      "reason": "Direct command to open a DM with a specified user."
+    },
+    {
+      "id": "discord.createGroupDM",
+      "include": true,
+      "reason": "Direct group-DM creation with a closed participant list."
+    },
+    {
+      "id": "discord.createGuild",
+      "include": true,
+      "reason": "Direct resource-creation command with closed configuration fields."
+    },
+    {
+      "id": "discord.createMessage",
+      "include": true,
+      "reason": "Direct single-step message posting action with structured destination and content."
+    },
+    {
+      "id": "discord.createWebhook",
+      "include": true,
+      "reason": "Direct webhook creation command with structured parameters."
+    },
+    {
+      "id": "discord.deleteChannel",
+      "include": true,
+      "reason": "Crisp destructive command targeting a channel or private message."
+    },
+    {
+      "id": "discord.deleteChannelPermission",
+      "include": true,
+      "reason": "Direct permission-overwrite deletion with explicit channel and target slots."
+    },
+    {
+      "id": "discord.deleteInvite",
+      "include": true,
+      "reason": "Crisp destructive command targeting a specific invite code."
+    },
+    {
+      "id": "discord.editChannelPermissions",
+      "include": true,
+      "reason": "Explicit structured mutation of channel permissions."
+    },
+    {
+      "id": "discord.executeWebhook",
+      "include": true,
+      "reason": "Direct single-step webhook execution that posts supplied content."
+    },
+    {
+      "id": "discord.followAnnouncementChannel",
+      "include": true,
+      "reason": "Crisp channel-follow command with structured source and destination slots."
+    },
+    {
+      "id": "discord.getChannel",
+      "include": false,
+      "reason": "Channel retrieval is a lookup-and-answer action."
+    },
+    {
+      "id": "discord.getChannelInvites",
+      "include": false,
+      "reason": "Lists channel invites and is a lookup action."
+    },
+    {
+      "id": "discord.getChannelMessages",
+      "include": false,
+      "reason": "Lookup-and-return action rather than a structured control command."
+    },
+    {
+      "id": "discord.getCurrentUser",
+      "include": false,
+      "reason": "Open-ended account information lookup."
+    },
+    {
+      "id": "discord.getCurrentUserApplicationRoleConnection",
+      "include": false,
+      "reason": "Retrieves role-connection information rather than changing state."
+    },
+    {
+      "id": "discord.getCurrentUserConnections",
+      "include": false,
+      "reason": "Retrieves linked-account information and is a lookup action."
+    },
+    {
+      "id": "discord.getCurrentUserGuildMember",
+      "include": false,
+      "reason": "Retrieves member information rather than performing a control action."
+    },
+    {
+      "id": "discord.getCurrentUserGuilds",
+      "include": false,
+      "reason": "Lists memberships and is a lookup action."
+    },
+    {
+      "id": "discord.getGuild",
+      "include": false,
+      "reason": "Fetches information and is therefore a lookup-and-answer action."
+    },
+    {
+      "id": "discord.getInvite",
+      "include": false,
+      "reason": "Invite-detail retrieval is a lookup-and-answer action."
+    },
+    {
+      "id": "discord.getTargetUsers",
+      "include": false,
+      "reason": "Retrieves invite target data and is a lookup action."
+    },
+    {
+      "id": "discord.getTargetUsersJobStatus",
+      "include": false,
+      "reason": "Asynchronous job-status query lacks control semantics."
+    },
+    {
+      "id": "discord.getThreadMember",
+      "include": true,
+      "reason": "Specific structured retrieval of one member's thread membership."
+    },
+    {
+      "id": "discord.getUser",
+      "include": false,
+      "reason": "User-detail retrieval is a lookup-and-answer action."
+    },
+    {
+      "id": "discord.getWebhook",
+      "include": false,
+      "reason": "Fetches webhook details and is a lookup action."
+    },
+    {
+      "id": "discord.groupDmAddRecipient",
+      "include": true,
+      "reason": "Direct group-DM membership command with closed recipient slot."
+    },
+    {
+      "id": "discord.groupDmRemoveRecipient",
+      "include": true,
+      "reason": "Direct group-DM membership command with closed recipient slot."
+    },
+    {
+      "id": "discord.joinThread",
+      "include": true,
+      "reason": "Crisp membership control for a specified thread."
+    },
+    {
+      "id": "discord.leaveGuild",
+      "include": true,
+      "reason": "Crisp single-step membership removal command."
+    },
+    {
+      "id": "discord.leaveThread",
+      "include": true,
+      "reason": "Crisp control action for leaving a specified thread."
+    },
+    {
+      "id": "discord.listChannels",
+      "include": true,
+      "reason": "Structured list command scoped to the current server."
+    },
+    {
+      "id": "discord.listJoinedPrivateArchivedThreads",
+      "include": true,
+      "reason": "Specific structured listing command with clear joined/private scope."
+    },
+    {
+      "id": "discord.listPrivateArchivedThreads",
+      "include": true,
+      "reason": "Specific structured listing command for private archived threads."
+    },
+    {
+      "id": "discord.listPublicArchivedThreads",
+      "include": true,
+      "reason": "Specific structured listing command for public archived threads."
+    },
+    {
+      "id": "discord.listThreadMembers",
+      "include": true,
+      "reason": "Structured list command scoped to a specified thread."
+    },
+    {
+      "id": "discord.modifyChannel",
+      "include": true,
+      "reason": "Explicit channel-settings mutation with structured fields."
+    },
+    {
+      "id": "discord.modifyCurrentUser",
+      "include": true,
+      "reason": "Explicit account-settings mutation with structured fields."
+    },
+    {
+      "id": "discord.refreshChannels",
+      "include": true,
+      "reason": "Explicit cache-refresh command with clear control semantics."
+    },
+    {
+      "id": "discord.removeThreadMember",
+      "include": true,
+      "reason": "Direct thread-membership removal with closed target slots."
+    },
+    {
+      "id": "discord.setGuild",
+      "include": true,
+      "reason": "Explicit configuration command for selecting the default server."
+    },
+    {
+      "id": "discord.setVoiceChannelStatus",
+      "include": true,
+      "reason": "Direct structured control for changing a voice channel's status."
+    },
+    {
+      "id": "discord.startThreadFromMessage",
+      "include": true,
+      "reason": "Clear thread-creation command anchored to a specific message."
+    },
+    {
+      "id": "discord.startThreadInForumOrMediaChannel",
+      "include": true,
+      "reason": "Direct thread/post creation in a specifically identified channel type."
+    },
+    {
+      "id": "discord.startThreadWithoutMessage",
+      "include": true,
+      "reason": "Direct standalone thread-creation action with structured parameters."
+    },
+    {
+      "id": "discord.triggerTypingIndicator",
+      "include": true,
+      "reason": "Explicit single-channel control action with no generation step."
+    },
+    {
+      "id": "discord.updateCurrentUserApplicationRoleConnection",
+      "include": true,
+      "reason": "Explicit structured update to an application role connection."
+    },
+    {
+      "id": "discord.updateTargetUsers",
+      "include": true,
+      "reason": "Explicit update command with a structured invite and user-list payload."
+    },
+    {
+      "id": "dispatcher.activity.exitActivity",
+      "include": true,
+      "reason": "Crisp command to exit the currently active activity."
+    },
+    {
+      "id": "dispatcher.lookup.lookupAndAnswerConversation",
+      "include": false,
+      "reason": "Explicitly a conversational lookup-and-answer action."
+    },
+    {
+      "id": "dispatcher.lookup.startLookup",
+      "include": false,
+      "reason": "Conversational meta-action that starts an underspecified lookup."
+    },
+    {
+      "id": "email.findEmail",
+      "include": true,
+      "reason": "Structured email-search command rather than conversational lookup-and-answer."
+    },
+    {
+      "id": "email.forwardEmail",
+      "include": true,
+      "reason": "Direct forwarding action with an existing email and recipient slots."
+    },
+    {
+      "id": "email.replyEmail",
+      "include": true,
+      "reason": "Direct reply action anchored to an existing email."
+    },
+    {
+      "id": "email.sendEmail",
+      "include": true,
+      "reason": "Direct single-turn communication action when recipients and content are supplied."
+    },
+    {
+      "id": "github-cli.agentTaskRun",
+      "include": false,
+      "reason": "Agent task execution may perform open-ended multi-step work."
+    },
+    {
+      "id": "github-cli.aliasSet",
+      "include": false,
+      "reason": "Alias definitions can contain arbitrary shell-like command bodies."
+    },
+    {
+      "id": "github-cli.apiRequest",
+      "include": false,
+      "reason": "Generic API requests are an open-ended escape hatch rather than a closed action."
+    },
+    {
+      "id": "github-cli.attestationCreate",
+      "include": true,
+      "reason": "Direct attestation creation has explicit artifact and predicate inputs."
+    },
+    {
+      "id": "github-cli.authLogin",
+      "include": false,
+      "reason": "Login commonly initiates an interactive multi-step authentication flow."
+    },
+    {
+      "id": "github-cli.authLogout",
+      "include": true,
+      "reason": "Crisp authentication-state control command."
+    },
+    {
+      "id": "github-cli.authStatus",
+      "include": true,
+      "reason": "Specific structured authentication-status command, not an open-ended query."
+    },
+    {
+      "id": "github-cli.browseIssue",
+      "include": true,
+      "reason": "Explicit UI command to open a specified issue."
+    },
+    {
+      "id": "github-cli.browsePr",
+      "include": true,
+      "reason": "Explicit UI command to open a specified pull request."
+    },
+    {
+      "id": "github-cli.browseRepo",
+      "include": true,
+      "reason": "Explicit UI command to open a specified repository."
+    },
+    {
+      "id": "github-cli.cacheDelete",
+      "include": true,
+      "reason": "Explicit deletion command for selected workflow caches."
+    },
+    {
+      "id": "github-cli.cacheList",
+      "include": true,
+      "reason": "Structured command to list workflow caches."
+    },
+    {
+      "id": "github-cli.codespaceCreate",
+      "include": true,
+      "reason": "Direct resource-creation command with structured configuration slots."
+    },
+    {
+      "id": "github-cli.codespaceDelete",
+      "include": true,
+      "reason": "Direct deletion command for a specified codespace."
+    },
+    {
+      "id": "github-cli.codespaceList",
+      "include": true,
+      "reason": "Structured command to list codespace resources."
+    },
+    {
+      "id": "github-cli.completionGenerate",
+      "include": false,
+      "reason": "Generates shell completion script content."
+    },
+    {
+      "id": "github-cli.configSet",
+      "include": true,
+      "reason": "Crisp configuration mutation with key and value slots."
+    },
+    {
+      "id": "github-cli.copilotRun",
+      "include": false,
+      "reason": "Copilot execution is an open-ended LLM or code-generation action."
+    },
+    {
+      "id": "github-cli.dependabotAlerts",
+      "include": false,
+      "reason": "This is an alerts lookup or status listing rather than a control."
+    },
+    {
+      "id": "github-cli.extensionInstall",
+      "include": true,
+      "reason": "Standard single-tool installation command for a named extension."
+    },
+    {
+      "id": "github-cli.gistCreate",
+      "include": false,
+      "reason": "Gist creation generally requires a freeform file or code payload."
+    },
+    {
+      "id": "github-cli.gistDelete",
+      "include": true,
+      "reason": "Direct deletion command for a specified gist."
+    },
+    {
+      "id": "github-cli.gistList",
+      "include": true,
+      "reason": "Structured command to list gist resources."
+    },
+    {
+      "id": "github-cli.gpgKeyAdd",
+      "include": true,
+      "reason": "Direct command to add a specified GPG key."
+    },
+    {
+      "id": "github-cli.issueAddLabel",
+      "include": true,
+      "reason": "Crisp mutation assigning a specified label to an issue."
+    },
+    {
+      "id": "github-cli.issueClose",
+      "include": true,
+      "reason": "Crisp single-issue state-change command with closed parameters."
+    },
+    {
+      "id": "github-cli.issueCreate",
+      "include": true,
+      "reason": "Direct issue-posting action when title and body are supplied."
+    },
+    {
+      "id": "github-cli.issueDelete",
+      "include": true,
+      "reason": "Explicit single-tool deletion of a specified issue."
+    },
+    {
+      "id": "github-cli.issueList",
+      "include": true,
+      "reason": "Structured listing command with standard filter slots."
+    },
+    {
+      "id": "github-cli.issueReopen",
+      "include": true,
+      "reason": "Crisp single-issue state-change command."
+    },
+    {
+      "id": "github-cli.issueView",
+      "include": true,
+      "reason": "Explicit UI-style command to open a specific issue."
+    },
+    {
+      "id": "github-cli.labelCreate",
+      "include": true,
+      "reason": "Crisp command to create a label with closed parameters."
+    },
+    {
+      "id": "github-cli.licensesView",
+      "include": true,
+      "reason": "Specific read-only CLI command with structured license selection."
+    },
+    {
+      "id": "github-cli.myAssignedIssues",
+      "include": false,
+      "reason": "This is a personalized issue lookup and listing action."
+    },
+    {
+      "id": "github-cli.myPullRequests",
+      "include": false,
+      "reason": "This is a personalized pull-request lookup and listing action."
+    },
+    {
+      "id": "github-cli.orgList",
+      "include": true,
+      "reason": "Structured command to list organizations."
+    },
+    {
+      "id": "github-cli.orgView",
+      "include": true,
+      "reason": "Explicit command to view a specified organization."
+    },
+    {
+      "id": "github-cli.prCheckout",
+      "include": true,
+      "reason": "Crisp command to check out a specified pull request."
+    },
+    {
+      "id": "github-cli.prChecks",
+      "include": true,
+      "reason": "Structured command to inspect checks for a specified pull request."
+    },
+    {
+      "id": "github-cli.prClose",
+      "include": true,
+      "reason": "Crisp state-change command for a specified pull request."
+    },
+    {
+      "id": "github-cli.prCreate",
+      "include": true,
+      "reason": "Direct pull-request creation is a single executable action."
+    },
+    {
+      "id": "github-cli.prList",
+      "include": true,
+      "reason": "Structured pull-request listing with closed filter parameters."
+    },
+    {
+      "id": "github-cli.prMerge",
+      "include": true,
+      "reason": "Direct merge command with explicit control semantics."
+    },
+    {
+      "id": "github-cli.prMergedStatus",
+      "include": true,
+      "reason": "Structured merge-status check with explicit branch and base slots."
+    },
+    {
+      "id": "github-cli.prView",
+      "include": true,
+      "reason": "Explicit UI-style command to open a specific pull request."
+    },
+    {
+      "id": "github-cli.previewExecute",
+      "include": false,
+      "reason": "Execution scope is unclear and may accept freeform command content."
+    },
+    {
+      "id": "github-cli.projectCreate",
+      "include": true,
+      "reason": "Direct creation command with structured project parameters."
+    },
+    {
+      "id": "github-cli.projectDelete",
+      "include": true,
+      "reason": "Explicit single-project deletion command."
+    },
+    {
+      "id": "github-cli.projectList",
+      "include": true,
+      "reason": "Structured command to list GitHub projects."
+    },
+    {
+      "id": "github-cli.releaseCreate",
+      "include": true,
+      "reason": "Direct release creation is a single executable action."
+    },
+    {
+      "id": "github-cli.releaseDelete",
+      "include": true,
+      "reason": "Explicit deletion of a specified release."
+    },
+    {
+      "id": "github-cli.releaseList",
+      "include": true,
+      "reason": "Structured command to list repository releases."
+    },
+    {
+      "id": "github-cli.repoClone",
+      "include": true,
+      "reason": "Crisp command to clone a specified repository."
+    },
+    {
+      "id": "github-cli.repoCreate",
+      "include": true,
+      "reason": "Direct repository creation with closed configuration slots."
+    },
+    {
+      "id": "github-cli.repoDelete",
+      "include": true,
+      "reason": "Explicit deletion of a specified repository."
+    },
+    {
+      "id": "github-cli.repoFork",
+      "include": true,
+      "reason": "Direct command to fork a specified repository."
+    },
+    {
+      "id": "github-cli.repoView",
+      "include": true,
+      "reason": "Explicit UI-style command to view a repository."
+    },
+    {
+      "id": "github-cli.rulesetView",
+      "include": true,
+      "reason": "Specific read-only CLI command for a selected ruleset."
+    },
+    {
+      "id": "github-cli.runView",
+      "include": true,
+      "reason": "Explicit command to view a specified workflow run."
+    },
+    {
+      "id": "github-cli.searchRepos",
+      "include": false,
+      "reason": "Repository search is a lookup-and-answer action."
+    },
+    {
+      "id": "github-cli.secretCreate",
+      "include": true,
+      "reason": "Crisp command to create a secret with explicit slots."
+    },
+    {
+      "id": "github-cli.sshKeyAdd",
+      "include": true,
+      "reason": "Crisp command to add a specified SSH key."
+    },
+    {
+      "id": "github-cli.starRepo",
+      "include": true,
+      "reason": "Simple repository state-change command."
+    },
+    {
+      "id": "github-cli.statusPrint",
+      "include": false,
+      "reason": "Generic status output lacks sufficiently specific control semantics."
+    },
+    {
+      "id": "github-cli.variableCreate",
+      "include": true,
+      "reason": "Crisp command to create a variable with closed parameters."
+    },
+    {
+      "id": "github-cli.workflowView",
+      "include": true,
+      "reason": "Explicit command to view a specified workflow."
+    },
+    {
+      "id": "ipconfig.displayDHCPClassIDs",
+      "include": true,
+      "reason": "Specific display command with a closed adapter slot."
+    },
+    {
+      "id": "ipconfig.displayDNSResolverCacheContents",
+      "include": true,
+      "reason": "Specific system command to display a defined cache."
+    },
+    {
+      "id": "ipconfig.displayFullConfigurationInformation",
+      "include": true,
+      "reason": "Specific system command with explicit configuration-display semantics."
+    },
+    {
+      "id": "ipconfig.displayHelpMessage",
+      "include": false,
+      "reason": "Help actions are explicitly excluded."
+    },
+    {
+      "id": "ipconfig.displayIPv6DHCPClassIDs",
+      "include": true,
+      "reason": "Specific display command with explicit IPv6 DHCP semantics."
+    },
+    {
+      "id": "ipconfig.modifyDHCPClassID",
+      "include": true,
+      "reason": "Crisp mutation with adapter and class-ID parameters."
+    },
+    {
+      "id": "ipconfig.modifyIPv6DHCPClassID",
+      "include": true,
+      "reason": "Crisp mutation with adapter and IPv6 class-ID parameters."
+    },
+    {
+      "id": "ipconfig.purgeDNSResolverCache",
+      "include": true,
+      "reason": "Clear single-turn system command with no open-ended content."
+    },
+    {
+      "id": "ipconfig.refreshDHCPLeasesAndReRegisterDNSNames",
+      "include": true,
+      "reason": "A single defined system command despite its two coupled effects."
+    },
+    {
+      "id": "ipconfig.releaseIPv4Address",
+      "include": true,
+      "reason": "Crisp network control with adapter and IP-version slots."
+    },
+    {
+      "id": "ipconfig.releaseIPv6Address",
+      "include": true,
+      "reason": "Crisp network control with adapter and IP-version slots."
+    },
+    {
+      "id": "ipconfig.renewIPv4Address",
+      "include": true,
+      "reason": "Crisp network control with adapter and IP-version slots."
+    },
+    {
+      "id": "ipconfig.renewIPv6Address",
+      "include": true,
+      "reason": "Crisp network control with adapter and IP-version slots."
+    },
+    {
+      "id": "list.addItems",
+      "include": true,
+      "reason": "Standard single-turn list mutation with clear item and list slots."
+    },
+    {
+      "id": "list.clearList",
+      "include": true,
+      "reason": "Crisp command to clear a specified list."
+    },
+    {
+      "id": "list.createList",
+      "include": true,
+      "reason": "Crisp command to create a named list."
+    },
+    {
+      "id": "list.getList",
+      "include": false,
+      "reason": "This is a contents lookup-and-answer action."
+    },
+    {
+      "id": "list.listLists",
+      "include": false,
+      "reason": "This is a lookup action that lists existing resources."
+    },
+    {
+      "id": "list.removeItems",
+      "include": true,
+      "reason": "Standard single-turn list mutation with clear item and list slots."
+    },
+    {
+      "id": "list.startEditList",
+      "include": false,
+      "reason": "Starting an edit session implies a conversational multi-step workflow."
+    },
+    {
+      "id": "localPlayer.addToQueue",
+      "include": true,
+      "reason": "Crisp playback-queue command with explicit file parameters."
+    },
+    {
+      "id": "localPlayer.clearQueue",
+      "include": true,
+      "reason": "Clear, single-turn queue control."
+    },
+    {
+      "id": "localPlayer.listFiles",
+      "include": false,
+      "reason": "This is a file-listing lookup rather than a media control."
+    },
+    {
+      "id": "localPlayer.mute",
+      "include": true,
+      "reason": "Standard audio mute or unmute control."
+    },
+    {
+      "id": "localPlayer.playFile",
+      "include": true,
+      "reason": "Standard single-turn media playback command."
+    },
+    {
+      "id": "localPlayer.playFolder",
+      "include": true,
+      "reason": "Standard single-turn media playback command for a folder."
+    },
+    {
+      "id": "localPlayer.playFromQueue",
+      "include": true,
+      "reason": "Standard playback control with a closed queue-index slot."
+    },
+    {
+      "id": "localPlayer.repeat",
+      "include": true,
+      "reason": "Standard media control with a defined repeat-mode slot."
+    },
+    {
+      "id": "localPlayer.resume",
+      "include": true,
+      "reason": "Standard media resume control."
+    },
+    {
+      "id": "localPlayer.searchFiles",
+      "include": false,
+      "reason": "Search/lookup action rather than a direct control command."
+    },
+    {
+      "id": "localPlayer.setMusicFolder",
+      "include": true,
+      "reason": "Explicit configuration command with a closed path slot."
+    },
+    {
+      "id": "localPlayer.showMusicFolder",
+      "include": false,
+      "reason": "Read-only configuration status query."
+    },
+    {
+      "id": "localPlayer.showQueue",
+      "include": false,
+      "reason": "Read-only status/display query."
+    },
+    {
+      "id": "markdown.createDocument",
+      "include": true,
+      "reason": "Crisp single-step document creation command."
+    },
+    {
+      "id": "markdown.openDocument",
+      "include": true,
+      "reason": "Crisp UI command targeting an existing document."
+    },
+    {
+      "id": "montage.addPhotos",
+      "include": true,
+      "reason": "Direct montage-editing command with photo inputs."
+    },
+    {
+      "id": "montage.changeTitle",
+      "include": true,
+      "reason": "Single-step edit with a clear title parameter."
+    },
+    {
+      "id": "montage.clearSelectedPhotos",
+      "include": true,
+      "reason": "Crisp UI command that clears the current selection."
+    },
+    {
+      "id": "montage.createNewMontage",
+      "include": true,
+      "reason": "Direct single-step montage creation command."
+    },
+    {
+      "id": "montage.deleteAllMontages",
+      "include": true,
+      "reason": "Explicit bulk-delete command with clear control semantics."
+    },
+    {
+      "id": "montage.deleteMontage",
+      "include": true,
+      "reason": "Direct delete command with an identifiable target."
+    },
+    {
+      "id": "montage.listMontages",
+      "include": false,
+      "reason": "Read-only listing query."
+    },
+    {
+      "id": "montage.mergeMontages",
+      "include": true,
+      "reason": "Single operation over explicitly selected montage inputs."
+    },
+    {
+      "id": "montage.openMontage",
+      "include": true,
+      "reason": "Crisp UI command targeting a montage."
+    },
+    {
+      "id": "montage.removePhotos",
+      "include": true,
+      "reason": "Direct removal command using supplied selection criteria."
+    },
+    {
+      "id": "montage.selectPhotos",
+      "include": true,
+      "reason": "Explicit UI selection command with bounded criteria."
+    },
+    {
+      "id": "montage.setMontageViewMode",
+      "include": true,
+      "reason": "Explicit UI view-mode control."
+    },
+    {
+      "id": "montage.setSearchParameters",
+      "include": true,
+      "reason": "Explicit configuration update with structured parameters."
+    },
+    {
+      "id": "montage.showSearchParameters",
+      "include": false,
+      "reason": "Read-only status/display query."
+    },
+    {
+      "id": "montage.startSlideShow",
+      "include": true,
+      "reason": "Standard single-turn media presentation control."
+    },
+    {
+      "id": "osNotifications.syncOsNotifications",
+      "include": false,
+      "reason": "May trigger a separate build-confirmation interaction, so it is not reliably single-step."
+    },
+    {
+      "id": "osNotifications.testOsNotification",
+      "include": true,
+      "reason": "Explicit single command to inject a synthetic test notification."
+    },
+    {
+      "id": "player.addCurrentTrackToPlaylist",
+      "include": true,
+      "reason": "Standard single-turn media command to add the current track to a named playlist."
+    },
+    {
+      "id": "player.addSongsToPlaylist",
+      "include": true,
+      "reason": "Standard playlist-add command with structured song and optional artist slots."
+    },
+    {
+      "id": "player.addToPlaylistFromCurrentTrackList",
+      "include": true,
+      "reason": "Structured playlist command with explicit playlist and track-index parameters."
+    },
+    {
+      "id": "player.createPlaylist",
+      "include": true,
+      "reason": "Direct playlist creation command with structured optional song inputs."
+    },
+    {
+      "id": "player.deletePlaylist",
+      "include": true,
+      "reason": "Crisp playlist deletion command with a closed playlist-name slot."
+    },
+    {
+      "id": "player.findMusic",
+      "include": false,
+      "reason": "Search/lookup action that does not execute playback."
+    },
+    {
+      "id": "player.getAlbum",
+      "include": false,
+      "reason": "Looks up the current album and returns data rather than performing a clear media control."
+    },
+    {
+      "id": "player.getFavorites",
+      "include": false,
+      "reason": "Retrieves a favorites list and is therefore a lookup action."
+    },
+    {
+      "id": "player.getFromCurrentPlaylistList",
+      "include": false,
+      "reason": "Insufficient description and appears to be a retrieval action."
+    },
+    {
+      "id": "player.getPlaylist",
+      "include": false,
+      "reason": "Playlist lookup/retrieval rather than a control command."
+    },
+    {
+      "id": "player.getQueue",
+      "include": true,
+      "reason": "Clear media queue control that sets the current track list to upcoming tracks."
+    },
+    {
+      "id": "player.listDevices",
+      "include": false,
+      "reason": "Read-only device listing query."
+    },
+    {
+      "id": "player.listPlaylists",
+      "include": false,
+      "reason": "Read-only playlist listing query."
+    },
+    {
+      "id": "player.playFromCurrentTrackList",
+      "include": true,
+      "reason": "Direct playback command with a closed track-index parameter."
+    },
+    {
+      "id": "player.playMusic",
+      "include": true,
+      "reason": "Standard single-turn media playback action."
+    },
+    {
+      "id": "player.playPlaylist",
+      "include": true,
+      "reason": "Standard single-turn playback command with a named-playlist slot."
+    },
+    {
+      "id": "player.resumePlayback",
+      "include": true,
+      "reason": "Standard playback control with unambiguous semantics."
+    },
+    {
+      "id": "player.selectDevice",
+      "include": true,
+      "reason": "Direct hardware/playback routing control."
+    },
+    {
+      "id": "player.setDefaultDevice",
+      "include": true,
+      "reason": "Explicit playback-device configuration command."
+    },
+    {
+      "id": "player.setMaxVolume",
+      "include": true,
+      "reason": "Explicit volume constraint control with a numeric parameter."
+    },
+    {
+      "id": "player.showSelectedDevice",
+      "include": false,
+      "reason": "Read-only selected-device status query."
+    },
+    {
+      "id": "powershell.deletePowerShellFlow",
+      "include": false,
+      "reason": "Excludes PowerShell flow management under the flow/script restriction."
+    },
+    {
+      "id": "powershell.importPowerShellFlow",
+      "include": false,
+      "reason": "Imports a script as a PowerShell flow and is explicitly tied to scripts and flows."
+    },
+    {
+      "id": "powershell.listPowerShellFlows",
+      "include": false,
+      "reason": "PowerShell flow inventory is developer-oriented flow management rather than a gold user command."
+    },
+    {
+      "id": "screencapture.listWindows",
+      "include": false,
+      "reason": "Read-only environment listing rather than a direct capture or control action."
+    },
+    {
+      "id": "screencapture.recording",
+      "include": false,
+      "reason": "This is an activity type, not a user-invocable action."
+    },
+    {
+      "id": "screencapture.startRecording",
+      "include": true,
+      "reason": "Clear hardware/media control with an optional structured window target."
+    },
+    {
+      "id": "screencapture.stopRecording",
+      "include": true,
+      "reason": "Crisp control to stop the active screen recording."
+    },
+    {
+      "id": "screencapture.takeScreenshot",
+      "include": true,
+      "reason": "Standard single-turn screen capture with an optional structured window target."
+    },
+    {
+      "id": "studio.getStudioInfo",
+      "include": false,
+      "reason": "Open-ended read-only environment status query."
+    },
+    {
+      "id": "studio.listCollisions",
+      "include": false,
+      "reason": "Read-only developer diagnostics listing rather than a structured control."
+    },
+    {
+      "id": "studio.queryEvents",
+      "include": false,
+      "reason": "Open-ended read-only event-stream status query."
+    },
+    {
+      "id": "system.config.enterAgentPriorityMode",
+      "include": true,
+      "reason": "Explicit mode-control command for a specified agent."
+    },
+    {
+      "id": "system.config.exitAgentPriorityMode",
+      "include": true,
+      "reason": "Explicit command to leave agent priority mode."
+    },
+    {
+      "id": "system.config.listAgents",
+      "include": false,
+      "reason": "Catalog-style availability lookup rather than a control action."
+    },
+    {
+      "id": "system.config.toggleAgent",
+      "include": true,
+      "reason": "Explicit configuration toggle with structured control semantics."
+    },
+    {
+      "id": "system.config.toggleDeveloperMode",
+      "include": true,
+      "reason": "Crisp configuration toggle."
+    },
+    {
+      "id": "system.config.toggleExplanation",
+      "include": true,
+      "reason": "Crisp configuration toggle."
+    },
+    {
+      "id": "system.conversation.deleteConversation",
+      "include": false,
+      "reason": "Conversation-management meta-action is excluded."
+    },
+    {
+      "id": "system.conversation.findConversation",
+      "include": false,
+      "reason": "Conversational meta-action performing a lookup."
+    },
+    {
+      "id": "system.conversation.help",
+      "include": false,
+      "reason": "Help actions are explicitly excluded."
+    },
+    {
+      "id": "system.conversation.indexConversation",
+      "include": false,
+      "reason": "Conversational history meta-management is excluded."
+    },
+    {
+      "id": "system.conversation.listConversation",
+      "include": false,
+      "reason": "Conversational meta-action and read-only listing."
+    },
+    {
+      "id": "system.conversation.newConversation",
+      "include": false,
+      "reason": "Conversational meta-action, which is excluded."
+    },
+    {
+      "id": "system.conversation.nextConversation",
+      "include": false,
+      "reason": "Conversation-management meta-action is excluded."
+    },
+    {
+      "id": "system.conversation.prevConversation",
+      "include": false,
+      "reason": "Conversation-management meta-action is excluded."
+    },
+    {
+      "id": "system.conversation.renameConversation",
+      "include": false,
+      "reason": "Conversation-management meta-action is excluded."
+    },
+    {
+      "id": "system.conversation.searchConversation",
+      "include": false,
+      "reason": "Conversational meta-action performing content search."
+    },
+    {
+      "id": "system.conversation.showConversationInfo",
+      "include": false,
+      "reason": "Conversational meta-action and open-ended status query."
+    },
+    {
+      "id": "system.conversation.summarizeConversation",
+      "include": false,
+      "reason": "LLM-style summarization transform and conversational meta-action."
+    },
+    {
+      "id": "system.conversation.switchConversation",
+      "include": false,
+      "reason": "Conversation-management meta-action is excluded."
+    },
+    {
+      "id": "system.grammar.clearRules",
+      "include": false,
+      "reason": "Missing description and developer grammar-management semantics require fail-closed exclusion."
+    },
+    {
+      "id": "system.grammar.deleteRule",
+      "include": false,
+      "reason": "Missing description and developer grammar-management semantics require fail-closed exclusion."
+    },
+    {
+      "id": "system.grammar.listRules",
+      "include": false,
+      "reason": "Developer-oriented read-only grammar listing rather than a user control target."
+    },
+    {
+      "id": "system.grammar.showRule",
+      "include": false,
+      "reason": "Missing description makes the action semantics insufficiently certain."
+    },
+    {
+      "id": "system.history.clearHistory",
+      "include": true,
+      "reason": "Clear, single-step destructive history command."
+    },
+    {
+      "id": "system.history.deleteHistory",
+      "include": true,
+      "reason": "Deletes one specifically identified history message."
+    },
+    {
+      "id": "system.history.listHistory",
+      "include": true,
+      "reason": "Crisp UI command to display chat history."
+    },
+    {
+      "id": "system.notify.clearNotifications",
+      "include": true,
+      "reason": "Clear, single-step notification control."
+    },
+    {
+      "id": "system.notify.showNotificationSummary",
+      "include": true,
+      "reason": "Crisp UI command to display a defined summary."
+    },
+    {
+      "id": "system.notify.showNotifications",
+      "include": true,
+      "reason": "Structured UI command with an optional notification filter."
+    },
+    {
+      "id": "system.settings.setAutoComplete",
+      "include": true,
+      "reason": "Closed boolean autocomplete setting."
+    },
+    {
+      "id": "system.settings.setConversationResume",
+      "include": true,
+      "reason": "Closed boolean startup setting."
+    },
+    {
+      "id": "system.settings.setIdleTimeout",
+      "include": true,
+      "reason": "Closed numeric setting with explicit disable semantics."
+    },
+    {
+      "id": "system.settings.setServerHidden",
+      "include": true,
+      "reason": "Closed boolean setting with explicit control semantics."
+    },
+    {
+      "id": "taskflow.deleteTaskFlow",
+      "include": true,
+      "reason": "Single-step deletion by task-flow name."
+    },
+    {
+      "id": "taskflow.listTaskFlows",
+      "include": true,
+      "reason": "Structured command to list a defined resource collection."
+    },
+    {
+      "id": "timer.cancelReminder",
+      "include": true,
+      "reason": "Explicit cancellation by reminder ID or all reminders."
+    },
+    {
+      "id": "timer.listReminders",
+      "include": true,
+      "reason": "Structured command to list pending reminders."
+    },
+    {
+      "id": "timer.repeatReminder",
+      "include": true,
+      "reason": "Structured repeating-reminder command with closed scheduling slots."
+    },
+    {
+      "id": "timer.setReminder",
+      "include": true,
+      "reason": "Standard single-turn reminder control."
+    },
+    {
+      "id": "utility.readFile",
+      "include": false,
+      "reason": "File-content lookup is excluded and the action has no clarifying description."
+    },
+    {
+      "id": "utility.webFetch",
+      "include": false,
+      "reason": "Web retrieval is a lookup operation and lacks a qualifying description."
+    },
+    {
+      "id": "utility.webSearch",
+      "include": false,
+      "reason": "Lookup-and-answer web search is excluded."
+    },
+    {
+      "id": "utility.writeFile",
+      "include": false,
+      "reason": "Likely requires freeform file content and lacks a clarifying description."
+    },
+    {
+      "id": "visualStudio.addBreakpoint",
+      "include": true,
+      "reason": "Crisp IDE command with file and line slots."
+    },
+    {
+      "id": "visualStudio.break",
+      "include": true,
+      "reason": "Explicit debugger pause control."
+    },
+    {
+      "id": "visualStudio.build",
+      "include": true,
+      "reason": "Crisp IDE build command."
+    },
+    {
+      "id": "visualStudio.clean",
+      "include": true,
+      "reason": "Crisp IDE clean command."
+    },
+    {
+      "id": "visualStudio.closeAll",
+      "include": true,
+      "reason": "Crisp document-control command with optional save semantics."
+    },
+    {
+      "id": "visualStudio.debug",
+      "include": true,
+      "reason": "Explicit command to start debugging."
+    },
+    {
+      "id": "visualStudio.findInFiles",
+      "include": true,
+      "reason": "Structured IDE search with closed query and file-type slots."
+    },
+    {
+      "id": "visualStudio.findText",
+      "include": true,
+      "reason": "Structured in-document search command."
+    },
+    {
+      "id": "visualStudio.go",
+      "include": true,
+      "reason": "Explicit debugger resume-execution control."
+    },
+    {
+      "id": "visualStudio.gotoLine",
+      "include": true,
+      "reason": "Crisp navigation command with line and selection slots."
+    },
+    {
+      "id": "visualStudio.openFile",
+      "include": true,
+      "reason": "Crisp IDE command identified by a file path."
+    },
+    {
+      "id": "visualStudio.redo",
+      "include": true,
+      "reason": "Standard editor redo control."
+    },
+    {
+      "id": "visualStudio.run",
+      "include": true,
+      "reason": "Explicit command to run the active solution."
+    },
+    {
+      "id": "visualStudio.saveAll",
+      "include": true,
+      "reason": "Crisp command to save all open documents."
+    },
+    {
+      "id": "visualStudio.stepInto",
+      "include": true,
+      "reason": "Standard single-step debugger control."
+    },
+    {
+      "id": "visualStudio.stepOut",
+      "include": true,
+      "reason": "Standard single-step debugger control."
+    },
+    {
+      "id": "visualStudio.stepOver",
+      "include": true,
+      "reason": "Standard single-step debugger control."
+    },
+    {
+      "id": "visualStudio.undo",
+      "include": true,
+      "reason": "Standard editor undo control."
+    },
+    {
+      "id": "weather.getAlerts",
+      "include": false,
+      "reason": "Open-ended weather lookup with no description or structured control semantics."
+    },
+    {
+      "id": "weather.getCurrentConditions",
+      "include": false,
+      "reason": "Weather lookup-and-answer action is excluded."
+    },
+    {
+      "id": "weather.getForecast",
+      "include": false,
+      "reason": "Forecast lookup-and-answer action is excluded."
+    },
+    {
+      "id": "windowsClock.addWorldClock",
+      "include": true,
+      "reason": "Clear single-turn command with a city as a closed parameter."
+    },
+    {
+      "id": "windowsClock.createAlarm",
+      "include": true,
+      "reason": "Standard alarm creation with explicit name and time parameters."
+    },
+    {
+      "id": "windowsClock.navigateToAlarmTab",
+      "include": true,
+      "reason": "Crisp UI navigation command to a specific tab."
+    },
+    {
+      "id": "windowsClock.navigateToFocusTab",
+      "include": true,
+      "reason": "Crisp UI navigation command to a specific tab."
+    },
+    {
+      "id": "windowsClock.navigateToStopwatchTab",
+      "include": true,
+      "reason": "Crisp UI navigation command to a specific tab."
+    },
+    {
+      "id": "windowsClock.navigateToTimerTab",
+      "include": true,
+      "reason": "Crisp UI navigation command to a specific tab."
+    },
+    {
+      "id": "windowsClock.navigateToWorldClockTab",
+      "include": true,
+      "reason": "Crisp UI navigation command to a specific tab."
+    },
+    {
+      "id": "windowsClock.recordLap",
+      "include": true,
+      "reason": "Explicit stopwatch control with clear single-turn semantics."
+    },
+    {
+      "id": "windowsClock.renameTimer",
+      "include": true,
+      "reason": "Structured edit command with timer selection and new-name slots."
+    },
+    {
+      "id": "windowsClock.setAlarmEnabled",
+      "include": true,
+      "reason": "Standard alarm enable or disable control with explicit state semantics."
+    },
+    {
+      "id": "windowsClock.setFocusSessionRunning",
+      "include": true,
+      "reason": "Explicit start or pause control for a focus session."
+    },
+    {
+      "id": "windowsClock.setStopwatchRunning",
+      "include": true,
+      "reason": "Explicit pause or resume control for the stopwatch."
+    },
+    {
+      "id": "windowsClock.setTimerViewMode",
+      "include": true,
+      "reason": "Crisp UI command that sets the timer's view mode."
+    },
+    {
+      "id": "windowsClock.startTimer",
+      "include": true,
+      "reason": "Standard single-turn timer start or resume control."
+    }
+  ]
+}

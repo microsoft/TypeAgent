@@ -1,0 +1,445 @@
+{
+  "version": 1,
+  "removedActions": [
+    {
+      "type": "action",
+      "id": "browser.lookupAndAnswer.lookupAndAnswerInternet",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "browser.searchImageAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "browser.external.switchToTabByText",
+      "reasons": ["not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "chat.generateResponse",
+      "reasons": ["original_request_echo", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.reasoning.reasoningAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "image.createImageAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "image.editImageAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "markdown.streamingUpdateDocument",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "markdown.updateDocument",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "photo.takePhoto",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "settings.adjustMultiMonitorLayoutAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "settings.dimBrightNessAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "video.createVideoAction",
+      "reasons": ["original_request_echo"]
+    },
+    {
+      "type": "action",
+      "id": "system.help.answerTypeAgentQuestion",
+      "reasons": ["not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "utility.claudeTask",
+      "reasons": ["internal_utility"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.unknown",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.clarify.clarifyMultiplePossibleActionName",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.clarify.clarifyMissingParameter",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.clarify.clarifyUnresolvedReference",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "dispatcher.clarify.clarifyMultipleAgentMatches",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "browser.actionDiscovery.createInferredFlows",
+      "reasons": ["open_ended_code_or_script_body", "not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "browser.createInferredFlow",
+      "reasons": ["open_ended_code_or_script_body", "not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "browser.actionDiscovery.inferActions",
+      "reasons": ["not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "browser.executeAdHocScript",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.actionDiscovery.createWebFlowFromRecording",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.actionDiscovery.registerPageDynamicAgent",
+      "reasons": ["behavioral_alias", "not_user_disambiguable"],
+      "notes": "Prefer browser.actionDiscovery.detectPageActions with registerAgent:true (and optional agentName). Models consistently emit that form for 'register a page agent and find available actions'; registerPageDynamicAgent only carries agentName and drops the registerAgent flag."
+    },
+    {
+      "type": "action",
+      "id": "browser.webFlows.editWebFlow",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.webFlows.generateWebFlow",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.webFlows.generateWebFlowFromRecording",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.webFlows.startGoalDrivenTask",
+      "reasons": ["not_user_disambiguable", "open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.code-editor.createCodeBlock",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.code-editor.createFunction",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.code-editor.generateWithCopilot",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.code-editor.fixCodeProblem",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.newCodeFile",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "code.code-workbench.openInIntegratedTerminal",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "powershell.createPowerShellFlow",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "powershell.editPowerShellFlow",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "powershell.executePowerShellFlow",
+      "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "utility.llmTransform",
+      "reasons": ["open_ended_code_or_script_body", "not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "discord.craftMessage",
+      "reasons": [
+        "conversational_meta_action",
+        "open_ended_code_or_script_body"
+      ]
+    },
+    {
+      "type": "action",
+      "id": "visualStudio.executeCommand",
+      "reasons": ["open_ended_code_or_script_body", "not_user_disambiguable"]
+    },
+    {
+      "type": "action",
+      "id": "system.help.describeAgent",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "system.help.describeAction",
+      "reasons": ["not_user_disambiguable", "conversational_meta_action"]
+    },
+    {
+      "type": "action",
+      "id": "workflow.noWorkflowsLoaded",
+      "reasons": ["not_user_disambiguable", "internal_utility"]
+    },
+    {
+      "type": "prefix",
+      "prefix": "onboarding.*",
+      "reasons": ["multi_step_onboarding_workflow"]
+    }
+  ],
+  "parameterOverrides": [
+    {
+      "type": "field",
+      "path": "browser.lookupAndAnswer.lookupAndAnswerInternet.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "browser.searchImageAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "chat.generateResponse.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "dispatcher.reasoning.reasoningAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "image.createImageAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "image.editImageAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "markdown.streamingUpdateDocument.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "markdown.updateDocument.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "photo.takePhoto.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "settings.adjustMultiMonitorLayoutAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "settings.dimBrightNessAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "video.createVideoAction.originalRequest",
+      "verify": "ignore",
+      "reason": "echo_of_user_utterance"
+    },
+    {
+      "type": "field",
+      "path": "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "browser.executeAdHocScript.script",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "browser.lookupAndAnswer.lookupAndAnswerInternet.internetLookups",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "browser.lookupAndAnswer.lookupAndAnswerInternet.sites",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "browser.webFlows.editWebFlow.script",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-editor.createCodeBlock.body",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-editor.createCodeBlock.codeSnippet",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-editor.createCodeBlock.declaration",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-editor.createFunction.body",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-editor.createFunction.functionDeclaration",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "code.code-workbench.openInIntegratedTerminal.commandToExecute",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "markdown.streamingUpdateDocument.generatedContent",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "markdown.streamingUpdateDocument.validationResults",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "powershell.createPowerShellFlow.script",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "powershell.editPowerShellFlow.script",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "powershell.executePowerShellFlow.flowArgs",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "powershell.executePowerShellFlow.flowParametersJson",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "visualStudio.executeCommand.commandArgs",
+      "verify": "llmAsAJudge",
+      "reason": "open_ended_code_or_script_body"
+    },
+    {
+      "type": "field",
+      "path": "system.conversation.indexConversation.name",
+      "verify": "nonempty",
+      "reason": "soft_name_match"
+    },
+    {
+      "type": "field",
+      "path": "system.conversation.newConversation.name",
+      "verify": "nonempty",
+      "reason": "soft_name_match"
+    },
+    {
+      "type": "field",
+      "path": "system.conversation.summarizeConversation.name",
+      "verify": "nonempty",
+      "reason": "soft_name_match"
+    },
+    {
+      "type": "field",
+      "path": "github-cli.aliasSet.command",
+      "verify": "exact",
+      "reason": "literal_command_must_match"
+    }
+  ]
+}

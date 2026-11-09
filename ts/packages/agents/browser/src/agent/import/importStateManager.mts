@@ -14,7 +14,7 @@ export interface ImportState {
     failedUrls: string[];
     startTime: number;
     lastProgressTime: number;
-    extractionMode: string;
+    extractionMode: "content";
     source: string;
     type: string;
     filePath?: string;
@@ -25,14 +25,8 @@ export class ImportStateManager {
         process.cwd(),
         ".import-states",
     );
-    private static readonly COLLECTION_BACKUPS_DIR = path.join(
-        process.cwd(),
-        ".collection-backups",
-    );
-
     static async ensureDirectories(): Promise<void> {
         await fs.mkdir(this.STATE_DIR, { recursive: true });
-        await fs.mkdir(this.COLLECTION_BACKUPS_DIR, { recursive: true });
     }
 
     static async saveImportState(state: ImportState): Promise<void> {
@@ -48,9 +42,21 @@ export class ImportStateManager {
         try {
             const statePath = path.join(this.STATE_DIR, `${importId}.json`);
             const data = await fs.readFile(statePath, "utf-8");
-            return JSON.parse(data);
+            const state = JSON.parse(data);
+            if (state.extractionMode !== "content") {
+                throw new Error(
+                    "Unsupported pending import mode. Only 'content' is supported.",
+                );
+            }
+            return state;
         } catch (error) {
             debug(`Failed to load import state for ${importId}: ${error}`);
+            if (
+                error instanceof Error &&
+                error.message.startsWith("Unsupported pending import mode")
+            ) {
+                throw error;
+            }
             return null;
         }
     }
@@ -62,32 +68,6 @@ export class ImportStateManager {
             debug(`Import state deleted for ${importId}`);
         } catch (error) {
             debug(`Failed to delete import state for ${importId}: ${error}`);
-        }
-    }
-
-    static getCollectionBackupPath(
-        importId: string,
-        savePoint: number,
-    ): string {
-        return path.join(
-            this.COLLECTION_BACKUPS_DIR,
-            `${importId}_${savePoint}.json`,
-        );
-    }
-
-    static async cleanupOldBackups(importId: string): Promise<void> {
-        try {
-            const files = await fs.readdir(this.COLLECTION_BACKUPS_DIR);
-            const importFiles = files.filter((f) => f.startsWith(importId));
-
-            for (const file of importFiles) {
-                await fs.unlink(path.join(this.COLLECTION_BACKUPS_DIR, file));
-            }
-            debug(
-                `Cleaned up ${importFiles.length} backup files for ${importId}`,
-            );
-        } catch (error) {
-            debug(`Failed to cleanup backups for ${importId}: ${error}`);
         }
     }
 

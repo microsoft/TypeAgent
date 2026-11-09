@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { AddressInfo } from "net";
 import { isAllowedAgentOrigin } from "./originAllowlist.mjs";
+import { LOOPBACK_HOST } from "@typeagent/websocket-utils/loopback";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -98,6 +99,11 @@ export class AgentWebSocketServer {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({
                 port,
+                // Bind loopback: the origin gate below accepts clients that
+                // send no Origin header at all (native `ws` callers), so an
+                // all-interfaces bind would let any LAN peer connect as one
+                // and drive privileged browser-control RPC.
+                host: LOOPBACK_HOST,
                 verifyClient: (info, cb) => {
                     // `info.req.headers.origin` is `string | string[] |
                     // undefined`; coerce arrays to the first element so
@@ -364,6 +370,7 @@ export class AgentWebSocketServer {
             } catch {
                 return;
             }
+            if (!data || typeof data !== "object") return;
 
             // Filter keepalive messages
             if (
@@ -389,6 +396,11 @@ export class AgentWebSocketServer {
         ws.on("close", () => {
             debug(`Client disconnected: ${clientId}`);
 
+            if (this.clients.get(sessionId)?.get(clientId) !== client) {
+                client.channelProvider?.notifyDisconnected();
+                return;
+            }
+
             const s = this.sessionHandlers.get(client.sessionId);
             if (s?.onClientDisconnected) {
                 s.onClientDisconnected(client);
@@ -400,7 +412,7 @@ export class AgentWebSocketServer {
 
             const sm = this.clients.get(client.sessionId);
             let postCount = 0;
-            if (sm) {
+            if (sm?.get(clientId) === client) {
                 sm.delete(clientId);
                 postCount = sm.size;
                 if (sm.size === 0) this.clients.delete(client.sessionId);

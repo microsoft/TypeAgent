@@ -17,6 +17,8 @@ import {
  */
 export class BrowserContentDownloader implements ContentDownloadAdapter {
     private offscreenCreated: boolean = false;
+    private offscreenReadyPromise: Promise<void> | undefined;
+    private operationQueue: Promise<void> = Promise.resolve();
     private readonly maxRetries: number = 3;
     private readonly defaultTimeout: number = 5000;
     private readonly minTimeout: number = 1000;
@@ -43,7 +45,9 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         const startTime = Date.now();
 
         try {
-            return await this.downloadUsingBrowser(url, options);
+            return await this.enqueueOffscreenOperation(() =>
+                this.downloadUsingBrowser(url, options),
+            );
         } catch (error: any) {
             // Try fallback if enabled
             if (options.fallbackToFetch) {
@@ -124,9 +128,12 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
                     error?.message || "Unknown error",
                 );
 
-                if (attempt >= this.maxRetries) {
+                if (
+                    attempt >= this.maxRetries ||
+                    !this.isRetryableError(error)
+                ) {
                     throw new Error(
-                        `Browser download failed after ${this.maxRetries} attempts: ${error?.message || "Unknown error"}`,
+                        `Browser download failed after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${error?.message || "Unknown error"}`,
                     );
                 }
 
@@ -136,6 +143,21 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         }
 
         throw new Error("Max retries exceeded");
+    }
+
+    private isRetryableError(error: unknown): boolean {
+        const message =
+            error instanceof Error ? error.message : String(error ?? "");
+        const status = /HTTP\s+(\d{3})/i.exec(message)?.[1];
+        if (status !== undefined) {
+            const statusCode = Number(status);
+            return (
+                statusCode === 408 || statusCode === 429 || statusCode >= 500
+            );
+        }
+        return !/invalid url|authentication failed|unauthorized|forbidden|content too large/i.test(
+            message,
+        );
     }
 
     /**
@@ -219,37 +241,41 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
      * Ensure offscreen document is created and ready
      */
     private async ensureOffscreenDocument(): Promise<void> {
-        if (!this.offscreenCreated) {
-            try {
-                // Check if offscreen document already exists
-                const existingContexts = await (
-                    chrome.runtime as any
-                ).getContexts({
-                    contextTypes: ["OFFSCREEN_DOCUMENT"],
+        if (this.offscreenCreated) {
+            return;
+        }
+        this.offscreenReadyPromise ??= this.createAndVerifyOffscreenDocument();
+        try {
+            await this.offscreenReadyPromise;
+        } catch (error) {
+            this.offscreenReadyPromise = undefined;
+            throw error;
+        }
+    }
+
+    private async createAndVerifyOffscreenDocument(): Promise<void> {
+        try {
+            const existingContexts = await (chrome.runtime as any).getContexts({
+                contextTypes: ["OFFSCREEN_DOCUMENT"],
+            });
+
+            if (existingContexts.length === 0) {
+                await (chrome as any).offscreen.createDocument({
+                    url: "offscreen/offscreen.html",
+                    reasons: ["DOM_PARSER"] as any,
+                    justification:
+                        "Process HTML content with DOM access for enhanced import functionality",
                 });
-
-                if (existingContexts.length === 0) {
-                    await (chrome as any).offscreen.createDocument({
-                        url: "offscreen/offscreen.html",
-                        reasons: ["DOM_PARSER"] as any,
-                        justification:
-                            "Process HTML content with DOM access for enhanced import functionality",
-                    });
-
-                    // Wait a moment for the document to initialize
-                    await this.delay(1000);
-                }
-
-                this.offscreenCreated = true;
-
-                // Test communication with offscreen document
-                await this.pingOffscreen();
-            } catch (error: any) {
-                this.offscreenCreated = false;
-                throw new Error(
-                    `Failed to create offscreen document: ${error?.message || "Offscreen API not available"}`,
-                );
+                await this.delay(1000);
             }
+
+            await this.pingOffscreen();
+            this.offscreenCreated = true;
+        } catch (error: any) {
+            this.offscreenCreated = false;
+            throw new Error(
+                `Failed to create offscreen document: ${error?.message || "Offscreen API not available"}`,
+            );
         }
     }
 
@@ -263,8 +289,12 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         return new Promise((resolve, reject) => {
+            let settled = false;
             const timeoutId = setTimeout(() => {
-                reject(new Error("Offscreen communication timeout"));
+                settled = true;
+                void this.cancelOffscreen(messageId).finally(() => {
+                    reject(new Error("Offscreen communication timeout"));
+                });
             }, this.sanitizeTimeout(timeout));
 
             chrome.runtime
@@ -274,8 +304,18 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
                     messageId,
                 })
                 .then((response: MessageResponse) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
                     clearTimeout(timeoutId);
-                    if (response) {
+                    if (response?.messageId !== messageId) {
+                        reject(
+                            new Error(
+                                `Unexpected offscreen response '${response?.messageId || "missing"}' for '${messageId}'`,
+                            ),
+                        );
+                    } else if (response) {
                         resolve(response);
                     } else {
                         reject(
@@ -284,10 +324,36 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
                     }
                 })
                 .catch((error) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
                     clearTimeout(timeoutId);
                     reject(error);
                 });
         });
+    }
+
+    private async cancelOffscreen(targetMessageId: string): Promise<void> {
+        const messageId = `cancel_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+        const response = (await chrome.runtime.sendMessage({
+            type: "cancel",
+            target: "offscreen",
+            messageId,
+            targetMessageId,
+        })) as MessageResponse;
+        if (response?.messageId !== messageId || response.success !== true) {
+            await this.resetOffscreenDocument();
+        }
+    }
+
+    private async resetOffscreenDocument(): Promise<void> {
+        try {
+            await (chrome as any).offscreen.closeDocument();
+        } finally {
+            this.offscreenCreated = false;
+            this.offscreenReadyPromise = undefined;
+        }
     }
 
     /**
@@ -342,16 +408,17 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         options: ProcessingOptions = {},
     ): Promise<any> {
         try {
-            await this.ensureOffscreenDocument();
-
-            const result = await this.sendToOffscreen(
-                {
-                    type: "processHtmlContent",
-                    htmlContent,
-                    options,
-                },
-                30000,
-            ); // Fixed timeout instead of using options.timeout
+            const result = await this.enqueueOffscreenOperation(async () => {
+                await this.ensureOffscreenDocument();
+                return this.sendToOffscreen(
+                    {
+                        type: "processHtmlContent",
+                        htmlContent,
+                        options,
+                    },
+                    30000,
+                );
+            });
 
             if (result.success) {
                 return result.data;
@@ -375,6 +442,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
             try {
                 await (chrome as any).offscreen.closeDocument();
                 this.offscreenCreated = false;
+                this.offscreenReadyPromise = undefined;
             } catch (error: any) {
                 console.warn(
                     "Failed to close offscreen document:",
@@ -411,6 +479,17 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
      */
     private delay(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    private enqueueOffscreenOperation<T>(
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const result = this.operationQueue.then(operation, operation);
+        this.operationQueue = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
     }
 }
 

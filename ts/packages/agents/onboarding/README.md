@@ -145,7 +145,7 @@ The scaffolder supports nine architectural patterns. Use `list agent patterns` a
 | `sub-agent-orchestrator` | API surface too large for one schema     | `desktop`, `code`, `browser`    |
 | `websocket-bridge`       | Automate a host app via a plugin         | `browser`, `code`               |
 | `state-machine`          | Multi-phase workflow with approval gates | `onboarding`, `powershell`      |
-| `native-platform`        | OS / device APIs, no cloud               | `androidMobile`, `playerLocal`  |
+| `native-platform`        | OS / device APIs, no cloud               | `playerLocal`, `desktop`        |
 | `view-ui`                | Rich interactive web-view UI             | `turtle`, `montage`, `markdown` |
 | `command-handler`        | Simple settings-style direct dispatch    | `settings`, `test`              |
 

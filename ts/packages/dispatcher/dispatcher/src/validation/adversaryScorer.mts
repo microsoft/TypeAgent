@@ -3,6 +3,7 @@
 
 import type { PatternValidationResult } from "./types.mjs";
 import {
+    DEFAULT_GENERATION_MODEL,
     runQueryWithTimeout,
     DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
 } from "./queryWithTimeout.mjs";
@@ -59,7 +60,7 @@ export class AdversaryScorer {
 
     constructor(config?: AdversaryScorerConfig) {
         this.config = {
-            model: config?.model ?? "claude-sonnet-4-20250514",
+            model: config?.model ?? DEFAULT_GENERATION_MODEL,
             concurrency: config?.concurrency ?? 8,
             batchSize: config?.batchSize ?? 10,
             timeoutMs: config?.timeoutMs ?? DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,

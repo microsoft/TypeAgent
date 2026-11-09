@@ -19,6 +19,7 @@ import type {
     TranslateTestFile,
     TranslateTestStep,
 } from "default-agent-provider/test";
+import { exitCli } from "../telemetry.js";
 
 async function readHistoryFile(filePath: string): Promise<ChatHistoryInput> {
     if (!fs.existsSync(filePath)) {
@@ -133,6 +134,6 @@ export default class ReplayCommand extends Command {
             await connection.close();
         }
 
-        process.exit(0);
+        exitCli(0);
     }
 }

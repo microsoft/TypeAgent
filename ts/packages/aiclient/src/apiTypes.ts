@@ -11,6 +11,7 @@ export enum ModelType {
     Embedding = "embedding",
     Image = "image",
     Video = "video",
+    Decision = "decision",
 }
 
 export type ModelInfo<T> = {
@@ -25,10 +26,15 @@ export type ModelProviders = "openai" | "azure" | "ollama" | "copilot";
 export type CompletionUsageStats = {
     // Number of tokens in the generated completion
     completion_tokens: number;
-    // Number of tokens in the prompt
+    // Number of tokens in the prompt (full input, OpenAI-style).
+    // Includes any cached prompt tokens when the provider reports them.
     prompt_tokens: number;
     // Total tokens (prompt + completion)
     total_tokens: number;
+    // Cache-read subset of prompt_tokens (OpenAI-style). Not additive —
+    // already counted inside prompt_tokens. Wire adapters normalize other
+    // providers (e.g. Anthropic exclusive cache buckets) to this shape.
+    cached_tokens?: number;
 };
 
 /**

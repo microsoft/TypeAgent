@@ -111,6 +111,10 @@ export function getBundledAgentNames(configName?: string): Set<string> {
 // are no longer modeled as an install source.
 export function createBundledAppAgentProvider(
     configName?: string,
+    executionModeOverrides: Record<
+        string,
+        NonNullable<NpmAppAgentInfo["execMode"]>
+    > = {},
 ): AppAgentProvider {
     // Bundled agents ship in the app and all resolve against the single
     // app-bundle root, so they are one provider at that root - no installDir
@@ -120,6 +124,9 @@ export function createBundledAppAgentProvider(
         seedRecordsFromConfig(configName),
     )) {
         configs[name] = recordToNpmInfo(record);
+        if (executionModeOverrides[name] !== undefined) {
+            configs[name].execMode = executionModeOverrides[name];
+        }
     }
     return createNpmAppAgentProvider(configs, getAppBundleRequirePath());
 }
@@ -183,11 +190,17 @@ export function createInstalledAppAgentProvider(
     name: string,
     record: InstalledAgentRecord,
     installDir: string,
+    options?: {
+        defaultEnabled?: boolean;
+    },
 ): AppAgentProvider {
-    return createNpmAppAgentProvider(
+    const provider = createNpmAppAgentProvider(
         { [name]: recordToNpmInfo(record) },
         recordRequirePath(record, installDir),
     );
+    return options?.defaultEnabled === undefined
+        ? provider
+        : { ...provider, defaultEnabled: options.defaultEnabled };
 }
 
 /**

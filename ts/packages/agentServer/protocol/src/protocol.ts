@@ -1,15 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
-import type { QueueSnapshot } from "@typeagent/dispatcher-types";
-import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import type { AppAgentManifest } from "@typeagent/agent-sdk";
+import type {
+    PendingInteractionRequest,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
+import type {
+    CatalogEntry,
+    CatalogSearchResult,
+    CatalogState,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    SkillGrammarRoutingResult,
+    SkillIdentity,
+    SkillScope,
+    SkillUpdateCheck,
+} from "@typeagent/skill-catalog";
+import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
+
+export type { MacroDraftResult } from "@typeagent/procedure-artifacts";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
-    clientType?: "shell" | "extension"; // identifies the connecting client type
+    clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
+    /**
+     * Opt into isolated structured-action ownership. Requires conversationId.
+     * Resume only with the capability returned by an earlier join of that
+     * same live conversation. Never substitute a client-supplied identity.
+     */
+    structuredActions?: {
+        resumeToken?: string;
+    };
 };
 
 /**
@@ -98,6 +122,14 @@ export type JoinConversationResult = {
     /** Server-side queue snapshot at join time. Omitted when idle/empty;
      *  older clients ignore the field. */
     queueSnapshot?: QueueSnapshot;
+    /**
+     * Private, in-memory resume capability for this logical structured caller.
+     * Keep it out of logs, model prompts, history, and persisted metadata.
+     * A resumed join revokes structured access on the previous connection.
+     */
+    structuredActions?: {
+        resumeToken: string;
+    };
 };
 
 /**
@@ -127,7 +159,112 @@ export type SpeechToken = {
     endpoint: string;
 };
 
+export type ListSkillsRequest = {
+    states?: CatalogState[];
+    scopes?: SkillScope[];
+    activeOnly?: boolean;
+};
+
+export type SearchSkillsRequest = {
+    query: string;
+    scopes?: SkillScope[];
+    limit?: number;
+};
+
+export type GetSkillRequest = {
+    identity: SkillIdentity;
+    revision?: string;
+};
+
+export type ReadSkillFileRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    path: string;
+};
+
+export type ReadSkillFileResponse = {
+    content: string;
+    encoding: "base64";
+    mimeType: string;
+};
+
+export type PublishSkillRequest = {
+    identity: SkillIdentity;
+    displayName?: string;
+    description?: string;
+    schemaFingerprint: string;
+    files: {
+        path: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+    }[];
+};
+
+export type ChangeSkillStateRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    state: CatalogState;
+};
+
+export type SelectSkillRevisionRequest = {
+    identity: SkillIdentity;
+    revision: string;
+};
+
+export type CheckSkillUpdateResponse = SkillUpdateCheck & {
+    currentState?: CatalogState;
+};
+
+export type SkillAcquisitionRevisionResponse = {
+    entry: CatalogEntry;
+    revision: string;
+    state: CatalogState;
+    active: boolean;
+    updated: boolean;
+    sourceFingerprint: string;
+    manifestDigest: string;
+};
+
 export type AgentServerInvokeFunctions = {
+    getSkillLifecycle: RunbookHostCapabilities["getSkillLifecycle"];
+    changeSkillLifecycle: RunbookHostCapabilities["changeSkillLifecycle"];
+    listBindingTargets: RunbookHostCapabilities["listBindingTargets"];
+    checkBindingTargets: RunbookHostCapabilities["checkBindingTargets"];
+    suggestBindings: RunbookHostCapabilities["suggestBindings"];
+    listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
+    searchSkills: (
+        request: SearchSkillsRequest,
+    ) => Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar: (
+        utterance: string,
+    ) => Promise<SkillGrammarRoutingResult>;
+    getSkill: (request: GetSkillRequest) => Promise<CatalogEntry | undefined>;
+    readSkillFile: (
+        request: ReadSkillFileRequest,
+    ) => Promise<ReadSkillFileResponse>;
+    publishSkill: (request: PublishSkillRequest) => Promise<CatalogEntry>;
+    changeSkillState: (
+        request: ChangeSkillStateRequest,
+    ) => Promise<CatalogEntry>;
+    activateSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    rollbackSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    previewSkillAcquisition: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+
     joinConversation: (
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;
@@ -187,11 +324,13 @@ export type AgentServerInvokeFunctions = {
      * The agent is removed automatically when the connection drops or leaves
      * the conversation.
      *
-     * The client must create its agent-rpc server on the `agent:<name>`
-     * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. Rejects if an agent with `name` is already
-     * registered on the target conversation (e.g. a second client trying to
-     * register the same singleton agent).
+     * The client must create its agent-rpc server before calling this. Current
+     * clients pass a `registrationId` and host it on the derived unique channel;
+     * older clients use `agent:<name>`. A client that opts in with
+     * `multiInstance` may share the agent name with other clients carrying the
+     * same schema: the server keeps one registration with an instance per
+     * client, and routes each action to one of them. Without it, a second client
+     * is rejected as before.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -205,16 +344,45 @@ export type RegisterClientAgentParams = {
     manifest: AppAgentManifest;
     agentInterface: AgentInterfaceFunctionName[];
     /**
+     * Identifies this RPC endpoint on the connection. When supplied, the
+     * endpoint is hosted on `agent:<name>:<registrationId>`, allowing a
+     * replacement to be validated while the previous endpoint remains live.
+     */
+    registrationId?: string;
+    /**
      * Target conversation. If omitted, the server uses the connection's single
      * joined conversation (and errors if the connection has joined none or
      * more than one).
      */
     conversationId?: string;
+    /**
+     * Stable, client-generated id for the device hosting this agent.
+     * Re-registering the same `instanceId` replaces its proxy in place, which
+     * is what makes a reconnect work. Omit it and the server derives one from
+     * the connection, so the client is a single instance that does not survive
+     * a reconnect.
+     */
+    instanceId?: string;
+    /** Human readable name, used when the server has to name the devices. */
+    displayName?: string;
+    /**
+     * Opt in to sharing this agent name with other clients. Off by default, so
+     * a client that expects to be the only host of `name` (the shell) keeps
+     * getting an error when a second one registers. When the client that
+     * creates the registration opts in, later clients carrying the same schema
+     * join it as extra instances instead of being rejected.
+     */
+    multiInstance?: boolean;
 };
 
 export type UnregisterClientAgentParams = {
     name: string;
     conversationId?: string;
+    /**
+     * Which instance to remove. The server only ever removes one the calling
+     * connection owns, so a client cannot unregister another client's.
+     */
+    instanceId?: string;
 };
 
 /**
@@ -256,6 +424,57 @@ export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_P
  */
 export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
 
+export type DiscoveryRequestAuth = {
+    version: 1;
+    credentialId: string;
+    nonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryResponseAuth = {
+    version: 1;
+    credentialId: string;
+    requestNonce: string;
+    serverNonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryLookupRequest = {
+    agentName: string;
+    role?: string;
+    /**
+     * Hint that the request originates from a remote (non-loopback)
+     * client, so the server should answer with a tunnel `url` (when one
+     * is configured and live) rather than a localhost realm. Optional and
+     * backward compatible - omitted by local clients, which only ever
+     * need the port. See the dev-tunnel discovery design.
+     */
+    remote?: boolean;
+    /**
+     * Optional tuple-specific authentication. Hosts require this for
+     * protected tuples while leaving unrelated discovery compatible.
+     */
+    auth?: DiscoveryRequestAuth;
+};
+
+export type DiscoveryLookupResponse = {
+    port: number | null;
+    /**
+     * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
+     * tunnel address) the caller should connect to instead of
+     * `ws://localhost:<port>`. Present only when the server resolved a
+     * live tunnel mapping for `port` and the request was remote-realm.
+     * Absent means callers fall back to the localhost realm using `port`.
+     */
+    url?: string;
+    /** Tuple-specific proof authenticating the response fields. */
+    auth?: DiscoveryResponseAuth;
+};
+
 /**
  * RPC surface for the discovery channel. Read-only on purpose: clients can
  * ask "where is agent X's role Y?" but cannot mutate the registrar — only
@@ -282,28 +501,9 @@ export type DiscoveryInvokeFunctions = {
      * defined value; callers should treat null as "no allocation found,
      * try again later" rather than a hard error.
      */
-    lookupPort: (param: {
-        agentName: string;
-        role?: string;
-        /**
-         * Hint that the request originates from a remote (non-loopback)
-         * client, so the server should answer with a tunnel `url` (when one
-         * is configured and live) rather than a localhost realm. Optional and
-         * backward compatible — omitted by local clients, which only ever
-         * need the port. See the dev-tunnel discovery design.
-         */
-        remote?: boolean;
-    }) => Promise<{
-        port: number | null;
-        /**
-         * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
-         * tunnel address) the caller should connect to instead of
-         * `ws://localhost:<port>`. Present only when the server resolved a
-         * live tunnel mapping for `port` and the request was remote-realm.
-         * Absent → fall back to the localhost realm using `port`.
-         */
-        url?: string;
-    }>;
+    lookupPort: (
+        param: DiscoveryLookupRequest,
+    ) => Promise<DiscoveryLookupResponse>;
 };
 
 /**
@@ -335,15 +535,32 @@ export function createDiscoveryHandlers(
         port: number,
         remote?: boolean,
     ) => string | undefined | Promise<string | undefined>,
+    /**
+     * Optional tuple-specific response protector. It may reject the request
+     * or return a proof that is attached to the result. Unprotected tuples
+     * return undefined and retain the legacy response shape.
+     */
+    protectResponse?: (
+        request: DiscoveryLookupRequest,
+        response: DiscoveryLookupResponse,
+    ) =>
+        | DiscoveryResponseAuth
+        | undefined
+        | Promise<DiscoveryResponseAuth | undefined>,
 ): DiscoveryInvokeFunctions {
     return {
-        lookupPort: async ({ agentName, role, remote }) => {
+        lookupPort: async (request) => {
+            const { agentName, role, remote } = request;
             const port = lookup(agentName, role) ?? null;
+            let response: DiscoveryLookupResponse;
             if (port === null) {
-                return { port };
+                response = { port };
+            } else {
+                const url = await resolveUrl?.(agentName, port, remote);
+                response = url ? { port, url } : { port };
             }
-            const url = await resolveUrl?.(agentName, port, remote);
-            return url ? { port, url } : { port };
+            const auth = await protectResponse?.(request, response);
+            return auth === undefined ? response : { ...response, auth };
         },
     };
 }

@@ -1,0 +1,1947 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+import { randomUUID } from "node:crypto";
+import {
+    frameQueryRequestSchema,
+    frameCorpusRequestSchema,
+    frameQueryResultSchema,
+    frameSchemasSchema,
+    frameProjectionStatusSchema,
+    frameToolNames,
+} from "./frameProtocol.js";
+import type {
+    FrameQueryRequest,
+    FrameQueryResult,
+    FrameProjectionStatus,
+    FrameSchema,
+} from "@typeagent/memory-service";
+
+import {
+    graphQueryRequestSchema,
+    graphQueryResultSchema,
+    graphSupportRequestSchema,
+    graphSupportPageSchema,
+    graphToolNames,
+} from "./graphProtocol.js";
+import { viewDetailPageSchema } from "./viewDetailProtocol.js";
+import type {
+    ViewDetailPage,
+    ViewDetailPageRequest,
+} from "@typeagent/memory-service";
+import {
+    understandingToolNames,
+    understandingRequestSchema,
+    understandingResultSchema,
+    understandingModuleRequestSchema,
+    understandingModuleResultSchema,
+} from "./understandingProtocol.js";
+import type {
+    UnderstandingRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
+} from "@typeagent/memory-service";
+
+import {
+    Client,
+    StreamableHTTPClientTransport,
+    type CallToolResult,
+} from "@modelcontextprotocol/client";
+import {
+    StdioClientTransport,
+    getDefaultEnvironment,
+    type StdioServerParameters,
+} from "@modelcontextprotocol/client/stdio";
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryGraphQueryRequest,
+    MemoryGraphQueryResult,
+    MemoryGraphSupportRequest,
+    MemoryGraphSupportPage,
+    QuestionSummaryRequest,
+    QuestionSummaryPage,
+    QuestionReadRequest,
+    MemoryQuestion,
+    KnowledgeStatus,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointWait,
+    QuestionInventory,
+    QuestionEditRequest,
+    SchemaViewPageRequest,
+    SchemaViewPage,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+    DocumentIngestRequest,
+    DocumentIngestResult,
+    IngestionJobStatus,
+    JobListRequest,
+    JobProgress,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
+    MemoryBatchImportLookup,
+    MemoryBatchImportRequest,
+    MemoryChangeListRequest,
+    MemoryChangeReceipt,
+    MemoryCorpus,
+    MemoryCorpusStatus,
+    MemoryEvent,
+    MemoryEventAppendRequest,
+    MemoryEventAppendResult,
+    MemoryEventForgetRequest,
+    MemoryEventForgetResult,
+    MemoryEventListRequest,
+    MemoryEventSearchRequest,
+    MemoryEventSearchResult,
+    MemoryKnowledgeGraph,
+    MemoryPage,
+    MemorySearchRequest,
+    MemorySearchResult,
+    MemoryService,
+    MemoryServiceCapabilities,
+    MemorySource,
+    MemoryViewService,
+    ReindexResult,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
+    SourceContent,
+    SourceContentRequest,
+    SourceSynopsis,
+    SourceSynopsisRequest,
+    SourceForgetPreview,
+    SourceForgetRequest,
+    SourceForgetResult,
+    SourceListRequest,
+    SourceReplaceRequest,
+    ViewArchiveRequest,
+    ViewBuildJob,
+    ViewBuildJobRequest,
+    ViewBuildRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewHistoryEntry,
+    ViewMaintenancePlan,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMergeConflict,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewSearchMatch,
+    ViewSearchRequest,
+    ViewSnapshot,
+    ViewSourceUsageRequest,
+    ViewSourceUsagePage,
+    ViewVersion,
+} from "@typeagent/memory-service";
+import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
+import type {
+    TopicQueryRequest,
+    TopicQueryPage,
+} from "@typeagent/memory-service";
+import { topicQueryPageSchema, topicToolNames } from "./topicProtocol.js";
+import {
+    agentMemorySearchRequestSchema,
+    agentMemorySearchResultSchema,
+    agentSessionImportReceiptSchema,
+    agentSessionImportRequestSchema,
+    agentSessionReadRequestSchema,
+    agentSessionToolNames,
+} from "./agentSessionProtocol.js";
+import type { z } from "zod";
+import {
+    answerResultSchema,
+    answerRequestSchema,
+    capabilitiesSchema,
+    changePageSchema,
+    clearedCountSchema,
+    corpusSchema,
+    eventAppendResultSchema,
+    eventForgetResultSchema,
+    eventPageSchema,
+    eventSearchResultSchema,
+    ingestResultSchema,
+    jobPageSchema,
+    jobStatusSchema,
+    knowledgeGraphSchema,
+    memoryToolNames,
+    optionalCorpusStatusSchema,
+    optionalEventSchema,
+    optionalJobStatusSchema,
+    optionalSourceSchema,
+    reindexResultSchema,
+    searchResultSchema,
+    sourceContentSchema,
+    sourceSynopsisSchema,
+    sourceForgetPreviewSchema,
+    sourceForgetResultSchema,
+    sourcePageSchema,
+    sourceSchema,
+} from "./protocol.js";
+import {
+    viewBuildJobSchema,
+    viewConflictSchema,
+    viewHistoryEntrySchema,
+    viewMaintenancePlanSchema,
+    viewMaintenanceResultSchema,
+    viewPublicationPolicySchema,
+    viewPublicationStatusSchema,
+    viewSearchMatchSchema,
+    viewSnapshotSchema,
+    viewSourceUsagePageSchema,
+    viewToolNames,
+    viewVersionSchema,
+} from "./viewProtocol.js";
+import {
+    questionInventorySchema,
+    questionEditRequestSchema,
+    questionCorpusRequestSchema,
+    schemaViewPageRequestSchema,
+    schemaViewPageSchema,
+    schemaViewProposalRequestSchema,
+    schemaQuestionDiscoveryRequestSchema,
+    schemaViewToolNames,
+} from "./schemaViewProtocol.js";
+import {
+    inventoryToolNames,
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    questionSummaryRequestSchema,
+    questionReadRequestSchema,
+    viewPublicationBatchRequestSchema,
+    viewSummaryPageSchema,
+    questionSummaryPageSchema,
+    questionDetailSchema,
+    viewBuildSummaryPageSchema,
+    viewPublicationBatchSchema,
+} from "./inventoryProtocol.js";
+
+import {
+    type AcquisitionProgress,
+    type MemoryAcquisitionProgressService,
+    acquisitionCorpusRequestSchema,
+    acquisitionCancelRequestSchema,
+    acquisitionProgressSchema,
+    acquisitionProgressListSchema,
+    acquisitionToolNames,
+    projectAcquisitionProgress,
+    safeAcquisitionOperation,
+} from "./acquisitionProtocol.js";
+import {
+    knowledgeCorpusRequestSchema,
+    knowledgeDiscoveryUpdateSchema,
+    knowledgeCheckpointRequestSchema,
+    knowledgeCheckpointReadSchema,
+    knowledgeCheckpointWaitSchema,
+    knowledgeCheckpointSchema,
+    knowledgeStatusSchema,
+    knowledgeToolNames,
+} from "./knowledgeProtocol.js";
+
+function unsupportedCapability(operation: string): Promise<never> {
+    return Promise.reject(new Error(`Memory ${operation} are not supported`));
+}
+
+export interface MemoryClientCallOptions {
+    signal?: AbortSignal;
+    onProgress?: (progress: JobProgress) => void;
+}
+
+export interface MemoryServiceClient
+    extends MemoryService,
+        MemoryViewService,
+        MemoryAcquisitionProgressService {
+    understand(request: UnderstandingRequest): Promise<UnderstandingResult>;
+    understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult>;
+    getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus>;
+    updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus>;
+    createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint>;
+    getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint>;
+    waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint>;
+    listQuestions(corpusId: string): Promise<QuestionInventory>;
+    editQuestion(request: QuestionEditRequest): Promise<ViewHistoryEntry>;
+    getViewPage(request: SchemaViewPageRequest): Promise<SchemaViewPage>;
+    proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry>;
+    discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry>;
+    importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined>;
+    cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult>;
+    queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage>;
+    rebuildTopics(corpusId: string): Promise<ViewBuildJob>;
+    ingestDocument(
+        request: DocumentIngestRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult>;
+    waitForJob(
+        jobId: string,
+        options?: MemoryClientCallOptions & { pollIntervalMs?: number },
+    ): Promise<IngestionJobStatus>;
+    close(): Promise<void>;
+    queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage>;
+    queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult>;
+    getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
+    listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    listViewSummaries(request: ViewSummaryRequest): Promise<ViewSummaryPage>;
+    listFrameSchemas(corpusId: string): Promise<FrameSchema[]>;
+    queryFrame(request: FrameQueryRequest): Promise<FrameQueryResult>;
+    getFrameProjectionStatus(corpusId: string): Promise<FrameProjectionStatus>;
+}
+
+export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public async listFrameSchemas(corpusId: string): Promise<FrameSchema[]> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return frameSchemasSchema.parse(
+            await (this.service.listFrameSchemas?.(corpusId) ??
+                unsupportedCapability("dataframes")),
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        return frameQueryResultSchema.parse(
+            await (this.service.queryFrame?.(
+                frameQueryRequestSchema.parse(request),
+            ) ?? unsupportedCapability("dataframes")),
+        );
+    }
+    public async getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return frameProjectionStatusSchema.parse(
+            await (this.service.getFrameProjectionStatus?.(corpusId) ??
+                unsupportedCapability("dataframes")),
+        );
+    }
+    public listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        return (
+            this.service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries")
+        );
+    }
+    public getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined> {
+        return (
+            this.service.getQuestion?.(request) ??
+            unsupportedCapability("question detail")
+        );
+    }
+    public getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus> {
+        return (
+            this.service.getKnowledgeStatus?.(corpusId) ??
+            unsupportedCapability("knowledge status")
+        );
+    }
+    public updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        return (
+            this.service.updateKnowledgeDiscovery?.(request) ??
+            unsupportedCapability("knowledge discovery policy")
+        );
+    }
+    public createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.createKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints")
+        );
+    }
+    public getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.getKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints")
+        );
+    }
+    public waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.waitForKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoint waits")
+        );
+    }
+    public listQuestions(corpusId: string): Promise<QuestionInventory> {
+        return (
+            this.service.listQuestions?.(corpusId) ??
+            unsupportedCapability("schema-defined questions")
+        );
+    }
+    public editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.editQuestion?.(request) ??
+            unsupportedCapability("question edits")
+        );
+    }
+    public getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        return (
+            this.service.getViewPage?.(request) ??
+            unsupportedCapability("schema view pages")
+        );
+    }
+    public proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.proposeSchemaView?.(request) ??
+            unsupportedCapability("schema view proposals")
+        );
+    }
+    public discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.discoverSchemaQuestions?.(request) ??
+            unsupportedCapability("question discovery")
+        );
+    }
+    public listAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return safeAcquisitionOperation(async () =>
+            (
+                await (this.service.listAcquisitions?.(corpusId) ??
+                    unsupportedCapability("acquisition progress"))
+            ).map(projectAcquisitionProgress),
+        );
+    }
+    public runAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return safeAcquisitionOperation(async () =>
+            (
+                await (this.service.runAcquisitions?.(corpusId) ??
+                    unsupportedCapability("acquisition progress"))
+            ).map(projectAcquisitionProgress),
+        );
+    }
+    public cancelAcquisitionProgress(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionProgress> {
+        return safeAcquisitionOperation(async () =>
+            projectAcquisitionProgress(
+                await (this.service.cancelAcquisition?.(request) ??
+                    unsupportedCapability("acquisition cancellation")),
+            ),
+        );
+    }
+    public importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return (
+            this.service.importAgentSession?.(request) ??
+            unsupportedCapability("agent session imports")
+        );
+    }
+    public getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        return (
+            this.service.getAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import status")
+        );
+    }
+    public cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return (
+            this.service.cancelAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import cancellation")
+        );
+    }
+    public searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        return (
+            this.service.searchAgentMemories?.(request) ??
+            unsupportedCapability("agent memory search")
+        );
+    }
+    public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
+        return (
+            this.service.queryTopics?.(request) ??
+            unsupportedCapability("topic queries")
+        );
+    }
+    public rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
+        return (
+            this.service.rebuildTopics?.(corpusId) ??
+            unsupportedCapability("topic rebuilds")
+        );
+    }
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return (
+            this.service.getSourceViewUsage?.(request) ??
+            unsupportedCapability("source View usage")
+        );
+    }
+    public constructor(
+        private readonly service: MemoryService & Partial<MemoryViewService>,
+    ) {}
+
+    public listViews(corpusId: string) {
+        return (
+            this.service.listViews?.(corpusId) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getView(request: ViewReadRequest) {
+        return (
+            this.service.getView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getViewDetailPage(request: ViewDetailPageRequest) {
+        return (
+            this.service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail")
+        );
+    }
+    public saveViewDraft(request: ViewSaveRequest) {
+        return (
+            this.service.saveViewDraft?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public archiveView(request: ViewArchiveRequest) {
+        return (
+            this.service.archiveView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getViewHistory(request: ViewReadRequest) {
+        return (
+            this.service.getViewHistory?.(request) ??
+            unsupportedCapability("view history")
+        );
+    }
+    public getViewPublicationPolicy(corpusId: string) {
+        return (
+            this.service.getViewPublicationPolicy?.(corpusId) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public updateViewPublicationPolicy(request: ViewPublicationPolicyUpdate) {
+        return (
+            this.service.updateViewPublicationPolicy?.(request) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public getViewPublication(request: ViewReadRequest) {
+        return (
+            this.service.getViewPublication?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public retryViewIndex(request: ViewPublishRequest) {
+        return (
+            this.service.retryViewIndex?.(request) ??
+            unsupportedCapability("view index retry")
+        );
+    }
+    public searchViews(request: ViewSearchRequest) {
+        return (
+            this.service.searchViews?.(request) ??
+            unsupportedCapability("published view search")
+        );
+    }
+    public publishView(request: ViewPublishRequest) {
+        return (
+            this.service.publishView?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public buildViews(request: ViewBuildRequest) {
+        return (
+            this.service.buildViews?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public planViewMaintenance(request: ViewMaintenancePlanRequest) {
+        return (
+            this.service.planViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance planning")
+        );
+    }
+    public maintainViews(request: ViewMaintenanceRequest) {
+        return (
+            this.service.maintainViews?.(request) ??
+            unsupportedCapability("view maintenance")
+        );
+    }
+    public updateViewMaintenance(request: ViewMaintenanceUpdate) {
+        return (
+            this.service.updateViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance definitions")
+        );
+    }
+    public getViewMaintenance(request: ViewMaintenanceRead) {
+        return (
+            this.service.getViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance receipts")
+        );
+    }
+    public getViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.getViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public listViewBuilds(corpusId: string) {
+        return (
+            this.service.listViewBuilds?.(corpusId) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public cancelViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.cancelViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ) {
+        return (
+            this.service.continueViewBuild?.(request) ??
+            unsupportedCapability("accounted view continuation")
+        );
+    }
+    public refreshExtensionViews(request: { corpusId: string }) {
+        return (
+            this.service.refreshExtensionViews?.(request) ??
+            unsupportedCapability("extension refresh")
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.retryViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public getViewConflict(request: ViewConflictReadRequest) {
+        return (
+            this.service.getViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
+    public resolveViewConflict(request: ViewConflictResolution) {
+        return (
+            this.service.resolveViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
+
+    public createCorpus(name: string, description?: string) {
+        return this.service.createCorpus(name, description);
+    }
+
+    public listCorpora() {
+        return this.service.listCorpora();
+    }
+
+    public getCorpus(corpusId: string) {
+        return this.service.getCorpus(corpusId);
+    }
+
+    public clearCorpus(corpusId: string) {
+        return this.service.clearCorpus(corpusId);
+    }
+
+    public listChanges(request: MemoryChangeListRequest) {
+        if (this.service.listChanges === undefined) {
+            return Promise.reject(
+                new Error("Memory changes are not supported"),
+            );
+        }
+        return this.service.listChanges(request);
+    }
+
+    public getRevisionAssets(request: RevisionAssetRequest) {
+        return (
+            this.service.getRevisionAssets?.(request) ??
+            unsupportedCapability("revision assets")
+        );
+    }
+
+    public readRevisionAsset(request: RevisionAssetReadRequest) {
+        return (
+            this.service.readRevisionAsset?.(request) ??
+            unsupportedCapability("revision assets")
+        );
+    }
+
+    public startBatchImport(request: MemoryBatchImportRequest) {
+        return (
+            this.service.startBatchImport?.(request) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public getBatchImport(batchId: string) {
+        return (
+            this.service.getBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public findBatchImport(request: MemoryBatchImportLookup) {
+        return (
+            this.service.findBatchImport?.(request) ??
+            unsupportedCapability("batch import lookup")
+        );
+    }
+
+    public listBatchImports(corpusId: string) {
+        return (
+            this.service.listBatchImports?.(corpusId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public retryBatchImport(batchId: string) {
+        return (
+            this.service.retryBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public cancelBatchImport(batchId: string) {
+        return (
+            this.service.cancelBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public listSources(corpusId: string) {
+        return this.service.listSources(corpusId);
+    }
+
+    public listSourcesPage(request: SourceListRequest) {
+        return this.service.listSourcesPage(request);
+    }
+
+    public getSource(corpusId: string, sourceId: string) {
+        return this.service.getSource(corpusId, sourceId);
+    }
+
+    public getSourceContent(request: SourceContentRequest) {
+        return this.service.getSourceContent(request);
+    }
+
+    public getSourceSynopsis(
+        request: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis> {
+        if (!this.service.getSourceSynopsis)
+            return Promise.reject(
+                new Error("Source synopses are not supported"),
+            );
+        return this.service.getSourceSynopsis(request);
+    }
+
+    public getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+        traceId?: string,
+    ) {
+        return traceId === undefined
+            ? this.service.getSourceKnowledge(corpusId, sourceId)
+            : this.service.getSourceKnowledge(corpusId, sourceId, traceId);
+    }
+
+    public ingestDocument(
+        request: DocumentIngestRequest,
+        signal?: AbortSignal,
+    ) {
+        return this.service.ingestDocument(request, signal);
+    }
+
+    public replaceSource(request: SourceReplaceRequest, signal?: AbortSignal) {
+        return this.service.replaceSource(request, signal);
+    }
+
+    public previewForgetSource(corpusId: string, sourceId: string) {
+        return this.service.previewForgetSource(corpusId, sourceId);
+    }
+
+    public forgetSource(request: SourceForgetRequest) {
+        return this.service.forgetSource(request);
+    }
+
+    public reindexCorpus(corpusId: string, signal?: AbortSignal) {
+        return this.service.reindexCorpus(corpusId, signal);
+    }
+
+    public reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal?: AbortSignal,
+    ) {
+        return this.service.reindexSource(corpusId, sourceId, signal);
+    }
+
+    public getJob(jobId: string) {
+        return this.service.getJob(jobId);
+    }
+
+    public listJobs(request: JobListRequest = {}) {
+        return this.service.listJobs(request);
+    }
+
+    public cancelJob(jobId: string) {
+        return this.service.cancelJob(jobId);
+    }
+
+    public appendEvent(request: MemoryEventAppendRequest) {
+        return this.service.appendEvent(request);
+    }
+
+    public getEvent(corpusId: string, eventId: string) {
+        return this.service.getEvent(corpusId, eventId);
+    }
+
+    public listEvents(request: MemoryEventListRequest) {
+        return this.service.listEvents(request);
+    }
+
+    public searchEvents(request: MemoryEventSearchRequest) {
+        return this.service.searchEvents(request);
+    }
+
+    public forgetEvents(request: MemoryEventForgetRequest) {
+        return this.service.forgetEvents(request);
+    }
+
+    public search(request: MemorySearchRequest) {
+        return this.service.search(request);
+    }
+
+    public answer(request: MemoryAnswerRequest, signal?: AbortSignal) {
+        return this.service.answer(request, signal);
+    }
+
+    public understand(
+        request: UnderstandingRequest,
+    ): Promise<UnderstandingResult> {
+        return (
+            this.service.understand?.(
+                understandingRequestSchema.parse(request),
+            ) ??
+            Promise.reject(new Error("Memory understanding is not supported"))
+        );
+    }
+
+    public understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return (
+            this.service.understandingModule?.(
+                understandingModuleRequestSchema.parse(request),
+            ) ??
+            Promise.reject(
+                new Error("Memory understanding modules are not supported"),
+            )
+        );
+    }
+
+    public warmViewIndexes(corpusId?: string): Promise<void> {
+        return (
+            this.service.warmViewIndexes?.(corpusId) ??
+            Promise.reject(
+                new Error("Memory view-index warmup is not supported"),
+            )
+        );
+    }
+
+    public cancelUnderstanding(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean> {
+        return (
+            this.service.cancelUnderstanding?.(request) ??
+            Promise.reject(
+                new Error("Memory understanding cancellation is not supported"),
+            )
+        );
+    }
+
+    public getKnowledgeGraph(corpusId: string) {
+        return this.service.getKnowledgeGraph(corpusId);
+    }
+
+    public getCapabilities() {
+        return this.service.getCapabilities();
+    }
+
+    public waitForJob(
+        jobId: string,
+        options: MemoryClientCallOptions & { pollIntervalMs?: number } = {},
+    ) {
+        return waitForMemoryJob(this, jobId, options);
+    }
+
+    public async close(): Promise<void> {}
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return (
+            this.service.queryGraphSupport?.(
+                graphSupportRequestSchema.parse(
+                    request,
+                ) as MemoryGraphSupportRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph support is not supported"))
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return (
+            this.service.queryKnowledgeGraph?.(
+                graphQueryRequestSchema.parse(
+                    request,
+                ) as MemoryGraphQueryRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph queries are not supported"))
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return (
+            this.service.getViewPublications?.(request) ??
+            unsupportedCapability("publication batches")
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return (
+            this.service.listViewBuildSummaries?.(request) ??
+            unsupportedCapability("build summaries")
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return (
+            this.service.listViewSummaries?.(request) ??
+            unsupportedCapability("view summaries")
+        );
+    }
+}
+
+export type MemoryMcpTransportConfig =
+    | {
+          kind: "stdio";
+          command: string;
+          args: string[];
+          env?: Record<string, string>;
+          cwd?: string;
+      }
+    | {
+          kind: "http";
+          url: string;
+          headers?: Record<string, string>;
+          timeoutMs?: number;
+      };
+
+type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
+
+export class McpMemoryServiceClient implements MemoryServiceClient {
+    public async listFrameSchemas(corpusId: string): Promise<FrameSchema[]> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return this.invoke(
+            frameToolNames.listFrameSchemas,
+            { corpusId },
+            frameSchemasSchema,
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        return this.invoke(
+            frameToolNames.queryFrame,
+            frameQueryRequestSchema.parse(request),
+            frameQueryResultSchema,
+        );
+    }
+    public async getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        frameCorpusRequestSchema.parse({ corpusId });
+        return this.invoke(
+            frameToolNames.getFrameProjectionStatus,
+            { corpusId },
+            frameProjectionStatusSchema,
+        );
+    }
+    public listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        return this.invoke(
+            inventoryToolNames.listQuestionSummaries,
+            questionSummaryRequestSchema.parse(request),
+            questionSummaryPageSchema,
+        );
+    }
+    public getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined> {
+        return this.invoke(
+            inventoryToolNames.getQuestion,
+            questionReadRequestSchema.parse(request),
+            questionDetailSchema,
+        );
+    }
+    public getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus> {
+        return this.invoke(
+            knowledgeToolNames.getKnowledgeStatus,
+            knowledgeCorpusRequestSchema.parse({ corpusId }),
+            knowledgeStatusSchema,
+        );
+    }
+    public updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        return this.invoke(
+            knowledgeToolNames.updateKnowledgeDiscovery,
+            knowledgeDiscoveryUpdateSchema.parse(request),
+            knowledgeStatusSchema,
+        );
+    }
+    public createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.createKnowledgeCheckpoint,
+            knowledgeCheckpointRequestSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
+    public getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.getKnowledgeCheckpoint,
+            knowledgeCheckpointReadSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
+    public waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.waitForKnowledgeCheckpoint,
+            knowledgeCheckpointWaitSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
+    public listQuestions(corpusId: string): Promise<QuestionInventory> {
+        return this.invoke(
+            schemaViewToolNames.listQuestions,
+            questionCorpusRequestSchema.parse({ corpusId }),
+            questionInventorySchema,
+        );
+    }
+    public editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.editQuestion,
+            questionEditRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        return this.invoke(
+            schemaViewToolNames.getViewPage,
+            schemaViewPageRequestSchema.parse(request),
+            schemaViewPageSchema,
+        );
+    }
+    public proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.proposeSchemaView,
+            schemaViewProposalRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.discoverSchemaQuestions,
+            schemaQuestionDiscoveryRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public listAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return this.invoke(
+            acquisitionToolNames.listAcquisitionProgress,
+            acquisitionCorpusRequestSchema.parse({ corpusId }),
+            acquisitionProgressListSchema,
+        );
+    }
+    public runAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return this.invoke(
+            acquisitionToolNames.runAcquisitionProgress,
+            acquisitionCorpusRequestSchema.parse({ corpusId }),
+            acquisitionProgressListSchema,
+        );
+    }
+    public cancelAcquisitionProgress(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionProgress> {
+        return this.invoke(
+            acquisitionToolNames.cancelAcquisitionProgress,
+            acquisitionCancelRequestSchema.parse(request),
+            acquisitionProgressSchema,
+        );
+    }
+    public importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return this.invoke(
+            agentSessionToolNames.importAgentSession,
+            agentSessionImportRequestSchema.parse(request),
+            agentSessionImportReceiptSchema,
+        );
+    }
+    public getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        return this.invoke<AgentSessionImportReceipt | null>(
+            agentSessionToolNames.getAgentSessionImport,
+            agentSessionReadRequestSchema.parse(request),
+            agentSessionImportReceiptSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return this.invoke(
+            agentSessionToolNames.cancelAgentSessionImport,
+            agentSessionReadRequestSchema.parse(request),
+            agentSessionImportReceiptSchema,
+        );
+    }
+    public searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        return this.invoke(
+            agentSessionToolNames.searchAgentMemories,
+            agentMemorySearchRequestSchema.parse(request),
+            agentMemorySearchResultSchema,
+        );
+    }
+    public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
+        return this.invoke(
+            topicToolNames.queryTopics,
+            request,
+            topicQueryPageSchema,
+        );
+    }
+    public rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
+        return this.invoke(
+            topicToolNames.rebuildTopics,
+            { corpusId },
+            viewBuildJobSchema,
+        );
+    }
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return this.invoke(
+            viewToolNames.getSourceViewUsage,
+            request,
+            viewSourceUsagePageSchema,
+        );
+    }
+    public listViews(corpusId: string): Promise<ViewSnapshot> {
+        return this.invoke(
+            viewToolNames.listViews,
+            { corpusId },
+            viewSnapshotSchema,
+        );
+    }
+    public getView(request: ViewReadRequest): Promise<ViewVersion | undefined> {
+        return this.invoke<ViewVersion | null>(
+            viewToolNames.getView,
+            request,
+            viewVersionSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public getViewDetailPage(
+        request: ViewDetailPageRequest,
+    ): Promise<ViewDetailPage | undefined> {
+        return this.invoke<ViewDetailPage | null>(
+            viewToolNames.getViewDetailPage,
+            request,
+            viewDetailPageSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.saveViewDraft,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.archiveView,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        return this.invoke(
+            viewToolNames.getViewHistory,
+            request,
+            viewHistoryEntrySchema.array(),
+        );
+    }
+    public getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.getViewPublicationPolicy,
+            { corpusId },
+            viewPublicationPolicySchema,
+        );
+    }
+    public updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.updateViewPublicationPolicy,
+            request,
+            viewPublicationPolicySchema,
+        );
+    }
+    public getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.getViewPublication,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public retryViewIndex(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.retryViewIndex,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public searchViews(request: ViewSearchRequest): Promise<ViewSearchMatch[]> {
+        return this.invoke(
+            viewToolNames.searchViews,
+            request,
+            viewSearchMatchSchema.array(),
+        );
+    }
+    public publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.publishView,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.buildViews,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public planViewMaintenance(
+        request: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan> {
+        return this.invoke(
+            viewToolNames.planViewMaintenance,
+            request,
+            viewMaintenancePlanSchema,
+        );
+    }
+    public maintainViews(
+        request: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult> {
+        return this.invoke(
+            viewToolNames.maintainViews,
+            request,
+            viewMaintenanceResultSchema,
+        );
+    }
+    public updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.updateViewMaintenance,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewMaintenance(
+        request: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        return this.invoke<ViewMaintenanceResult | null>(
+            viewToolNames.getViewMaintenance,
+            request,
+            viewMaintenanceResultSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public getViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined> {
+        return this.invoke<ViewBuildJob | null>(
+            viewToolNames.getViewBuild,
+            request,
+            viewBuildJobSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.listViewBuilds,
+            { corpusId },
+            viewBuildJobSchema.array(),
+        );
+    }
+    public cancelViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.cancelViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.continueViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.refreshExtensionViews,
+            request,
+            viewBuildJobSchema.array(),
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.retryViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public getViewConflict(
+        request: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined> {
+        return this.invoke<ViewMergeConflict | null>(
+            viewToolNames.getViewConflict,
+            request,
+            viewConflictSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public resolveViewConflict(
+        request: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.resolveViewConflict,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    private constructor(
+        private readonly client: Client,
+        private readonly timeoutMs: number | undefined,
+    ) {}
+
+    public static async create(
+        config: MemoryMcpTransportConfig,
+    ): Promise<McpMemoryServiceClient> {
+        const transport = createTransport(config);
+        const client = new Client(
+            { name: "typeagent-memory-client", version: "0.0.1" },
+            { versionNegotiation: { mode: "legacy" }, capabilities: {} },
+        );
+        try {
+            await client.connect(
+                transport,
+                config.kind === "http" && config.timeoutMs !== undefined
+                    ? { timeout: config.timeoutMs }
+                    : undefined,
+            );
+        } catch (error) {
+            await transport.close().catch(() => undefined);
+            throw error;
+        }
+        return new McpMemoryServiceClient(
+            client,
+            config.kind === "http" ? config.timeoutMs : undefined,
+        );
+    }
+
+    public createCorpus(
+        name: string,
+        description?: string,
+    ): Promise<MemoryCorpus> {
+        return this.invoke(
+            memoryToolNames.corpusCreate,
+            { name, description },
+            corpusSchema,
+        );
+    }
+
+    public listCorpora(): Promise<MemoryCorpus[]> {
+        return this.invoke(
+            memoryToolNames.corpusList,
+            {},
+            corpusSchema.array(),
+        );
+    }
+
+    public getCorpus(
+        corpusId: string,
+    ): Promise<MemoryCorpusStatus | undefined> {
+        return this.invoke<MemoryCorpusStatus | null>(
+            memoryToolNames.corpusGet,
+            { corpusId },
+            optionalCorpusStatusSchema,
+        ).then((corpus) => corpus ?? undefined);
+    }
+
+    public clearCorpus(corpusId: string): Promise<number> {
+        return this.invoke(
+            memoryToolNames.corpusClear,
+            { corpusId },
+            clearedCountSchema,
+        );
+    }
+
+    public listSources(corpusId: string): Promise<MemorySource[]> {
+        return this.invoke<MemorySource[]>(
+            memoryToolNames.sourceList,
+            { corpusId },
+            sourceSchema.array(),
+        );
+    }
+
+    public listChanges(
+        request: MemoryChangeListRequest,
+    ): Promise<MemoryPage<MemoryChangeReceipt>> {
+        return this.invoke(
+            memoryToolNames.changesList,
+            request,
+            changePageSchema,
+        );
+    }
+
+    public listSourcesPage(
+        request: SourceListRequest,
+    ): Promise<MemoryPage<MemorySource>> {
+        return this.invoke(
+            memoryToolNames.sourceListPage,
+            request,
+            sourcePageSchema,
+        );
+    }
+
+    public getSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<MemorySource | undefined> {
+        return this.invoke<MemorySource | null>(
+            memoryToolNames.sourceGet,
+            { corpusId, sourceId },
+            optionalSourceSchema,
+        ).then((source) => source ?? undefined);
+    }
+
+    public getSourceContent(
+        request: SourceContentRequest,
+    ): Promise<SourceContent> {
+        return this.invoke(
+            memoryToolNames.sourceContentGet,
+            request,
+            sourceContentSchema,
+        );
+    }
+
+    public getSourceSynopsis(
+        request: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis> {
+        return this.invoke(
+            memoryToolNames.sourceSynopsisGet,
+            request,
+            sourceSynopsisSchema,
+        );
+    }
+
+    public getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+        _traceId?: string,
+    ): Promise<MemoryKnowledgeGraph> {
+        return this.invoke(
+            memoryToolNames.sourceKnowledgeGet,
+            { corpusId, sourceId },
+            knowledgeGraphSchema,
+        );
+    }
+
+    public ingestDocument(
+        request: DocumentIngestRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult> {
+        return this.invoke(
+            memoryToolNames.documentIngest,
+            request,
+            ingestResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public replaceSource(
+        request: SourceReplaceRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult> {
+        return this.invoke(
+            memoryToolNames.sourceReplace,
+            request,
+            ingestResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public previewForgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceForgetPreview> {
+        return this.invoke(
+            memoryToolNames.sourceForgetPreview,
+            { corpusId, sourceId },
+            sourceForgetPreviewSchema,
+        );
+    }
+
+    public forgetSource(
+        request: SourceForgetRequest,
+    ): Promise<SourceForgetResult> {
+        return this.invoke(
+            memoryToolNames.sourceForget,
+            request,
+            sourceForgetResultSchema,
+        );
+    }
+
+    public reindexCorpus(
+        corpusId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult> {
+        return this.invoke(
+            memoryToolNames.corpusReindex,
+            { corpusId },
+            reindexResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult> {
+        return this.invoke(
+            memoryToolNames.sourceReindex,
+            { corpusId, sourceId },
+            reindexResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public getJob(jobId: string): Promise<IngestionJobStatus | undefined> {
+        return this.invoke<IngestionJobStatus | null>(
+            memoryToolNames.jobGet,
+            { jobId },
+            optionalJobStatusSchema,
+        ).then((job) => job ?? undefined);
+    }
+
+    public listJobs(
+        request: JobListRequest = {},
+    ): Promise<MemoryPage<IngestionJobStatus>> {
+        return this.invoke(memoryToolNames.jobList, request, jobPageSchema);
+    }
+
+    public cancelJob(jobId: string): Promise<IngestionJobStatus | undefined> {
+        return this.invoke<IngestionJobStatus | null>(
+            memoryToolNames.jobCancel,
+            { jobId },
+            optionalJobStatusSchema,
+        ).then((job) => job ?? undefined);
+    }
+
+    public appendEvent(
+        request: MemoryEventAppendRequest,
+    ): Promise<MemoryEventAppendResult> {
+        return this.invoke(
+            memoryToolNames.eventAppend,
+            request,
+            eventAppendResultSchema,
+        );
+    }
+
+    public getEvent(
+        corpusId: string,
+        eventId: string,
+    ): Promise<MemoryEvent | undefined> {
+        return this.invoke<MemoryEvent | null>(
+            memoryToolNames.eventGet,
+            { corpusId, eventId },
+            optionalEventSchema,
+        ).then((event) => event ?? undefined);
+    }
+
+    public listEvents(
+        request: MemoryEventListRequest,
+    ): Promise<MemoryPage<MemoryEvent>> {
+        return this.invoke(memoryToolNames.eventList, request, eventPageSchema);
+    }
+
+    public searchEvents(
+        request: MemoryEventSearchRequest,
+    ): Promise<MemoryEventSearchResult> {
+        const { traceId: _traceId, ...mcpRequest } = request;
+        return this.invoke(
+            memoryToolNames.eventSearch,
+            mcpRequest,
+            eventSearchResultSchema,
+        );
+    }
+
+    public forgetEvents(
+        request: MemoryEventForgetRequest,
+    ): Promise<MemoryEventForgetResult> {
+        return this.invoke(
+            memoryToolNames.eventForget,
+            request,
+            eventForgetResultSchema,
+        );
+    }
+
+    public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
+        const { traceId: _traceId, ...mcpRequest } = request;
+        return this.invoke(
+            memoryToolNames.search,
+            mcpRequest,
+            searchResultSchema,
+        );
+    }
+
+    public answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult> {
+        return this.invoke(
+            memoryToolNames.answer,
+            answerRequestSchema.parse(request),
+            answerResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public understand(
+        request: UnderstandingRequest,
+    ): Promise<UnderstandingResult> {
+        return this.invoke(
+            understandingToolNames.understand,
+            understandingRequestSchema.parse(request),
+            understandingResultSchema,
+        );
+    }
+
+    public understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return this.invoke(
+            understandingToolNames.module,
+            understandingModuleRequestSchema.parse(request),
+            understandingModuleResultSchema,
+        );
+    }
+
+    public getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph> {
+        return this.invoke(
+            memoryToolNames.knowledgeGraphGet,
+            { corpusId },
+            knowledgeGraphSchema,
+        );
+    }
+
+    public getCapabilities(): Promise<MemoryServiceCapabilities> {
+        return this.invoke(
+            memoryToolNames.capabilities,
+            {},
+            capabilitiesSchema,
+        );
+    }
+
+    public waitForJob(
+        jobId: string,
+        options: MemoryClientCallOptions & { pollIntervalMs?: number } = {},
+    ): Promise<IngestionJobStatus> {
+        return this.invoke<IngestionJobStatus>(
+            memoryToolNames.jobWait,
+            {
+                jobId,
+                ...(options.pollIntervalMs === undefined
+                    ? {}
+                    : { pollIntervalMs: options.pollIntervalMs }),
+            },
+            jobStatusSchema,
+            options,
+        );
+    }
+
+    public async close(): Promise<void> {
+        await this.client.close();
+    }
+
+    private async invoke<T>(
+        name: string,
+        args: object,
+        schema: z.ZodType,
+        options: MemoryClientCallOptions = {},
+    ): Promise<T> {
+        const result = await this.client.callTool(
+            {
+                name,
+                arguments: args as Record<string, unknown>,
+            },
+            {
+                ...(this.timeoutMs === undefined
+                    ? {}
+                    : { timeout: this.timeoutMs }),
+                ...(options.signal === undefined
+                    ? {}
+                    : { signal: options.signal }),
+                ...(options.onProgress === undefined
+                    ? {}
+                    : {
+                          onprogress: (progress) =>
+                              options.onProgress?.({
+                                  completed: progress.progress,
+                                  ...(progress.total === undefined
+                                      ? {}
+                                      : { total: progress.total }),
+                                  ...(progress.message === undefined
+                                      ? {}
+                                      : { message: progress.message }),
+                              }),
+                      }),
+            },
+        );
+        return parseToolResult(name, result, schema);
+    }
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return this.invoke(
+            graphToolNames.queryGraphSupport,
+            graphSupportRequestSchema.parse(request),
+            graphSupportPageSchema,
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return this.invoke(
+            graphToolNames.queryKnowledgeGraph,
+            graphQueryRequestSchema.parse(request),
+            graphQueryResultSchema,
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return this.invoke(
+            inventoryToolNames.getViewPublications,
+            viewPublicationBatchRequestSchema.parse(request),
+            viewPublicationBatchSchema,
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return this.invoke(
+            inventoryToolNames.listViewBuildSummaries,
+            inventoryPageRequestSchema.parse(request),
+            viewBuildSummaryPageSchema,
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return this.invoke(
+            inventoryToolNames.listViewSummaries,
+            viewSummaryRequestSchema.parse(request),
+            viewSummaryPageSchema,
+        );
+    }
+}
+
+function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
+    if (config.kind === "http") {
+        const headers = new Headers(config.headers);
+        headers.set("X-TypeAgent-Client-Id", randomUUID());
+        return new StreamableHTTPClientTransport(new URL(config.url), {
+            requestInit: { headers },
+            ...(config.timeoutMs === undefined
+                ? {}
+                : {
+                      fetch: (input, init) =>
+                          globalThis.fetch(input, {
+                              ...init,
+                              signal:
+                                  init?.signal == null
+                                      ? AbortSignal.timeout(config.timeoutMs!)
+                                      : (
+                                            AbortSignal as typeof AbortSignal & {
+                                                any(
+                                                    signals: AbortSignal[],
+                                                ): AbortSignal;
+                                            }
+                                        ).any([
+                                            init.signal,
+                                            AbortSignal.timeout(
+                                                config.timeoutMs!,
+                                            ),
+                                        ]),
+                          }),
+                  }),
+        });
+    }
+    const parameters: StdioServerParameters = {
+        command: config.command,
+        args: config.args,
+        stderr: "pipe",
+        ...(config.cwd === undefined ? {} : { cwd: config.cwd }),
+        ...(config.env === undefined
+            ? {}
+            : { env: { ...getDefaultEnvironment(), ...config.env } }),
+    };
+    return new StdioClientTransport(parameters);
+}
+
+function parseToolResult<T>(
+    name: string,
+    result: CallToolResult,
+    schema: z.ZodType,
+): T {
+    if (result.isError === true) {
+        const message = result.content
+            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+            .join("\n");
+        throw new Error(message || `Memory tool '${name}' failed`);
+    }
+    const envelope = result.structuredContent;
+    const parsed = schema.safeParse(
+        envelope !== null &&
+            typeof envelope === "object" &&
+            "result" in envelope
+            ? envelope.result
+            : undefined,
+    );
+    if (!parsed.success) {
+        throw new Error(
+            `Memory tool '${name}' returned invalid structured content: ${parsed.error.message}`,
+        );
+    }
+    return parsed.data as T;
+}

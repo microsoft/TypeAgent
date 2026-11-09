@@ -1,0 +1,545 @@
+diff --git a/export.js b/export.js
+index c475e28bd..d4a96df3b 100644
+--- a/export.js
++++ b/export.js
+@@ -1,38 +1,25 @@
+-// Renderers and file exporters for the document JSON — a port of src/papero_extract/render.py
+-// plus XLSX/DOCX writers (plain OOXML zipped with JSZip, no heavy dependencies).
+-
+-import { bands } from "./columns.js";
++// Copyright (c) Microsoft Corporation.
++// Licensed under the MIT License.
++
++// Copyright (c) 2026 Beatriz Almeida.
++// Licensed under the MIT License; see LICENSE.
++// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/export.js
++// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
++// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
+ import { inlineLatex, latexify, mathSpans, scriptText } from "./mathtext.js";
+
++
+ const FURNITURE = new Set(["header", "footer", "page_number"]);
+-const BOM = String.fromCharCode(0xfeff); // lets Notepad/Excel detect UTF-8 (accents)
++ // lets Notepad/Excel detect UTF-8 (accents)
+ const BULLET_CHARS = "•◦▪▫‣⁃●○■□–—*✓✔➢➤►▶·-";
+
++
+ export const contentBlocks = (page) => page.blocks.filter((b) => !FURNITURE.has(b.type));
+-export const allBlocks = (doc) => doc.pages.flatMap((p) => p.blocks);
+-export const tablesOf = (doc) => allBlocks(doc).filter((b) => b.type === "table" && b.rows);
+-export const imagesOf = (doc) => allBlocks(doc).filter((b) => b.image && b.image.data);
+
+-// ---------------------------------------------------------------- text
+-// `math`: "unicode" (as it reads: "x² + 1 = 0") or "latex" ("$x^{2} + 1 = 0$").
+-export function blocksToText(blocks, math = "unicode") {
+-  const latex = math === "latex";
+-  return blocks
+-    .map((b) => {
+-      const text = latex && b.type !== "formula" && b.type !== "code" ? inlineLatex(b.text || "") : b.text || "";
+-      if (b.type === "table" && b.rows) return b.rows.map((r) => r.map((c) => c.replace(/\n/g, " ")).join("\t")).join("\n");
+-      if (b.type === "list_item") return "  ".repeat(b.level || 0) + `${b.marker || "-"} ${text}`;
+-      if (b.type === "formula") return (latex ? `$$${b.latex || b.text}$$` : b.text) + (b.number ? `  ${b.number}` : "");
+-      return text;
+-    })
+-    .filter((t) => t.trim())
+-    .join("\n\n");
+-}
+-export const toText = (doc, { math = "unicode" } = {}) =>
+-  doc.pages.map((p) => blocksToText(contentBlocks(p), math)).filter((t) => t.trim()).join("\n\n");
+
+ // ---------------------------------------------------------------- markdown
+ const mdCell = (t) => String(t).replace(/\|/g, "\\|").replace(/\n/g, "<br>").trim();
++
+ export function mdTable(rows) {
+   const width = Math.max(...rows.map((r) => r.length));
+   const full = rows.map((r) => [...r, ...Array(width - r.length).fill("")]);
+@@ -42,11 +29,13 @@ export function mdTable(rows) {
+     ...full.slice(1).map((r) => "| " + r.map(mdCell).join(" | ") + " |"),
+   ].join("\n");
+ }
++
+ function imageMd(b, images, alt) {
+   if (!b.image || images === "none") return null;
+   if (images === "embed" && b.image.data) return `![${alt}](data:${b.image.mime};base64,${b.image.data})`;
+   return `![${alt}](images/${b.image.name})`;
+ }
++
+ // Words printed inside a figure (legend, axis titles) help search; bare tick values don't.
+ export function figureWords(text) {
+   return text
+@@ -54,6 +43,7 @@ export function figureWords(text) {
+     .map((ln) => ln.split(/\s+/).filter((t) => t && !/^[-+−]?[\d.,%]+$/.test(t)).join(" "))
+     .filter((ln) => /\p{L}/u.test(ln));
+ }
++
+ // Inline formatting as Markdown: **bold**, *italic*, <sup>/<sub>; markers hug the words.
+ // **bold** / *italic* around the words, the spaces at either end left outside.
+ function emphasis(text, bold, italic) {
+@@ -64,6 +54,7 @@ function emphasis(text, bold, italic) {
+   if (bold) t = `**${t}**`;
+   return lead + t + trail;
+ }
++
+ function mdInline(b, math = "unicode") {
+   if (math === "latex") return mdInlineLatex(b);
+   if (!b.runs?.length) return (b.text || "").replace(/\n/g, "  \n");
+@@ -75,6 +66,7 @@ function mdInline(b, math = "unicode") {
+     return lead + emphasis(t, r.bold, r.italic) + trail;
+   }).join("").replace(/\n/g, "  \n");
+ }
++
+ // The block with its math as `$…$` (exponents and indices inside it), bold and italic kept on
+ // the words around.
+ function mdInlineLatex(b) {
+@@ -106,25 +98,7 @@ function mdInlineLatex(b) {
+   }
+   return (out + plain(at, text.length)).replace(/\n/g, "  \n");
+ }
+-function htmlInline(b) {
+-  const br = (t) => esc(t).replace(/\n/g, "<br>");
+-  if (!b.runs?.length) return br(b.text || "");
+-  return b.runs.map((r) => {
+-    let t = br(r.text);
+-    if (r.script) t = r.script === "super" ? `<sup>${t}</sup>` : `<sub>${t}</sub>`;
+-    if (r.italic) t = `<em>${t}</em>`;
+-    if (r.bold) t = `<strong>${t}</strong>`;
+-    return t;
+-  }).join("");
+-}
+-function htmlStyle(b) {
+-  const f = b.format || {}, out = [];
+-  if (f.align && f.align !== "left") out.push(`text-align:${f.align}`);
+-  if (f.indent) out.push(`margin-left:${f.indent}pt`);
+-  if (f.first_line) out.push(`text-indent:${f.first_line}pt`);
+-  if (f.line_spacing) out.push(`line-height:${Math.round(f.line_spacing * 115) / 100}`);
+-  return out.length ? ` style="${out.join(";")}"` : "";
+-}
++
+ export function blockMarkdown(b, images = "ref", math = "unicode") {
+   const text = math === "latex" ? inlineLatex(b.text || "") : b.text;
+   switch (b.type) {
+@@ -156,6 +130,7 @@ export function blockMarkdown(b, images = "ref", math = "unicode") {
+       return mdInline(b, math);
+   }
+ }
++
+ export function toMarkdown(doc, { images = "ref", pageBreaks = false, math = "unicode" } = {}) {
+   const out = [];
+   doc.pages.forEach((page) => {
+@@ -173,416 +148,3 @@ export function toMarkdown(doc, { images = "ref", pageBreaks = false, math = "un
+   });
+   return out.join("\n\n").trim() + "\n";
+ }
+-
+-// ---------------------------------------------------------------- html
+-export const esc = (s) =>
+-  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+-
+-// `ownCaption`: false when the caption is also a block of its own on the page.
+-export function blockHtml(b, images = "embed", ownCaption = true) {
+-  const bbox = b.bbox ? b.bbox.map((v) => v.toFixed(1)).join(",") : "";
+-  const a = ` id="${esc(b.id)}" data-type="${b.type}" data-bbox="${bbox}"`;
+-  switch (b.type) {
+-    case "heading": {
+-      const l = Math.min(6, Math.max(1, b.level || 2));
+-      return `<h${l}${a}${htmlStyle(b)}>${esc(b.text.replace(/\n/g, " "))}</h${l}>`;
+-    }
+-    case "list_item":
+-      return `<p${a} style="margin-left:${(b.level || 0) * 1.5}rem">${esc(b.marker || "•")} ${htmlInline(b)}</p>`;
+-    case "table": {
+-      if (!b.rows) return `<p${a}>${esc(b.text)}</p>`;
+-      const head = b.rows[0].map((c) => `<th>${esc(c)}</th>`).join("");
+-      const body = b.rows.slice(1).map((r) => "<tr>" + r.map((c) => `<td>${esc(c)}</td>`).join("") + "</tr>").join("");
+-      const cap = b.caption && ownCaption ? `<caption>${esc(b.caption)}</caption>` : "";
+-      return `<table${a}>${cap}<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+-    }
+-    case "formula":
+-      return `<div class="formula"${a} data-latex="${esc(b.latex || "")}">\\[${esc(b.latex || b.text)}\\]${b.number ? ` <span>${esc(b.number)}</span>` : ""}</div>`;
+-    case "figure": {
+-      let src = "";
+-      if (b.image && images !== "none") src = images === "embed" && b.image.data ? `data:${b.image.mime};base64,${b.image.data}` : `images/${b.image.name}`;
+-      return `<figure${a}>${src ? `<img src="${src}" alt="${esc(b.caption || "figura")}">` : ""}${b.caption && ownCaption ? `<figcaption>${esc(b.caption)}</figcaption>` : ""}</figure>`;
+-    }
+-    case "caption":
+-      return `<p${a}${htmlStyle(b)}><em>${htmlInline(b)}</em></p>`;
+-    case "code":
+-      return `<pre${a}><code>${esc(b.text)}</code></pre>`;
+-    default:
+-      return `<p${a}${htmlStyle(b)}>${htmlInline(b)}</p>`;
+-  }
+-}
+-const HTML_STYLE = `body{font:16px/1.6 system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;color:#1f2328}
+-section.page{border-top:1px solid #d0d7de;padding-top:1rem;margin-top:2rem}section.page>h6{color:#656d76;font-weight:500;margin:0 0 1rem}
+-table{border-collapse:collapse;margin:1rem 0}td,th{border:1px solid #d0d7de;padding:.3rem .6rem;vertical-align:top}th{background:#f6f8fa}
+-figure{margin:1rem 0}figure img{max-width:100%}figcaption{color:#656d76;font-size:.9em}
+-.formula{overflow-x:auto;padding:.5rem 1rem;background:#f6f8fa;border-radius:6px;font-family:ui-monospace,monospace}
+-pre{background:#f6f8fa;padding:1rem;border-radius:6px;overflow-x:auto}
+-.cols{display:grid;column-gap:1.75rem;align-items:start}.cols>div{min-width:0}
+-@media(max-width:640px){.cols{display:block}}`;
+-// Two columns on the page stay two columns: each multi-column band is a grid.
+-function pageHtml(page, images) {
+-  const blocks = contentBlocks(page);
+-  const captions = new Set(blocks.filter((b) => b.type === "caption").map((b) => b.text));
+-  return bands(blocks).map((band) => {
+-    const cols = band.blocks.map((col) => col.map((b) => blockHtml(b, images, !captions.has(b.caption))).join("\n"));
+-    if (cols.length === 1) return cols[0];
+-    const tracks = band.columns.map((c) => `${Math.max(1, Math.round(c[1] - c[0]))}fr`).join(" ");
+-    return `<div class="cols" style="grid-template-columns:${tracks}">\n${cols.map((c) => `<div>\n${c}\n</div>`).join("\n")}\n</div>`;
+-  }).join("\n");
+-}
+-export function toHtml(doc, { images = "embed", title } = {}) {
+-  const t = title || doc.metadata?.title || "Documento";
+-  const pages = doc.pages
+-    .map((p) => `<section class="page" data-page="${p.number}" data-width="${p.width}" data-height="${p.height}"><h6>Página ${p.number}</h6>\n${pageHtml(p, images)}\n</section>`)
+-    .join("\n");
+-  return `<!doctype html>\n<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(t)}</title><style>${HTML_STYLE}</style></head><body>\n${pages}\n</body></html>\n`;
+-}
+-
+-// ---------------------------------------------------------------- csv
+-const csvCell = (v) => (/[",\n\r;]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+-export function tablesCsv(doc) {
+-  return tablesOf(doc)
+-    .map((t, k) => {
+-      const page = t.id ? t.id.split("-")[0].slice(1) : "?";
+-      const head = csvCell(`# página ${page}, tabela ${k + 1}${t.caption ? ": " + t.caption : ""}`);
+-      return [head, ...t.rows.map((r) => r.map(csvCell).join(","))].join("\r\n");
+-    })
+-    .join("\r\n\r\n");
+-}
+-
+-// ---------------------------------------------------------------- json
+-export function toJson(doc, { embedImages = true } = {}) {
+-  const copy = structuredClone(doc);
+-  copy.text = toText(doc);
+-  copy.markdown = toMarkdown(doc, { images: "ref" });
+-  if (!embedImages) for (const b of allBlocks(copy)) if (b.image) delete b.image.data;
+-  return JSON.stringify(copy, null, 2);
+-}
+-
+-// ---------------------------------------------------------------- xlsx (one sheet per table)
+-const xmlEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+-const colName = (i) => { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+-export async function toXlsx(doc) {
+-  const tables = tablesOf(doc);
+-  const zip = new JSZip();
+-  const sheets = tables.length ? tables : [{ rows: [["Nenhuma tabela encontrada"]] }];
+-  const numeric = /^-?\d{1,15}([.,]\d+)?$/;
+-  sheets.forEach((t, k) => {
+-    const rows = t.rows.map((r, ri) =>
+-      `<row r="${ri + 1}">` + r.map((c, ci) => {
+-        const ref = `${colName(ci)}${ri + 1}`;
+-        const v = String(c ?? "");
+-        if (ri > 0 && numeric.test(v.trim())) return `<c r="${ref}"><v>${v.trim().replace(",", ".")}</v></c>`;
+-        return `<c r="${ref}" t="inlineStr"${ri === 0 ? ' s="1"' : ""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+-      }).join("") + "</row>").join("");
+-    zip.file(`xl/worksheets/sheet${k + 1}.xml`,
+-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`);
+-  });
+-  const names = sheets.map((t, k) => {
+-    const page = t.id ? t.id.split("-")[0].slice(1) : "";
+-    return xmlEsc(`Tabela ${k + 1}${page ? " (p" + page + ")" : ""}`.slice(0, 31));
+-  });
+-  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, k) => `<Override PartName="/xl/worksheets/sheet${k + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`);
+-  zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+-  zip.file("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n, k) => `<sheet name="${n}" sheetId="${k + 1}" r:id="rId${k + 1}"/>`).join("")}</sheets></workbook>`);
+-  zip.file("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, k) => `<Relationship Id="rId${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${k + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+-  zip.file("xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf fontId="0"/><xf fontId="1" applyFont="1"/></cellXfs></styleSheet>`);
+-  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+-}
+-
+-// ---------------------------------------------------------------- docx
+-// Word export that keeps the page's look: page size and margins, alignment, indents, line
+-// spacing, bold/italic/super/subscript runs with the real font and size, intended line
+-// breaks, vertical spacing, page breaks, images at their size on the page, and blocks set
+-// side by side (a logo next to a letterhead) as a borderless table.
+-const TWIP = 20; // per point
+-const EMU = 12700; // per point
+-const JC = { left: "left", center: "center", right: "right", justify: "both" };
+-// A font Word has, close to the one on the page: the PDF base fonts and the TeX / URW
+-// families papers are set in. (An unknown name makes Word fall back to a wider font, and
+-// the columns overflow.)
+-function wordFont(name) {
+-  if (!name) return name;
+-  const n = name.toLowerCase().replace(/\s+/g, "");
+-  if (/consolas|couriernew|timesnewroman|arial|calibri|cambria|georgia|verdana|tahoma/.test(n)) return name;
+-  if (/mono|courier|cmtt|lmmono|typewriter|inconsolata|menlo/.test(n)) return "Courier New";
+-  if (/nimbussan|helvet|cmss|lmsans|heros|dejavusans|liberationsans|opensans|^sf(ss|sx)/.test(n)) return "Arial";
+-  if (/nimbusrom|^times|^cm(r|bx|ti|sl|csc|mi)|^lm(roman|r\d)|^sf(rm|bx|ti)|stix|termes|libertin|utopia|charter|palatin|minion|garamond/.test(n)) return "Times New Roman";
+-  return name;
+-}
+-
+-function docxRuns(b, extraProps = "") {
+-  const pt = b.style?.pt;
+-  const font = wordFont(b.style?.font);
+-  // Running text is set a hair tighter (0.15 pt per letter, not visible): Word's line
+-  // breaks differ from the page's by a word here and there, and a paragraph that gains a
+-  // line pushes the page over.
+-  const tight = b.format?.leading ? '<w:spacing w:val="-3"/>' : "";
+-  const base = (b.style?.tracking ? `<w:spacing w:val="${Math.round(b.style.tracking * TWIP)}"/>` : tight) +
+-    (pt ? `<w:sz w:val="${Math.round(pt * 2)}"/><w:szCs w:val="${Math.round(pt * 2)}"/>` : "") +
+-    (font ? `<w:rFonts w:ascii="${xmlEsc(font)}" w:hAnsi="${xmlEsc(font)}" w:cs="${xmlEsc(font)}"/>` : "");
+-  const runs = b.runs?.length ? b.runs : [{ text: b.text || "", bold: !!b.style?.bold, italic: false, script: null }];
+-  return runs.map((r) => {
+-    const props = (r.bold ? "<w:b/><w:bCs/>" : "") + (r.italic ? "<w:i/><w:iCs/>" : "") +
+-      (r.script ? `<w:vertAlign w:val="${r.script === "super" ? "superscript" : "subscript"}"/>` : "") + base + extraProps;
+-    const pieces = String(r.text).split("\n").map((t) => `<w:t xml:space="preserve">${xmlEsc(t)}</w:t>`);
+-    return `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}${pieces.join("<w:br/>")}</w:r>`;
+-  }).join("");
+-}
+-
+-function docxParaProps(b, before, style) {
+-  const f = b.format || {};
+-  const parts = [];
+-  if (style) parts.push(`<w:pStyle w:val="${style}"/>`);
+-  const spacing = [`w:before="${Math.round(before * TWIP)}"`, 'w:after="0"'];
+-  if (f.line_spacing) spacing.push(`w:line="${Math.round(240 * f.line_spacing)}" w:lineRule="auto"`);
+-  // Tight text: Word's "single" is looser than the page, and a column would overflow.
+-  else if (f.leading) spacing.push(`w:line="${Math.round(f.leading * TWIP)}" w:lineRule="exact"`);
+-  parts.push(`<w:spacing ${spacing.join(" ")}/>`);
+-  if (f.indent || f.first_line) {
+-    const ind = [];
+-    if (f.indent) ind.push(`w:left="${Math.round(f.indent * TWIP)}"`);
+-    if (f.first_line > 0) ind.push(`w:firstLine="${Math.round(f.first_line * TWIP)}"`);
+-    if (f.first_line < 0) ind.push(`w:hanging="${Math.round(-f.first_line * TWIP)}"`);
+-    parts.push(`<w:ind ${ind.join(" ")}/>`);
+-  }
+-  if (f.align && JC[f.align]) parts.push(`<w:jc w:val="${JC[f.align]}"/>`);
+-  return `<w:pPr>${parts.join("")}</w:pPr>`;
+-}
+-
+-export async function toDocx(doc) {
+-  const zip = new JSZip();
+-  const media = [];
+-  const imageXml = (img, b) => {
+-    const wPt = b.bbox ? b.bbox[2] - b.bbox[0] : img.width / 2;
+-    const hPt = b.bbox ? b.bbox[3] - b.bbox[1] : img.height / 2;
+-    const cx = Math.round(wPt * EMU), cy = Math.round(hPt * EMU);
+-    const id = media.length - 1; // the image was just pushed: rImg{id} in the relationships
+-    return `<w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id + 1}" name="${xmlEsc(img.name)}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id + 1}" name="${xmlEsc(img.name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImg${id}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+-  };
+-
+-  // Captions that are blocks of their own: the figure/table must not print them again.
+-  const captions = new Set(allBlocks(doc).filter((b) => b.type === "caption").map((b) => b.text));
+-  // The space above a table: a paragraph one point tall carrying it.
+-  const spacer = (before) => `<w:p><w:pPr><w:spacing w:before="${Math.round(Math.max(0, before - 1) * TWIP)}" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/></w:rPr></w:pPr></w:p>`;
+-  // One block -> one or more <w:p>/<w:tbl>, with `before` points of space above it.
+-  const blockXml = (b, before) => {
+-    switch (b.type) {
+-      case "heading": {
+-        const lvl = Math.min(6, Math.max(1, b.level || 2));
+-        return `<w:p>${docxParaProps(b, before, `Heading${lvl}`)}${docxRuns({ ...b, text: b.text.replace(/\n/g, " ") })}</w:p>`;
+-      }
+-      case "list_item": {
+-        const marker = `${b.marker || "•"} `;
+-        const runs = b.runs?.length ? [{ text: marker, bold: false, italic: false, script: null }, ...b.runs] : null;
+-        return `<w:p>${docxParaProps(b, before)}${docxRuns({ ...b, text: marker + b.text, runs })}</w:p>`;
+-      }
+-      case "table": {
+-        if (!b.rows) return "";
+-        const width = Math.max(...b.rows.map((r) => r.length));
+-        const total = b.bbox ? Math.round((b.bbox[2] - b.bbox[0]) * TWIP) : 9000;
+-        const col = Math.round(total / width);
+-        // Rows as tall as on the page (Word's own row height is looser), each line of a
+-        // cell on the pitch the page had, in a size that fits it.
+-        const lineCount = (r) => Math.max(1, ...r.map((c) => String(c).split(String.fromCharCode(10)).length));
+-        const allLines = b.rows.reduce((n, r) => n + lineCount(r), 0);
+-        const pitch = b.bbox ? (b.bbox[3] - b.bbox[1]) / allLines : 0;
+-        const pt = Math.min(b.style?.pt || 11, pitch ? Math.max(5, Math.round(pitch * 0.86 * 2) / 2) : 11);
+-        const cellRun = (t, bold) => ({ text: t, style: { pt, font: b.style?.font, bold }, runs: [{ text: t, bold, italic: false, script: null }] });
+-        const cellSpacing = pitch ? ` w:line="${Math.round(pitch * TWIP)}" w:lineRule="exact"` : "";
+-        const rowHeight = (r) => (pitch ? `<w:trPr><w:trHeight w:val="${Math.round(pitch * lineCount(r) * TWIP)}" w:hRule="exact"/></w:trPr>` : "");
+-        const rows = b.rows.map((r, ri) => `<w:tr>${rowHeight(r)}${[...r, ...Array(width - r.length).fill("")].map((c) =>
+-          `<w:tc><w:tcPr><w:tcW w:w="${col}" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0"${cellSpacing}/></w:pPr>${docxRuns(cellRun(String(c), ri === 0))}</w:p></w:tc>`).join("")}</w:tr>`).join("");
+-        const borders = ["top", "left", "bottom", "right", "insideH", "insideV"].map((s) => `<w:${s} w:val="single" w:sz="4" w:space="0" w:color="808080"/>`).join("");
+-        let out = `${spacer(before)}<w:tbl><w:tblPr><w:tblW w:w="${total}" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${Array(width).fill(`<w:gridCol w:w="${col}"/>`).join("")}</w:tblGrid>${rows}</w:tbl>`;
+-        if (b.caption && !captions.has(b.caption)) out += `<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr>${docxRuns({ text: b.caption, runs: [{ text: b.caption, italic: true }] })}</w:p>`;
+-        return out;
+-      }
+-      case "formula":
+-        return `<w:p>${docxParaProps({ ...b, format: { align: "center" } }, before)}${docxRuns({ ...b, text: b.latex || b.text, runs: null, style: { ...b.style, font: "Cambria Math" } })}${b.number ? `<w:r><w:t xml:space="preserve">  ${xmlEsc(b.number)}</w:t></w:r>` : ""}</w:p>`;
+-      case "figure": {
+-        let out = "";
+-        if (b.image?.data) {
+-          media.push(b.image);
+-          out += `<w:p>${docxParaProps(b, before)}${imageXml(b.image, b)}</w:p>`;
+-        }
+-        if (b.caption && !captions.has(b.caption)) out += `<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr>${docxRuns({ text: b.caption, runs: [{ text: b.caption, italic: true }] })}</w:p>`;
+-        return out;
+-      }
+-      case "caption":
+-        return `<w:p>${docxParaProps(b, before, "Caption")}${docxRuns(b)}</w:p>`;
+-      case "code":
+-        return b.text.split("\n").map((ln, i) => `<w:p>${docxParaProps({}, i ? 0 : before)}${docxRuns({ text: ln, style: { pt: b.style?.pt, font: "Consolas" } })}</w:p>`).join("");
+-      default:
+-        return b.text || b.runs ? `<w:p>${docxParaProps(b, before)}${docxRuns(b)}</w:p>` : "";
+-    }
+-  };
+-
+-  // Page size and margins from the first page and the text area of all pages.
+-  const first = doc.pages[0] || { width: 595, height: 842, blocks: [] };
+-  const boxes = doc.pages.flatMap((p) => contentBlocks(p)).filter((b) => b.bbox).map((b) => b.bbox);
+-  const W = first.width || 595, H = first.height || 842;
+-  const areaLeft = boxes.length ? Math.min(...boxes.map((b) => b[0])) : 56.7;
+-  const margin = (v) => Math.round(Math.max(18, Math.min(144, v)) * TWIP);
+-  const mLeft = margin(areaLeft);
+-  const mRight = boxes.length ? margin(W - Math.max(...boxes.map((b) => b[2]))) : 1134;
+-  const mTop = boxes.length ? margin(Math.min(...boxes.map((b) => b[1])) - 12) : 1134;
+-  // Some room below the text: Word never breaks lines exactly as the page did, and a line
+-  // or two too many should stay on the page instead of opening a new one.
+-  const below = boxes.length ? H - Math.max(...boxes.map((b) => b[3])) : 0;
+-  const mBottom = boxes.length ? margin(below - 12 - Math.min(40, below * 0.5)) : 1134;
+-  // The language Word hyphenates in (the page hyphenated its lines too).
+-  const words = doc.pages.slice(0, 5).flatMap((p) => contentBlocks(p)).map((b) => b.text || "").join(" ").toLowerCase().split(/[^\p{L}]+/u);
+-  const count = (list) => words.filter((w) => list.includes(w)).length;
+-  const language = count(["the", "and", "of", "is", "that", "with", "for"]) > count(["de", "que", "não", "uma", "para", "com", "os", "em"]) ? "en-US" : "pt-BR";
+-
+-  // A run of blocks down one column, `left` being that column's left edge.
+-  // Returns the bottom of the last block.
+-  // `bottom` follows where Word's cursor really is: a paragraph is as tall as its lines
+-  // (not as its glyph boxes), so each one is centred on the place it had on the page and
+-  // the space before the next one absorbs the difference. Nothing piles up down the page.
+-  const TEXT = new Set(["paragraph", "heading", "list_item", "caption"]);
+-  const placed = (b) => {
+-    const top = b.bbox[1], h = b.bbox[3] - b.bbox[1];
+-    if (!TEXT.has(b.type)) return [top, h];
+-    const pt = b.style?.pt || 11, leading = b.format?.leading;
+-    const lines = leading ? Math.max(1, Math.round((h - pt) / leading) + 1) : 1;
+-    const tall = leading ? lines * leading : pt * 1.15;
+-    return [top + (h - tall) / 2, tall];
+-  };
+-  const flow = (blocks, bottom, left, out) => {
+-    for (let i = 0; i < blocks.length; i++) {
+-      const b = blocks[i];
+-      const [at, tall] = b.bbox ? placed(b) : [bottom + 6, 0];
+-      const before = Math.max(0, Math.min(H * 0.6, at - bottom));
+-      // Blocks side by side (logo + letterhead, two signatures): a borderless table row.
+-      const row = [b];
+-      while (b.bbox && i + row.length < blocks.length) {
+-        const n = blocks[i + row.length];
+-        const last = row[row.length - 1];
+-        if (!n.bbox) break;
+-        const overlap = Math.min(last.bbox[3], n.bbox[3]) - Math.max(last.bbox[1], n.bbox[1]);
+-        const minH = Math.min(last.bbox[3] - last.bbox[1], n.bbox[3] - n.bbox[1]);
+-        if (overlap < minH * 0.5 || n.bbox[0] < last.bbox[2] - 2 || n.type === "table") break;
+-        row.push(n);
+-      }
+-      if (row.length > 1) {
+-        const x0 = row[0].bbox[0];
+-        // Word adds ~5.4 pt of padding on each side of a cell: give each one that room.
+-        const widths = row.map((r, k) => Math.round(((k + 1 < row.length ? row[k + 1].bbox[0] : r.bbox[2] + 24) - r.bbox[0] + 12) * TWIP));
+-        const cells = row.map((r, k) => `<w:tc><w:tcPr><w:tcW w:w="${widths[k]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>${blockXml({ ...r, format: { ...(r.format || {}), indent: 0 } }, 0) || "<w:p/>"}</w:tc>`).join("");
+-        out.push(`${spacer(before)}<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblInd w:w="${Math.round(Math.max(0, x0 - left) * TWIP)}" w:type="dxa"/><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map((s) => `<w:${s} w:val="nil"/>`).join("")}</w:tblBorders></w:tblPr><w:tblGrid>${widths.map((w) => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid><w:tr>${cells}</w:tr></w:tbl>`);
+-        bottom = Math.max(bottom + before, Math.max(...row.map((r) => r.bbox[3])));
+-        i += row.length - 1;
+-        continue;
+-      }
+-      out.push(blockXml(b, before));
+-      bottom += before + tall;
+-    }
+-    return bottom;
+-  };
+-
+-  // Section properties: the page, plus the columns of one band.
+-  const areaRight = W - mRight / TWIP, textLeft = mLeft / TWIP;
+-  const sectPr = (cols, type) => {
+-    let colsXml = "";
+-    if (cols.length > 1) {
+-      const last = cols.length - 1;
+-      colsXml = `<w:cols w:num="${cols.length}" w:equalWidth="0">${cols.map((c, k) => {
+-        const from = k ? c[0] : textLeft, to = k < last ? c[1] : areaRight;
+-        const space = k < last ? ` w:space="${Math.round(Math.max(0, cols[k + 1][0] - c[1]) * TWIP)}"` : "";
+-        return `<w:col w:w="${Math.round(Math.max(36, to - from) * TWIP)}"${space}/>`;
+-      }).join("")}</w:cols>`;
+-    }
+-    return `<w:sectPr>${type ? `<w:type w:val="${type}"/>` : ""}<w:pgSz w:w="${Math.round(W * TWIP)}" w:h="${Math.round(H * TWIP)}"/><w:pgMar w:top="${mTop}" w:right="${mRight}" w:bottom="${mBottom}" w:left="${mLeft}" w:header="708" w:footer="708" w:gutter="0"/>${colsXml}</w:sectPr>`;
+-  };
+-  // A paragraph that takes (almost) no room: it carries a column break or ends a section.
+-  const tiny = (inner, sect = "") => `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/></w:rPr>${sect}</w:pPr>${inner}</w:p>`;
+-
+-  const pageBands = doc.pages.map((page) => bands(contentBlocks(page)));
+-  const multiColumn = pageBands.some((bs) => bs.some((band) => band.blocks.length > 1));
+-  const body = [];
+-  let finalSect = sectPr([], "");
+-  doc.pages.forEach((page, pi) => {
+-    const blocks = contentBlocks(page);
+-    const tops = blocks.filter((b) => b.bbox).map((b) => b.bbox[1]);
+-    let bottom = tops.length ? Math.min(...tops) : 0;
+-    if (!multiColumn) {
+-      if (pi > 0) body.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+-      flow(blocks, bottom, areaLeft, body);
+-      return;
+-    }
+-    // Columns on the page are columns in Word: one section per band.
+-    const list = pageBands[pi].length ? pageBands[pi] : [{ columns: [], blocks: [[]] }];
+-    list.forEach((band, bi) => {
+-      const sect = sectPr(band.blocks.length > 1 ? band.columns : [], bi ? "continuous" : pi ? "nextPage" : "");
+-      // Full columns flow into each other as text does in Word (the last band of a page
+-      // fills column by column, the others are balanced by Word): a few lines more or
+-      // less just reflow. A column that ends early gets a column break after it.
+-      const ends = band.blocks.map((col) => Math.max(bottom, ...col.filter((b) => b.bbox).map((b) => b.bbox[3])));
+-      const full = Math.max(...ends);
+-      const natural = band.blocks.every((col) => col.length) &&
+-        ends.every((e, k) => full - e <= 30 || (bi === list.length - 1 && k === ends.length - 1));
+-      let end = bottom, at = 0;
+-      band.blocks.forEach((col, k) => {
+-        if (!col.length) return;
+-        if (k > at && !natural) body.push(tiny('<w:r><w:br w:type="column"/></w:r>'.repeat(k - at)));
+-        at = k;
+-        end = Math.max(end, flow(col, bottom, band.blocks.length > 1 ? band.columns[k][0] : areaLeft, body));
+-      });
+-      bottom = end;
+-      if (pi === doc.pages.length - 1 && bi === list.length - 1) finalSect = sect;
+-      else body.push(tiny("", sect));
+-    });
+-  });
+-
+-  media.forEach((img, k) => zip.file(`word/media/image${k + 1}.png`, img.data, { base64: true }));
+-  const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+-  zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${body.join("")}${finalSect}</w:body></w:document>`);
+-  const headingStyles = [1, 2, 3, 4, 5, 6].map((l) => `<w:style w:type="paragraph" w:styleId="Heading${l}"><w:name w:val="heading ${l}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:outlineLvl w:val="${l - 1}"/></w:pPr><w:rPr><w:b/><w:sz w:val="${[32, 28, 26, 24, 22, 22][l - 1]}"/></w:rPr></w:style>`).join("");
+-  zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${NS}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>${headingStyles}<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/><w:basedOn w:val="Normal"/><w:rPr><w:i/><w:color w:val="555555"/><w:sz w:val="20"/></w:rPr></w:style></w:styles>`);
+-  zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>${media.map((_, k) => `<Relationship Id="rImg${k}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${k + 1}.png"/>`).join("")}</Relationships>`);
+-  zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+-  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`);
+-  zip.file("word/settings.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings ${NS}><w:autoHyphenation/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`);
+-  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+-}
+-
+-// ---------------------------------------------------------------- zip bundle
+-export async function toZip(doc, stem, { math = "unicode" } = {}) {
+-  const zip = new JSZip();
+-  zip.file(`${stem}.md`, toMarkdown(doc, { images: "ref", math }));
+-  zip.file(`${stem}.txt`, toText(doc, { math }));
+-  zip.file(`${stem}.html`, toHtml(doc, { images: "ref" }));
+-  zip.file(`${stem}.json`, toJson(doc, { embedImages: false }));
+-  if (tablesOf(doc).length) zip.file(`${stem}-tabelas.csv`, "\uFEFF" + tablesCsv(doc));
+-  for (const b of imagesOf(doc)) zip.file(`images/${b.image.name}`, b.image.data, { base64: true });
+-  return zip.generateAsync({ type: "blob", mimeType: "application/zip" });
+-}
+-
+-// ---------------------------------------------------------------- formats registry
+-export const FORMATS = [
+-  { id: "md", label: "Markdown", ext: "md", hint: "RAG / LLM, com imagens embutidas" },
+-  { id: "txt", label: "Texto puro", ext: "txt", hint: "só o texto, em ordem de leitura" },
+-  { id: "html", label: "HTML", ext: "html", hint: "página única, com posições (data-bbox)" },
+-  { id: "json", label: "JSON estruturado", ext: "json", hint: "blocos, bbox, tabelas, LaTeX" },
+-  { id: "csv", label: "CSV das tabelas", ext: "csv", hint: "todas as tabelas" },
+-  { id: "xlsx", label: "Excel", ext: "xlsx", hint: "uma planilha por tabela" },
+-  { id: "docx", label: "Word", ext: "docx", hint: "títulos, listas, tabelas e figuras" },
+-  { id: "zip", label: "Pacote ZIP", ext: "zip", hint: "tudo + pasta images/" },
+-];
+-
+-export async function exportAs(doc, format, stem, { math = "unicode" } = {}) {
+-  const text = (s, type) => new Blob([s], { type: `${type};charset=utf-8` });
+-  switch (format) {
+-    case "md": return text(toMarkdown(doc, { images: "embed", math }), "text/markdown");
+-    case "txt": return text(BOM + toText(doc, { math }), "text/plain"); // BOM: Notepad/Excel read UTF-8
+-    case "html": return text(toHtml(doc, { images: "embed" }), "text/html");
+-    case "json": return text(toJson(doc, { embedImages: true }), "application/json");
+-    case "csv": return text("\uFEFF" + tablesCsv(doc), "text/csv");
+-    case "xlsx": return toXlsx(doc);
+-    case "docx": return toDocx(doc);
+-    case "zip": return toZip(doc, stem, { math });
+-    default: throw new Error(`Formato desconhecido: ${format}`);
+-  }
+-}

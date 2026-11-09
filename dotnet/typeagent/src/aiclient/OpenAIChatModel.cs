@@ -63,10 +63,6 @@ public class OpenAIChatModel : ModelApi, IChatModel
             {
                 request.temperature = translationSettings.Temperature;
             }
-            if (translationSettings.MaxTokens > 0)
-            {
-                request.max_tokens = translationSettings.MaxTokens;
-            }
             if (translationSettings.Seed != 0)
             {
                 request.seed = translationSettings.Seed;
@@ -107,7 +103,6 @@ public class OpenAIChatModel : ModelApi, IChatModel
         {
             messages = Message.Create(prompt),
             temperature = CompletionSettings.Temperature,
-            max_tokens = CompletionSettings.MaxTokens,
             seed = CompletionSettings.Seed,
             top_p = CompletionSettings.TopP,
         };
@@ -127,7 +122,6 @@ public class OpenAIChatModel : ModelApi, IChatModel
         public string? model { get; set; }
         public Message[]? messages { get; set; }
         public double? temperature { get; set; }
-        public int? max_tokens { get; set; }
         public ResponseFormat? response_format { get; set; }
         public double? seed { get; set; }
         public int? top_p { get; set; }

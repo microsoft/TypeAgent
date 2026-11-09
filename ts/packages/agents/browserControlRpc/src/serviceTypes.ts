@@ -1,9 +1,491 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryPage,
+    QuestionSummaryRequest,
+    QuestionSummaryPage,
+    QuestionReadRequest,
+    MemoryQuestion,
+    KnowledgeStatus,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointWait,
+    AcquisitionRequest,
+    QuestionInventory,
+    QuestionEditRequest,
+    SchemaViewPageRequest,
+    SchemaViewPage,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
+    MemoryServiceCapabilities,
+    ViewBuildRequest,
+    ViewBuildJobRequest,
+    ViewBuildJob,
+    ViewMaintenancePlanRequest,
+    ViewMaintenancePlan,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewSnapshot,
+    ViewVersion,
+    ViewHistoryEntry,
+    ViewMergeConflict,
+    ViewPublishRequest,
+    ViewPublicationStatus,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewSearchRequest,
+    ViewSearchMatch,
+    MemoryEvent,
+    MemoryEventListRequest,
+    SourceSynopsisPreview,
+    SourceSynopsis,
+    SourceSynopsisRequest,
+    TopicQueryRequest,
+    TopicQueryPage,
+} from "@typeagent/memory-service";
+import type { CrosswordDecisionCapabilities } from "./crosswordDecisionTypes.js";
+
+export type MemoryAcquisitionProgress = Pick<
+    AcquisitionRequest,
+    | "corpusId"
+    | "requestId"
+    | "sourceId"
+    | "state"
+    | "createdAt"
+    | "updatedAt"
+    | "calls"
+    | "retries"
+    | "consumers"
+> & {
+    hasError: boolean;
+    receipt?: Pick<
+        NonNullable<AcquisitionRequest["receipt"]>,
+        "jobId" | "revisionId" | "state"
+    >;
+};
+
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
 // =============================================
+
+export type MemoryCenterCorpus = {
+    corpusId: string;
+    name: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    status: "ready" | "indexing" | "degraded" | "error";
+    documentCount: number;
+};
+
+export type MemoryCenterCorpusStatus = MemoryCenterCorpus & {
+    sourceCount: number;
+    revisionCount: number;
+    readyRevisionCount: number;
+    failedRevisionCount: number;
+    activeJobCount: number;
+    indexVersion: string;
+};
+
+export type MemoryCenterRevision = {
+    revisionId: string;
+    sourceId: string;
+    contentHash: string;
+    mimeType: string;
+    capturedAt?: string;
+    sourceModifiedAt?: string;
+    indexedAt?: string;
+    synopsis?: SourceSynopsisPreview;
+    pipelineVersion: string;
+    pipeline?: {
+        mode: "basic" | "summary" | "content" | "full";
+        maxCharsPerChunk?: number;
+    };
+    state: "accepted" | "processing" | "ready" | "failed" | "deleted";
+};
+
+export type MemoryCenterSource = {
+    sourceId: string;
+    corpusId: string;
+    sourceType: "web" | "markdown" | "text" | "html" | "vtt";
+    canonicalUri?: string;
+    title: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+    activeRevisionId: string;
+    revisions: MemoryCenterRevision[];
+};
+
+export type MemoryCenterPage<T> = {
+    items: T[];
+    total: number;
+    nextContinuationToken?: string;
+};
+
+export type MemoryCenterContent = {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    mimeType: string;
+    offset: number;
+    content: string;
+    totalChars: number;
+    truncated: boolean;
+    nextOffset?: number;
+};
+
+export type MemoryCenterKnowledge = {
+    entities: Array<{
+        name: string;
+        types: string[];
+        mentionCount: number;
+        sourceIds: string[];
+    }>;
+    topics: Array<{
+        name: string;
+        mentionCount: number;
+        sourceIds: string[];
+    }>;
+    relationships: Array<{
+        fromEntity: string;
+        toEntity: string;
+        relationshipType: string;
+        count: number;
+        sourceIds: string[];
+    }>;
+};
+
+export type MemoryCenterJobState =
+    | "accepted"
+    | "validating"
+    | "normalizing"
+    | "chunking"
+    | "extracting-knowledge"
+    | "embedding"
+    | "building-indexes"
+    | "persisting"
+    | "complete"
+    | "partial"
+    | "failed"
+    | "cancelling"
+    | "cancelled";
+
+export type MemoryCenterJob = {
+    jobId: string;
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    state: MemoryCenterJobState;
+    progress: {
+        completed: number;
+        total?: number;
+        message?: string;
+        stage?: MemoryCenterJobState;
+    };
+    createdAt: string;
+    updatedAt: string;
+    error?: string;
+    warnings: string[];
+};
+
+export type MemoryCenterForgetPreview = {
+    corpusId: string;
+    sourceId: string;
+    activeRevisionId: string;
+    revisionCount: number;
+    derivedEntityCount: number;
+    derivedTopicCount: number;
+    derivedRelationshipCount: number;
+    confirmationToken: string;
+    expiresAt: string;
+};
+
+export type MemoryCenterIngestResult = {
+    jobId: string;
+    sourceId: string;
+    revisionId: string;
+    state: MemoryCenterJobState;
+    statusUri: string;
+};
+
+export type MemoryCenterReindexResult = {
+    corpusId: string;
+    sourceId?: string;
+    sourceCount: number;
+    indexVersion: string;
+};
+
+export type MemoryCenterKnowledgeSuppression = {
+    sourceId: string;
+    kind: "entity" | "topic";
+    name: string;
+};
+
+export type MemoryCenterActivityType =
+    | "visited"
+    | "bookmarked"
+    | "captured"
+    | "imported";
+
+export type MemoryCenterActivity = {
+    eventId: string;
+    corpusId: string;
+    eventType: MemoryCenterActivityType;
+    observedAt: string;
+    eventTime: string;
+    linkedSourceIds?: string[];
+    metadata?: Record<string, unknown>;
+};
+
+export type MemoryCenterActivityFilter = {
+    dateFrom?: string;
+    dateTo?: string;
+    domains?: string[];
+    eventTypes?: MemoryCenterActivityType[];
+    sources?: string[];
+    sourceIds?: string[];
+    pageTypes?: string[];
+    pageSize?: number;
+    continuationToken?: string;
+};
+
+export type MemoryCenterInvokeFunctions = {
+    memoryListViewSummaries(
+        params: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage>;
+    memoryListViewBuildSummaries(
+        params: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    memoryGetViewPublications(
+        params: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
+    memoryGetKnowledgeStatus(params: {
+        corpusId: string;
+    }): Promise<KnowledgeStatus>;
+    memoryUpdateKnowledgeDiscovery(
+        params: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus>;
+    memoryCreateKnowledgeCheckpoint(
+        params: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint>;
+    memoryGetKnowledgeCheckpoint(
+        params: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint>;
+    memoryWaitForKnowledgeCheckpoint(
+        params: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint>;
+    memoryGetViewPublicationPolicy(params: {
+        corpusId: string;
+    }): Promise<ViewPublicationPolicy>;
+    memoryUpdateViewPublicationPolicy(
+        params: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy>;
+    memoryGetViewPublication(
+        params: ViewReadRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryPublishView(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryRetryViewIndex(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memorySearchViews(params: ViewSearchRequest): Promise<ViewSearchMatch[]>;
+    memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
+    memoryQueryTopics(params: TopicQueryRequest): Promise<TopicQueryPage>;
+    memoryRebuildTopics(params: { corpusId: string }): Promise<ViewBuildJob>;
+    memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
+    memoryListQuestionSummaries(
+        params: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage>;
+    memoryGetQuestion(
+        params: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined>;
+    memoryListQuestions(params: {
+        corpusId: string;
+    }): Promise<QuestionInventory>;
+    memoryListAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryRunAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryCancelAcquisition(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<MemoryAcquisitionProgress>;
+    memoryEditQuestion(params: QuestionEditRequest): Promise<ViewHistoryEntry>;
+    memoryGetViewPage(params: SchemaViewPageRequest): Promise<SchemaViewPage>;
+    memoryProposeSchemaView(
+        params: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry>;
+    memoryDiscoverSchemaQuestions(
+        params: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry>;
+    memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
+    memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
+    memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;
+    memoryViewHistory(params: ViewReadRequest): Promise<ViewHistoryEntry[]>;
+    memoryBuildViews(params: ViewBuildRequest): Promise<ViewBuildJob>;
+    memoryPlanViewMaintenance(
+        params: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan>;
+    memoryMaintainViews(
+        params: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult>;
+    memoryUpdateViewMaintenance(
+        params: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry>;
+    memoryGetViewMaintenance(
+        params: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined>;
+    memoryGetViewBuild(
+        params: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined>;
+    memoryListViewBuilds(params: { corpusId: string }): Promise<ViewBuildJob[]>;
+    memoryCancelViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryRetryViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryContinueViewBuild(
+        params: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob>;
+    memoryRefreshExtensionViews(params: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]>;
+    memoryGetViewConflict(
+        params: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined>;
+    memoryResolveViewConflict(
+        params: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry>;
+    memoryCreateCorpus(params: {
+        name: string;
+        description?: string;
+    }): Promise<MemoryCenterCorpus>;
+    memoryListCorpora(params: {}): Promise<MemoryCenterCorpus[]>;
+    memoryListEvents(
+        params: MemoryEventListRequest,
+    ): Promise<MemoryCenterPage<MemoryEvent>>;
+    memoryGetCorpus(params: {
+        corpusId: string;
+    }): Promise<MemoryCenterCorpusStatus | undefined>;
+    memoryListSources(params: {
+        corpusId: string;
+        pageSize?: number;
+        continuationToken?: string;
+        query?: string;
+        sourceTypes?: MemoryCenterSource["sourceType"][];
+    }): Promise<MemoryCenterPage<MemoryCenterSource>>;
+    memoryGetSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterSource | undefined>;
+    memoryGetSourceContent(params: {
+        corpusId: string;
+        sourceId: string;
+        revisionId?: string;
+        offset?: number;
+        maxChars?: number;
+        indexedLocator?: string;
+    }): Promise<MemoryCenterContent>;
+    memoryGetSourceSynopsis(
+        params: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis>;
+    memoryGetSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterKnowledge>;
+    memoryListSourceKnowledgeSuppressions(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memorySuppressSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memoryRestoreSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memoryImportDocument(params: {
+        corpusId: string;
+        title: string;
+        markdown: string;
+        canonicalUri?: string;
+        tags?: string[];
+    }): Promise<MemoryCenterIngestResult>;
+    memoryReplaceSource(params: {
+        corpusId: string;
+        sourceId: string;
+        expectedActiveRevisionId: string;
+        text: string;
+        retainRevisionHistory?: boolean;
+    }): Promise<MemoryCenterIngestResult>;
+    memoryPreviewForgetSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterForgetPreview>;
+    memoryForgetSource(params: {
+        corpusId: string;
+        sourceId: string;
+        confirmationToken: string;
+    }): Promise<{
+        corpusId: string;
+        sourceId: string;
+        deletedRevisionCount: number;
+        indexVersion: string;
+    }>;
+    memoryReindexCorpus(params: {
+        corpusId: string;
+    }): Promise<MemoryCenterReindexResult>;
+    memoryReindexSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterReindexResult>;
+    memoryListJobs(params: {
+        corpusId?: string;
+        sourceId?: string;
+        pageSize?: number;
+        continuationToken?: string;
+    }): Promise<MemoryCenterPage<MemoryCenterJob>>;
+    memoryCancelJob(params: {
+        jobId: string;
+    }): Promise<MemoryCenterJob | undefined>;
+    memoryListActivity(
+        params: MemoryCenterActivityFilter,
+    ): Promise<MemoryCenterPage<MemoryCenterActivity>>;
+    memoryForgetActivity(
+        params: Omit<
+            MemoryCenterActivityFilter,
+            "pageSize" | "continuationToken"
+        > & {
+            eventIds?: string[];
+        },
+    ): Promise<{
+        corpusId: string;
+        deletedEventCount: number;
+        deletedSourceCount: number;
+        retainedLinkedSourceIds: string[];
+        indexVersion: string;
+    }>;
+};
 
 export type BrowserAgentInvokeFunctions = {
     // Knowledge extraction
@@ -61,23 +543,9 @@ export type BrowserAgentInvokeFunctions = {
         combineStrategies?: boolean;
     }): Promise<any>;
 
-    getHierarchicalTopics(params: {
-        centerTopic?: string;
-        includeRelationships?: boolean;
-        maxDepth?: number;
-        domain?: string;
-    }): Promise<any>;
-
     getTopicImportanceLayer(params: {
         maxNodes?: number;
         minImportanceThreshold?: number;
-    }): Promise<any>;
-
-    getTopicViewportNeighborhood(params: {
-        centerTopic: string;
-        viewportTopicIds: string[];
-        maxNodes?: number;
-        maxDepth?: number;
     }): Promise<any>;
 
     getTopicMetrics(params: { topicId: string }): Promise<any>;
@@ -110,8 +578,6 @@ export type BrowserAgentInvokeFunctions = {
     getKnowledgeGraphStatus(params: {}): Promise<any>;
     buildKnowledgeGraph(params: any): Promise<any>;
     rebuildKnowledgeGraph(params: {}): Promise<any>;
-    testMergeTopicHierarchies(params: {}): Promise<any>;
-    mergeTopicHierarchies(params: {}): Promise<any>;
     getGlobalGraphLayoutData(params: any): Promise<any>;
 
     getEntityNeighborhood(params: {
@@ -154,7 +620,14 @@ export type BrowserAgentInvokeFunctions = {
         textOnly?: boolean;
         mode?: string;
         extractedKnowledge?: any;
-    }): Promise<any>;
+        activityType?: "visited" | "captured";
+    }): Promise<{
+        indexed: boolean;
+        knowledgeExtracted: boolean;
+        entityCount: number;
+        warnings?: string[];
+        error?: string;
+    }>;
 
     checkPageIndexStatus(params: { url: string }): Promise<any>;
     getPageIndexedKnowledge(params: { url: string }): Promise<any>;
@@ -249,7 +722,7 @@ export type BrowserAgentInvokeFunctions = {
     deleteTabIdFromIndex(params: any): Promise<any>;
     getTabIdFromIndex(params: any): Promise<any>;
     resetTabIdToIndex(params: any): Promise<any>;
-};
+} & MemoryCenterInvokeFunctions;
 
 // Fire-and-forget events from agent → extension
 export type BrowserAgentCallFunctions = {
@@ -287,6 +760,7 @@ export type ExtensionLocalInvokeFunctions = {
     getViewHostUrl(): Promise<{ url?: string }>;
 
     // Settings
+    getCrosswordDecisionCapabilities(): Promise<CrosswordDecisionCapabilities>;
     settingsUpdated(params: { settings: any }): Promise<{ success: boolean }>;
     autoIndexSettingChanged(params: {
         enabled: boolean;
@@ -462,7 +936,8 @@ export type ChatPanelCallFunctions = {
 // =============================================
 
 export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
-    ChatPanelInvokeFunctions & {
+    ChatPanelInvokeFunctions &
+    MemoryCenterInvokeFunctions & {
         // Agent-forwarded operations (the service worker forwards these to the agent)
         // Listed separately because the service worker acts as a proxy
         getLibraryStats(params?: any): Promise<any>;
@@ -470,9 +945,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         searchWebMemories(params: any): Promise<any>;
         searchByEntities(params: any): Promise<any>;
         searchByTopics(params: any): Promise<any>;
-        getHierarchicalTopics(params: any): Promise<any>;
         getTopicImportanceLayer(params: any): Promise<any>;
-        getTopicViewportNeighborhood(params: any): Promise<any>;
         getTopicMetrics(params: any): Promise<any>;
         getTopicDetails(params: any): Promise<any>;
         getEntityDetails(params: any): Promise<any>;
@@ -501,8 +974,6 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         getKnowledgeGraphStatus(): Promise<any>;
         buildKnowledgeGraph(params: any): Promise<any>;
         rebuildKnowledgeGraph(): Promise<any>;
-        testMergeTopicHierarchies(): Promise<any>;
-        mergeTopicHierarchies(): Promise<any>;
         getGlobalGraphLayoutData(params: any): Promise<any>;
         getEntityNeighborhood(params: any): Promise<any>;
         getEntityNeighborhoodLayoutData(params: any): Promise<any>;

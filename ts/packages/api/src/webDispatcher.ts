@@ -5,6 +5,7 @@ import {
     awaitCommand,
     CommandResult,
     createDispatcher,
+    DefaultIndexingServiceRegistry,
     ProcessCommandOptions,
     SubmitResult,
 } from "agent-dispatcher";
@@ -16,25 +17,34 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
+    getDefaultAppAgentSources,
     getDefaultConstructionProvider,
+    getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
 import WebSocket from "ws";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import registerDebug from "debug";
 import { FullAction } from "@typeagent/agent-cache";
+import {
+    HOSTED_API_AGENT_CONFIG,
+    loadHostedApiAgentProviders,
+    type ApiAgentProfile,
+} from "./hostedAgentProfile.js";
 
 const debug = registerDebug("typeagent:webserver:api");
 registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
-    close(): void;
+    close(): Promise<void>;
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
-export async function createWebDispatcher(): Promise<WebDispatcher> {
+export async function createWebDispatcher(
+    structuredLogs: boolean,
+    agentProfile: ApiAgentProfile = "default",
+): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
@@ -48,23 +58,38 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     debug("Creating Web Dispatcher...");
 
     const instanceDir = getInstanceDir();
+    const hosted = agentProfile === "hosted";
+    const appAgentProviders = hosted
+        ? await loadHostedApiAgentProviders()
+        : getDefaultAppAgentProviders(instanceDir);
+    const appAgentSources = hosted
+        ? []
+        : getDefaultAppAgentSources(instanceDir, {
+              excludePathSources: true,
+          });
+    const indexingServiceRegistry = hosted
+        ? new DefaultIndexingServiceRegistry()
+        : await getIndexingServiceRegistry(instanceDir);
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
-        appAgentProviders: getDefaultAppAgentProviders(instanceDir),
-        appAgentSources: [
-            getDefaultAppAgentSource(instanceDir, {
-                excludePathSources: true,
-            }),
-        ],
+        appAgentProviders,
+        appAgentSources,
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs,
+        },
         clientIO: clientIO,
-        constructionProvider: getDefaultConstructionProvider(),
-        indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
+        ...(hosted
+            ? getDefaultDispatcherOptions(HOSTED_API_AGENT_CONFIG)
+            : {
+                  constructionProvider: getDefaultConstructionProvider(),
+              }),
+        indexingServiceRegistry,
     });
 
     let settingSummary: string = "";
@@ -191,8 +216,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             // Always update setting on first connect
             updateSettingSummary(true);
         },
-        close: () => {
-            dispatcher.close();
+        close: async () => {
+            await dispatcher.close();
         },
         handleAction: handleAction,
     };

@@ -84,7 +84,13 @@ For example: apple.com could be:
     );
 
     // make the request
-    const chatResponse = await chat.translate(pageMarkdown);
+    const chatResponse = await chat.translate(pageMarkdown, [
+        {
+            role: "system",
+            content:
+                "Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve required aliases even when that needs a longer answer.",
+        },
+    ]);
 
     return chatResponse;
 }
@@ -96,14 +102,14 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
-                openai.GPT_5_NANO,
+                openai.GPT_6_LUNA,
                 ["websiteAliases"],
             );
         } else {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
-                openai.GPT_5,
+                openai.GPT_6_1_TERRA,
                 ["websiteAliases"],
             );
         }
@@ -111,8 +117,6 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
 
     const completionSettings: CompletionSettings = {
         temperature: 1.0,
-        // Max response tokens
-        max_tokens: 1000,
         // createChatModel will remove it if the model doesn't support it
         response_format: { type: "json_object" },
     };

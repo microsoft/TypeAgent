@@ -108,10 +108,10 @@ export default class Prompt extends Command {
                     throw new Error(complete.message);
                 }
             }
-        } catch (e: any) {
-            console.log("GPT error:");
-            console.log(e.message);
-            return;
+        } catch (error: unknown) {
+            this.error(
+                `GPT error: ${error instanceof Error ? error.message : String(error)}`,
+            );
         }
 
         if (flags.json) {

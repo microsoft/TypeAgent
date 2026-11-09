@@ -31,6 +31,8 @@ import { PowerShellNetworkActions } from "./networkActionsSchema.mts";
       -> { actionName: "portListeners", parameters: {} }
   | (show|list) port listeners
       -> { actionName: "portListeners", parameters: {} }
+  | (show|list) (me)? (the)? (processes|programs) (using|on) (network)? ports (on my machine)?
+      -> { actionName: "portListeners", parameters: {} }
   | (which|what) (process|program) is (using|on) port $(port:number)
       -> { actionName: "portListeners", parameters: { port } }
   | netstat

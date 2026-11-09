@@ -273,6 +273,45 @@ describe("agent running rail", () => {
         expect(agentRail(root)).toBeNull();
     });
 
+    it("appends request metadata inside the existing response bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage(
+            "completed",
+            "agent",
+            undefined,
+            undefined,
+            "req-1",
+        );
+
+        expect(
+            panel.appendRequestMetadata(
+                "req-1",
+                "Permissions: All tools for this session.",
+            ),
+        ).toBe(true);
+        expect(
+            root.querySelectorAll(".chat-message-container-agent"),
+        ).toHaveLength(1);
+        const metadata = root.querySelector(".chat-response-metadata");
+        expect(metadata?.textContent).toBe(
+            "Permissions: All tools for this session.",
+        );
+        expect(
+            metadata?.closest(".chat-message-container-agent")?.textContent,
+        ).toContain("completed");
+    });
+
+    it("reports when request metadata has no response bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+
+        expect(panel.appendRequestMetadata("req-1", "Permissions: Once.")).toBe(
+            false,
+        );
+        expect(root.querySelector(".chat-response-metadata")).toBeNull();
+    });
+
     it("setIdle removes the working rail", () => {
         const { root, panel } = makePanel({ onCancel: jest.fn() });
         panel.addUserMessage("hi", "req-1");
@@ -425,6 +464,71 @@ describe("agent running rail", () => {
         expect(root.textContent).toContain("Thinking Tokens:");
         expect(root.textContent).toContain("~100");
         expect(root.textContent).toContain("(60+40)");
+    });
+
+    it("renders the Trace ID line immediately below Action Tokens when provided", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "response",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+            },
+            traceId: "abcd1234abcd1234abcd1234abcd1234",
+        });
+
+        // The canonical OTel trace id lives in the agent-bubble metrics hover,
+        // rendered right after Action Tokens so users can copy it out.
+        expect(root.textContent).toContain("Trace ID:");
+        expect(root.textContent).toContain("abcd1234abcd1234abcd1234abcd1234");
+
+        // Assert ordering: Trace ID appears after Action Tokens and before
+        // Thinking Tokens / phase marks would (if any).
+        const agentMetrics = root.querySelector(
+            ".chat-message-agent .metrics-details",
+        );
+        expect(agentMetrics).not.toBeNull();
+        const html = (agentMetrics as HTMLElement).innerHTML;
+        const actionIdx = html.indexOf("Action Tokens:");
+        const traceIdx = html.indexOf("Trace ID:");
+        expect(actionIdx).toBeGreaterThanOrEqual(0);
+        expect(traceIdx).toBeGreaterThan(actionIdx);
+    });
+
+    it("omits the Trace ID line when no traceId is provided", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "response",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+            },
+        });
+
+        expect(root.textContent).toContain("Action Tokens:");
+        expect(root.textContent).not.toContain("Trace ID:");
     });
 });
 
@@ -978,6 +1082,68 @@ describe("icons", () => {
             const el = make();
             expect(el.tagName).toBe("I");
             expect(el.querySelector("svg")).not.toBeNull();
+        }
+    });
+});
+
+describe("Escape / completions propagation", () => {
+    // The host's document-level Escape handler denies the visible permission
+    // prompt and drives the double-Esc "cancel everything" clock. When Esc is
+    // consumed purely to dismiss a completion popup, chat-ui must stop
+    // propagation so those host actions don't fire.
+    it("stops propagation when Esc dismisses local chat completions", async () => {
+        jest.useFakeTimers();
+        try {
+            const root = document.createElement("div");
+            document.body.appendChild(root);
+            const panel = new ChatPanel(root, {
+                platformAdapter: { handleLinkClick() {} },
+                getCompletions: async () => ({
+                    completions: ["help", "history"],
+                    prefix: "@",
+                    startIndex: 0,
+                }),
+                onSend() {},
+            });
+            const input = root.querySelector<HTMLElement>("#phraseDiv")!;
+            // Populate the input so the completion fetch runs.
+            input.textContent = "@";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            await jest.runOnlyPendingTimersAsync();
+            // A pending promise chain resolves the completions.
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(
+                (panel as unknown as { completions: string[] }).completions
+                    .length,
+            ).toBeGreaterThan(0);
+
+            let sawEscapeOnDoc = false;
+            const docListener = (e: KeyboardEvent) => {
+                if (e.key === "Escape") sawEscapeOnDoc = true;
+            };
+            document.addEventListener("keydown", docListener);
+            try {
+                input.dispatchEvent(
+                    new KeyboardEvent("keydown", {
+                        key: "Escape",
+                        bubbles: true,
+                        cancelable: true,
+                    }),
+                );
+            } finally {
+                document.removeEventListener("keydown", docListener);
+            }
+            // Chat-ui called stopPropagation, so the doc listener never fired.
+            expect(sawEscapeOnDoc).toBe(false);
+            // And the completion popup is cleared.
+            expect(
+                (panel as unknown as { completions: string[] }).completions
+                    .length,
+            ).toBe(0);
+            document.body.removeChild(root);
+        } finally {
+            jest.useRealTimers();
         }
     });
 });
@@ -1576,6 +1742,30 @@ describe("blocking prompt ordering (reasoning ask_user)", () => {
         // Resolve the prompt so no timer/promise dangles.
         root.querySelector<HTMLButtonElement>(".choice-button")!.click();
         await expect(answered).resolves.toBe(0);
+    });
+});
+
+describe("security approval prompt cancellation", () => {
+    it("removes the card, settles the promise and ignores stale buttons", async () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        const controller = new AbortController();
+        const approval = panel.addChoicePrompt(
+            "Authorize project script",
+            [
+                { label: "Run", value: 0 },
+                { label: "Cancel", value: 1 },
+            ],
+            { defaultValue: 1, signal: controller.signal },
+        );
+        const button = root.querySelector<HTMLButtonElement>(".choice-button")!;
+        expect(root.textContent).toContain("Authorize project script");
+        const rejected = expect(approval).rejects.toThrow("Stopped");
+        controller.abort(new Error("Stopped"));
+        await rejected;
+        expect(root.querySelector(".choice-panel")).toBeNull();
+        expect(root.textContent).not.toContain("Authorize project script");
+        button.click();
+        await expect(approval).rejects.toThrow("Stopped");
     });
 });
 

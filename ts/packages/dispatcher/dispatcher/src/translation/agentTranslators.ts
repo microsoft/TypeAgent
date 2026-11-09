@@ -31,7 +31,10 @@ import {
 } from "@typeagent/action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
-import { CompleteUsageStatsCallback } from "@typeagent/aiclient";
+import {
+    CompleteUsageStatsCallback,
+    withChatModelTelemetryPurpose,
+} from "@typeagent/aiclient";
 import { PromptLogger } from "@typeagent/telemetry";
 import type { UserContext } from "./userContext.js";
 
@@ -245,6 +248,7 @@ export function loadAgentJsonTranslator<
     promptLogger?: PromptLogger,
     entityPromptShape: EntityPromptShape = "facets",
     entityPathNavigationEnabled: boolean = false,
+    reasoningEffort?: JsonTranslatorOptions<T>["reasoningEffort"],
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
@@ -260,6 +264,7 @@ export function loadAgentJsonTranslator<
         schemaNameMap,
         {
             model,
+            reasoningEffort,
             promptLogger,
         },
         entityPromptShape,
@@ -324,13 +329,15 @@ function createTypeAgentTranslator<
                 userContext,
             );
 
-            return streamingTranslator.translate(
-                requestPrompt,
-                history?.promptSections,
-                attachments,
-                cb,
-                usageCallback,
-                signal,
+            return withChatModelTelemetryPurpose("action-generation", () =>
+                streamingTranslator.translate(
+                    requestPrompt,
+                    history?.promptSections,
+                    attachments,
+                    cb,
+                    usageCallback,
+                    signal,
+                ),
             );
         },
         // No streaming, no history, no attachments.
@@ -344,7 +351,9 @@ function createTypeAgentTranslator<
                 entityPromptShape,
                 entityPathNavigationEnabled,
             );
-            return altTranslator.translate(requestPrompt);
+            return withChatModelTelemetryPurpose("action-validation", () =>
+                altTranslator.translate(requestPrompt),
+            );
         },
         getSchemaName(actionName: string) {
             return schemaNameMap.get(actionName);

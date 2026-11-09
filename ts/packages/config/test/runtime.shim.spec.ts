@@ -7,8 +7,63 @@ import {
     configToEnv,
     type FlatEnv,
 } from "../src/index.js";
+import { configToTree, typedSectionToFlat } from "../src/runtime/tree.js";
 
 describe("configToEnv: shim projection", () => {
+    test.each(["responses", "chat_completions"])(
+        "round-trips an explicit wire model for %s without other overrides",
+        (wireApi) => {
+            const tree = {
+                azureOpenAI: {
+                    deployments: {
+                        gpt_6_1_terra: {
+                            endpoints: [
+                                {
+                                    endpoint:
+                                        "https://example-eastus.services.ai.azure.com/openai/v1/responses",
+                                    model: "gpt-6.1-terra",
+                                    wireApi,
+                                },
+                            ],
+                        },
+                    },
+                },
+            };
+            const config = buildConfig(
+                typedSectionToFlat("azureOpenAI", tree.azureOpenAI),
+            );
+            const endpoints =
+                config.azureOpenAI.deployments.get("gpt_6_1_terra")!.endpoints;
+            expect(endpoints[0].model).toBe("gpt-6.1-terra");
+            const fromEnv = buildConfig(configToEnv(config));
+            const projectedTree = configToTree(config);
+            const fromTree = buildConfig(
+                typedSectionToFlat("azureOpenAI", projectedTree.azureOpenAI),
+            );
+            for (const roundTrip of [fromEnv, fromTree]) {
+                expect(
+                    roundTrip.azureOpenAI.deployments.get("gpt_6_1_terra")!
+                        .endpoints,
+                ).toEqual(endpoints);
+            }
+        },
+    );
+
+    test("rejects a non-string endpoint model", () => {
+        expect(() =>
+            typedSectionToFlat("azureOpenAI", {
+                deployments: {
+                    terra: [
+                        {
+                            endpoint: "https://example-eastus.test",
+                            model: 61,
+                        },
+                    ],
+                },
+            }),
+        ).toThrow(/model/);
+    });
+
     test("round-trips Azure OpenAI deployment endpoints", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_API_KEY: "identity",
@@ -22,6 +77,47 @@ describe("configToEnv: shim projection", () => {
         for (const [k, v] of Object.entries(flat)) {
             expect(projected[k]).toBe(v);
         }
+    });
+
+    test("round-trips a non-default wireApi through the POOL override", () => {
+        // A non-default wireApi must survive buildConfig -> configToEnv so
+        // that an unmigrated consumer reading the flat env sees it. The
+        // POOL override is the only channel that can express wireApi.
+        const flat: FlatEnv = {
+            AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex-eastus",
+            AZURE_OPENAI_API_KEY_GPT_5_CODEX_EASTUS: "identity",
+            AZURE_OPENAI_POOL_GPT_5_CODEX:
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,mode:PAYG,priority:2,wireApi:responses}]",
+        };
+        const projected = configToEnv(buildConfig(flat));
+        expect(projected.AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS).toBe(
+            "https://codex-eastus",
+        );
+        // The emitted POOL override carries the wireApi back out.
+        expect(projected.AZURE_OPENAI_POOL_GPT_5_CODEX).toContain(
+            "wireApi:responses",
+        );
+        // And feeding the projection back in yields the same wireApi.
+        const reparsed = buildConfig(projected);
+        const ep = reparsed.azureOpenAI.deployments
+            .get("gpt_5_codex")!
+            .endpoints.find((e) => e.region === "eastus")!;
+        expect(ep.wireApi).toBe("responses");
+    });
+
+    test("default (omitted) wireApi is not emitted into the POOL override", () => {
+        // Back-compat: a plain chat_completions endpoint must project to the
+        // exact same env it came from, with no POOL override introduced.
+        const flat: FlatEnv = {
+            AZURE_OPENAI_API_KEY: "identity",
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o-east",
+            AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "identity",
+        };
+        const projected = configToEnv(buildConfig(flat));
+        for (const [k, v] of Object.entries(flat)) {
+            expect(projected[k]).toBe(v);
+        }
+        expect(projected.AZURE_OPENAI_POOL_GPT_4_O).toBeUndefined();
     });
 
     test("emits tuning knobs as strings, response_format as 1/0", () => {
@@ -41,12 +137,16 @@ describe("configToEnv: shim projection", () => {
             TYPEAGENT_EMBEDDING_PROVIDER: "local",
             TYPEAGENT_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
             TYPEAGENT_EMBEDDING_CACHE_DIR: "/var/lib/typeagent/models",
+            TYPEAGENT_EMBEDDING_SIZE: "384",
+            TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE: "16",
         };
         const config = buildConfig(flat);
         expect(config.embedding).toEqual({
             provider: "local",
             model: "Xenova/all-MiniLM-L6-v2",
             cacheDir: "/var/lib/typeagent/models",
+            size: 384,
+            maxBatchSize: 16,
         });
         const out = configToEnv(config);
         for (const [k, v] of Object.entries(flat)) {
@@ -54,11 +154,10 @@ describe("configToEnv: shim projection", () => {
         }
     });
 
-    test("leaves an unknown embedding provider value in extras", () => {
-        const out = configToEnv(
+    test("rejects an unknown embedding provider", () => {
+        expect(() =>
             buildConfig({ TYPEAGENT_EMBEDDING_PROVIDER: "bogus" }),
-        );
-        expect(out.TYPEAGENT_EMBEDDING_PROVIDER).toBe("bogus");
+        ).toThrow("embedding.provider");
     });
 
     test("preserves extras verbatim", () => {

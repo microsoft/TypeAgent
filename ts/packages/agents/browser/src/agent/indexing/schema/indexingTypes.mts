@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExtractionMode } from "@typeagent/website-memory";
+import type { IngestionMode as ExtractionMode } from "@typeagent/memory-service";
 
 /**
  * Enhanced website metadata for indexing
@@ -47,7 +47,6 @@ export interface EnhancedWebsite {
 export interface IndexingConfig {
     extractionMode: ExtractionMode;
     enableSummaryEnhancement: boolean;
-    domainModeOverrides: Record<string, ExtractionMode>;
     performance: {
         maxConcurrentExtractions: number;
         timeoutMs: number;
@@ -56,8 +55,6 @@ export interface IndexingConfig {
     };
     quality: {
         minimumQualityThreshold: number;
-        enableFallbackMode: boolean;
-        fallbackMode: ExtractionMode;
     };
 }
 
@@ -146,12 +143,8 @@ export interface IndexingProgress {
  * Default indexing configuration
  */
 export const DEFAULT_INDEXING_CONFIG: IndexingConfig = {
-    extractionMode: "summary" as ExtractionMode,
+    extractionMode: "content",
     enableSummaryEnhancement: true,
-    domainModeOverrides: {
-        // Domain-specific overrides can be added here if needed
-        // Currently using summary mode for all domains
-    },
     performance: {
         maxConcurrentExtractions: 3,
         timeoutMs: 15000,
@@ -160,7 +153,5 @@ export const DEFAULT_INDEXING_CONFIG: IndexingConfig = {
     },
     quality: {
         minimumQualityThreshold: 0.2,
-        enableFallbackMode: true,
-        fallbackMode: "basic" as ExtractionMode,
     },
 };

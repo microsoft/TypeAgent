@@ -93,6 +93,159 @@ describe("setContent markdown linkification", () => {
     });
 });
 
+describe("setContent local-file links", () => {
+    it("keeps typeagent-file links and routes clicks to the adapter", () => {
+        const handleLinkClick = jest.fn();
+        const href = "typeagent-file:///d:/repo/ts/config.local.yaml";
+        const elm = render(
+            {
+                type: "markdown",
+                content: `Edit [\`config.local.yaml\`](<${href}>)`,
+            },
+            { handleLinkClick },
+        );
+        const link = elm.querySelector<HTMLAnchorElement>("a[href]");
+        // The sanitizer allows the scheme through...
+        expect(link?.getAttribute("href")).toBe(href);
+        link!.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        // ...and the host decides how to open it.
+        expect(handleLinkClick).toHaveBeenCalledWith(href, expect.anything());
+    });
+});
+
+describe("setContent code blocks", () => {
+    const yaml = "```yaml\nspotify:\n  clientId: <value>\n```";
+
+    function clickCopy(elm: HTMLElement): void {
+        elm.querySelector<HTMLButtonElement>("button.chat-code-copy")!.click();
+    }
+
+    it("adds a copy button to fenced code blocks", () => {
+        const elm = render({ type: "markdown", content: yaml });
+        const pre = elm.querySelector("pre");
+        expect(pre?.classList.contains("chat-code-block")).toBe(true);
+        expect(pre?.querySelector("button.chat-code-copy")).not.toBeNull();
+    });
+
+    it("copies the block's text without the button's own markup", async () => {
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({ type: "markdown", content: yaml });
+        document.body.appendChild(elm);
+        clickCopy(elm);
+        expect(writeText).toHaveBeenCalledWith(
+            "spotify:\n  clientId: <value>\n",
+        );
+    });
+
+    it("still copies after more content is appended", () => {
+        // setContent appends with `innerHTML +=`, which re-serializes the
+        // container and drops listeners bound to individual elements — the
+        // handler is delegated to the container so it survives.
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({ type: "markdown", content: yaml });
+        document.body.appendChild(elm);
+        setContent(
+            elm,
+            { type: "markdown", content: "and then some prose." },
+            defaultChatSettings,
+            "agent",
+            { handleLinkClick() {} },
+            "inline",
+        );
+        expect(elm.querySelectorAll("button.chat-code-copy")).toHaveLength(1);
+        clickCopy(elm);
+        expect(writeText).toHaveBeenCalledWith(
+            "spotify:\n  clientId: <value>\n",
+        );
+    });
+
+    it("does not add a copy button to inline code", () => {
+        const elm = render({
+            type: "markdown",
+            content: "Run `pnpm build` first.",
+        });
+        expect(elm.querySelector("button.chat-code-copy")).toBeNull();
+    });
+
+    it("syntax-highlights yaml and json blocks", () => {
+        const elm = render({ type: "markdown", content: yaml });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector(".json-key")?.textContent).toBe("spotify:");
+        // Highlighting must not disturb the text the copy button grabs.
+        expect(code.textContent).toBe("spotify:\n  clientId: <value>\n");
+
+        const json = render({
+            type: "markdown",
+            content: '```json\n{"port": 8080}\n```',
+        });
+        expect(json.querySelector("pre > code .json-number")?.textContent).toBe(
+            "8080",
+        );
+    });
+
+    it("keeps highlighted source text inert", () => {
+        const elm = render({
+            type: "markdown",
+            content:
+                '```json\n{"value": "</span><img src=x onerror=alert(1)>"}\n```',
+        });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector("img")).toBeNull();
+        expect(code.textContent).toContain(
+            "</span><img src=x onerror=alert(1)>",
+        );
+    });
+
+    it("leaves blocks in unknown languages alone", () => {
+        const elm = render({
+            type: "markdown",
+            content: "```\nplain text\n```",
+        });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector("span")).toBeNull();
+        expect(code.textContent).toBe("plain text\n");
+    });
+});
+
+describe("setContent inline commands", () => {
+    it("makes an inline command click-to-copy", async () => {
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({
+            type: "markdown",
+            content: "Then run `@config agent refresh player`.",
+        });
+        document.body.appendChild(elm);
+        const code = elm.querySelector<HTMLElement>("code.chat-inline-copy")!;
+        expect(code.textContent).toBe("@config agent refresh player");
+        code.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        expect(writeText).toHaveBeenCalledWith("@config agent refresh player");
+    });
+
+    it("leaves ordinary inline code as prose", () => {
+        const elm = render({
+            type: "markdown",
+            content: "The `clientId` comes from the dashboard.",
+        });
+        expect(elm.querySelector("code.chat-inline-copy")).toBeNull();
+    });
+});
+
 describe("setContent plain-text linkification", () => {
     it("turns a bare https URL in text content into a clickable link", () => {
         const elm = render({
@@ -140,5 +293,114 @@ describe("setContent plain-text linkification", () => {
             content: "Edit README.md then publish to example.com.",
         });
         expect(elm.querySelector("a[href]")).toBeNull();
+    });
+});
+
+// Message content can carry text an agent relayed from the outside world (an
+// email body, a fetched page), so it is treated as untrusted. These pin the
+// sanitizer: the config previously allow-listed `onclick`/`onerror` via
+// ADD_ATTR and marked `href`/`src` as URI-safe, which let event handlers and
+// `javascript:` URLs reach the DOM.
+describe("setContent sanitizes untrusted message content", () => {
+    // Serialized markup, so an attribute that survived sanitization is
+    // visible even when jsdom would not fire the handler.
+    const html = (elm: HTMLElement) => elm.innerHTML.toLowerCase();
+
+    describe.each(["html", "markdown"] as const)("%s content", (type) => {
+        it("strips inline event handlers", () => {
+            const elm = render({
+                type,
+                content: `<img src="x" onerror="alert(1)">`,
+            });
+            expect(html(elm)).not.toContain("onerror");
+            // The element itself is kept; only the handler is removed.
+            expect(elm.querySelector("img")).not.toBeNull();
+        });
+
+        it("strips onclick handlers", () => {
+            const elm = render({
+                type,
+                content: `<div onclick="alert(1)">click me</div>`,
+            });
+            expect(html(elm)).not.toContain("onclick");
+        });
+
+        it("drops javascript: URLs", () => {
+            const elm = render({
+                type,
+                content: `<a href="javascript:alert(1)">link</a>`,
+            });
+            expect(html(elm)).not.toContain("javascript:");
+        });
+
+        it("drops javascript: URLs that dodge a naive scheme check", () => {
+            const elm = render({
+                type,
+                content: [
+                    `<a href="JaVaScRiPt:alert(1)">a</a>`,
+                    `<a href="&#106;avascript:alert(1)">b</a>`,
+                    `<a href=" javascript:alert(1)">c</a>`,
+                    `<img src="javascript:alert(1)">`,
+                ].join(""),
+            });
+            expect(html(elm)).not.toContain("javascript:");
+        });
+
+        it("removes script elements", () => {
+            const elm = render({
+                type,
+                content: `<script>alert(1)</script><p>after</p>`,
+            });
+            expect(elm.querySelector("script")).toBeNull();
+        });
+
+        it("survives markup that tries to break out of a parent element", () => {
+            const elm = render({
+                type,
+                content:
+                    `<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>` +
+                    `<template><img src=y onerror=alert(2)></template>`,
+            });
+            expect(html(elm)).not.toContain("onerror");
+        });
+    });
+
+    // The allow-list existed to keep these working. They must survive, or the
+    // fix would be traded for a rendering regression.
+    describe("keeps legitimate content intact", () => {
+        it("keeps links to the app's own schemes", () => {
+            const elm = render({
+                type: "html",
+                content: [
+                    `<a href="https://example.com/a">https</a>`,
+                    `<a href="mailto:a@b.com">mail</a>`,
+                    `<a href="typeagent-file:/c/tmp/a.txt">file</a>`,
+                    `<a href="typeagent-browser://open">browser</a>`,
+                ].join(""),
+            });
+            expect(elm.querySelectorAll("a[href]")).toHaveLength(4);
+        });
+
+        it("keeps image sources the renderer relies on", () => {
+            const elm = render({
+                type: "html",
+                content: [
+                    `<img src="https://example.com/a.png">`,
+                    `<img src="data:image/png;base64,iVBORw0KGgo=">`,
+                    `<img src="cid:attachment-1">`,
+                ].join(""),
+            });
+            expect(elm.querySelectorAll("img[src]")).toHaveLength(3);
+        });
+
+        it("keeps target on markdown links so they open in a new tab", () => {
+            const elm = render({
+                type: "markdown",
+                content: "[docs](https://example.org/guide)",
+            });
+            expect(
+                elm.querySelector<HTMLAnchorElement>("a[href]")!.target,
+            ).toBe("_blank");
+        });
     });
 });

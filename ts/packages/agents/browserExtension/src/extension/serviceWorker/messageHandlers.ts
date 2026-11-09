@@ -5,6 +5,7 @@ import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { sendActionToAgent } from "./websocket";
 import { BrowserContentDownloader } from "./contentDownloader.js";
 import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+import type { ImportWebsiteDataMessage } from "../interfaces/websiteImport.types";
 import { broadcastEvent } from "./extensionEventHelpers";
 
 // Store active extraction callbacks
@@ -32,11 +33,20 @@ export function handleKnowledgeExtractionProgress(
 }
 
 // Website Library Panel handlers
-export async function handleImportWebsiteDataWithProgress(message: any) {
-    const importId = message.importId;
-    const totalItems = message.totalItems || 0;
+export async function handleImportWebsiteDataWithProgress(
+    message: ImportWebsiteDataMessage,
+) {
+    const { importId, totalItems = 0 } = message.parameters;
 
     try {
+        if (
+            message.parameters.mode !== undefined &&
+            message.parameters.mode !== "content"
+        ) {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
         // Send initial progress update
         sendProgressToUI(importId, {
             importId,
@@ -46,8 +56,6 @@ export async function handleImportWebsiteDataWithProgress(message: any) {
             errors: [],
         });
 
-        const startTime = Date.now();
-
         const result = await sendActionToAgent({
             actionName: "importWebsiteDataWithProgress",
             parameters: {
@@ -56,7 +64,7 @@ export async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                mode: message.parameters.mode || "basic",
+                mode: "content",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
                 importId: importId,
@@ -65,18 +73,26 @@ export async function handleImportWebsiteDataWithProgress(message: any) {
             },
         });
 
-        // Send completion progress
-        sendProgressToUI(importId, {
-            importId,
-            phase: "complete",
-            totalItems: totalItems,
-            processedItems: totalItems,
-            errors: [],
-        });
+        if (result.error || result.success === false) {
+            const error = result.error || "Website import failed";
+            sendProgressToUI(importId, {
+                importId,
+                phase: "error",
+                totalItems,
+                processedItems: result.itemCount || 0,
+                errors: [
+                    {
+                        type: "processing",
+                        message: error,
+                        timestamp: Date.now(),
+                    },
+                ],
+            });
+        }
 
         return {
-            success: !result.error,
-            itemCount: result.itemCount || totalItems,
+            success: !result.error && result.success !== false,
+            itemCount: result.itemCount || 0,
             error: result.error,
         };
     } catch (error) {
@@ -119,21 +135,10 @@ export function sendProgressToUI(importId: string, progress: any) {
         ...progress,
     };
 
-    // Send to all connected library panels via runtime messaging
-    try {
-        chrome.runtime
-            .sendMessage({
-                type: "importProgress",
-                importId,
-                progress: structuredProgress,
-            })
-            .catch((error) => {
-                // Handle case where no listeners are available
-                console.log("No listeners for progress update:", error);
-            });
-    } catch (error) {
-        console.error("Failed to send progress to UI:", error);
-    }
+    broadcastEvent("importProgress", {
+        importId,
+        progress: structuredProgress,
+    });
 }
 
 export async function handleClearWebsiteLibrary() {
@@ -172,6 +177,11 @@ export async function handleImportHtmlFolder(message: any) {
     try {
         const { parameters } = message;
         const { folderPath, options, importId } = parameters;
+        if (options?.mode !== undefined && options.mode !== "content") {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
 
         // Send action to backend agent using the new ImportHtmlFolder action
         const result = await sendActionToAgent({
@@ -179,7 +189,7 @@ export async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    mode: options?.mode || "basic",
+                    mode: "content",
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [
@@ -196,19 +206,12 @@ export async function handleImportHtmlFolder(message: any) {
         });
 
         return {
-            success: !result.error,
-            itemCount: result.websiteCount || 0,
+            success: result.success !== false && !result.error,
+            itemCount: result.itemCount || 0,
             importId: importId,
             duration: result.duration || 0,
             errors: result.errors || [],
-            summary: {
-                totalProcessed: result.websiteCount || 0,
-                successfullyImported: result.websiteCount || 0,
-                knowledgeExtracted: result.knowledgeCount || 0,
-                entitiesFound: result.entityCount || 0,
-                topicsIdentified: result.topicCount || 0,
-                actionsDetected: result.actionCount || 0,
-            },
+            summary: result.summary,
         };
     } catch (error) {
         console.error("Folder import error:", error);
@@ -267,44 +270,66 @@ export async function handleCancelFileImport(importId: string) {
     }
 }
 
+type SearchWebMemoriesMessage = { parameters: any };
+
+function searchWebMemoryParameters(message: SearchWebMemoriesMessage) {
+    const { parameters } = message;
+    return {
+        query: parameters.query,
+        generateAnswer: true,
+        includeRelatedEntities: true,
+        enableAdvancedSearch: true,
+        limit: parameters.limit || 20,
+        minScore:
+            parameters.minScore ?? parameters.filters?.minRelevance ?? 0.3,
+        ...parameters.filters,
+        domain: parameters.domain ?? parameters.filters?.domain,
+        source: parameters.source ?? parameters.filters?.source,
+        dateFrom: parameters.dateFrom ?? parameters.filters?.dateFrom,
+        dateTo: parameters.dateTo ?? parameters.filters?.dateTo,
+    };
+}
+
+function searchWebMemoryResponse(
+    message: SearchWebMemoriesMessage,
+    result: Awaited<ReturnType<typeof sendActionToAgent>>,
+    startTime: number,
+) {
+    return {
+        success: true,
+        results: {
+            websites: result.websites || [],
+            summary: {
+                text: result.answer || "",
+                totalFound: result.websites?.length || 0,
+                searchTime:
+                    result.summary?.searchTime || Date.now() - startTime,
+                sources: result.answerSources || [],
+                entities: result.relatedEntities || [],
+            },
+            query: message.parameters.query,
+            filters: message.parameters.filters || {},
+            topTopics: result.topTopics || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            relatedEntities: result.relatedEntities || [],
+        },
+    };
+}
+
 // Enhanced search handlers
-export async function handleSearchWebMemories(message: any) {
+export async function handleSearchWebMemories(
+    message: SearchWebMemoriesMessage,
+) {
     try {
         const startTime = Date.now();
 
         // Use the new unified search action
         const result = await sendActionToAgent({
             actionName: "searchWebMemories",
-            parameters: {
-                query: message.parameters.query,
-                generateAnswer: true, // Knowledge Library wants answers
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: message.parameters.limit || 20,
-                minScore: message.parameters.filters?.minRelevance || 0.3,
-                ...message.parameters.filters,
-            },
+            parameters: searchWebMemoryParameters(message),
         });
 
-        return {
-            success: true,
-            results: {
-                websites: result.websites || [],
-                summary: {
-                    text: result.answer || "",
-                    totalFound: result.websites?.length || 0,
-                    searchTime:
-                        result.summary?.searchTime || Date.now() - startTime,
-                    sources: result.answerSources || [],
-                    entities: result.relatedEntities || [],
-                },
-                query: message.parameters.query,
-                filters: message.parameters.filters || {},
-                topTopics: result.topTopics || [],
-                suggestedFollowups: result.suggestedFollowups || [],
-                relatedEntities: result.relatedEntities || [],
-            },
-        };
+        return searchWebMemoryResponse(message, result, startTime);
     } catch (error) {
         console.error("Error in unified search:", error);
         return {
@@ -413,17 +438,30 @@ export async function handleGetSuggestedSearches() {
 // Helper function to parse website stats from text response
 
 // Helper functions for knowledge indexing
+export interface PageIndexResult {
+    indexed: boolean;
+    error?: string;
+    warnings?: string[];
+    howTo?: { enabled: boolean; candidateCount: number };
+}
+
 export async function indexPageContent(
     tab: chrome.tabs.Tab,
     showNotification: boolean = true,
     options: {
-        quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "content";
         extractedKnowledge?: any;
+        activityType?: "visited" | "captured";
+        reportHowToStatus?: boolean;
     } = {},
-): Promise<boolean> {
+): Promise<PageIndexResult> {
     try {
+        if (options.mode !== undefined && options.mode !== "content") {
+            throw new Error(
+                "Unsupported indexing mode. Only 'content' is supported.",
+            );
+        }
         let htmlFragments = null;
         let extractKnowledge = true;
 
@@ -446,9 +484,10 @@ export async function indexPageContent(
             title: tab.title,
             extractKnowledge: extractKnowledge,
             timestamp: new Date().toISOString(),
-            quality: options.quality || "balanced",
             textOnly: options.textOnly || false,
-            mode: options.mode || "content",
+            mode: "content",
+            activityType: options.activityType ?? "captured",
+            reportHowToStatus: options.reportHowToStatus ?? false,
         };
 
         if (options.extractedKnowledge) {
@@ -457,10 +496,13 @@ export async function indexPageContent(
             parameters.htmlFragments = htmlFragments;
         }
 
-        await sendActionToAgent({
+        const result: PageIndexResult = await sendActionToAgent({
             actionName: "indexWebPageContent",
             parameters: parameters,
         });
+        if (result?.indexed !== true) {
+            throw new Error(result?.error ?? "Page indexing failed");
+        }
 
         if (showNotification) {
             chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
@@ -473,7 +515,7 @@ export async function indexPageContent(
             }, 3000);
         }
 
-        return true;
+        return result;
     } catch (error) {
         console.error("Error indexing page content:", error);
 
@@ -488,7 +530,10 @@ export async function indexPageContent(
             }, 3000);
         }
 
-        return false;
+        return {
+            indexed: false,
+            error: error instanceof Error ? error.message : String(error),
+        };
     }
 }
 
@@ -997,81 +1042,6 @@ export async function handleHybridSearch(message: any): Promise<any> {
                 error instanceof Error ? error.message : "Hybrid search failed",
             searchMethod: "hybrid-direct",
             query: message.query || "",
-        };
-    }
-}
-
-/**
- * Handle requests for hierarchical topic data
- */
-export async function handleGetHierarchicalTopics(message: any): Promise<any> {
-    try {
-        console.log("Fetching hierarchical topics from agent...");
-        const startTime = Date.now();
-
-        // Send action to agent to get hierarchical topics
-        const result = await sendActionToAgent({
-            actionName: "getHierarchicalTopics",
-            parameters: {
-                centerTopic: message.parameters?.centerTopic,
-                includeRelationships:
-                    message.parameters?.includeRelationships ?? true,
-                maxDepth: message.parameters?.maxDepth ?? 5,
-                domain: message.parameters?.domain, // Optional domain filter
-            },
-        });
-
-        console.log("Received hierarchical topics result:", result);
-
-        if (result && result.success !== false) {
-            return {
-                success: true,
-                topics: result.topics || [],
-                relationships: result.relationships || [],
-                centerTopic: message.parameters?.centerTopic || null,
-                maxDepth: result.maxDepth || 0,
-                metadata: {
-                    totalTopics: (result.topics || []).length,
-                    queryTime: Date.now() - startTime,
-                    source: "hierarchical_storage",
-                },
-            };
-        } else {
-            console.warn(
-                "No hierarchical topics found or agent returned error:",
-                result?.error,
-            );
-            return {
-                success: false,
-                topics: [],
-                relationships: [],
-                centerTopic: null,
-                maxDepth: 0,
-                error: result?.error || "No hierarchical topics available",
-                metadata: {
-                    totalTopics: 0,
-                    queryTime: Date.now() - startTime,
-                    source: "hierarchical_storage",
-                },
-            };
-        }
-    } catch (error) {
-        console.error("Error fetching hierarchical topics:", error);
-        return {
-            success: false,
-            topics: [],
-            relationships: [],
-            centerTopic: null,
-            maxDepth: 0,
-            error:
-                error instanceof Error
-                    ? error.message
-                    : "Failed to fetch hierarchical topics",
-            metadata: {
-                totalTopics: 0,
-                queryTime: 0,
-                source: "hierarchical_storage",
-            },
         };
     }
 }

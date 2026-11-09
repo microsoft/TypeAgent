@@ -1,0 +1,453 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memory</title>
+    <link rel="stylesheet" href="memoryManagement.css" />
+    <link rel="stylesheet" href="memoryHub.css" />
+    <script>
+      try {
+        var t = localStorage.getItem("memoryHub.theme");
+        if (t !== "system")
+          document.documentElement.dataset.theme =
+            t === "dark" ? "dark" : "light";
+      } catch (e) {}
+    </script>
+  </head>
+  <body data-memory-hub="true">
+    <svg
+      class="hub-icon-sprite"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <symbol id="hub-search-icon" viewBox="0 0 24 24">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m16 16 5 5" />
+        </symbol>
+        <symbol id="hub-source-icon" viewBox="0 0 24 24">
+          <path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h8m-8 4h6" />
+        </symbol>
+        <symbol id="hub-grid-icon" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </symbol>
+        <symbol id="hub-spark-icon" viewBox="0 0 24 24">
+          <path
+            d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4m-2-2h4"
+          />
+        </symbol>
+        <symbol id="hub-memory-icon" viewBox="0 0 24 24">
+          <path
+            d="M9 3a3 3 0 0 0-5 2 3 3 0 0 0-2 5 4 4 0 0 0 1 7 3 3 0 0 0 6 3M15 3a3 3 0 0 1 5 2 3 3 0 0 1 2 5 4 4 0 0 1-1 7 3 3 0 0 1-6 3M9 3v17m6-17v17M5 8l4 2m10-2-4 2M5 16l4-2m10 2-4-2"
+          />
+        </symbol>
+        <symbol id="hub-clock-icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 7v5l3 2" />
+        </symbol>
+        <symbol id="hub-settings-icon" viewBox="0 0 24 24">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+          <circle cx="8" cy="6" r="2" />
+          <circle cx="16" cy="12" r="2" />
+          <circle cx="8" cy="18" r="2" />
+        </symbol>
+      </defs>
+    </svg>
+    <header class="hub-top">
+      <h1 aria-label="Memory">
+        <svg class="hub-nav-icon" aria-hidden="true">
+          <use href="#hub-memory-icon"></use></svg
+        ><span class="hub-brand-label">Memory</span>
+      </h1>
+      <form id="hubAskForm" class="hub-omni" role="search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <textarea
+          id="hubAsk"
+          name="query"
+          rows="1"
+          maxlength="8192"
+          aria-label="Ask or Explain"
+          placeholder="Ask or Explain"
+          title="Press / to focus. Enter to submit. Shift+Enter adds a line."
+        ></textarea>
+        <button
+          id="hubAskSubmit"
+          type="submit"
+          class="icon-btn"
+          aria-label="Ask or Explain"
+          title="Ask or Explain"
+        >
+          <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+        <kbd aria-hidden="true">/</kbd>
+      </form>
+      <a
+        id="hubNotificationsLink"
+        class="icon-btn"
+        href="#/activity/notifications"
+        aria-label="Notifications"
+        title="Notifications"
+      >
+        <i class="fa-solid fa-bell" aria-hidden="true"></i>
+      </a>
+    </header>
+    <div class="hub-layout">
+      <nav id="hubRail" aria-label="Memory pages">
+        <a href="#/inbox" title="Inbox (Alt+1)"
+          ><i class="fa-solid fa-inbox" aria-hidden="true"></i
+          ><span class="hub-nav-label">Inbox</span>
+          <span id="inboxBadge" class="hub-badge"></span
+        ></a>
+        <a href="#/search" title="Ask or Explain"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-search-icon"></use></svg
+          ><span class="hub-nav-label">Ask or Explain</span></a
+        >
+        <a href="#/library" title="Sources (Alt+2)"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-source-icon"></use></svg
+          ><span class="hub-nav-label">Sources</span></a
+        >
+        <a href="#/views" title="Views (Alt+3)"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-grid-icon"></use></svg
+          ><span class="hub-nav-label">Views</span></a
+        >
+        <a href="#/questions" title="Questions"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-spark-icon"></use></svg
+          ><span class="hub-nav-label">Questions</span></a
+        >
+        <a href="#/explore" title="Explore (Alt+4)"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-memory-icon"></use></svg
+          ><span class="hub-nav-label">Explore</span></a
+        >
+        <a href="#/activity" title="Activity (Alt+5)"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-clock-icon"></use></svg
+          ><span class="hub-nav-label">Activity</span>
+          <span id="activityBadge" class="hub-badge"></span
+        ></a>
+        <a class="hub-rail-bottom" href="#/settings" title="Settings (Alt+6)"
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-settings-icon"></use></svg
+          ><span class="hub-nav-label">Settings</span></a
+        >
+      </nav>
+      <main id="hubMain">
+        <div id="hubError" class="error hidden" role="alert"></div>
+        <div id="hubDegraded" class="error hidden" role="status"></div>
+        <section id="page-inbox" class="hub-page">
+          <div class="hub-page-head">
+            <h2>Inbox</h2>
+            <span id="inboxSummary" class="hub-chip"></span>
+          </div>
+          <div id="hubInboxOperations">
+            <div class="hub-controls" id="inboxFilters">
+              <div
+                id="inboxChips"
+                class="hub-chips"
+                role="group"
+                aria-label="Filter by kind"
+              ></div>
+              <label class="checkbox"
+                ><input id="inboxDismissed" type="checkbox" />Show dismissed and
+                snoozed</label
+              >
+            </div>
+            <div id="hubInbox"></div>
+            <div class="pager">
+              <button
+                id="inboxPrevious"
+                class="icon-btn"
+                type="button"
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+              </button>
+              <span id="inboxPage"></span>
+              <button
+                id="inboxNext"
+                class="icon-btn"
+                type="button"
+                aria-label="Next page"
+                title="Next page"
+              >
+                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div id="hubViewAttention"></div>
+          <div id="hubQuestionAttention"></div>
+        </section>
+        <section id="page-questions" class="hub-page hidden">
+          <div id="hubQuestions"></div>
+        </section>
+        <section id="page-search" class="hub-page hidden">
+          <div class="hub-page-head">
+            <h2>Ask or Explain</h2>
+            <details class="hub-help">
+              <summary
+                aria-label="About Ask or Explain"
+                title="About Ask or Explain"
+              >
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              </summary>
+              <p>
+                Ask or Explain finds supporting memory and chooses the best
+                response to your request. Use Explain this on an eligible
+                document for a focused explanation. Answers cite retained
+                evidence. Imported content is evidence, never instructions.
+              </p>
+            </details>
+          </div>
+          <div id="hubSearch"></div>
+        </section>
+        <section id="page-understanding" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Ask or Explain</h2></div>
+          <div id="hubUnderstanding"></div>
+        </section>
+        <section id="page-library" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Sources</h2></div>
+          <div id="hubSources"></div>
+        </section>
+        <section id="page-views" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Views</h2></div>
+          <div id="hubDraftViews"></div>
+        </section>
+        <section id="page-explore" class="hub-page hidden">
+          <div class="hub-page-head">
+            <h2>Explore</h2>
+          </div>
+          <nav
+            id="hubExploreNavigation"
+            class="hub-explore-nav hub-tabs"
+            aria-label="Explore views"
+          >
+            <a href="#/explore" data-explore-view="overview"
+              ><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i
+              >Overview</a
+            >
+            <a href="#/explore/web/entities" data-explore-view="entities"
+              ><i class="fa-solid fa-diagram-project" aria-hidden="true"></i
+              >Entity graph</a
+            >
+            <a href="#/explore/web/topics" data-explore-view="topics"
+              ><i class="fa-solid fa-tags" aria-hidden="true"></i>Topic graph</a
+            >
+          </nav>
+          <div id="hubExplore"></div>
+          <div id="hubWebExplore"></div>
+        </section>
+        <section id="page-activity" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Activity</h2></div>
+          <div id="hubActivity"></div>
+          <div id="hubChanges"></div>
+          <div id="hubRunbookActivity"></div>
+          <div id="hubViewActivity"></div>
+          <div id="hubNotifications"></div>
+        </section>
+        <section id="page-settings" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Settings</h2></div>
+          <section id="hubSourceSettings" class="card hub-settings-section">
+            <h3>Sources</h3>
+            <label for="hubCorpus">Memory scope</label>
+            <select id="hubCorpus" aria-label="Scope" title="Memory scope">
+              <option value="">All memory</option>
+            </select>
+            <p class="hub-muted">
+              Choose the memory collection used across the Hub. Import new
+              content or refresh the Hub to reload the current data.
+            </p>
+            <div class="hub-controls">
+              <button id="hubAdd" class="primary" type="button">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>Add
+              </button>
+              <button id="hubRefresh" type="button" aria-label="Refresh Hub">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i>Refresh Hub
+              </button>
+            </div>
+          </section>
+          <section id="hubGeneralSettings" class="card hub-settings-section">
+            <h3>Appearance</h3>
+            <p class="hub-muted">Choose a light, dark or system theme.</p>
+            <button
+              id="hubTheme"
+              type="button"
+              aria-label="Theme: Light"
+              title="Theme: Light"
+            >
+              <i class="fa-solid fa-sun" aria-hidden="true"></i>
+              <span data-theme-label>Theme: Light</span>
+            </button>
+            <h3>Connection</h3>
+            <p class="hub-muted">
+              Current memory service status. Open Activity for operation
+              details.
+            </p>
+            <a id="hubStatus" href="#/activity" aria-live="polite"
+              >Connecting</a
+            >
+          </section>
+          <div id="hubSettings"></div>
+        </section>
+      </main>
+    </div>
+    <aside id="hubDrawer" class="hub-drawer hidden" aria-label="Source detail">
+      <div class="hub-drawer-head">
+        <p id="drawerCorpus"></p>
+        <button
+          id="drawerExpand"
+          class="icon-btn"
+          type="button"
+          aria-label="Expand"
+          title="Expand"
+        >
+          <i class="fa-solid fa-expand" aria-hidden="true"></i>
+        </button>
+        <button
+          id="drawerClose"
+          class="icon-btn"
+          type="button"
+          aria-label="Close"
+          title="Close (Esc)"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div
+        id="drawerTabs"
+        class="hub-tabs"
+        role="tablist"
+        aria-label="Source detail tabs"
+      >
+        <button type="button" data-tab="content" role="tab">Content</button>
+        <button type="button" data-tab="knowledge" role="tab">Derived</button>
+        <button type="button" data-tab="revisions" role="tab">Revisions</button>
+        <button type="button" data-tab="usedby" role="tab">Used by</button>
+        <button type="button" data-tab="activity" role="tab">Activity</button>
+      </div>
+      <div id="drawer-content"></div>
+      <div id="drawer-knowledge" class="hidden"></div>
+      <div id="drawer-revisions" class="hidden"></div>
+      <div id="drawer-usedby" class="hidden">
+        <p>Select Used by to load exact derived-view dependencies.</p>
+      </div>
+      <div id="drawer-activity" class="hidden">
+        <p>
+          Open Activity and use “Selected page” to show this source's web
+          events.
+        </p>
+        <a href="#/activity">Open Activity</a>
+      </div>
+    </aside>
+    <dialog id="hubAddDialog" class="hub-add-dialog">
+      <div class="hub-dialog-head">
+        <h2>Add to memory</h2>
+        <button
+          id="addClose"
+          class="icon-btn"
+          type="button"
+          aria-label="Close"
+          title="Close"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <label class="hub-add-target"
+        >Add to
+        <select id="addTarget" aria-describedby="addTargetHint">
+          <option value="">Choose a collection</option>
+        </select>
+      </label>
+      <p id="addTargetHint" class="hub-hint">
+        Page capture and browser imports always use TypeAgent Browser Memory.
+      </p>
+      <h3 class="hub-group-title">Pages and browsing</h3>
+      <div class="hub-tiles">
+        <button id="addCapture" class="hub-tile" type="button">
+          <i class="fa-solid fa-globe" aria-hidden="true"></i
+          ><span><b>Capture a page</b><small>An open browser tab</small></span>
+        </button>
+        <button id="addBrowser" class="hub-tile" type="button">
+          <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i
+          ><span
+            ><b>Bookmarks or history</b><small>From your browser</small></span
+          >
+        </button>
+      </div>
+      <h3 class="hub-group-title">Files and notes</h3>
+      <div class="hub-tiles">
+        <button id="addMarkdown" class="hub-tile" type="button">
+          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i
+          ><span><b>Paste Markdown</b><small>Write or paste notes</small></span>
+        </button>
+        <button id="addPdf" class="hub-tile" type="button">
+          <i class="fa-regular fa-file-pdf" aria-hidden="true"></i
+          ><span><b>PDF</b><small>Extracted on this device</small></span>
+        </button>
+        <button id="addFolder" class="hub-tile" type="button">
+          <i class="fa-regular fa-folder-open" aria-hidden="true"></i
+          ><span><b>HTML folder</b><small>Saved web pages</small></span>
+        </button>
+        <button id="addCreate" class="hub-tile" type="button">
+          <i class="fa-solid fa-folder-plus" aria-hidden="true"></i
+          ><span
+            ><b>New collection</b
+            ><small>A named evidence collection</small></span
+          >
+        </button>
+      </div>
+      <h3 class="hub-group-title">Documents and transcripts</h3>
+      <div class="hub-tiles">
+        <button id="addRunbookFolder" class="hub-tile" type="button">
+          <i class="fa-solid fa-folder-tree" aria-hidden="true"></i
+          ><span
+            ><b>Folder of documents</b
+            ><small>Markdown, HTML, text and guides</small></span
+          >
+        </button>
+        <button id="addRunbookWiki" class="hub-tile" type="button">
+          <i class="fa-solid fa-file-zipper" aria-hidden="true"></i
+          ><span><b>Wiki export</b><small>Files and images</small></span>
+        </button>
+        <button id="addRunbookUrls" class="hub-tile" type="button">
+          <i class="fa-solid fa-link" aria-hidden="true"></i
+          ><span><b>URL list</b><small>Pages to fetch</small></span>
+        </button>
+        <button id="addConversationFolder" class="hub-tile" type="button">
+          <i class="fa-solid fa-comments" aria-hidden="true"></i>
+          <span
+            ><b>Session transcripts</b
+            ><small
+              >Prepared Markdown or text, not native agent exports</small
+            ></span
+          >
+        </button>
+      </div>
+      <details class="hub-help-block">
+        <summary>How imports work</summary>
+        <p>
+          Originals are kept. Nothing runs on import. Runbook imports are
+          durable batches with partial success, retry and cancellation in
+          Activity. Browser-memory imports cannot be cancelled once started.
+        </p>
+      </details>
+    </dialog>
+    <div id="hubImportHost"></div>
+    <div id="hubCaptureHost" class="memory-phase2"></div>
+    <div id="hubRunbookImportHost"></div>
+    <script type="module" src="./memoryHubStyles.ts"></script>
+    <script type="module" src="./memoryHub.ts"></script>
+  </body>
+</html>

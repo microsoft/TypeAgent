@@ -1,0 +1,110 @@
+{
+  "corpusId": "corpus",
+  "viewId": "profile",
+  "revisionId": "view-revision",
+  "version": 1,
+  "state": "draft",
+  "actor": "offline",
+  "createdAt": "2026-10-23T00:00:00Z",
+  "provenance": "human",
+  "definition": {
+    "viewId": "profile",
+    "revisionId": "definition-revision",
+    "kind": "schemaView",
+    "selector": {
+      "kind": "sources",
+      "sources": [{ "sourceId": "source", "revisionId": "source-revision" }]
+    },
+    "maintenance": { "schemaVersion": 1, "scope": { "mode": "pinned" } },
+    "schemaView": {
+      "construction": "schema-defined-v1",
+      "title": "Profile",
+      "template": "questions-v1",
+      "discovery": {
+        "enabled": true,
+        "maxProposals": 8,
+        "lastEvaluatedScope": "scope"
+      },
+      "slots": [
+        {
+          "id": "name",
+          "question": "What name is preferred?",
+          "cardinality": "singleton",
+          "schema": { "type": "string", "enum": ["Ada", "Grace"] },
+          "rubric": {
+            "version": 1,
+            "selection": "manual",
+            "requireConfirmation": true,
+            "authoritySourceIds": []
+          },
+          "approval": "approved",
+          "discoveryCitations": []
+        }
+      ]
+    }
+  },
+  "content": {
+    "kind": "schemaView",
+    "construction": "schema-defined-v1",
+    "title": "Profile",
+    "sections": [
+      {
+        "id": "name",
+        "role": "question",
+        "heading": "Preferred name",
+        "body": "Candidate: Ada",
+        "details": {
+          "kind": "question",
+          "slotId": "name",
+          "candidates": [
+            {
+              "id": "candidate",
+              "value": "Ada",
+              "origin": "source",
+              "review": "unreviewed",
+              "citations": [
+                {
+                  "sourceId": "source",
+                  "revisionId": "source-revision",
+                  "locator": "chars:0-3",
+                  "excerpt": "Ada"
+                }
+              ],
+              "opposingCitations": [],
+              "derivedFrom": [],
+              "support": [
+                {
+                  "citation": {
+                    "sourceId": "source",
+                    "revisionId": "source-revision",
+                    "locator": "chars:0-3",
+                    "excerpt": "Ada"
+                  },
+                  "derivedFrom": []
+                }
+              ]
+            }
+          ],
+          "selectedCandidateIds": [],
+          "answerState": "conflicted",
+          "reviewState": "unreviewed",
+          "freshness": "stale",
+          "coverage": "partial",
+          "evaluatedSources": [
+            { "sourceId": "source", "revisionId": "source-revision" }
+          ],
+          "scopeFingerprint": "scope"
+        }
+      }
+    ],
+    "citations": [
+      {
+        "sourceId": "source",
+        "revisionId": "source-revision",
+        "locator": "chars:0-3",
+        "excerpt": "Ada"
+      }
+    ]
+  },
+  "relationships": []
+}

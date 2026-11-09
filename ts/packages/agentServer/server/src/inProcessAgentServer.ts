@@ -1,22 +1,33 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
+import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import {
     AgentServerConnection,
     createAgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { UserIdentity } from "@typeagent/agent-server-protocol";
+import type { MemoryService } from "@typeagent/memory-service";
+import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 import { DispatcherOptions } from "agent-dispatcher";
-import os from "node:os";
 import registerDebug from "debug";
+import { getCurrentMcpToolCatalogs } from "default-agent-provider";
+import os from "node:os";
+import path from "node:path";
 
-import {
-    createConversationManager,
-    ConversationManager,
-} from "./conversationManager.js";
+import { withAutomationSources } from "./automationSources.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import {
+    ConversationManager,
+    createConversationManager,
+} from "./conversationManager.js";
+import { createConfiguredMemoryService } from "./memoryConnection.js";
+import {
+    createRunbookHostCapabilities,
+    withRunbookHostCapabilities,
+} from "./runbookCapabilities.js";
+import { createLocalSkillServices } from "./skillCatalog.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -44,6 +55,8 @@ export type InProcessAgentServerOptions = {
     idleTimeoutMs?: number;
     /** Disable background content indexing for isolated test instances. */
     testMode?: boolean;
+    /** Optional acquisition dependencies; the server still owns staging. */
+    skillAcquisition?: Omit<SkillAcquirerOptions, "stagingRoot">;
 };
 
 export type InProcessAgentServer = {
@@ -70,9 +83,52 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
+    const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
+        | { memoryServiceClient?: MemoryService }
+        | undefined;
+    const injectedMemoryService =
+        dispatcherOptions.conversationMemorySettings?.durableMemoryService ??
+        memoryAgentOptions?.memoryServiceClient;
+    const ownedMemoryService =
+        injectedMemoryService === undefined
+            ? await createConfiguredMemoryService(
+                  path.join(instanceDir, "memory"),
+              )
+            : undefined;
+    const memoryService = injectedMemoryService ?? ownedMemoryService!;
+    if (ownedMemoryService) {
+        try {
+            await ownedMemoryService.initialize?.();
+        } catch (error) {
+            await ownedMemoryService.close?.();
+            throw error;
+        }
+    }
+    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
+        instanceDir,
+        options.skillAcquisition,
+    );
+    const runbookCapabilities = createRunbookHostCapabilities({
+        skillCatalog,
+        readMcpCatalogs: () =>
+            getCurrentMcpToolCatalogs(dispatcherOptions.appAgentSources ?? []),
+    });
     const conversationManager = await createConversationManager(
         hostName,
-        dispatcherOptions,
+        {
+            ...dispatcherOptions,
+            agentInitOptions: withAutomationSources(
+                withRunbookHostCapabilities(
+                    dispatcherOptions.agentInitOptions,
+                    runbookCapabilities,
+                ),
+                instanceDir,
+            ),
+            conversationMemorySettings: {
+                ...dispatcherOptions.conversationMemorySettings,
+                durableMemoryService: memoryService,
+            },
+        },
         instanceDir,
         options.idleTimeoutMs ?? 0,
         options.testMode ?? false,
@@ -83,6 +139,9 @@ export async function createInProcessAgentServer(
 
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
+        skillCatalog,
+        runbookCapabilities,
+        skillAcquirer,
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery
@@ -132,7 +191,11 @@ export async function createInProcessAgentServer(
         conversationManager,
         async close(): Promise<void> {
             closeTransport();
-            await conversationManager.close();
+            try {
+                await conversationManager.close();
+            } finally {
+                await ownedMemoryService?.close?.();
+            }
         },
     };
 }

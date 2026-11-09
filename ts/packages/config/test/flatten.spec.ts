@@ -42,12 +42,29 @@ describe("flatten", () => {
                 provider: "local",
                 model: "Xenova/all-MiniLM-L6-v2",
                 cacheDir: "/models",
+                size: 384,
+                maxBatchSize: 16,
             },
         });
         expect(out).toEqual({
             TYPEAGENT_EMBEDDING_PROVIDER: "local",
             TYPEAGENT_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
             TYPEAGENT_EMBEDDING_CACHE_DIR: "/models",
+            TYPEAGENT_EMBEDDING_SIZE: "384",
+            TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE: "16",
+        });
+    });
+
+    test("flattens Copilot fallback models as a JSON array", () => {
+        const out = flatten({
+            copilot: {
+                defaultModel: "gpt-5.6-luna",
+                fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
+            },
+        });
+        expect(out).toEqual({
+            COPILOT_DEFAULT_MODEL: "gpt-5.6-luna",
+            COPILOT_FALLBACK_MODELS: '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
         });
     });
 
@@ -111,6 +128,27 @@ describe("flatten", () => {
             },
         });
         expect(out).toEqual({ AZURE_OPENAI_RESPONSE_FORMAT: "1" });
+    });
+
+    test("preserves explicit false values for telemetry controls", () => {
+        const out = flatten({
+            telemetry: {
+                debugBridge: false,
+                structuredLogs: false,
+                local: {
+                    enabled: false,
+                    debugBridge: false,
+                    structuredLogs: false,
+                },
+            },
+        });
+        expect(out).toEqual({
+            TELEMETRY_DEBUGBRIDGE: "0",
+            TELEMETRY_STRUCTUREDLOGS: "0",
+            TELEMETRY_LOCAL_ENABLED: "0",
+            TELEMETRY_LOCAL_DEBUGBRIDGE: "0",
+            TELEMETRY_LOCAL_STRUCTUREDLOGS: "0",
+        });
     });
 
     test("numbers are stringified", () => {

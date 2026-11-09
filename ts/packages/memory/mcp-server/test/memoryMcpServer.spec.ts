@@ -1,0 +1,846 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import {
+    InProcessMemoryServiceClient,
+    McpMemoryServiceClient,
+    agentSessionToolNames,
+    changeReceiptSchema,
+    memoryToolNames,
+    topicToolNames,
+    viewToolNames,
+    schemaViewToolNames,
+    acquisitionToolNames,
+    frameToolNames,
+    inventoryToolNames,
+    knowledgeToolNames,
+    understandingToolNames,
+} from "@typeagent/memory-client";
+import type {
+    DocumentIngestRequest,
+    DocumentIngestResult,
+    IngestionJobStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
+    MemoryChangeReceipt,
+    MemoryCorpus,
+    MemoryEvent,
+    MemoryEventAppendRequest,
+    MemoryKnowledgeGraph,
+    MemorySearchRequest,
+    MemorySearchResult,
+    MemoryService,
+    MemoryServiceCapabilities,
+    MemorySource,
+    SourceReplaceRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
+} from "@typeagent/memory-service";
+import { MemoryMcpServer } from "../src/memoryMcpServer.js";
+import { MemoryServiceHost } from "../src/memoryServiceHost.js";
+import { MemoryAppSessions } from "../src/memoryAppSessions.js";
+
+const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+
+class PairedTransport implements Transport {
+    public peer?: PairedTransport;
+    public onclose?: () => void;
+    public onerror?: (error: Error) => void;
+    public onmessage?: (message: JSONRPCMessage) => void;
+
+    public async start(): Promise<void> {}
+
+    public async send(message: JSONRPCMessage): Promise<void> {
+        queueMicrotask(() => this.peer?.onmessage?.(message));
+    }
+
+    public async close(): Promise<void> {
+        this.onclose?.();
+    }
+}
+
+function createTransportPair(): [PairedTransport, PairedTransport] {
+    const client = new PairedTransport();
+    const server = new PairedTransport();
+    client.peer = server;
+    server.peer = client;
+    return [client, server];
+}
+
+class FakeMemoryService implements MemoryService {
+    public readonly corpus: MemoryCorpus = {
+        corpusId: "corpus-1",
+        name: "Test corpus",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        status: "ready",
+        documentCount: 1,
+    };
+    public readonly job: IngestionJobStatus = {
+        jobId: "job-1",
+        corpusId: this.corpus.corpusId,
+        sourceId: "source-1",
+        revisionId: "revision-1",
+        state: "complete",
+        progress: { completed: 1, total: 1 },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        warnings: [],
+    };
+    public readonly source: MemorySource = {
+        sourceId: "source-1",
+        corpusId: this.corpus.corpusId,
+        sourceType: "markdown",
+        title: "Test source",
+        activeRevisionId: "revision-1",
+        revisions: [
+            {
+                revisionId: "revision-1",
+                sourceId: "source-1",
+                contentHash: "hash",
+                mimeType: "text/markdown",
+                indexedAt: "2026-01-01T00:00:00.000Z",
+                pipelineVersion: "1",
+                state: "ready",
+            },
+        ],
+    };
+    public readonly event: MemoryEvent = {
+        eventId: "event-1",
+        corpusId: this.corpus.corpusId,
+        idempotencyKey: "event-key-1",
+        producer: {
+            producerId: "test-producer",
+            producerType: "test",
+        },
+        eventType: "conversation-turn",
+        sourceKind: "conversation",
+        observedAt: "2026-01-01T00:00:00.000Z",
+        eventTime: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        content: "Remember this fixture",
+        conversationId: "conversation-1",
+    };
+
+    public async createCorpus(
+        name: string,
+        description?: string,
+    ): Promise<MemoryCorpus> {
+        return {
+            ...this.corpus,
+            name,
+            ...(description === undefined ? {} : { description }),
+        };
+    }
+
+    public async listCorpora(): Promise<MemoryCorpus[]> {
+        return [this.corpus];
+    }
+
+    public async getCorpus() {
+        return {
+            ...this.corpus,
+            sourceCount: 1,
+            revisionCount: 1,
+            readyRevisionCount: 1,
+            failedRevisionCount: 0,
+            activeJobCount: 0,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async clearCorpus(): Promise<number> {
+        return 1;
+    }
+
+    public async listChanges() {
+        return {
+            items: [
+                {
+                    changeId: "00000000-0000-4000-8000-000000000001",
+                    corpusId: this.corpus.corpusId,
+                    operation: "suppress",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    outcome: "committed",
+                    sourceId: "a".repeat(64),
+                    counts: { sources: 1, revisions: 0, knowledge: 1 },
+                } satisfies MemoryChangeReceipt,
+            ],
+            total: 1,
+        };
+    }
+
+    public async listSources(): Promise<MemorySource[]> {
+        return [this.source];
+    }
+
+    public async listSourcesPage() {
+        return { items: [this.source], total: 1 };
+    }
+
+    public async getSource(): Promise<MemorySource> {
+        return this.source;
+    }
+
+    public async getSourceContent() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            revisionId: this.source.activeRevisionId,
+            mimeType: "text/markdown",
+            offset: 0,
+            content: "fixture",
+            totalChars: 7,
+            truncated: false,
+        };
+    }
+
+    public async getSourceKnowledge() {
+        return this.getKnowledgeGraph();
+    }
+
+    public async ingestDocument(
+        _request: DocumentIngestRequest,
+        _signal?: AbortSignal,
+    ): Promise<DocumentIngestResult> {
+        return {
+            jobId: this.job.jobId,
+            sourceId: this.job.sourceId,
+            revisionId: this.job.revisionId,
+            state: "accepted",
+            statusUri: `typeagent-memory://jobs/${this.job.jobId}`,
+        };
+    }
+
+    public async replaceSource(
+        _request: SourceReplaceRequest,
+        _signal?: AbortSignal,
+    ) {
+        return {
+            jobId: this.job.jobId,
+            sourceId: this.job.sourceId,
+            revisionId: this.job.revisionId,
+            state: "accepted" as const,
+            statusUri: `typeagent-memory://jobs/${this.job.jobId}`,
+        };
+    }
+
+    public async previewForgetSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            activeRevisionId: this.source.activeRevisionId,
+            revisionCount: 1,
+            derivedEntityCount: 1,
+            derivedTopicCount: 0,
+            derivedRelationshipCount: 0,
+            confirmationToken: "confirmation-1",
+            expiresAt: "2026-01-01T00:10:00.000Z",
+        };
+    }
+
+    public async forgetSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            deletedRevisionCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async reindexCorpus() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async reindexSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            sourceCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async getJob(jobId: string) {
+        return jobId === this.job.jobId ? this.job : undefined;
+    }
+
+    public async listJobs() {
+        return { items: [this.job], total: 1 };
+    }
+
+    public async cancelJob(jobId: string) {
+        return this.getJob(jobId);
+    }
+
+    public async appendEvent(request: MemoryEventAppendRequest) {
+        return {
+            event: {
+                ...this.event,
+                idempotencyKey: request.idempotencyKey,
+                producer: request.producer,
+                eventType: request.eventType,
+                sourceKind: request.sourceKind,
+                ...(request.content === undefined
+                    ? {}
+                    : { content: request.content }),
+            },
+            replayed: false,
+        };
+    }
+
+    public async getEvent(_corpusId: string, eventId: string) {
+        return eventId === this.event.eventId ? this.event : undefined;
+    }
+
+    public async listEvents() {
+        return { items: [this.event], total: 1 };
+    }
+
+    public async searchEvents(request: { query: string }) {
+        return {
+            query: request.query,
+            matches: [{ event: this.event, snippet: "fixture", score: 1 }],
+        };
+    }
+
+    public async forgetEvents() {
+        return {
+            corpusId: this.corpus.corpusId,
+            deletedEventCount: 1,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: [],
+            indexVersion: "fixture",
+        };
+    }
+
+    public async search(
+        request: MemorySearchRequest,
+    ): Promise<MemorySearchResult> {
+        return {
+            query: request.query,
+            matches: [],
+            warnings: [],
+            capabilitiesUsed: ["structured-search"],
+            indexVersion: "fixture",
+        };
+    }
+
+    public async answer(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        return {
+            question: request.question,
+            answer: "No supporting memory evidence was found.",
+            mode: request.answerMode ?? "extractive",
+            citations: [],
+            grounded: true,
+            warnings: [],
+            indexVersion: "fixture",
+        };
+    }
+
+    public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
+        return {
+            entities: [
+                {
+                    name: "TypeAgent",
+                    types: ["software"],
+                    mentionCount: 1,
+                    sourceIds: [this.source.sourceId],
+                },
+            ],
+            topics: [],
+            relationships: [],
+        };
+    }
+
+    public async getCapabilities(): Promise<MemoryServiceCapabilities> {
+        return {
+            features: {
+                knowledgeExtraction: true,
+                queryTranslation: true,
+                vectorSimilarity: true,
+                structuredSearch: true,
+                exactSearch: true,
+                management: true,
+                groundedAnswer: true,
+            },
+            warnings: [],
+        };
+    }
+}
+
+class WaitingMemoryService extends FakeMemoryService {
+    private markStarted: (() => void) | undefined;
+    public readonly waitStarted = new Promise<void>((resolve) => {
+        this.markStarted = resolve;
+    });
+
+    public override async getJob(
+        jobId: string,
+    ): Promise<IngestionJobStatus | undefined> {
+        this.markStarted?.();
+        return jobId === this.job.jobId
+            ? { ...this.job, state: "building-indexes" }
+            : undefined;
+    }
+}
+
+class PreviewMemoryService extends FakeMemoryService {
+    public async understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return { schemaVersion: 1, ...request, status: "ready", citations: [] };
+    }
+
+    public async understand(): Promise<UnderstandingResult> {
+        return {
+            schemaVersion: 1,
+            snapshotId: "00000000-0000-4000-8000-000000000001",
+            turnId: "00000000-0000-4000-8000-000000000002",
+            corpusId: "corpus-1",
+            question: "What is remembered?",
+            expiresAt: "2099-01-01T00:00:00Z",
+            answer: {
+                status: "answered",
+                title: "Remembered context",
+                summary: {
+                    text: "A grounded explanation.",
+                    evidenceIds: ["s0"],
+                    role: "memory",
+                },
+                sections: [],
+                unknowns: [],
+                followUps: [],
+            },
+            citations: [],
+            modules: [],
+            warnings: [],
+        };
+    }
+}
+
+describe("opt-in HTTP Memory Apps sessions", () => {
+    test.each([false, true])(
+        "typed native clients keep their ordinary envelope with Apps=%s",
+        async (previews) => {
+            const service = new PreviewMemoryService();
+            const host = await MemoryServiceHost.start(service, { previews });
+            const client = await McpMemoryServiceClient.create({
+                kind: "http",
+                url: host.endpoint,
+                headers: { authorization: `Bearer ${host.bearerToken}` },
+            });
+            try {
+                const direct = new InProcessMemoryServiceClient(service);
+                const request = {
+                    corpusId: "corpus-1",
+                    question: "What is remembered?",
+                };
+                const result = await client.understand(request);
+                expect(result).toEqual(await direct.understand(request));
+                const module = {
+                    corpusId: request.corpusId,
+                    snapshotId: result.snapshotId,
+                    kind: "sources" as const,
+                };
+                expect(await client.understandingModule(module)).toEqual(
+                    await direct.understandingModule(module),
+                );
+            } finally {
+                await client.close();
+                await host.close();
+            }
+        },
+    );
+    test("keeps initialize capabilities per connection and preserves bearer authentication", async () => {
+        const host = await MemoryServiceHost.start(new PreviewMemoryService(), {
+            previews: true,
+        });
+        const clients: Client[] = [];
+        try {
+            for (const html of [true, false]) {
+                const capabilities = {
+                    roots: {},
+                    ...(html
+                        ? {
+                              extensions: {
+                                  "io.modelcontextprotocol/ui": {
+                                      mimeTypes: ["text/html;profile=mcp-app"],
+                                  },
+                              },
+                          }
+                        : {}),
+                };
+                const client = new Client(
+                    { name: `preview-${html}`, version: "1" },
+                    {
+                        capabilities,
+                    },
+                );
+                clients.push(client);
+                await client.connect(
+                    new StreamableHTTPClientTransport(new URL(host.endpoint), {
+                        requestInit: {
+                            headers: {
+                                authorization: `Bearer ${host.bearerToken}`,
+                            },
+                        },
+                    }) as Transport,
+                );
+            }
+            for (const [index, client] of clients.entries()) {
+                const result = await client.callTool({
+                    name: "memory_preview",
+                    arguments: {
+                        corpusId: "corpus-1",
+                        question: "What is remembered?",
+                    },
+                });
+                expect(result.isError).not.toBe(true);
+                expect(!!result._meta?.["typeagent.memory.preview"]).toBe(
+                    index === 0,
+                );
+            }
+            expect(
+                (
+                    await clients[0].readResource({
+                        uri: "ui://typeagent-memory/preview-v1.html",
+                    })
+                ).contents[0].mimeType,
+            ).toBe("text/html;profile=mcp-app");
+            expect((await fetch(host.endpoint)).status).toBe(401);
+            const missing = await fetch(host.endpoint, {
+                headers: {
+                    authorization: `Bearer ${host.bearerToken}`,
+                    "mcp-session-id": "unknown",
+                    accept: "text/event-stream",
+                },
+            });
+            expect(missing.status).toBe(404);
+        } finally {
+            await Promise.all(clients.map((client) => client.close()));
+            await host.close();
+        }
+    });
+
+    test("expires sessions absolutely and releases active servers", async () => {
+        clock.useFakeTimers({
+            doNotFake: ["nextTick", "setImmediate", "performance"],
+        });
+        const active = new Set<MemoryMcpServer>();
+        const onError = clock.fn();
+        const sessions = new MemoryAppSessions(
+            new PreviewMemoryService(),
+            active,
+            onError,
+        );
+        const request = new Request("http://localhost/mcp", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+            },
+        });
+        try {
+            const response = await sessions.handle(request, {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "initialize",
+                params: {
+                    protocolVersion: "2025-11-25",
+                    capabilities: {},
+                    clientInfo: { name: "expiry-test", version: "1" },
+                },
+            });
+            await response.text();
+            const id = response.headers.get("mcp-session-id");
+            expect(id).toBeTruthy();
+            expect(active.size).toBe(1);
+            await clock.advanceTimersByTimeAsync(15 * 60_000);
+            expect(active.size).toBe(0);
+            expect(onError).not.toHaveBeenCalled();
+            const expired = await sessions.handle(
+                new Request("http://localhost/mcp", {
+                    headers: { "mcp-session-id": id! },
+                }),
+                undefined,
+            );
+            expect(expired.status).toBe(404);
+        } finally {
+            await Promise.all([...active].map((server) => server.close()));
+            clock.useRealTimers();
+        }
+    });
+});
+
+describe("MemoryMcpServer", () => {
+    let server: MemoryMcpServer;
+    let client: Client;
+
+    beforeEach(async () => {
+        const [clientTransport, serverTransport] = createTransportPair();
+        server = new MemoryMcpServer(new FakeMemoryService());
+        client = new Client(
+            { name: "memory-protocol-test", version: "0.0.1" },
+            { capabilities: {} },
+        );
+        await Promise.all([
+            server.start(serverTransport),
+            client.connect(clientTransport),
+        ]);
+    });
+
+    afterEach(async () => {
+        await Promise.all([client.close(), server.close()]);
+    });
+
+    test("advertises the complete memory tool surface", async () => {
+        const tools = await client.listTools();
+        expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
+            [
+                ...Object.values(agentSessionToolNames),
+                ...Object.values(memoryToolNames),
+                ...Object.values(understandingToolNames),
+                ...Object.values(topicToolNames),
+                ...Object.values(viewToolNames),
+                ...Object.values(schemaViewToolNames),
+                ...Object.values(acquisitionToolNames),
+                ...Object.values(frameToolNames),
+                ...Object.values(inventoryToolNames),
+                ...Object.values(knowledgeToolNames),
+            ].sort(),
+        );
+    });
+
+    test("returns validated structured tool results", async () => {
+        const response = await client.callTool({
+            name: memoryToolNames.corpusCreate,
+            arguments: { name: "Protocol corpus" },
+        });
+        expect(response.isError).not.toBe(true);
+        expect(response.structuredContent).toEqual({
+            result: expect.objectContaining({
+                corpusId: "corpus-1",
+                name: "Protocol corpus",
+            }),
+        });
+    });
+
+    test("rejects invalid tool arguments before service dispatch", async () => {
+        const response = await client.callTool({
+            name: memoryToolNames.search,
+            arguments: { corpusId: "invalid id", query: "test" },
+        });
+        expect(response.isError).toBe(true);
+    });
+
+    test("serves strict metadata-only receipt pages", async () => {
+        const response = await client.callTool({
+            name: memoryToolNames.changesList,
+            arguments: { corpusId: "corpus-1", pageSize: 1 },
+        });
+        expect(response.isError).not.toBe(true);
+        expect(response.structuredContent).toEqual({
+            result: await new FakeMemoryService().listChanges(),
+        });
+        const invalid = await client.callTool({
+            name: memoryToolNames.changesList,
+            arguments: { corpusId: "corpus-1", pageSize: 0 },
+        });
+        expect(invalid.isError).toBe(true);
+        const receipt = (await new FakeMemoryService().listChanges()).items[0];
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                metadata: { secret: "Private metadata" },
+            }).success,
+        ).toBe(false);
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                counts: {
+                    sources: Number.MAX_SAFE_INTEGER + 1,
+                    revisions: 0,
+                    knowledge: 1,
+                },
+            }).success,
+        ).toBe(false);
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                sourceId: "Private-source-name",
+            }).success,
+        ).toBe(false);
+    });
+
+    test("reports unsupported receipts explicitly over MCP and in-process clients", async () => {
+        const service = new FakeMemoryService();
+        Object.defineProperty(service, "listChanges", { value: undefined });
+        const host = await MemoryServiceHost.start(service);
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            await expect(
+                typed.listChanges({ corpusId: "corpus-1" }),
+            ).rejects.toThrow("not supported");
+            await expect(
+                new InProcessMemoryServiceClient(service).listChanges({
+                    corpusId: "corpus-1",
+                }),
+            ).rejects.toThrow("not supported");
+        } finally {
+            await typed.close();
+            await host.close();
+        }
+    });
+
+    test("forwards capture-date search predicates through both typed clients", async () => {
+        const service = new FakeMemoryService();
+        const requests: MemorySearchRequest[] = [];
+        const search = service.search.bind(service);
+        service.search = async (request) => {
+            requests.push(request);
+            return search(request);
+        };
+        const request: MemorySearchRequest = {
+            corpusId: "corpus-1",
+            query: "target",
+            dateFrom: "2026-01-01T00:00:00.000Z",
+            dateTo: "2026-12-31T23:59:59.999Z",
+        };
+        await new InProcessMemoryServiceClient(service).search(request);
+        const host = await MemoryServiceHost.start(service);
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            await typed.search(request);
+            expect(requests).toEqual([request, request]);
+        } finally {
+            await typed.close();
+            await host.close();
+        }
+    });
+
+    test("reads durable job and source resources", async () => {
+        const job = await client.readResource({
+            uri: "typeagent-memory://jobs/job-1",
+        });
+        const source = await client.readResource({
+            uri: "typeagent-memory://corpora/corpus-1/sources/source-1",
+        });
+        const jobContent = job.contents[0];
+        const sourceContent = source.contents[0];
+        if (!("text" in jobContent) || !("text" in sourceContent)) {
+            throw new Error("Expected JSON text resources");
+        }
+        expect(JSON.parse(jobContent.text)).toMatchObject({
+            jobId: "job-1",
+            state: "complete",
+        });
+        expect(JSON.parse(sourceContent.text)).toMatchObject({
+            sourceId: "source-1",
+            activeRevisionId: "revision-1",
+        });
+    });
+});
+
+describe("MemoryServiceHost", () => {
+    test("accepts initialize and initialized HTTP messages", async () => {
+        const host = await MemoryServiceHost.start(new FakeMemoryService());
+        try {
+            const headers = {
+                accept: "application/json, text/event-stream",
+                authorization: `Bearer ${host.bearerToken}`,
+                "content-type": "application/json",
+            };
+            const initialize = await fetch(host.endpoint, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "initialize",
+                    params: {
+                        protocolVersion: "2025-03-26",
+                        capabilities: {},
+                        clientInfo: { name: "raw-test", version: "0.0.1" },
+                    },
+                }),
+            });
+            expect(initialize.status).toBe(200);
+            await initialize.text();
+            const initialized = await fetch(host.endpoint, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    method: "notifications/initialized",
+                }),
+            });
+            expect({
+                status: initialized.status,
+                body: await initialized.text(),
+            }).toEqual({ status: 202, body: "" });
+            const tools = await fetch(host.endpoint, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: 2,
+                    method: "tools/list",
+                    params: {},
+                }),
+            });
+            const toolsBody = await tools.text();
+            expect({ status: tools.status, body: toolsBody }).toEqual({
+                status: 200,
+                body: expect.stringContaining(memoryToolNames.search),
+            });
+        } finally {
+            await host.close();
+        }
+    });
+
+    test("rejects unauthenticated MCP requests", async () => {
+        const host = await MemoryServiceHost.start(new FakeMemoryService());
+        try {
+            const response = await fetch(host.endpoint, { method: "POST" });
+            expect(response.status).toBe(401);
+        } finally {
+            await host.close();
+        }
+    });
+
+    test("closes while an HTTP job wait is active", async () => {
+        const service = new WaitingMemoryService();
+        const host = await MemoryServiceHost.start(service);
+        const client = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        const wait = client.waitForJob("job-1").catch(() => undefined);
+        await service.waitStarted;
+
+        await expect(host.close()).resolves.toBeUndefined();
+        await wait;
+        await client.close().catch(() => undefined);
+    });
+});

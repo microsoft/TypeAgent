@@ -3,17 +3,41 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export * from "./decisionModels.js";
+export * from "./embeddingInput.js";
+export {
+    instrumentChatModel,
+    resetLlmClassificationDiagnostics,
+    type ChatModelTelemetryInfo,
+} from "./otelChatModel.js";
+export {
+    getChatModelTelemetryContext,
+    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
+    type ChatModelTelemetryClassification,
+    type ChatModelTelemetryClassificationSource,
+    type ChatModelTelemetryContext,
+    type ChatModelTelemetryPhase,
+    type ChatModelTelemetryPurpose,
+    type ChatModelTelemetryScope,
+} from "./chatModelTelemetryContext.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";
 export * from "./auth.js";
 export * from "./tokenCounter.js";
+export * from "./requestBudget.js";
+export * from "./requestConstraints.js";
 export {
     getCopilotClient,
     getCopilotCliPath,
+    stopCopilotClient,
+    createCopilotModelEndpointProvider,
     warmupCopilotClient,
     warmupCopilotFromConfig,
     type CopilotClientOptions,
+    type CopilotModelEndpoint,
+    type CopilotModelEndpointProvider,
 } from "./copilotModels.js";
 export {
     copilotApiSettingsFromConfig,
@@ -44,6 +68,7 @@ export {
     getRuntimeConfig,
     setRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
+    getRuntimeConfigGeneration,
 } from "./runtimeConfig.js";
 export {
     createLocalEmbeddingModel,
@@ -51,8 +76,16 @@ export {
     type LocalEmbeddingModelSettings,
 } from "./localEmbedding.js";
 export {
+    createCopilotEmbeddingModel,
+    DefaultCopilotEmbeddingModel,
+} from "./copilotEmbedding.js";
+export {
     getEmbeddingProvider,
+    getEmbeddingSize,
     isEmbeddingAvailable,
     tryCreateEmbeddingModel,
     type EmbeddingProvider,
 } from "./embeddingProvider.js";
+export * from "./embeddingIdentity.js";
+export * from "./candidateEmbedding.js";
+export * from "./gemmaEmbedding.js";

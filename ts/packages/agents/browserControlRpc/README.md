@@ -17,9 +17,19 @@ agent's heavy transitive deps (embeddings, puppeteer, the extension toolchain).
 | `./platformServices`        | Platform service abstractions                                                                      |
 | `./htmlReducer`             | Cross-context HTML reducer (`crossContextHtmlReducer`)                                             |
 | `./pdfTypes`                | PDF annotation/service types                                                                       |
+| `./pdfMarkdown`             | PDF extraction and Markdown conversion                                                             |
 | `./answerEnhancement`       | Answer-enhancement types                                                                           |
 | `./contentScriptRpc/types`  | Content-script RPC contract                                                                        |
 | `./contentScriptRpc/client` | `createContentScriptRpcClient` (runtime)                                                           |
+
+## PDF Markdown Imports
+
+PDF-derived content uses the ordinary `memoryImportDocument` service operation:
+`corpusId`, `title`, `markdown`, optional `canonicalUri` and `tags`. Sources,
+revisions, content, jobs, search and forgetting use the shared memory contracts.
+There are no retained-PDF capture/read/search APIs, capability grants or
+capture/open browser-control operation types. Extraction algorithms and their
+authored regeneration tools remain available.
 
 ## Trademarks
 

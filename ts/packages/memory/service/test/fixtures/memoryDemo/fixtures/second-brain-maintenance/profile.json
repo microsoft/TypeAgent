@@ -1,0 +1,1245 @@
+{
+  "baseline": {
+    "activeRevisions": {
+      "dream-constraints": 1,
+      "dream-platform": 1,
+      "dream-project": 1,
+      "dream-session-01": 1,
+      "dream-session-02": 1,
+      "dream-session-03": 1,
+      "dream-session-04": 2,
+      "dream-status": 2,
+      "identity-gateway-migration-charter": 1,
+      "identity-gateway-migration-session-03": 1,
+      "identity-gateway-migration-status": 1,
+      "orders-schema-migration-charter": 1,
+      "payments-reliability-charter": 1,
+      "payments-reliability-status": 1,
+      "sb-capacity-notebook": 1,
+      "sb-memory-warning": 1,
+      "sb-overlap-notebook": 1,
+      "sb-shared-meeting": 1,
+      "sb-transition-reference": 1
+    },
+    "orderedPhases": [
+      "baseline",
+      "meeting-orders",
+      "correction"
+    ],
+    "profile": "fixtures/second-brain/profile.json"
+  },
+  "externalActions": "fixtures/second-brain-maintenance/external-actions.json",
+  "indexing": "not-run",
+  "ingestion": "not-run",
+  "modelEvaluation": "not-run",
+  "not_for_import": true,
+  "profile": "second-brain-maintenance-v1",
+  "projectionPolicy": "Select one variant and one format per logical source. Deltas are not cumulative copies or independent corroboration.",
+  "runtimeIdentityPolicy": "No allocated product IDs, chunk ordinals or execution receipts. Actual IDs and source-range/index mappings are external runtime records.",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-project",
+      "number": 1,
+      "origin": "memory-import-distillation/project-charter.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-001.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-001.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-project"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-platform",
+      "number": 2,
+      "origin": "memory-import-distillation/service-overview.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-002.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-002.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-platform"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-constraints",
+      "number": 3,
+      "origin": "memory-import-distillation/operating-constraints.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-003.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-003.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-constraints"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-status",
+      "number": 4,
+      "origin": "memory-import-distillation/status-review.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-004.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-004.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-status"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-session-01",
+      "number": 5,
+      "origin": "memory-import-distillation/session-01.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-005.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-005.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-session-01"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-session-02",
+      "number": 6,
+      "origin": "memory-import-distillation/session-02.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-006.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-006.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-session-02"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-session-04",
+      "number": 7,
+      "origin": "memory-import-distillation/session-04.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-007.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-007.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-session-04"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:payments-reliability-charter",
+      "number": 8,
+      "origin": "memory-import-engineering/payments-reliability/charter.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-008.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-008.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "payments-reliability-charter"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:payments-reliability-status",
+      "number": 9,
+      "origin": "memory-import-engineering/payments-reliability/status.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-009.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-009.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "payments-reliability-status"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-session-03",
+      "number": 10,
+      "origin": "memory-import-engineering/payments-reliability/dream-session-03.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-010.md",
+          "messages": "memory-import-second-brain/content-only/baseline/document-010.messages.json"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-010.md",
+          "messages": "memory-import-second-brain/metadata-assisted/baseline/document-010.messages.json"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "dream-session-03"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:identity-gateway-migration-charter",
+      "number": 11,
+      "origin": "memory-import-engineering/identity-gateway-migration/charter.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-011.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-011.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "identity-gateway-migration-charter"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:identity-gateway-migration-status",
+      "number": 12,
+      "origin": "memory-import-engineering/identity-gateway-migration/status.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-012.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-012.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "identity-gateway-migration-status"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:identity-gateway-migration-session-03",
+      "number": 13,
+      "origin": "memory-import-engineering/identity-gateway-migration/identity-gateway-migration-session-03.md",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-013.md",
+          "messages": "memory-import-second-brain/content-only/baseline/document-013.messages.json"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-013.md",
+          "messages": "memory-import-second-brain/metadata-assisted/baseline/document-013.messages.json"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "identity-gateway-migration-session-03"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-capacity-notebook",
+      "number": 14,
+      "origin": "scripts/second_brain_content.py:LONG_NOTES",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-014.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-014.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-capacity-notebook"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-overlap-notebook",
+      "number": 15,
+      "origin": "scripts/second_brain_content.py:LONG_NOTES",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-015.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-015.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-overlap-notebook"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-transition-reference",
+      "number": 16,
+      "origin": "scripts/second_brain_content.py:REFERENCE",
+      "phase": "baseline",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/baseline/document-016.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/baseline/document-016.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-transition-reference"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-shared-meeting",
+      "number": 17,
+      "origin": "scripts/second_brain_content.py:MEETING",
+      "phase": "meeting-orders",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/meeting-orders/document-017.md",
+          "messages": "memory-import-second-brain/content-only/meeting-orders/document-017.messages.json"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/meeting-orders/document-017.md",
+          "messages": "memory-import-second-brain/metadata-assisted/meeting-orders/document-017.messages.json"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-shared-meeting"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:orders-schema-migration-charter",
+      "number": 18,
+      "origin": "memory-import-engineering/orders-schema-migration/charter.md",
+      "phase": "meeting-orders",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/meeting-orders/document-018.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/meeting-orders/document-018.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "orders-schema-migration-charter"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-memory-warning",
+      "number": 19,
+      "origin": "scripts/second_brain_content.py:CORRECTION",
+      "phase": "correction",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/correction/document-019.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/correction/document-019.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-memory-warning"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-session-04",
+      "number": 7,
+      "origin": "memory-import-distillation-update/session-04.md",
+      "phase": "correction",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/correction/document-007.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/correction/document-007.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "dream-session-04"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:dream-status",
+      "number": 4,
+      "origin": "memory-import-distillation-update/status-review.md",
+      "phase": "correction",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain/content-only/correction/document-004.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain/metadata-assisted/correction/document-004.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "dream-status"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "20fb2472327ec3cedccf903764f22f0d6de931a37677ed860f6e50d3e5a53116"
+        },
+        "metadata-assisted": {
+          "markdown": "a8e37db460ea95443918b210fb7c2ee12e189600e1decfa4a8c41a4f0d018ea1"
+        }
+      },
+      "number": 20,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "initial",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-020.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-020.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-pool-worksheet"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-review-vocabulary",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "17fad9d024b30da388d18f34399e2355d9ce44aa644e89a8cc2582edfec9e816"
+        },
+        "metadata-assisted": {
+          "markdown": "e9531fa6b8f7673319cd69132f96e5d4603e3c56db6dc71e36ec39648be18226"
+        }
+      },
+      "number": 21,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "initial",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-021.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-021.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-review-vocabulary"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "2d89d4ac1bfc5bcdb2656ab202a2c1f719ebeed22e5fc23a6bf62311d173937f"
+        },
+        "metadata-assisted": {
+          "markdown": "60ca1737300714de7a87bf6c59f3f89d1795152c9f239e341289b3cd5a64a4b6"
+        }
+      },
+      "number": 22,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "initial",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-022.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-022.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-overlap-handoff"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-temporary-handoff",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "fc404c3ec8de11dddf315722d9dbc0dca2410c5cb0d8847eb8f26d30407c2448"
+        },
+        "metadata-assisted": {
+          "markdown": "6cf4cae57bfd911f391a7f3c24f73ac4ea8eb05c175129c57e7c8f7f37860045"
+        }
+      },
+      "number": 23,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "initial",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-023.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-023.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-temporary-handoff"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "5d37f9aa1ac0c3870dbff64a3c57899f2dd1768e83107232c1256be9a4c9ecb4"
+        },
+        "metadata-assisted": {
+          "markdown": "10cf4e381eb29a900a79b12f2161f683cd20e2dc3f845fbf8c737c0e584f2386"
+        }
+      },
+      "number": 20,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t1",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-020.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-020.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "sb-pool-worksheet"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-review-vocabulary",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "0f0dd7d71dc3a19597d965ac7fb82b07b22372fb00d971836558da46e86799bb"
+        },
+        "metadata-assisted": {
+          "markdown": "e5606c4034d91fceeb012ec6aeb9a8325122fe9b112fce3d8d0ba915c98d0060"
+        }
+      },
+      "number": 21,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t1",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-021.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-021.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "sb-review-vocabulary"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "d80fd384e55d9326b46acfd0e83f01aa0da530be6d4768e1869c847efd800512"
+        },
+        "metadata-assisted": {
+          "markdown": "9707e344ec0a37f928ddf97db4f7c05e713f3968e5d2d45579c5f792bfd874ed"
+        }
+      },
+      "number": 22,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t1",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-022.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-022.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "sb-overlap-handoff"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:second-brain:sb-capacity-notebook",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "266d2f1aa38c4bd09d56ee6f1a2806609ab90e835d6efebdb7470d9c77900677"
+        },
+        "metadata-assisted": {
+          "markdown": "9ad19893b2352b2aa80df3dcff762daef9fd865a60eb728c83792d15745aaee4"
+        }
+      },
+      "number": 14,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t1",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-014.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-014.md"
+        }
+      },
+      "replacesRevision": 1,
+      "revision": 2,
+      "sourceKey": "sb-capacity-notebook"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-followup-meeting",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "7bb1cf345968bebd1259b0e90c9b5d11750afff45ab70fbdf0a4711e0c322c5e",
+          "messages": "fd0234f00ff2445b4ce872d7506af29027d53e9b9b536e7f695c0b94658caebc",
+          "vtt": "b788aa9209c5c23f47c808d45bee4b28bfac5bb54830818cf2066a752e7d4550"
+        },
+        "metadata-assisted": {
+          "markdown": "8adf094de3b2c760c888fce762832d2ff00a735a90d9c8a85ec0ec9424b89a33",
+          "messages": "3786a3aa47e92561ae78e638009ad4d5384b90457617924fd1dd69e8fc5c01af",
+          "vtt": "b788aa9209c5c23f47c808d45bee4b28bfac5bb54830818cf2066a752e7d4550"
+        }
+      },
+      "number": 24,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t1",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-024.md",
+          "messages": "memory-import-second-brain-maintenance/content-only/t1/document-024.messages.json",
+          "vtt": "memory-import-second-brain-maintenance/content-only/t1/document-024.vtt"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.md",
+          "messages": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.messages.json",
+          "vtt": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.vtt"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-followup-meeting"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "0b50c4feb2327abb8b65321cc77a701f1a2fbbaeaa9c072804addf62ba0e85e4"
+        },
+        "metadata-assisted": {
+          "markdown": "589392bdd588208e08b466252a37985e7240122f7a729d451253dec18871b8a2"
+        }
+      },
+      "number": 20,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t2",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-020.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-020.md"
+        }
+      },
+      "replacesRevision": 2,
+      "revision": 3,
+      "sourceKey": "sb-pool-worksheet"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "a2809d824b2bf8c537f0fa65f34b14d343a6b7c43466755ad190c1002fb7b456"
+        },
+        "metadata-assisted": {
+          "markdown": "9a6bf9ed64c5964821c07e5e364c403be1363bc73e9415d9f5578aad19320ea8"
+        }
+      },
+      "number": 22,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t2",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-022.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-022.md"
+        }
+      },
+      "replacesRevision": 2,
+      "revision": 3,
+      "sourceKey": "sb-overlap-handoff"
+    },
+    {
+      "canonicalUri": "urn:memorydemo:maintenance:sb-draft-index",
+      "contentHashes": {
+        "content-only": {
+          "markdown": "6cb6068be3c08bc6b18b52b15df3daa006ba9ad2447865e3056f6e47e2626d9e"
+        },
+        "metadata-assisted": {
+          "markdown": "607727cb672a84132c78a7c4d146a39648b47eea10c7d49ce9bee61fd02b61c2"
+        }
+      },
+      "number": 25,
+      "origin": "scripts/second_brain_maintenance_content.py",
+      "phase": "t2",
+      "projections": {
+        "content-only": {
+          "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-025.md"
+        },
+        "metadata-assisted": {
+          "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-025.md"
+        }
+      },
+      "replacesRevision": null,
+      "revision": 1,
+      "sourceKey": "sb-draft-index"
+    }
+  ],
+  "stages": [
+    {
+      "activeRevisions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 1,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 1,
+        "sb-review-vocabulary": 1,
+        "sb-shared-meeting": 1,
+        "sb-temporary-handoff": 1,
+        "sb-transition-reference": 1
+      },
+      "activeRevisionsBeforeExternalActions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 1,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 1,
+        "sb-review-vocabulary": 1,
+        "sb-shared-meeting": 1,
+        "sb-temporary-handoff": 1,
+        "sb-transition-reference": 1
+      },
+      "externalActionIds": [],
+      "operations": [
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "20fb2472327ec3cedccf903764f22f0d6de931a37677ed860f6e50d3e5a53116"
+            },
+            "metadata-assisted": {
+              "markdown": "a8e37db460ea95443918b210fb7c2ee12e189600e1decfa4a8c41a4f0d018ea1"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-020.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-020.md"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-pool-worksheet"
+        },
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-review-vocabulary",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "17fad9d024b30da388d18f34399e2355d9ce44aa644e89a8cc2582edfec9e816"
+            },
+            "metadata-assisted": {
+              "markdown": "e9531fa6b8f7673319cd69132f96e5d4603e3c56db6dc71e36ec39648be18226"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-021.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-021.md"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-review-vocabulary"
+        },
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "2d89d4ac1bfc5bcdb2656ab202a2c1f719ebeed22e5fc23a6bf62311d173937f"
+            },
+            "metadata-assisted": {
+              "markdown": "60ca1737300714de7a87bf6c59f3f89d1795152c9f239e341289b3cd5a64a4b6"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-022.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-022.md"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-overlap-handoff"
+        },
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-temporary-handoff",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "fc404c3ec8de11dddf315722d9dbc0dca2410c5cb0d8847eb8f26d30407c2448"
+            },
+            "metadata-assisted": {
+              "markdown": "6cf4cae57bfd911f391a7f3c24f73ac4ea8eb05c175129c57e7c8f7f37860045"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/initial/document-023.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/initial/document-023.md"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-temporary-handoff"
+        }
+      ],
+      "phase": "initial"
+    },
+    {
+      "activeRevisions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 2,
+        "sb-followup-meeting": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 2,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 2,
+        "sb-review-vocabulary": 2,
+        "sb-shared-meeting": 1,
+        "sb-temporary-handoff": 1,
+        "sb-transition-reference": 1
+      },
+      "activeRevisionsBeforeExternalActions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 2,
+        "sb-followup-meeting": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 2,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 2,
+        "sb-review-vocabulary": 2,
+        "sb-shared-meeting": 1,
+        "sb-temporary-handoff": 1,
+        "sb-transition-reference": 1
+      },
+      "externalActionIds": [],
+      "operations": [
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "5d37f9aa1ac0c3870dbff64a3c57899f2dd1768e83107232c1256be9a4c9ecb4"
+            },
+            "metadata-assisted": {
+              "markdown": "10cf4e381eb29a900a79b12f2161f683cd20e2dc3f845fbf8c737c0e584f2386"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "20fb2472327ec3cedccf903764f22f0d6de931a37677ed860f6e50d3e5a53116"
+            },
+            "metadata-assisted": {
+              "markdown": "a8e37db460ea95443918b210fb7c2ee12e189600e1decfa4a8c41a4f0d018ea1"
+            }
+          },
+          "expectedRevision": 1,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-020.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-020.md"
+            }
+          },
+          "revision": 2,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-pool-worksheet"
+        },
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-review-vocabulary",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "0f0dd7d71dc3a19597d965ac7fb82b07b22372fb00d971836558da46e86799bb"
+            },
+            "metadata-assisted": {
+              "markdown": "e5606c4034d91fceeb012ec6aeb9a8325122fe9b112fce3d8d0ba915c98d0060"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "17fad9d024b30da388d18f34399e2355d9ce44aa644e89a8cc2582edfec9e816"
+            },
+            "metadata-assisted": {
+              "markdown": "e9531fa6b8f7673319cd69132f96e5d4603e3c56db6dc71e36ec39648be18226"
+            }
+          },
+          "expectedRevision": 1,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-021.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-021.md"
+            }
+          },
+          "revision": 2,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-review-vocabulary"
+        },
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "d80fd384e55d9326b46acfd0e83f01aa0da530be6d4768e1869c847efd800512"
+            },
+            "metadata-assisted": {
+              "markdown": "9707e344ec0a37f928ddf97db4f7c05e713f3968e5d2d45579c5f792bfd874ed"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "2d89d4ac1bfc5bcdb2656ab202a2c1f719ebeed22e5fc23a6bf62311d173937f"
+            },
+            "metadata-assisted": {
+              "markdown": "60ca1737300714de7a87bf6c59f3f89d1795152c9f239e341289b3cd5a64a4b6"
+            }
+          },
+          "expectedRevision": 1,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-022.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-022.md"
+            }
+          },
+          "revision": 2,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-overlap-handoff"
+        },
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:second-brain:sb-capacity-notebook",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "266d2f1aa38c4bd09d56ee6f1a2806609ab90e835d6efebdb7470d9c77900677"
+            },
+            "metadata-assisted": {
+              "markdown": "9ad19893b2352b2aa80df3dcff762daef9fd865a60eb728c83792d15745aaee4"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "8bb8e84681835d96afa00ad85d0637bf0637c91aa1804573e9865ef6d0f30993"
+            },
+            "metadata-assisted": {
+              "markdown": "ba8746bc2c3647ea64c572bd67611269a4f76736b0054047cabd06984798b2b7"
+            }
+          },
+          "expectedRevision": 1,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-014.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-014.md"
+            }
+          },
+          "revision": 2,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-capacity-notebook"
+        },
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-followup-meeting",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "7bb1cf345968bebd1259b0e90c9b5d11750afff45ab70fbdf0a4711e0c322c5e",
+              "messages": "fd0234f00ff2445b4ce872d7506af29027d53e9b9b536e7f695c0b94658caebc",
+              "vtt": "b788aa9209c5c23f47c808d45bee4b28bfac5bb54830818cf2066a752e7d4550"
+            },
+            "metadata-assisted": {
+              "markdown": "8adf094de3b2c760c888fce762832d2ff00a735a90d9c8a85ec0ec9424b89a33",
+              "messages": "3786a3aa47e92561ae78e638009ad4d5384b90457617924fd1dd69e8fc5c01af",
+              "vtt": "b788aa9209c5c23f47c808d45bee4b28bfac5bb54830818cf2066a752e7d4550"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t1/document-024.md",
+              "messages": "memory-import-second-brain-maintenance/content-only/t1/document-024.messages.json",
+              "vtt": "memory-import-second-brain-maintenance/content-only/t1/document-024.vtt"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.md",
+              "messages": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.messages.json",
+              "vtt": "memory-import-second-brain-maintenance/metadata-assisted/t1/document-024.vtt"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-followup-meeting"
+        }
+      ],
+      "phase": "t1"
+    },
+    {
+      "activeRevisions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 2,
+        "sb-draft-index": 1,
+        "sb-followup-meeting": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 3,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 3,
+        "sb-review-vocabulary": 2,
+        "sb-shared-meeting": 1,
+        "sb-transition-reference": 1
+      },
+      "activeRevisionsBeforeExternalActions": {
+        "dream-constraints": 1,
+        "dream-platform": 1,
+        "dream-project": 1,
+        "dream-session-01": 1,
+        "dream-session-02": 1,
+        "dream-session-03": 1,
+        "dream-session-04": 2,
+        "dream-status": 2,
+        "identity-gateway-migration-charter": 1,
+        "identity-gateway-migration-session-03": 1,
+        "identity-gateway-migration-status": 1,
+        "orders-schema-migration-charter": 1,
+        "payments-reliability-charter": 1,
+        "payments-reliability-status": 1,
+        "sb-capacity-notebook": 2,
+        "sb-draft-index": 1,
+        "sb-followup-meeting": 1,
+        "sb-memory-warning": 1,
+        "sb-overlap-handoff": 3,
+        "sb-overlap-notebook": 1,
+        "sb-pool-worksheet": 3,
+        "sb-review-vocabulary": 2,
+        "sb-shared-meeting": 1,
+        "sb-temporary-handoff": 1,
+        "sb-transition-reference": 1
+      },
+      "externalActionIds": [
+        "forget-temporary"
+      ],
+      "operations": [
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-pool-worksheet",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "0b50c4feb2327abb8b65321cc77a701f1a2fbbaeaa9c072804addf62ba0e85e4"
+            },
+            "metadata-assisted": {
+              "markdown": "589392bdd588208e08b466252a37985e7240122f7a729d451253dec18871b8a2"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "5d37f9aa1ac0c3870dbff64a3c57899f2dd1768e83107232c1256be9a4c9ecb4"
+            },
+            "metadata-assisted": {
+              "markdown": "10cf4e381eb29a900a79b12f2161f683cd20e2dc3f845fbf8c737c0e584f2386"
+            }
+          },
+          "expectedRevision": 2,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-020.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-020.md"
+            }
+          },
+          "revision": 3,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-pool-worksheet"
+        },
+        {
+          "action": "replace",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-overlap-handoff",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "a2809d824b2bf8c537f0fa65f34b14d343a6b7c43466755ad190c1002fb7b456"
+            },
+            "metadata-assisted": {
+              "markdown": "9a6bf9ed64c5964821c07e5e364c403be1363bc73e9415d9f5578aad19320ea8"
+            }
+          },
+          "expectedContentHashes": {
+            "content-only": {
+              "markdown": "d80fd384e55d9326b46acfd0e83f01aa0da530be6d4768e1869c847efd800512"
+            },
+            "metadata-assisted": {
+              "markdown": "9707e344ec0a37f928ddf97db4f7c05e713f3968e5d2d45579c5f792bfd874ed"
+            }
+          },
+          "expectedRevision": 2,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-022.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-022.md"
+            }
+          },
+          "revision": 3,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-overlap-handoff"
+        },
+        {
+          "action": "add",
+          "canonicalUri": "urn:memorydemo:maintenance:sb-draft-index",
+          "contentHashes": {
+            "content-only": {
+              "markdown": "6cb6068be3c08bc6b18b52b15df3daa006ba9ad2447865e3056f6e47e2626d9e"
+            },
+            "metadata-assisted": {
+              "markdown": "607727cb672a84132c78a7c4d146a39648b47eea10c7d49ce9bee61fd02b61c2"
+            }
+          },
+          "expectedContentHashes": null,
+          "expectedRevision": null,
+          "projections": {
+            "content-only": {
+              "markdown": "memory-import-second-brain-maintenance/content-only/t2/document-025.md"
+            },
+            "metadata-assisted": {
+              "markdown": "memory-import-second-brain-maintenance/metadata-assisted/t2/document-025.md"
+            }
+          },
+          "revision": 1,
+          "runtimeGuard": "Map fixture identity to actual sourceId and expectedActiveRevisionId; never add replacements as new sources.",
+          "sourceKey": "sb-draft-index"
+        }
+      ],
+      "phase": "t2"
+    }
+  ],
+  "synthetic": true,
+  "variants": [
+    "metadata-assisted",
+    "content-only"
+  ]
+}

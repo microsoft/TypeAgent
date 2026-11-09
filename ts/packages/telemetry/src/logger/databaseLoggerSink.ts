@@ -96,6 +96,6 @@ export function createDatabaseLoggerSink(
 
     // No connection string found
     throw new Error(
-        "No database connection string found. Set either COSMOSDB_CONNECTION_STRING or MONGODB_CONNECTION_STRING environment variable.",
+        "No database connection string found. Set `storage.database.cosmosDbConnectionString` or `storage.database.mongoDbConnectionString` in `ts/config.local.yaml`.",
     );
 }

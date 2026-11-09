@@ -21,11 +21,13 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge;
 ///     { "name": "discovery",
 ///       "message": { "type": "invoke", "callId": N, "name": "lookupPort",
 ///                    "args": [{ "agentName": "visualStudio",
-///                               "role": "default" }] } }
+///                               "role": "default",
+///                               "auth": { ... } }] } }
 ///   server → client:
 ///     { "name": "discovery",
 ///       "message": { "type": "invokeResult", "callId": N,
-///                    "result": { "port": &lt;int|null&gt; } } }
+///                    "result": { "port": &lt;int|null&gt;,
+///                                "auth": { ... } } } }
 ///
 /// Returns the discovered port, or null when the agent isn't yet
 /// registered with the agent-server (transient — caller should retry).
@@ -66,10 +68,15 @@ internal static class BridgeDiscovery
     /// Throws on transport failure (agent-server unreachable, timeout,
     /// malformed response) so the caller can log and retry.
     /// </summary>
-    public static async Task<uint?> ResolveBridgePortAsync(CancellationToken cancellation)
+    public static async Task<uint?> ResolveBridgePortAsync(
+        BridgeCredential credential,
+        CancellationToken cancellation)
     {
         uint agentServerPort = GetAgentServerPort();
-        uint? discovered = await LookupPortAsync(agentServerPort, cancellation).ConfigureAwait(false);
+        uint? discovered = await LookupPortAsync(
+            agentServerPort,
+            credential,
+            cancellation).ConfigureAwait(false);
         if (discovered is uint p)
         {
             Debug.WriteLine($"[TypeAgent] Discovery resolved bridge port {p}");
@@ -91,7 +98,10 @@ internal static class BridgeDiscovery
         return DefaultAgentServerPort;
     }
 
-    private static async Task<uint?> LookupPortAsync(uint agentServerPort, CancellationToken cancellation)
+    private static async Task<uint?> LookupPortAsync(
+        uint agentServerPort,
+        BridgeCredential credential,
+        CancellationToken cancellation)
     {
         var uri = new Uri($"{AgentServerHost}:{agentServerPort}/");
         using var ws = new ClientWebSocket();
@@ -106,6 +116,10 @@ internal static class BridgeDiscovery
         // callId is arbitrary — the server echoes it back verbatim,
         // and we only have one outstanding request per socket.
         const int callId = 1;
+        DiscoveryAuthContext discoveryAuth = BridgeAuthentication.CreateDiscoveryRequest(
+            credential,
+            AgentName,
+            Role);
         var request = new JObject
         {
             ["name"] = "discovery",
@@ -120,6 +134,7 @@ internal static class BridgeDiscovery
                     {
                         ["agentName"] = AgentName,
                         ["role"] = Role,
+                        ["auth"] = discoveryAuth.Auth,
                     },
                 },
             },
@@ -171,9 +186,22 @@ internal static class BridgeDiscovery
         {
             return null;
         }
+        int? portValue = result.Value<int?>("port");
+        string? url = result.Value<string>("url");
+        var responseAuth = result["auth"] as JObject;
+        if (!BridgeAuthentication.VerifyDiscoveryResponse(
+            credential,
+            discoveryAuth,
+            AgentName,
+            Role,
+            portValue,
+            url,
+            responseAuth))
+        {
+            throw new InvalidOperationException("Discovery peer authentication failed");
+        }
         // `port` is `int|null` on the wire; clamp to the valid port
         // range and surface anything else as "not registered".
-        int? portValue = result.Value<int?>("port");
         if (portValue is int pv && pv > 0 && pv <= 65535)
         {
             return (uint)pv;

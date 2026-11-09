@@ -43,7 +43,15 @@ import {
     AnswerResponse,
     ConversationSearchResult,
     SearchSelectExpr,
+    removeConversationData,
 } from "@typeagent/knowpro";
+import {
+    ConversationDurableMemory,
+    formatConversationEvidence,
+    searchDurableConversationMemory,
+} from "./conversationDurableMemory.js";
+import path from "node:path";
+import { toConcreteEntity } from "./conversationEntityMemory.js";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -51,9 +59,24 @@ export async function initializeMemory(
     context: CommandHandlerContext,
     sessionDirPath: string | undefined,
 ) {
+    await context.conversationDurableMemory?.flush();
+    await context.conversationMemory?.waitForPendingTasks();
+    context.conversationDurableMemory = undefined;
     if (sessionDirPath === undefined) {
         context.conversationManager = undefined;
         context.conversationMemory = undefined;
+        return;
+    }
+    if (context.durableMemoryService !== undefined) {
+        await removeConversationData(sessionDirPath, "conversationMemory");
+        context.conversationManager = undefined;
+        context.conversationMemory = undefined;
+        context.conversationDurableMemory = new ConversationDurableMemory({
+            service: context.durableMemoryService,
+            conversationId:
+                context.conversationId ?? path.basename(sessionDirPath),
+            runId: context.activationId,
+        });
         return;
     }
     context.conversationManager = await conversation.createConversationManager(
@@ -71,31 +94,6 @@ export async function initializeMemory(
     );
 }
 
-function toConcreteEntity(
-    appAgentName: string,
-    entities: Entity[],
-): conversation.ConcreteEntity[] {
-    return entities.map((e) => {
-        const concreteEntity: conversation.ConcreteEntity = {
-            name: e.name,
-            type: e.type,
-        };
-        if (e.uniqueId) {
-            concreteEntity.facets = [
-                {
-                    name: `typeagent.appAgentName`,
-                    value: appAgentName,
-                },
-                {
-                    name: `typeagent.uniqueId`,
-                    value: e.uniqueId,
-                },
-            ];
-        }
-        return concreteEntity;
-    });
-}
-
 // Record the user's own turn in the in-session transcript (chat history).
 // Kept separate from knowledge extraction so the transcript stays complete
 // even when extraction is disabled (e.g. connected/agent-server mode).
@@ -109,11 +107,17 @@ export function addUserMessageToHistory(
     // Fires regardless of the knowledge-extraction flags (which connected mode
     // disables), so the unified index still populates there. The request id
     // keys the turn so a later history backfill won't index it a second time.
-    context.conversationContentSink?.(
-        request,
-        "user",
-        context.currentRequestId?.requestId,
-    );
+    if (context.conversationDurableMemory === undefined) {
+        context.conversationContentSink?.(
+            request,
+            "user",
+            context.currentRequestId?.requestId,
+        );
+    }
+    const turnId = context.currentRequestId?.requestId;
+    if (turnId !== undefined) {
+        context.conversationDurableMemory?.recordUserTurn(request, turnId);
+    }
 }
 
 // Queue the user's turn for knowledge extraction into conversation memory.
@@ -157,11 +161,26 @@ export function addResultToMemory(
 
     // Mirror the assistant turn into the host's cross-conversation content
     // index (ungated by knowledge extraction, like the user turn).
-    context.conversationContentSink?.(
-        message,
-        "assistant",
-        context.currentRequestId?.requestId,
-    );
+    if (context.conversationDurableMemory === undefined) {
+        context.conversationContentSink?.(
+            message,
+            "assistant",
+            context.currentRequestId?.requestId,
+        );
+    }
+    const turnId = context.currentRequestId?.requestId;
+    if (turnId !== undefined) {
+        context.conversationDurableMemory?.recordAssistantEvidence(
+            message,
+            turnId,
+            action === undefined
+                ? undefined
+                : `${getAppAgentName(schemaName)}.${action.actionName}`,
+            entities === undefined
+                ? undefined
+                : { appAgentName: getAppAgentName(schemaName), entities },
+        );
+    }
 
     if (context.actionResultKnowledgeExtraction) {
         if (context.conversationManager && entities) {
@@ -213,6 +232,8 @@ export function addActionResultToMemory(
     schemaName: string,
     result: ActionResult,
 ): void {
+    const turnId = context.currentRequestId?.requestId;
+    const actionName = getFullActionName(executableAction);
     if (result.error !== undefined) {
         addResultToMemory(
             context,
@@ -220,6 +241,14 @@ export function addActionResultToMemory(
             schemaName,
             resolvedEntities,
         );
+        if (turnId !== undefined) {
+            context.conversationDurableMemory?.recordActionResult(
+                result.error,
+                turnId,
+                actionName,
+                false,
+            );
+        }
     } else {
         const combinedEntities = resolvedEntities ? [...resolvedEntities] : [];
         combinedEntities.push(...result.entities);
@@ -238,6 +267,17 @@ export function addActionResultToMemory(
             result.activityContext,
             executableAction.action,
         );
+        if (turnId !== undefined) {
+            const outcome =
+                result.historyText ??
+                `Action ${actionName} completed successfully.`;
+            context.conversationDurableMemory?.recordActionResult(
+                outcome,
+                turnId,
+                actionName,
+                true,
+            );
+        }
     }
 }
 
@@ -246,6 +286,20 @@ export async function lookupAndAnswerFromMemory(
     question: string,
 ): Promise<{ historyText: string[]; answered: boolean }> {
     const systemContext = context.sessionContext.agentContext;
+    if (systemContext.conversationDurableMemory !== undefined) {
+        const text = await searchDurableConversationMemory(
+            systemContext,
+            question,
+        );
+        if (text === undefined) {
+            return {
+                historyText: ["No matching conversation evidence found."],
+                answered: false,
+            };
+        }
+        displayResult(text, context);
+        return { historyText: [text], answered: true };
+    }
     const conversationMemory = systemContext.conversationMemory;
     if (conversationMemory === undefined) {
         throw new Error("Conversation memory is undefined!");
@@ -375,6 +429,17 @@ class MemorySearchCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { args, flags } = params;
+        const durable =
+            context.sessionContext.agentContext.conversationDurableMemory;
+        if (durable !== undefined) {
+            const matches = await durable.search(
+                args.terms.join(" "),
+                "current",
+                flags.count,
+            );
+            displayResult(formatConversationEvidence(matches), context);
+            return;
+        }
         const memory = ensureMemory(context);
 
         const selectExpr: SearchSelectExpr = {
@@ -494,6 +559,21 @@ class MemoryAnswerCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { args, flags } = params;
+        if (
+            context.sessionContext.agentContext.conversationDurableMemory !==
+            undefined
+        ) {
+            const text = await searchDurableConversationMemory(
+                context.sessionContext.agentContext,
+                args.question,
+                "current",
+            );
+            displayResult(
+                text ?? "No matching conversation evidence found.",
+                context,
+            );
+            return;
+        }
         const memory = ensureMemory(context);
 
         const result = await this.getResult(memory, args.question);
@@ -534,9 +614,117 @@ class MemoryAnswerCommandHandler implements CommandHandler {
     }
 }
 
+class DurableInspectTurnCommandHandler implements CommandHandler {
+    public readonly description =
+        "Inspect durable conversation evidence for one turn";
+    public readonly parameters = {
+        args: {
+            turnId: { description: "Turn identifier" },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.inspectTurn(params.args.turnId),
+                undefined,
+                2,
+            ),
+            context,
+        );
+    }
+}
+
+class DurableInspectConversationCommandHandler implements CommandHandler {
+    public readonly description = "Inspect durable conversation evidence";
+    public readonly parameters = {
+        args: {
+            conversationId: {
+                description: "Conversation identifier (current when omitted)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.inspectConversation(params.args.conversationId),
+                undefined,
+                2,
+            ),
+            context,
+        );
+    }
+}
+
+class DurableForgetTurnCommandHandler implements CommandHandler {
+    public readonly description = "Forget durable evidence for one turn";
+    public readonly parameters = {
+        args: {
+            turnId: { description: "Turn identifier" },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(await memory.forgetTurn(params.args.turnId)),
+            context,
+        );
+    }
+}
+
+class DurableForgetConversationCommandHandler implements CommandHandler {
+    public readonly description = "Forget durable evidence for a conversation";
+    public readonly parameters = {
+        args: {
+            conversationId: {
+                description: "Conversation identifier (current when omitted)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.forgetConversation(params.args.conversationId),
+            ),
+            context,
+        );
+    }
+}
+
+function requireDurableMemory(
+    context: ActionContext<CommandHandlerContext>,
+): ConversationDurableMemory {
+    const memory =
+        context.sessionContext.agentContext.conversationDurableMemory;
+    if (memory === undefined) {
+        throw new Error("Durable conversation memory is not available.");
+    }
+    return memory;
+}
+
 export function getMemoryCommandHandlers(): CommandHandlerTable {
     return {
-        description: "Memory commands",
+        description: "Legacy per-conversation memory commands",
         commands: {
             legacy: getToggleHandlerTable("legacy", async (context, enable) => {
                 await changeContextConfig(
@@ -554,6 +742,12 @@ export function getMemoryCommandHandlers(): CommandHandlerTable {
             query: new MemorySearchCommandHandler(),
             search: new MemoryAnswerCommandHandler(true),
             answer: new MemoryAnswerCommandHandler(false),
+            "inspect-turn": new DurableInspectTurnCommandHandler(),
+            "inspect-conversation":
+                new DurableInspectConversationCommandHandler(),
+            "forget-turn": new DurableForgetTurnCommandHandler(),
+            "forget-conversation":
+                new DurableForgetConversationCommandHandler(),
         },
     };
 }

@@ -1,0 +1,139 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "setTimer",
+        "description": "Set a countdown timer with an optional label",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "durationMinutes": { "type": "number" },
+            "message": { "type": "string" }
+          },
+          "required": ["durationMinutes", "message"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "addItems",
+        "description": "Add one or more items to a named list",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "listName": { "type": "string" },
+            "items": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["listName", "items"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "createList",
+        "description": "Create a named list",
+        "parameters": {
+          "type": "object",
+          "properties": { "listName": { "type": "string" } },
+          "required": ["listName"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "findEvents",
+        "description": "Find calendar events in a time range",
+        "parameters": {
+          "type": "object",
+          "properties": { "timeRange": { "type": "string" } },
+          "required": ["timeRange"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "addEvent",
+        "description": "Add a calendar event",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "when": { "type": "string" }
+          },
+          "required": ["title", "when"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "play",
+        "description": "Play media matching a query",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "service": { "type": "string" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "pause",
+        "description": "Pause playback",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "sendEmail",
+        "description": "Send an email",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "to": { "type": "string" },
+            "body": { "type": "string" },
+            "attachments": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["to", "body"],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "findEmail",
+        "description": "Search mail",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "timeRange": { "type": "string" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "vscode-shell",
   "displayName": "TypeAgent VS Code Shell",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "private": true,
   "description": "Embeds the TypeAgent shell chat into VS Code",
   "categories": [
@@ -28,6 +28,7 @@
     "deploy:local": "npm run package && code --install-extension dist-pub/vscode-shell.vsix --force",
     "install:ext:vscode": "code --install-extension dist-pub/vscode-shell.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-shell.vsix",
+    "test:local": "node --test test/securityApproval.spec.mjs",
     "tsc:extension": "tsc --noEmit -p tsconfig.extension.json",
     "tsc:webview": "tsc --noEmit -p tsconfig.webview.json",
     "vscode:prepublish": "npm run compile",
@@ -213,11 +214,11 @@
     "agent-dispatcher": "workspace:*",
     "ansi_up": "^6.0.6",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.17",
     "isomorphic-ws": "^5.0.0",
-    "markdown-it": "^14.2.0",
+    "markdown-it": "^14.3.3",
     "microsoft-cognitiveservices-speech-sdk": "1.43.1",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",
@@ -228,7 +229,7 @@
     "@vscode/vsce": "^3.2.1",
     "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

@@ -1,8 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { fileURLToPath } from "node:url";
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 export default {
+    ...(process.env.CI === "true" ? { maxWorkers: 1 } : {}),
+    ...(process.env.TYPEAGENT_JEST_NO_CACHE === "true" ? { cache: false } : {}),
     preset: "ts-jest/presets/default-esm",
     extensionsToTreatAsEsm: [".ts"],
     testEnvironment: "jsdom",
@@ -39,4 +43,17 @@ export default {
         // Map .mjs imports from src to .mts files for ts-jest
         "^(.*)\\.mjs$": "$1.mts",
     },
+    ...(process.env.TYPEAGENT_TEST_FAILURES_DIR === undefined
+        ? {}
+        : {
+              reporters: [
+                  "default",
+                  fileURLToPath(
+                      new URL(
+                          "../../../tools/scripts/jestFailureReporter.cjs",
+                          import.meta.url,
+                      ),
+                  ),
+              ],
+          }),
 };

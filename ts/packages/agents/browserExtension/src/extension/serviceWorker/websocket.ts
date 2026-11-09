@@ -11,6 +11,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
+import { getViewHostUrl } from "./browserViewNavigation";
 import type {
     BrowserAgentInvokeFunctions,
     BrowserAgentCallFunctions,
@@ -214,7 +215,9 @@ export async function ensureWebsocketConnected(): Promise<
         // Browser control channel
         const browserControlChannel =
             channelProvider.createChannel("browserControl");
-        createExternalBrowserServer(browserControlChannel);
+        createExternalBrowserServer(browserControlChannel, () =>
+            getViewHostUrl(sendActionToAgent),
+        );
 
         // Agent service RPC client (replaces sendActionToAgent). Created once
         // as a rebindable rpc and re-pointed at the fresh channel on each

@@ -1,5 +1,53 @@
 # TypeAgent — AI Assistant Instructions
 
+## First-run setup (fresh checkout)
+
+A fresh checkout of this repo — a new clone, a git worktree (each Copilot CLI
+session gets its own), or a cloud/container workspace — has the committed files
+but **not** the gitignored files that let the repo install and run. Those must be
+provisioned once. From `ts/`:
+
+```bash
+pnpm run setup            # provision .npmrc + config.local.yaml, then install
+pnpm run setup --build    # same, plus a full build at the end
+```
+
+On a brand-new machine where pnpm isn't cached yet, `pnpm run setup` can't
+bootstrap itself (corepack would try to fetch pnpm from the blocked public
+registry). Start with the pnpm-free entrypoint instead — it provisions `.npmrc`
+(which also seeds corepack's pnpm) before it uses pnpm:
+
+```bash
+node tools/scripts/setupWorktree.mjs
+```
+
+`setup` does **not** build by default — a full build of every package is
+redundant for most sessions. `fluid-build` is incremental and dependency-aware,
+so build just the package you touch, on demand (`pnpm run build <package>`). Use
+`--build` only when you want a full build warmed up front.
+
+Order matters, and `setup` handles it:
+
+1. **`ts/.npmrc`** points pnpm at the internal Azure Artifacts feed. It must
+   exist **before `pnpm install`**, or pnpm/corepack reach the (blocked) public
+   npm registry and install fails. `setup` copies it from the main checkout
+   when available; if it can't, setup runs `node tools/scripts/getNPMRC.mjs`
+   automatically (fetches only an npm token, no secrets, and seeds corepack's
+   pnpm — invoked via node so it works before pnpm is available).
+2. **`pnpm install`**.
+3. **`ts/config.local.yaml`** holds API keys. `setup` copies it from the main
+   checkout when available; if it can't, setup warns and continues (only
+   running the app needs keys) and prints the `pnpm run getKeys` command.
+
+Never build or run before `setup` has provisioned `ts/.npmrc`: the first `pnpm`
+command otherwise hits the blocked public npm registry.
+
+`setup` auto-provisions `.npmrc` (copy, else `getNPMRC`) but treats
+`config.local.yaml` differently: it only **copies** it and never runs `getKeys`
+itself, because `getKeys` signs in to Azure and fetches secrets (it can open a
+browser sign-in). **Agent: never run `getKeys` automatically. Ask the user
+first** and run it only after they approve, or let the user run it.
+
 ## Build & Test
 
 This is a **pnpm monorepo** rooted at `ts/`. All commands run from the `ts/` directory.
@@ -38,6 +86,48 @@ pnpm run prettier:fix        # Fix formatting
 ```
 
 Tests run against compiled output in `dist/test/` — you must build before running tests.
+
+**Before considering any change complete**, ensure the affected build, relevant
+tests, formatting check, complexity ratchet, and lint ratchet all pass. CI
+enforces these separately, so it is easy to miss them if you only build and test:
+
+```bash
+pnpm run build <package>
+pnpm --filter <package-name> test
+pnpm run prettier:changed:fix   # Fix formatting for files changed vs origin/main (matches CI's check)
+pnpm run code-complexity:ci     # Complexity ratchet against origin/main
+pnpm run code-lint -- --ratchet --base origin/main
+```
+
+Do not rely on a bare `npx prettier` for validation — always use the repo's pinned version
+(`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
+since a newer/older Prettier version can produce spurious reformatting diffs.
+
+### PR-only gates: build and tests passing is not enough
+
+`build-ts.yml` runs four ratchets that only fire on pull requests, so they are
+invisible until CI fails. Each compares the files your change touches against
+the base branch. Run all four before calling a change done:
+
+```bash
+npm run code-lint       -- --ratchet --base origin/main   # no new eslint violations
+npm run code-complexity -- --ratchet --base origin/main --cyclomatic 25 --cognitive 30 \
+                           --new-file-cyclomatic 25 --new-file-cognitive 30
+npm run code-circular   -- --ratchet --base origin/main \
+                           --exceptions-file tools/scripts/code/circular-baseline-exception.json
+npm run code-debt       -- --gate    --base origin/main   # no .only / newly skipped tests
+```
+
+The lint ratchet bites most often, usually on `no-explicit-any`. A **new file
+counts entirely as added violations**, so a new module written with `any` fails
+even though it changed nothing that existed before. Prefer `unknown` with a
+narrow cast where the value is actually used.
+
+Nothing outside `ts/` is checked at all — not by these ratchets, not by
+`prettier:changed`, and no CI job builds the Kotlin under `android/`. Verify
+those files by hand (`cd android/samples/mobile-2 && ./gradlew assembleDebug
+testDebugUnitTest`) and read the final diff, since formatting mistakes there
+reach `main` unchallenged.
 
 ## Architecture
 
@@ -137,7 +227,7 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 
 ### Environment
 
-- Requires **Node ≥22**, **pnpm ≥10**
+- Developer setup defaults to the **latest Node LTS**; CI and production containers pin **Node 24.22.1**. Supports **22.23.4+**, **24.22.1+**, and **26.12.1+** within those major lines. Node 20 is unsupported. Requires **pnpm ≥10**.
 - API keys go in `ts/config.local.yaml` (see `config.sample.yaml` for reference). Legacy `.env` is still supported but deprecated.
 - User data stored in `~/.typeagent/`
 - Tracing via the `debug` package — enable with `DEBUG=typeagent:*` env var
@@ -148,7 +238,9 @@ Use these criteria both when **writing** changes and when **reviewing** code (yo
 own or a diff you are asked to review). Report only high-confidence, substantive
 issues — prefer a short list of real problems over an exhaustive nitpick list. For
 each issue, name the file/line, explain _why_ it matters, and suggest a concrete
-fix. Do not comment on formatting that Prettier already enforces.
+fix. Do not comment on formatting that Prettier already enforces. Formatting in
+files Prettier does not cover (anything outside `ts/`, notably Kotlin under
+`android/`) is fair game — nothing else will catch it.
 
 ### Readability & maintainability
 
@@ -165,7 +257,10 @@ fix. Do not comment on formatting that Prettier already enforces.
   distinguish a temporary **NYI (TODO)** from a fundamental limitation.
 - **Clear signatures.** Order parameters so common callers rely on defaults, make
   optional callbacks optional, and drop dead/unused parameters instead of threading
-  constants through.
+  constants through. This extends to whole members: an added function or property
+  with no caller is dead code unless it is deliberate public API of a published
+  package (`agentSdk` and friends). Nothing warns about an unused public member,
+  so review is the only thing that catches it.
 - **Clean up as you go.** Remove stale comments and tests that reference relocated
   or deleted code.
 

@@ -14,7 +14,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./test": "./dist/test/index.js"
+    "./test": "./dist/test/index.js",
+    "./memory-view-packages": "./dist/memoryViewPackages.js"
   },
   "files": [
     "dist",
@@ -36,7 +37,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/client": "^2.3.1",
     "@modelcontextprotocol/server-filesystem": "2026.1.14",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
@@ -51,6 +52,7 @@
     "@typeagent/code-agent": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/desktop-automation": "workspace:*",
     "@typeagent/discord-agent": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
@@ -61,10 +63,13 @@
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/list-agent": "workspace:*",
     "@typeagent/markdown-agent": "workspace:*",
+    "@typeagent/memory-agent": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/montage-agent": "workspace:*",
     "@typeagent/music": "workspace:*",
     "@typeagent/music-local": "workspace:*",
     "@typeagent/os-notifications-agent": "workspace:*",
+    "@typeagent/package-installation": "workspace:*",
     "@typeagent/photo-agent": "workspace:*",
     "@typeagent/powershell-typeagent": "workspace:*",
     "@typeagent/screencapture-agent": "workspace:*",
@@ -81,7 +86,7 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dispatcher-node-providers": "workspace:*",
-    "exifreader": "^4.39.0",
+    "exifreader": "^4.50.0",
     "file-size": "^1.0.0",
     "glob": "^13.0.0",
     "greeting-agent": "workspace:*",
@@ -93,10 +98,11 @@
     "typechat": "^0.1.1",
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
-    "ws": "^8.21.1",
+    "ws": "^8.21.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
     "@types/jest": "^29.5.7",

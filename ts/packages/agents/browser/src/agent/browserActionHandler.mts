@@ -46,8 +46,14 @@ import {
 } from "./readiness.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
+import { crosswordDecisionHandler } from "./crosswordDecisionHandler.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
+import {
+    cancelViewServiceStart,
+    createViewServiceHost,
+} from "./viewService.mjs";
+import { getSessionFolderPath } from "./browserSessionStorage.mjs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs, { readFileSync } from "node:fs";
@@ -61,8 +67,6 @@ import {
 
 import registerDebug from "debug";
 
-import * as website from "@typeagent/website-memory";
-import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
     performKnowledgeExtraction,
@@ -84,7 +88,7 @@ import {
     searchByTopics,
     hybridSearch,
     generateWebSearchMarkdown,
-} from "./searchWebMemories.mjs";
+} from "./durableWebSearch.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -115,11 +119,8 @@ import {
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import {
-    BrowserControl,
-    defaultSearchProviders,
-} from "@typeagent/browser-control-rpc/types";
-import { openai } from "@typeagent/aiclient";
+import { defaultSearchProviders } from "@typeagent/browser-control-rpc/types";
+import { openai, tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -127,8 +128,10 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
+    normalizeBrowserAgentInitOptions,
     saveSettings,
 } from "./browserActions.mjs";
+import { getBrowserMemoryService } from "./browserMemoryService.mjs";
 import {
     ChunkChatResponse,
     generateAnswer,
@@ -146,8 +149,18 @@ import {
     type AiSearchConfig,
 } from "./lookup/aiSearchLookup.mjs";
 import { LookupCommandHandlerTable } from "./lookup/lookupCommandHandlers.mjs";
+import { createAutomationCatalogService } from "@typeagent/agent-flows/catalog";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
-import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
+import {
+    createAgentInvokeHandlers,
+    createViewServiceDomain,
+} from "./agentServiceHandlers.mjs";
+import {
+    getBrowserViewName,
+    getBrowserViewUrl,
+    parseBrowserViewUrl,
+    isHostedBrowserView,
+} from "@typeagent/browser-control-rpc/viewRoutes";
 import { hookModelTokenUsage, runWithTokenUsage } from "./tokenUsage.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
@@ -308,8 +321,8 @@ async function cleanupBrowserSession(
 const dynamicDisplayRetryCounters = new Map<string, number>();
 const MAX_RETRY_CYCLES = 2;
 
-// Set up periodic cleanup for running extractions cache and retry counters
-setInterval(
+// Do not keep short-lived hosts alive solely for cache cleanup.
+const cacheCleanupTimer = setInterval(
     () => {
         runningExtractionsCache.cleanup();
 
@@ -324,6 +337,7 @@ setInterval(
     },
     5 * 60 * 1000,
 ); // Clean up every 5 minutes
+cacheCleanupTimer.unref();
 
 async function getDynamicDisplayImpl(
     type: DisplayType,
@@ -508,20 +522,39 @@ export interface urlResolutionAction {
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
-    const clientBrowserControl = settings?.options as
-        | BrowserControl
-        | undefined;
+    const {
+        browserControl: clientBrowserControl,
+        memoryServiceClient,
+        automations,
+    } = normalizeBrowserAgentInitOptions(settings?.options);
 
     const localHostPort = settings?.localHostPort;
     if (localHostPort === undefined) {
         throw new Error("Local view port not assigned.");
     }
 
+    void memoryServiceClient?.warmViewIndexes?.().catch((error: unknown) => {
+        console.warn("Memory background warmup could not start", error);
+    });
+
     return {
         // Use "default" session ID so the extension can connect with matching session.
         sessionId: "default",
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
+        ...(memoryServiceClient === undefined ? {} : { memoryServiceClient }),
+        ...(automations === undefined
+            ? {}
+            : {
+                  automationCatalog:
+                      createAutomationCatalogService(automations),
+              }),
+        ...(memoryServiceClient === undefined
+            ? {}
+            : {
+                  browserMemoryService:
+                      getBrowserMemoryService(memoryServiceClient),
+              }),
         // With no in-process control (connect mode, or extension-only), leave
         // the preferred client type unset so selectActiveClientForSession uses
         // its default priority (electron > extension > any). This lets the
@@ -531,7 +564,6 @@ async function initializeBrowserContext(
         // because it provides the control in-process.
         preferredClientType:
             clientBrowserControl === undefined ? undefined : "electron",
-        index: undefined,
         localHostPort,
         // Shared WebSocket server is created lazily on the first
         // updateBrowserContext(true, ...) call so the bind happens with
@@ -596,15 +628,9 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Load the website index from disk
-        if (!context.agentContext.websiteCollection) {
-            await initializeWebsiteIndex(context);
-        }
-
         // Initialize fuzzy matching model for website search
         if (!context.agentContext.fuzzyMatchingModel) {
-            context.agentContext.fuzzyMatchingModel =
-                openai.createEmbeddingModel();
+            context.agentContext.fuzzyMatchingModel = tryCreateEmbeddingModel();
         }
 
         if (!context.agentContext.viewProcess) {
@@ -615,7 +641,10 @@ async function updateBrowserContext(
             // createViewServiceHost when the child reports ready. This keeps a
             // slow/cold view-service fork (up to the 10s timeout) off the
             // launch critical path.
-            void createViewServiceHost(context)
+            void createViewServiceHost(
+                context,
+                createViewServiceDomain(context),
+            )
                 .then((viewProcess) => {
                     if (!viewProcess) {
                         return;
@@ -722,6 +751,7 @@ async function updateBrowserContext(
                 void context.notifyReadinessChanged();
             },
             onClientDisconnected: (client: BrowserClient) => {
+                crosswordDecisionHandler.disconnect(client.id);
                 if (client.type === "extension") {
                     debug(`Extension client disconnected: ${client.id}`);
                 }
@@ -744,6 +774,36 @@ async function updateBrowserContext(
                     isBuiltInWebAgentRpcRequest(data.params)
                 ) {
                     const { id, method, params } = data.params;
+                    if (method === "cancelCrosswordDecision") {
+                        crosswordDecisionHandler.cancel(client.id, params);
+                        return;
+                    }
+                    if (
+                        method === "getCrosswordDecisionCapabilities" ||
+                        method === "resolveCrosswordClue"
+                    ) {
+                        if (!id || id.length > 256) return;
+                        const result =
+                            method === "getCrosswordDecisionCapabilities"
+                                ? crosswordDecisionHandler.capabilities()
+                                : await crosswordDecisionHandler.resolve(
+                                      client.id,
+                                      id,
+                                      params,
+                                  );
+                        if (client.socket.readyState === 1) {
+                            client.socket.send(
+                                JSON.stringify({
+                                    source: "dispatcher",
+                                    method: "crosswordDecision/response",
+                                    type: "builtInRpcResponse",
+                                    id,
+                                    result,
+                                }),
+                            );
+                        }
+                        return;
+                    }
                     const result = await handleWebAgentRpc(
                         method,
                         params,
@@ -849,6 +909,7 @@ async function closeBrowserContext(
 // still hold the old port briefly (SIGTERM is async on Windows), so
 // re-binding the same port would race with EADDRINUSE.
 function shutdownBrowserChildProcesses(agentContext: BrowserActionContext) {
+    cancelViewServiceStart(agentContext);
     if (agentContext.browserProcess) {
         agentContext.browserProcess.kill();
         agentContext.browserProcess = undefined;
@@ -1084,213 +1145,6 @@ export function sendWebFlowRefreshToClient(
     }
 }
 
-async function initializeWebsiteIndex(
-    context: SessionContext<BrowserActionContext>,
-) {
-    try {
-        const websiteIndexes = await context.indexes("website");
-
-        if (websiteIndexes.length > 0) {
-            context.agentContext.index = websiteIndexes[0];
-            context.agentContext.websiteCollection =
-                await website.WebsiteCollection.readFromFile(
-                    websiteIndexes[0].path,
-                    "index",
-                );
-
-            // Initialize JSON storage alongside SQLite
-            await initializeGraphologyStorage(context, websiteIndexes[0].path);
-
-            debug(
-                `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-            );
-        } else {
-            debug(
-                "No existing website index found, checking for index file at target path",
-            );
-
-            let indexPath: string | undefined;
-            let websiteCollection: website.WebsiteCollection | undefined;
-
-            // Try to determine the target index path
-            try {
-                const sessionDir = await getSessionFolderPath(context);
-                if (sessionDir) {
-                    // Create index path following IndexManager pattern: sessionDir/indexes/website
-                    indexPath = path.resolve(
-                        sessionDir,
-                        "..",
-                        "indexes",
-                        "website",
-                        "index",
-                    );
-
-                    // Check if the index database file exists and try to read it
-                    const dbFile = path.join(
-                        indexPath,
-                        "index_dataFrames.sqlite",
-                    );
-                    if (fs.existsSync(dbFile)) {
-                        try {
-                            websiteCollection =
-                                await website.WebsiteCollection.readFromFile(
-                                    indexPath,
-                                    "index",
-                                );
-
-                            if (
-                                websiteCollection &&
-                                websiteCollection.messages.length > 0
-                            ) {
-                                context.agentContext.websiteCollection =
-                                    websiteCollection;
-
-                                // Create proper IndexData object for the loaded collection
-                                context.agentContext.index = {
-                                    source: "website",
-                                    name: "website-index",
-                                    location: "browser-agent",
-                                    size: websiteCollection.messages.length,
-                                    path: indexPath,
-                                    state: "finished",
-                                    progress: 100,
-                                    sizeOnDisk: 0,
-                                };
-
-                                // Initialize JSON storage and perform migration if needed
-                                await initializeGraphologyStorage(
-                                    context,
-                                    indexPath,
-                                );
-
-                                debug(
-                                    `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
-                                );
-                            } else {
-                                debug(
-                                    `Database exists but collection is empty at ${indexPath}, will create new collection`,
-                                );
-                                websiteCollection = undefined;
-                            }
-                        } catch (readError) {
-                            debug(
-                                `Failed to read existing collection: ${readError}`,
-                            );
-                            websiteCollection = undefined;
-                        }
-                    } else {
-                        debug(`No existing database file found at ${dbFile}`);
-                    }
-                }
-            } catch (pathError) {
-                debug(`Error determining index path: ${pathError}`);
-                indexPath = undefined;
-            }
-
-            // If we couldn't load an existing collection, create a new one
-            if (!websiteCollection) {
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
-
-                // Set up index metadata if we have a valid path
-                // Directory will be created when writeToFile is called
-                if (indexPath) {
-                    context.agentContext.index = {
-                        source: "website",
-                        name: "website-index",
-                        location: "browser-agent",
-                        size: 0,
-                        path: indexPath,
-                        state: "new",
-                        progress: 0,
-                        sizeOnDisk: 0,
-                    };
-
-                    // Initialize JSON storage for new index
-                    await initializeGraphologyStorage(context, indexPath);
-
-                    debug(
-                        `Index will be created at ${indexPath} when first page is indexed`,
-                    );
-                } else {
-                    context.agentContext.index = undefined;
-                    debug(
-                        "No index path available, collection will be in-memory only",
-                    );
-                }
-            }
-
-            // Log final state
-            if (!context.agentContext.index) {
-                debug(
-                    "Website collection created without persistent index - data will be in-memory only",
-                );
-            }
-        }
-    } catch (error) {
-        debug("Error initializing website collection:", error);
-        // SQLite/website-memory may be unavailable; keep browser agent alive.
-        // Knowledge features will remain unavailable until dependency issues are resolved.
-        context.agentContext.websiteCollection = undefined;
-        context.agentContext.index = undefined;
-    }
-}
-
-/**
- * Initialize Graphology storage for pure Graphology architecture
- */
-async function initializeGraphologyStorage(
-    context: SessionContext<BrowserActionContext>,
-    indexPath: string,
-): Promise<void> {
-    try {
-        debug("Initializing Graphology storage");
-
-        // Create storage path for Graphology files
-        const graphologyStoragePath = path.join(indexPath, "storage");
-
-        // Create Graphology persistence manager
-        const persistenceManager = createGraphologyPersistenceManager(
-            graphologyStoragePath,
-        );
-
-        // Store reference in context for later use (maintaining compatibility)
-        if (!context.agentContext.graphJsonStorage) {
-            context.agentContext.graphJsonStorage = {
-                manager: persistenceManager,
-                lastEntityGraphUpdate: null,
-                lastTopicGraphUpdate: null,
-            };
-        }
-
-        debug("Graphology storage initialization complete");
-    } catch (error) {
-        debug(`Error initializing Graphology storage: ${error}`);
-        // Don't throw - this should not break the main initialization
-    }
-}
-
-async function getSessionFolderPath(
-    context: SessionContext<BrowserActionContext>,
-) {
-    let sessionDir: string | undefined;
-
-    if (!(await context.sessionStorage?.exists("settings.json"))) {
-        await context.sessionStorage?.write("settings.json", "");
-    }
-
-    const existingFiles = await context.sessionStorage?.list("", {
-        fullPath: true,
-    });
-
-    if (existingFiles && existingFiles.length > 0) {
-        sessionDir = path.dirname(existingFiles[0]);
-        debug(`Discovered session directory from existing file: ${sessionDir}`);
-    }
-
-    return sessionDir;
-}
-
 async function resolveEntity(
     type: string,
     name: string,
@@ -1345,19 +1199,13 @@ async function resolveWebPage(
         );
     }
 
-    // Handle library pages with custom protocol
-    const libraryPages: Record<string, string> = {
-        annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
-        entityGraph: "typeagent-browser://views/entityGraphView.html",
-        knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
-        macroslibrary: "typeagent-browser://views/macrosLibrary.html",
-        topicGraph: "typeagent-browser://views/topicGraphView.html",
-    };
-
-    const libraryUrl = libraryPages[site.toLowerCase()];
-    if (libraryUrl) {
-        debug(`Resolved library page: ${site} -> ${libraryUrl}`);
-        return [libraryUrl];
+    const view = parseBrowserViewUrl(site);
+    const viewName = view?.name ?? getBrowserViewName(site);
+    if (viewName) {
+        const { url } = await createAgentInvokeHandlers(context).getViewHostUrl(
+            {},
+        );
+        return [getBrowserViewUrl(url, viewName, view?.search, view?.hash)];
     }
 
     switch (site.toLowerCase()) {
@@ -1542,6 +1390,15 @@ async function openWebPage(
         newTab: action.parameters.tab === "new",
     });
 
+    if (
+        isHostedBrowserView(
+            url,
+            `http://localhost:${context.sessionContext.agentContext.localHostPort}`,
+        )
+    ) {
+        return createOpenedWebPageResult(url);
+    }
+
     // Check for existing knowledge and display it
     const existingKnowledge = await checkKnowledgeInIndex(url, context);
     if (existingKnowledge) {
@@ -1582,10 +1439,15 @@ async function openWebPage(
     if (await shouldRunKnowledgeExtraction(url, context)) {
         const browserSettings = await browserControl.getBrowserSettings();
         try {
+            if (browserSettings.extractionMode !== "content") {
+                throw new Error(
+                    "Unsupported extraction mode. Only 'content' is supported.",
+                );
+            }
             const extractionInfo = await performKnowledgeExtraction(
                 url,
                 context,
-                browserSettings.extractionMode,
+                "content",
             );
             // Return immediately with dynamic display information for real-time progress
             if (extractionInfo && extractionInfo.dynamicDisplayId) {
@@ -1609,8 +1471,11 @@ async function openWebPage(
     }
 
     // Fallback to basic result if autoIndex disabled or error occurred
-    const result = createActionResult("Web page opened successfully.");
+    return createOpenedWebPageResult(url);
+}
 
+function createOpenedWebPageResult(url: string): ActionResult {
+    const result = createActionResult("Web page opened successfully.");
     result.activityContext = {
         activityName: "browsingWebPage",
         description: "Browsing a web page",
@@ -2237,8 +2102,20 @@ async function executeBrowserActionImpl(
             switch (action.actionName) {
                 case "closeWindow": {
                     const control = getActionBrowserControl(context);
-                    await control.closeWindow();
-                    return;
+                    try {
+                        if (action.parameters.title === undefined) {
+                            await control.closeWindow();
+                        } else {
+                            await control.closeWindow(action.parameters.title);
+                        }
+                        return;
+                    } catch (error) {
+                        return createActionResultFromError(
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        );
+                    }
                 }
             }
             break;
@@ -2618,85 +2495,6 @@ async function lookup(
             `There was an error generating the answer: ${answerResult.message} `,
         );
     }
-}
-
-/**
- * Progress update helper function
- */
-
-async function createViewServiceHost(
-    context: SessionContext<BrowserActionContext>,
-) {
-    let timeoutHandle: NodeJS.Timeout;
-    const port = context.agentContext.localHostPort;
-    const sessionDir = await getSessionFolderPath(context);
-
-    if (!sessionDir) {
-        debug(
-            "Session directory not available, skipping view service host creation",
-        );
-        return undefined;
-    }
-
-    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(
-            () => reject(new Error("Browser views service creation timed out")),
-            10000,
-        );
-    });
-
-    const viewServicePromise = new Promise<ChildProcess | undefined>(
-        (resolve, reject) => {
-            try {
-                const expressService = fileURLToPath(
-                    new URL(
-                        path.join("..", "./views/server/server.mjs"),
-                        import.meta.url,
-                    ),
-                );
-
-                const folderPath = path.join(sessionDir, "files");
-
-                fs.mkdirSync(folderPath, { recursive: true });
-
-                const childProcess = fork(expressService, [port.toString()], {
-                    env: {
-                        ...process.env,
-                        TYPEAGENT_BROWSER_FILES: folderPath,
-                    },
-                });
-
-                childProcess.on("message", function (message: any) {
-                    if (message?.type === "Success") {
-                        context.agentContext.localHostPort = message.port;
-                        context.agentContext.viewPortRegistration?.release();
-                        context.agentContext.viewPortRegistration =
-                            context.registerPort("view", message.port);
-                        resolve(childProcess);
-                    } else if (message === "Failure") {
-                        resolve(undefined);
-                    }
-                });
-
-                childProcess.on("exit", (code) => {
-                    debug("Browser views server exited with code:", code);
-                });
-            } catch (e: any) {
-                console.error(e);
-                // Synchronous fork failure (e.g. ENOENT for server.mjs,
-                // permissions error). Reset the cached port back to OS-
-                // assigned so a subsequent retry doesn't re-use a stale
-                // value — mirrors the disable/close paths.
-                context.agentContext.localHostPort = 0;
-                resolve(undefined);
-            }
-        },
-    );
-
-    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
-        clearTimeout(timeoutHandle);
-        return result;
-    });
 }
 
 export async function createAutomationBrowser(isVisible?: boolean) {
@@ -3159,7 +2957,8 @@ class AskAboutPageHandler implements CommandHandler {
                 {
                     query: question,
                     searchScope: "current_page",
-                    metadata: { url },
+                    url,
+                    generateAnswer: true,
                 },
                 context.sessionContext,
             );

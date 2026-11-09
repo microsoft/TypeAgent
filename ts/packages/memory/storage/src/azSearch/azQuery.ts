@@ -68,7 +68,21 @@ export class AzSearchQueryCompiler {
             );
         }
         if (filter.dateRange) {
-            filterExpressions.push(this.compileDateRange(filter.dateRange));
+            const range = filter.dateRange;
+            if ("domain" in range) {
+                if (range.domain !== "instant" || range.dimension !== "message")
+                    throw new Error(
+                        "Azure Search does not support calendar-domain or event-time filtering",
+                    );
+                filterExpressions.push(
+                    this.compileDateRange({
+                        start: new Date(range.start),
+                        ...(range.end === undefined
+                            ? {}
+                            : { end: new Date(range.end) }),
+                    }),
+                );
+            } else filterExpressions.push(this.compileDateRange(range));
         }
         if (filter.textRangesInScope && filter.textRangesInScope.length > 0) {
             const rangeExpressions = filter.textRangesInScope.map((tr) =>

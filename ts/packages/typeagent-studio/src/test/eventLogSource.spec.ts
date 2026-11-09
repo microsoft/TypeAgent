@@ -86,11 +86,10 @@ test("StudioServiceEventSource (over the shared connection) seeds + fans out liv
     });
     const source = new StudioServiceEventSource(connection);
     try {
-        assert.equal(await connection.connect(), true);
         const received: StudioEvent[] = [];
-        // Register before any awaited round-trip so the one-shot push isn't missed.
         const sub = source.onAnyEvent((e) => received.push(e));
 
+        assert.equal(await connection.connect(), true);
         const seed = await source.queryRecentEvents(200);
         assert.deepEqual(
             seed.map((e) => e.type),

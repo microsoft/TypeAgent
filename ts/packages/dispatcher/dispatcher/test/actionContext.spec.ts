@@ -5,12 +5,14 @@ import { getActionContext } from "../src/execute/actionContext.js";
 
 // Builds the minimal CommandHandlerContext surface that getActionContext and
 // makeClientIOMessage touch for non-error display content.
-function makeContext() {
+function makeContext(workingDirectory?: string) {
     const calls: { type: string; mode?: string }[] = [];
     const context = {
         displayCount: 0,
         reasoningSourceIcon: undefined,
         collectCommandResult: false,
+        currentOptions:
+            workingDirectory === undefined ? undefined : { workingDirectory },
         metricsManager: undefined,
         agents: {
             getSessionContext: () => ({}) as any,
@@ -78,5 +80,18 @@ describe("getActionContext displayCount tracking", () => {
         );
         actionContext.actionIO.appendDisplay(content, "temporary");
         expect(context.displayCount).toBe(0);
+    });
+
+    it("exposes the host-authorized working directory", () => {
+        const workingDirectory = "C:\\workspace";
+        const { context } = makeContext(workingDirectory);
+        const { actionContext } = getActionContext(
+            "agent",
+            context,
+            requestId,
+            0,
+        );
+
+        expect(actionContext.workingDirectory).toBe(workingDirectory);
     });
 });

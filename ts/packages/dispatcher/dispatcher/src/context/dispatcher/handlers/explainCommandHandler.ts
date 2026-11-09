@@ -9,6 +9,7 @@ import {
     printProcessRequestActionResult,
 } from "@typeagent/agent-cache";
 import { createLimiter, getElapsedString } from "@typeagent/common-utils";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import chalk from "chalk";
 
 export class ExplainCommandHandler implements CommandHandler {
@@ -52,6 +53,20 @@ export class ExplainCommandHandler implements CommandHandler {
         const requestAction = RequestAction.fromString(args.requestAction);
         displayResult(`Generating explanation for '${requestAction}'`, context);
         const systemContext = context.sessionContext.agentContext;
+        const explain = (concurrent: boolean) =>
+            withChatModelTelemetryContext(
+                {
+                    phase: "explanation",
+                    purpose: "cache-generation",
+                    scope: "foreground",
+                },
+                () =>
+                    systemContext.agentCache.processRequestAction(
+                        requestAction,
+                        false,
+                        concurrent ? { concurrent: true, ...options } : options,
+                    ),
+            );
 
         if (flags.repeat > 1) {
             displayResult(
@@ -72,12 +87,7 @@ export class ExplainCommandHandler implements CommandHandler {
                             `Iteration #${current} started.`,
                             context,
                         );
-                        const result =
-                            await systemContext.agentCache.processRequestAction(
-                                requestAction,
-                                false,
-                                { concurrent: true, ...options },
-                            );
+                        const result = await explain(true);
                         displayResult(
                             result.explanationResult.explanation.success
                                 ? chalk.green(
@@ -122,11 +132,7 @@ export class ExplainCommandHandler implements CommandHandler {
                 context,
             );
         } else {
-            const result = await systemContext.agentCache.processRequestAction(
-                requestAction,
-                false,
-                options,
-            );
+            const result = await explain(false);
 
             displayResult((log) => {
                 printProcessRequestActionResult(result, log);

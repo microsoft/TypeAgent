@@ -13,6 +13,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./runtime": "./dist/runtime.js",
     "./completion": "./dist/completion.js",
     "./rules": "./dist/indexRules.js",
     "./generation": "./dist/generation/index.js"
@@ -46,7 +47,9 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@github/copilot-sdk": "1.0.13",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",

@@ -1,0 +1,16 @@
+{
+  "emojiChar": "🧠",
+  "description": "Manage and search durable memory corpora",
+  "commandDefaultEnabled": true,
+  "schema": {
+    "description": "Core durable memory actions for selecting, importing, searching, and asking",
+    "schemaFile": "./memorySchema.ts",
+    "schemaType": "MemoryAction",
+    "cached": false,
+    "actionPolicies": {
+      "useMemoryCorpus": { "effects": "read-only" },
+      "searchMemory": { "effects": "read-only" },
+      "askMemory": { "effects": "read-only" }
+    }
+  }
+}

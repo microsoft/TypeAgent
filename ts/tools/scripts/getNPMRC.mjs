@@ -36,6 +36,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
+import { parseRegistry } from "./lib/installEnvironment.mjs";
 
 const require = createRequire(import.meta.url);
 const config = require("./getNPMRC.config.json");
@@ -278,14 +279,6 @@ async function keyVaultSetSecret(credential, vault, secret, value) {
 }
 
 // --- npmrc helpers -------------------------------------------------------
-
-function parseRegistry(npmrcContent) {
-    for (const line of npmrcContent.split(/\r?\n/)) {
-        const m = line.match(/^\s*registry\s*=\s*(\S+)/);
-        if (m) return m[1];
-    }
-    return undefined;
-}
 
 // https://host/path/ -> //host/path/  (the npm auth "nerf dart" key prefix)
 function registryToNerfDart(registryUrl) {

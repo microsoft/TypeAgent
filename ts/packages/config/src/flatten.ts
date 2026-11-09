@@ -3,6 +3,10 @@
 
 import type { ConfigTree, FlatEnv } from "./types.js";
 import { isTypedSectionKey, typedSectionToFlat } from "./runtime/tree.js";
+import {
+    EMBEDDING_MODELS_KEY,
+    mergeEmbeddingModels,
+} from "./runtime/embedding.js";
 
 /**
  * Top-level keys whose contents are passed through verbatim into the
@@ -46,13 +50,26 @@ const VALUE_GROUP_KEYS = new Set(["identity"]);
  * - Arrays are not supported in Phase 1 and produce a descriptive
  *   error pointing the caller at the future structured schema.
  */
-export function flatten(tree: ConfigTree | null | undefined): FlatEnv {
+export function flatten(
+    tree: ConfigTree | null | undefined,
+    options: FlattenOptions = {},
+): FlatEnv {
     if (tree === null || tree === undefined) {
         return {};
     }
     const out: FlatEnv = {};
-    walk(tree, [], out, /*passthrough*/ false);
+    walk(tree, [], out, /*passthrough*/ false, options);
     return out;
+}
+
+export interface FlattenOptions {
+    /**
+     * Called when a top-level section fails to convert (a typo'd value,
+     * a leftover `<value>` placeholder, ...). When supplied, that one
+     * section is skipped and the rest of the file still loads; without
+     * it the error propagates and the whole tree is rejected.
+     */
+    readonly onSectionError?: (section: string, error: Error) => void;
 }
 
 function walk(
@@ -60,6 +77,7 @@ function walk(
     path: string[],
     out: FlatEnv,
     passthrough: boolean,
+    options: FlattenOptions,
 ): void {
     if (node === null || node === undefined) {
         return;
@@ -79,14 +97,24 @@ function walk(
             node as Record<string, unknown>,
         )) {
             if (path.length === 0 && VALUE_GROUP_KEYS.has(rawKey)) {
-                expandValueGroup(rawKey, value, out);
+                tryTopLevel(rawKey, options, () =>
+                    expandValueGroup(rawKey, value, out),
+                );
                 continue;
             }
             if (path.length === 0 && isTypedSectionKey(rawKey)) {
-                const sub = typedSectionToFlat(rawKey, value);
-                for (const [k, v] of Object.entries(sub)) {
-                    out[k] = v;
-                }
+                tryTopLevel(rawKey, options, () => {
+                    const sub = typedSectionToFlat(
+                        rawKey,
+                        value,
+                        options.onSectionError === undefined
+                            ? undefined
+                            : (error) => options.onSectionError!(rawKey, error),
+                    );
+                    for (const [k, v] of Object.entries(sub)) {
+                        out[k] = v;
+                    }
+                });
                 continue;
             }
             const isPassthroughBoundary =
@@ -96,6 +124,7 @@ function walk(
                 isPassthroughBoundary ? path : [...path, rawKey],
                 out,
                 passthrough || isPassthroughBoundary,
+                options,
             );
         }
         return;
@@ -106,9 +135,32 @@ function walk(
     if (!flatKey) {
         return;
     }
-    const stringValue = scalarToString(node);
+    const stringValue = scalarToString(node, flatKey);
     if (stringValue !== undefined) {
         out[flatKey] = stringValue;
+    }
+}
+
+// Run a top-level section's conversion. Without an `onSectionError`
+// handler the error propagates (the caller wants all-or-nothing); with
+// one, the section is reported and skipped so one bad entry can't
+// silently take the whole config file down with it.
+function tryTopLevel(
+    section: string,
+    options: FlattenOptions,
+    convert: () => void,
+): void {
+    if (options.onSectionError === undefined) {
+        convert();
+        return;
+    }
+    try {
+        convert();
+    } catch (e: any) {
+        options.onSectionError(
+            section,
+            e instanceof Error ? e : new Error(String(e)),
+        );
     }
 }
 
@@ -140,7 +192,18 @@ function expandValueGroup(
     }
 }
 
-function scalarToString(value: unknown): string | undefined {
+const PRESERVED_FALSE_KEYS = new Set([
+    "TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY",
+    "TYPEAGENT_MEMORY_VIEW_DRAFTS",
+    "TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS",
+    "TELEMETRY_DEBUGBRIDGE",
+    "TELEMETRY_STRUCTUREDLOGS",
+    "TELEMETRY_LOCAL_ENABLED",
+    "TELEMETRY_LOCAL_DEBUGBRIDGE",
+    "TELEMETRY_LOCAL_STRUCTUREDLOGS",
+]);
+
+function scalarToString(value: unknown, flatKey: string): string | undefined {
     if (typeof value === "string") {
         return value;
     }
@@ -152,8 +215,13 @@ function scalarToString(value: unknown): string | undefined {
     }
     if (typeof value === "boolean") {
         // Match the codebase convention: truthy flags are stored as
-        // "1"; falsy flags are simply absent.
-        return value ? "1" : undefined;
+        // "1"; falsy flags are usually absent. Selected controls preserve
+        // "0" when an explicit false must override a lower-precedence true.
+        return value
+            ? "1"
+            : PRESERVED_FALSE_KEYS.has(flatKey)
+              ? "0"
+              : undefined;
     }
     return undefined;
 }
@@ -166,7 +234,10 @@ export function mergeFlat(...maps: FlatEnv[]): FlatEnv {
     const out: FlatEnv = {};
     for (const m of maps) {
         for (const k of Object.keys(m)) {
-            out[k] = m[k];
+            out[k] =
+                k === EMBEDDING_MODELS_KEY && out[k] !== undefined
+                    ? mergeEmbeddingModels(out[k], m[k])
+                    : m[k];
         }
     }
     return out;

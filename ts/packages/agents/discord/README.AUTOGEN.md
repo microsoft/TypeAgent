@@ -46,7 +46,7 @@ To use the `discord-agent`, you need to configure a Discord bot and set up the r
 
 ### Prerequisites
 
-- Install **Node.js** (version 20 or higher) and **pnpm** (version 10 or higher).
+- Install the **latest Node.js LTS** release (recommended; see [supported versions](../../../README.md#setup)) and **pnpm** (version 10 or higher).
 - Create a Discord account and have access to a Discord server (guild) that you manage.
 
 ### Create and Configure a Discord Bot

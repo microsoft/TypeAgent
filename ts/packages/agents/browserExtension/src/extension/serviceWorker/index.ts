@@ -16,7 +16,13 @@ import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
 import { setChatPanelRpc } from "./dispatcherConnection";
 import { setContextMenuRpcSend, initContextMenuSettings } from "./contextMenu";
-import { clearRecordedActions } from "./storage";
+import { clearRecordedActions, getCrosswordDecisionSettings } from "./storage";
+import {
+    cancelCrosswordDecisionRpc,
+    forwardCrosswordDecisionRpc,
+    getCrosswordRpcOrigin,
+} from "./crosswordDecisionRpc";
+import { routeCrosswordFrameAction } from "./crosswordFrames";
 
 import {
     isWebAgentMessage,
@@ -57,7 +63,7 @@ export async function initialize(): Promise<void> {
     }
 
     // Initialize context menu
-    initializeContextMenu();
+    await initializeContextMenu();
     initContextMenuSettings();
 
     // Set up RPC server for typed view communication
@@ -78,6 +84,77 @@ function setupEventListeners(): void {
     // Handle simple content script and view messages (not RPC)
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message?.type === "crosswordFrameAction") {
+                routeCrosswordFrameAction(message, sender)
+                    .then(sendResponse)
+                    .catch((error) =>
+                        sendResponse({
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : "unavailable: crossword frame action",
+                        }),
+                    );
+                return true;
+            }
+            if (message?.type === "getCrosswordMode") {
+                getCrosswordDecisionSettings()
+                    .then(sendResponse)
+                    .catch((error) => {
+                        console.warn(
+                            "Could not read crossword settings:",
+                            error,
+                        );
+                        sendResponse({
+                            error: "unavailable: crossword settings",
+                        });
+                    });
+                return true;
+            }
+            if (message?.type === "crosswordDecisionRpc") {
+                const method = message.method;
+                if (method === "getCrosswordDecisionCapabilities") {
+                    forwardCrosswordDecisionRpc(method)
+                        .then(sendResponse)
+                        .catch(() =>
+                            sendResponse({
+                                available: false,
+                                configGeneration: "",
+                            }),
+                        );
+                    return true;
+                }
+                if (method !== "resolveCrosswordClue") {
+                    sendResponse({ status: "unsupported" });
+                    return false;
+                }
+                getCrosswordRpcOrigin(sender)
+                    .then((origin) =>
+                        forwardCrosswordDecisionRpc(
+                            method,
+                            message.params,
+                            origin,
+                        ),
+                    )
+                    .then(sendResponse)
+                    .catch(() => sendResponse({ status: "unavailable" }));
+                return true;
+            }
+            if (message?.type === "cancelCrosswordDecisionRpc") {
+                getCrosswordRpcOrigin(sender)
+                    .then((origin) => {
+                        if (origin)
+                            cancelCrosswordDecisionRpc(
+                                origin,
+                                typeof message.snapshotId === "string"
+                                    ? message.snapshotId
+                                    : undefined,
+                            );
+                        sendResponse({});
+                    })
+                    .catch(() => sendResponse({}));
+                return true;
+            }
             if (message.type === "getTabId") {
                 sendResponse({
                     tabId: sender.tab?.id ? String(sender.tab.id) : null,
@@ -349,7 +426,24 @@ function setupEventListeners(): void {
     });
 
     // Context menu clicks
-    chrome.contextMenus?.onClicked.addListener(handleContextMenuClick);
+    chrome.contextMenus?.onClicked.addListener((info, tab) => {
+        handleContextMenuClick(info, tab).catch((error: unknown) => {
+            console.error("TypeAgent context menu action failed:", error);
+            if (tab?.id !== undefined) {
+                void chrome.action
+                    .setTitle({
+                        tabId: tab.id,
+                        title: `TypeAgent action failed: ${error instanceof Error ? error.message : String(error)}`,
+                    })
+                    .catch((notificationError: unknown) =>
+                        console.error(
+                            "Failed to report context menu error:",
+                            notificationError,
+                        ),
+                    );
+            }
+        });
+    });
 
     // Storage changes
     chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -428,6 +522,17 @@ function setupEventListeners(): void {
         const frameId = port.sender?.frameId;
         port.onMessage.addListener((data) => {
             if (isWebAgentMessage(data)) {
+                if (
+                    data.params?.type === "builtInRpc" &&
+                    [
+                        "resolveCrosswordClue",
+                        "getCrosswordDecisionCapabilities",
+                        "cancelCrosswordDecision",
+                    ].includes(data.params.method)
+                ) {
+                    // Private decisions are accepted only from the isolated runtime bridge.
+                    return;
+                }
                 debugWebAgentProxy(
                     `WebAgent -> Dispatcher (${url}, tabId=${tabId}, frameId=${frameId})`,
                     data,

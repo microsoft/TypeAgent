@@ -11,12 +11,8 @@
  *   rename <name>   — rename the current conversation
  *   delete <name>   — delete a conversation after confirmation
  *
- * The tests mock AgentServerConnection methods and readline to verify
- * routing, argument validation, and interactive confirmation flows.
- *
- * Because the module under test (conversationCommands.ts) imports `readline`
- * and `chalk` which are ESM-only, we use `jest.unstable_mockModule` to mock
- * readline *before* the dynamic import of the module under test.
+ * The tests mock AgentServerConnection methods and confirmation responses to
+ * verify routing, argument validation, and interactive confirmation flows.
  */
 
 import {
@@ -33,22 +29,7 @@ import type {
     ConversationInfo,
 } from "@typeagent/agent-server-client";
 
-// ── readline mock (must be installed before importing the module under test) ─
-
-type QuestionCallback = (answer: string) => void;
-
-let questionCallbacks: QuestionCallback[];
-
-jest.unstable_mockModule("readline", () => ({
-    createInterface: jest.fn(() => ({
-        question: jest.fn((_prompt: string, cb: QuestionCallback) => {
-            questionCallbacks.push(cb);
-        }),
-        close: jest.fn(),
-    })),
-}));
-
-// ── Dynamic import of the module under test (after the mock is installed) ──
+// ── Dynamic import of the module under test ────────────────────────────────
 
 const { handleConversationCommand } = await import(
     "../src/conversationCommands.js"
@@ -96,18 +77,6 @@ function makeConnection() {
     };
 }
 
-/** Simulate the user answering the outstanding readline question. */
-function answerPrompt(answer: string) {
-    expect(questionCallbacks.length).toBeGreaterThan(0);
-    const cb = questionCallbacks.shift()!;
-    cb(answer);
-}
-
-/** Wait for microtasks + setImmediate so async code can progress. */
-function flushAsync() {
-    return new Promise<void>((resolve) => setImmediate(resolve));
-}
-
 // ── Spying on console.log ──────────────────────────────────────────────────
 
 let logSpy: ReturnType<typeof jest.spyOn>;
@@ -120,7 +89,6 @@ function capturedLog(): string {
 // ── Setup / teardown ───────────────────────────────────────────────────────
 
 beforeEach(() => {
-    questionCallbacks = [];
     logOutput = [];
     logSpy = jest
         .spyOn(console, "log")
@@ -146,6 +114,7 @@ function makeCtx(
         jest.fn<(conversationId: string) => Promise<ConversationDispatcher>>();
     return {
         connection,
+        confirmYesNo: jest.fn(async () => false),
         getCurrentConversationId: () => "current-id",
         getCurrentConversationName: () => "Current Session",
         switchConversation,
@@ -193,12 +162,7 @@ describe("@conversation new", () => {
             makeSession({ conversationId: "new-id", name: "MyChat" }),
         );
 
-        const promise = handleConversationCommand(ctx, "new MyChat");
-
-        // Wait for the readline question callback to be queued
-        await flushAsync();
-        answerPrompt("n");
-        await promise;
+        await handleConversationCommand(ctx, "new MyChat");
 
         expect(ctx.connection.createConversation).toHaveBeenCalledWith(
             "MyChat",
@@ -208,22 +172,32 @@ describe("@conversation new", () => {
     });
 
     it("creates conversation and switches when user answers 'y'", async () => {
-        const ctx = makeCtx();
+        const clientIO = {} as ConversationCommandContext["clientIO"];
+        const onSwitched = jest.fn(async () => {});
+        const ctx = makeCtx({
+            clientIO,
+            confirmYesNo: async () => true,
+            onSwitched,
+        });
+        const joined = {
+            conversationId: "new-id",
+        } as ConversationDispatcher;
         ctx.connection.createConversation.mockResolvedValue(
             makeSession({ conversationId: "new-id", name: "MyChat" }),
         );
+        (ctx.connection.joinConversation as jest.Mock).mockResolvedValue(
+            joined,
+        );
 
-        const promise = handleConversationCommand(ctx, "new MyChat");
-
-        await flushAsync();
-        answerPrompt("y");
-        await promise;
+        await handleConversationCommand(ctx, "new MyChat");
 
         expect(ctx.connection.createConversation).toHaveBeenCalledWith(
             "MyChat",
         );
-        // switchConversation called with the conversationId from createConversation's return value
-        expect(ctx.switchConversation).toHaveBeenCalledWith("new-id");
+        expect(ctx.connection.joinConversation).toHaveBeenCalledWith(clientIO, {
+            conversationId: "new-id",
+        });
+        expect(onSwitched).toHaveBeenCalledWith(joined);
     });
 
     it("handles quoted name argument", async () => {
@@ -232,11 +206,7 @@ describe("@conversation new", () => {
             makeSession({ conversationId: "new-id", name: "My Chat Room" }),
         );
 
-        const promise = handleConversationCommand(ctx, 'new "My Chat Room"');
-
-        await flushAsync();
-        answerPrompt("n");
-        await promise;
+        await handleConversationCommand(ctx, 'new "My Chat Room"');
 
         expect(ctx.connection.createConversation).toHaveBeenCalledWith(
             "My Chat Room",
@@ -518,11 +488,7 @@ describe("@conversation delete", () => {
             makeSession({ conversationId: "target-id", name: "OldChat" }),
         ]);
 
-        const promise = handleConversationCommand(ctx, "delete OldChat");
-
-        await flushAsync();
-        answerPrompt("n");
-        await promise;
+        await handleConversationCommand(ctx, "delete OldChat");
 
         expect(capturedLog()).toContain("Cancelled");
         expect(ctx.connection.deleteConversation).not.toHaveBeenCalled();
@@ -531,17 +497,14 @@ describe("@conversation delete", () => {
     it("deletes when user confirms", async () => {
         const ctx = makeCtx({
             getCurrentConversationId: () => "other-id",
+            confirmYesNo: async () => true,
         });
         ctx.connection.listConversations.mockResolvedValue([
             makeSession({ conversationId: "target-id", name: "OldChat" }),
         ]);
         ctx.connection.deleteConversation.mockResolvedValue(undefined);
 
-        const promise = handleConversationCommand(ctx, "delete OldChat");
-
-        await flushAsync();
-        answerPrompt("y");
-        await promise;
+        await handleConversationCommand(ctx, "delete OldChat");
 
         expect(ctx.connection.deleteConversation).toHaveBeenCalledWith(
             "target-id",

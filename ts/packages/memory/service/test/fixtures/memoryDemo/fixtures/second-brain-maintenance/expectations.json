@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "evaluatorOnly": true,
+  "not_for_import": true,
+  "goldMarker": "MAINTENANCE_EVALUATOR_ONLY",
+  "authorship": "Independently authored evaluator expectations. Not derived from generator or source-content constants. Never pass this file, its questions or checklists into model inputs.",
+  "scope": "Static checks qualify authored evidence only. Runtime observations below are unexecuted.",
+  "cases": [
+    {
+      "id": "C1",
+      "question": "What governs use of the local command sample, including the worksheet's distant table exception?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-pool-worksheet", "revision": 1, "needles": ["Governing tail exception", "duplicate completion spans", "local command denominator"]},
+        {"phase": "t1", "sourceKey": "sb-pool-worksheet", "revision": 2, "needles": ["Governing tail exception"]},
+        {"phase": "t2", "sourceKey": "sb-pool-worksheet", "revision": 3, "needles": ["denominator", "withdrawn"]}
+      ],
+      "required": ["Tail exception survives actual bounded indexing, synopsis and relevant article.", "All accepted citations resolve against active original evidence.", "Coverage limitations are explicit."],
+      "runtimeChecks": ["Record actual chunk bound and index-generated IDs; source offsets are not chunk ordinals.", "Retrieve tail and inspect accepted output, not just full retained source."],
+      "forbidden": ["Complete coverage claimed from source-length checks alone."]
+    },
+    {
+      "id": "C2",
+      "question": "Can short command execution coexist with long connection ownership, and which measurements may be compared?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-pool-worksheet", "revision": 1, "needles": ["1850 ms", "38 ms", "median", "p95", "hold"]},
+        {"phase": "t1", "sourceKey": "sb-capacity-notebook", "revision": 2, "needles": ["short command", "lease", "1850 ms"]},
+        {"phase": "t2", "sourceKey": "sb-pool-worksheet", "revision": 3, "needles": ["Short commands can still coexist with long held leases"]}
+      ],
+      "required": ["Command execution is contained within, not identical to, connection ownership.", "Local command median differs from incident acquisition p95 in statistic and cohort.", "Recovery does not establish universal pool recommendation or peak-load sign-off."],
+      "forbidden": ["Confirmed leak from a long lease alone.", "Subtracting unrelated percentiles to invent held-gap p95.", "Deployment approval from local measurements."]
+    },
+    {
+      "id": "C3",
+      "question": "How can complete topic membership coexist with bounded display and multi-parent organization?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-pool-worksheet", "revision": 1, "needles": ["Parent links", "related links", "checkout waiting", "pool"]},
+        {"phase": "t1", "sourceKey": "sb-followup-meeting", "revision": 1, "needles": ["organizational parents", "resident memory", "distinct topics"]}
+      ],
+      "required": ["Eligible occurrences remain represented even without an article.", "Organizational parents form a DAG; typed relatedness can differ.", "Resource and failure subjects stay distinct; stable IDs survive label changes.", "Display subset and continuation do not delete maintained membership."],
+      "acceptableOrganizations": ["Payments capacity with acquisition and lease children and related memory.", "Other evidence-grounded hierarchies; no mandatory taxonomy."],
+      "runtimeChecks": ["Compare maintained incidence with every eligible extracted occurrence and display limits.", "If lexical alternatives were not extracted as subjects, report not exercised rather than deduplication passed."]
+    },
+    {
+      "id": "C4",
+      "question": "When does evidence justify treating the two Payments review labels as aliases?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-review-vocabulary", "revision": 1, "needles": ["has not established equivalence", "open"]},
+        {"phase": "t1", "sourceKey": "sb-review-vocabulary", "revision": 2, "needles": ["same scoped", "still open", "peak-load"]},
+        {"phase": "t1", "sourceKey": "sb-followup-meeting", "revision": 1, "needles": ["same Payments capacity review"]}
+      ],
+      "required": ["Initial related labels remain uncertain.", "T1 explicit same-scope evidence permits automatic canonical contribution.", "Qualified unprotected consolidation preserves lease lifetime and memory details, citations and old links.", "Review remains open; no repeated approval merely for resolved ambiguity."],
+      "forbidden": ["Identity inferred from shared source membership alone."]
+    },
+    {
+      "id": "C5",
+      "question": "Which distinct review meanings did the bare overlap label hide?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-overlap-handoff", "revision": 1, "needles": ["does not identify", "uncertainty"]},
+        {"phase": "t1", "sourceKey": "sb-overlap-handoff", "revision": 2, "needles": ["old-key/new-key", "old/new payload", "Theo Reed", "Jules Rowan"]},
+        {"phase": "t2", "sourceKey": "sb-overlap-handoff", "revision": 3, "needles": ["local reader/writer compatibility review is complete", "cutover date remains unknown"]}
+      ],
+      "required": ["Identity verification and Orders payload compatibility are separate scopes.", "Owners and statuses never transfer across projects.", "Earlier ambiguous links remain navigable with scope clarified."],
+      "forbidden": ["One-to-many redirect pretending to be a single equivalent concept.", "Orders local completion closes Identity rollout."]
+    },
+    {
+      "id": "C6",
+      "question": "What happens to the current local command measurement at each stage?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-pool-worksheet", "revision": 1, "needles": ["initial median is 38 ms"]},
+        {"phase": "t1", "sourceKey": "sb-pool-worksheet", "revision": 2, "needles": ["corrected local command median is 41 ms", "transcription"]},
+        {"phase": "t2", "sourceKey": "sb-pool-worksheet", "revision": 3, "needles": ["sample is withdrawn", "invalidated its denominator", "Neither the initial 38 ms nor the corrected 41 ms is valid"]}
+      ],
+      "required": ["Initial 38 ms; T1 correction replaces it with 41 ms for current use.", "T2 withdraws the local sample, without inventing a replacement median.", "Current summary distinguishes explanatory history from valid measurement.", "Acquisition p95 remains separately scoped."],
+      "forbidden": ["Obsolete revisions counted as independent corroboration.", "41 ms retained as valid current evidence after withdrawal."]
+    },
+    {
+      "id": "C7",
+      "question": "Do deliberate human edits survive routine maintenance without blocking unrelated work?",
+      "evidence": [
+        {"phase": "t1", "sourceKey": "sb-pool-worksheet", "revision": 2, "needles": ["Human-protected prose", "without blocking unrelated"]}
+      ],
+      "externalActionIds": ["protect-lease", "conflict-protected"],
+      "required": ["Authenticated human title and annotation persist.", "One genuine proposed protected overlap yields a precise recoverable exception.", "Unprotected T1 correction and unrelated targets continue.", "Agent-generated content stays revisable rather than becoming human-protected."],
+      "runtimeChecks": ["Capture actual page IDs, generated base, edit versions and protected conflict; do not assert a canned article title."]
+    },
+    {
+      "id": "C8",
+      "question": "Does authorized forgetting remove the unique temporary routing fact and prevent resurrection?",
+      "evidence": [
+        {"phase": "initial", "sourceKey": "sb-temporary-handoff", "revision": 1, "needles": ["violet queue", "copper review tray", "No other source establishes"]}
+      ],
+      "absentActiveAt": {"t2": ["sb-temporary-handoff"]},
+      "externalActionIds": ["forget-temporary"],
+      "privacyProbe": "violet queue to copper review tray",
+      "required": ["Authorized forget first denies affected reads and late publication.", "All retained source revisions and affected synopsis/index/topic/view/history/context are purged or withheld until regenerated from eligible survivors.", "Human protection and read-but-not-cited influence do not exempt dependent content.", "Late results, undo or redirects cannot resurrect forgotten content."],
+      "runtimeChecks": ["Map actual source IDs and product preview/confirmation token externally.", "Inspect absence across stores and delayed publish paths, not just keyword removal from current page."],
+      "forbidden": ["Pretend forget or restart event ingested as evidence."]
+    },
+    {
+      "id": "C9",
+      "question": "Which milestone, review, rollout and ownership states are actually established?",
+      "evidence": [
+        {"phase": "t1", "sourceKey": "sb-followup-meeting", "revision": 1, "needles": ["incident recovered", "remains open", "cutover date is unknown", "rollout is planned", "not automatically deployment approvers"]},
+        {"phase": "t2", "sourceKey": "sb-overlap-handoff", "revision": 3, "needles": ["Orders rollout is", "planned, not executed", "production rollout remains proposed"]}
+      ],
+      "expectedAtT1": {
+        "Payments": {"reviewOwner": "Mira Vale", "incident": "recovered", "capacityReview": "open", "peakCapacity": "unmeasured"},
+        "Identity": {"reviewOwner": "Theo Reed", "rehearsal": "complete", "rollout": "proposed", "cutoverDate": "unknown"},
+        "Orders": {"reviewOwner": "Jules Rowan", "localCompatibility": "open", "rollout": "planned"}
+      },
+      "expectedAtT2": {"OrdersLocalCompatibility": "complete", "OrdersRollout": "planned", "IdentityCutoverDate": "unknown"},
+      "required": ["Earlier unknown assignees remain historically unknown.", "Review ownership does not imply operational approval."],
+      "forbidden": ["One local acceptance represented as whole-project completion."]
+    },
+    {
+      "id": "C10",
+      "question": "What useful knowledge, if any, is established by the scratch draft?",
+      "evidence": [
+        {"phase": "t2", "sourceKey": "sb-draft-index", "revision": 1, "needles": ["unassigned scratch values", "No definition, evidence", "no approved cutover date"]}
+      ],
+      "required": ["Dates, quantities and unsupported headings do not create useless asserted articles.", "Suggestion remains unverified and uncertainty visible.", "Supported correction or disagreement does not require blanket approval."],
+      "forbidden": ["November 3 becomes an approved cutover.", "64 becomes a capacity recommendation.", "Quantum pool harmonization becomes established technology."]
+    },
+    {
+      "id": "C11",
+      "question": "Does restart recovery repair a committed effect without duplicate synthesis?",
+      "evidence": [],
+      "externalActionIds": ["restart-repeat"],
+      "required": ["Crash after accepted canonical commit, before derivative index acknowledgement, recovers the committed effect.", "Repeat unchanged settled maintenance produces zero synthesis calls and no duplicate content revisions.", "Unsettled targets remain truthful and independent targets continue."],
+      "runtimeChecks": ["Observe actual job state, commits, index repair and model calls; static data cannot execute this case."]
+    }
+  ],
+  "qualification": {
+    "runtimeExecuted": false,
+    "criticalDistortionsTarget": 0,
+    "unsupportedStrongerClaimsTarget": 0,
+    "protectedOverwritesTarget": 0,
+    "privacyLeaksTarget": 0,
+    "routineUserApprovalsTarget": 0,
+    "acceptedCitationResolutionRequired": "all",
+    "reportSeparately": ["discovered", "applied", "unresolved exceptions", "search-ready", "undiscovered", "not exercised"],
+    "partialPolicy": "Useful partial summaries are allowed with scope and coverage limits; parked targets are not success.",
+    "luna": "deferred independent experiment"
+  }
+}

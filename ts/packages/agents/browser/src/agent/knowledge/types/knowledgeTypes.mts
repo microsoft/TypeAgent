@@ -112,14 +112,7 @@ export interface GraphCache {
         | undefined;
     lastUpdated: number;
     isValid: boolean;
-}
-
-export interface TopicGraphCache {
-    topics: any[];
-    relationships: any[];
-    topicMetrics: any[];
-    lastUpdated: number;
-    isValid: boolean;
+    sourceVersion?: number;
 }
 
 export interface ImportanceLevel {

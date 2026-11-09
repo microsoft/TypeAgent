@@ -11,19 +11,21 @@
   and prerequisites exist). This script provisions what a bare machine lacks:
 
     1. Verifies Node >= 22.
-    2. For the 'external' artifact variant, provisions the Claude Code + GitHub
-       Copilot CLIs on PATH (the external-cli agent-server resolves them at
-       runtime; see @typeagent/agent-sdk/node claudeExecutableOption). The 'full'
-       variant bundles those runtimes, so this step is skipped.
+    2. For the 'external' artifact variant, provisions Claude Code on PATH and,
+       when Copilot is selected, installs the exact SDK-compatible Copilot
+       runtime into TypeAgent's per-user cache. The 'full' variant bundles those
+       runtimes, so this step is skipped.
     3. Downloads the agent-server Universal package for this RID from the feed.
     4. Installs and registers the Copilot CLI plugin (from feed by default, or -PluginSource).
-    5. Runs config provisioning and starts the daemon via the artifact's
+    5. When VS Code 1.133 or newer is present, installs TypeAgent Chat and
+       creates a desktop shortcut that enables the proposed chat sessions API.
+    6. Runs config provisioning and starts the daemon via the artifact's
        typeagent-serve.mjs. Config provisioning depends on -Provider:
          aisystems (default) - getKeys + browser login (AI Systems Key Vault).
          ollama / copilot     - synthesize config.local.yaml locally (no Key Vault).
-    6. Registers a per-user Scheduled Task (logon trigger) so the agent-server
+    7. Registers a per-user Scheduled Task (logon trigger) so the agent-server
        starts again after logout/reboot. Skip with -NoAutoStart.
-    7. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
+    8. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
        client on another device can reach the service.
 
   Azure CLI (with az login) is used to download from the feed. This is the
@@ -38,7 +40,9 @@
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
   pwsh ./install-typeagent.ps1 -BootstrapPrereqs
   pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
-    pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
+  pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
+  pwsh ./install-typeagent.ps1 -VsCodeChatSource C:\temp\typeagent-vscode-chat.vsix
+  pwsh ./install-typeagent.ps1 -NoVsCodeChat   # skip native VS Code integration
   pwsh ./install-typeagent.ps1 -Shell -ShellStorage myacct -ShellContainer mycontainer   # also install the desktop shell
 #>
 
@@ -51,6 +55,7 @@ param(
     [string]$Org = "https://dev.azure.com/msctoproj",
     [string]$Project = "AI_Systems",
     [string]$Feed = "typeagent",
+    [string]$NpmFeedRegistry = "",
     [string]$PluginSource = "",
     [string]$PluginVersion = "latest",
     [string]$PluginPackageName = "typeagent-copilot-plugin",
@@ -60,6 +65,15 @@ param(
     [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\available-plugins\typeagent",
     [string]$PluginMarketplaceName = "typeagent-local",
     [string]$PluginMarketplaceDir = "$env:USERPROFILE\.copilot\marketplaces\typeagent-local",
+    # Install the native TypeAgent Chat extension when compatible VS Code is
+    # present. Pass -NoVsCodeChat to skip this component.
+    [switch]$NoVsCodeChat,
+    # Local VSIX file or directory containing one VSIX. When omitted, the
+    # extension is downloaded from the TypeAgent Universal Package feed.
+    [string]$VsCodeChatSource = "",
+    [string]$VsCodeChatVersion = "latest",
+    [string]$VsCodeChatPackageName = "typeagent-vscode-chat",
+    [string]$VsCodeChatInstallDir = "$env:LOCALAPPDATA\TypeAgent\vscode-chat",
     [switch]$NoStart,
     # Opt-out: by default the installer registers a per-user Scheduled Task so the
     # agent-server starts again at logon. Pass -NoAutoStart to skip registration.
@@ -82,15 +96,19 @@ param(
     #   copilot   - GitHub Copilot SDK chat via an authenticated 'copilot' CLI (no Key Vault).
     [ValidateSet("aisystems", "ollama", "copilot")]
     [string]$Provider = "aisystems",
-    # Embedding source for ollama/copilot providers (independent of chat):
-    #   local (default, bundled CPU-only), ollama, openai, or none.
-    [ValidateSet("local", "ollama", "openai", "none")]
+    # Local CPU/FP32 embeddings by default; downloads require separate consent.
+    [ValidateSet("copilot", "local", "ollama", "openai", "none")]
     [string]$Embedding = "local",
     [string]$OllamaHost = "http://localhost:11434",
     [string]$ChatModel = "",
     [string]$CopilotModel = "",
     [string]$EmbeddingEndpoint = "",
     [string]$EmbeddingModel = "",
+    [ValidateSet("minilm", "embeddinggemma")]
+    [string]$LocalEmbeddingModel = "minilm",
+    [string]$LocalEmbeddingCacheDir = "$env:LOCALAPPDATA\TypeAgent\embedding-cache",
+    [int]$EmbeddingSize = 0,
+    [switch]$DownloadLocalEmbedding,
     [string]$OpenAIKey = "",
     # Opt-in: also download and install the TypeAgent Shell (Electron desktop
     # app) from Azure Blob Storage after the agent-server install, via the
@@ -110,11 +128,59 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail($msg) { Write-Error $msg; exit 1 }
 
 function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
+}
+
+$AzureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798"
+
+function Get-NpmFeedToken {
+    $output = & az account get-access-token `
+        --resource $AzureDevOpsResource `
+        --output json `
+        --only-show-errors 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        return $null
+    }
+    try {
+        return ($output | ConvertFrom-Json).accessToken
+    } catch {
+        return $null
+    }
+}
+
+function New-TransientNpmrc {
+    param(
+        [Parameter(Mandatory = $true)][string]$Registry,
+        [Parameter(Mandatory = $true)][string]$Token
+    )
+
+    $normalized = if ($Registry.EndsWith("/")) { $Registry } else { "$Registry/" }
+    $authKey = $normalized -replace '^https:', ''
+    $baseAuthKey = $authKey -replace 'registry/?$', ''
+    $directory = Join-Path $env:TEMP ("ta-npmauth-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    $userconfig = Join-Path $directory ".npmrc"
+    $content = "registry=$normalized`n$($baseAuthKey):_authToken=$Token`n$($authKey):_authToken=$Token`n$($authKey):always-auth=true`n"
+    Set-Content -Path $userconfig -Value $content -NoNewline -Encoding ascii
+    return $userconfig
+}
+
+function Install-GlobalPackageFromTypeAgentFeed {
+    param(
+        [Parameter(Mandatory = $true)][string]$Package,
+        [Parameter(Mandatory = $true)][string]$Registry,
+        [Parameter(Mandatory = $true)][string]$UserConfig
+    )
+
+    & npm install -g $Package --registry $Registry --userconfig $UserConfig
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Failed to install '$Package' from the TypeAgent package feed."
+    }
 }
 
 function Test-AzureDevOpsAuthError {
@@ -400,36 +466,24 @@ if ($BootstrapPrereqs) {
     Invoke-PrereqBootstrap
 }
 
-# --- 1. Node >= 22 -----------------------------------------------------------
+# --- 1. Supported Node.js ----------------------------------------------------
 Write-Step "Checking Node.js"
 if (-not (Test-Command node)) {
-    Fail "Node.js >= 22 is required and was not found on PATH. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run."
+    Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ is required and was not found on PATH. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run."
 }
-$nodeMajor = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-if ([int]$nodeMajor -lt 22) {
-    Fail "Node.js >= 22 required; found v$(& node --version). Upgrade and re-run."
+& node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
+if ($LASTEXITCODE -ne 0) {
+    Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(& node --version). Upgrade and re-run."
 }
 Write-Host "  Node $(& node --version)"
 
 # --- 2. External-CLI prerequisites (Claude Code + Copilot CLI) ---------------
 if ($Variant -eq "external") {
-    Write-Step "Provisioning external CLIs (claude, copilot)"
+    Write-Step "Checking external runtime prerequisites"
     if (-not (Test-Command npm)) {
-        Fail "npm is required to install the CLIs (ships with Node)."
+        Fail "npm is required to install external runtimes from the TypeAgent package feed."
     }
-    if (-not (Test-Command claude)) {
-        Write-Host "  Installing Claude Code CLI (npm i -g @anthropic-ai/claude-code)"
-        & npm install -g "@anthropic-ai/claude-code"
-    } else {
-        Write-Host "  claude already on PATH: $((Get-Command claude).Source)"
-    }
-    if (-not (Test-Command copilot)) {
-        Write-Host "  Installing GitHub Copilot CLI (npm i -g @github/copilot)"
-        & npm install -g "@github/copilot"
-    } else {
-        Write-Host "  copilot already on PATH: $((Get-Command copilot).Source)"
-    }
-    Write-Host "  NOTE: both CLIs require a one-time auth (e.g. 'claude' / 'copilot' login) before agent actions work."
+    Write-Host "  Runtime packages will be provisioned after the agent-server artifact is available."
 }
 
 # --- 3. Download the agent-server artifact from the feed ---------------------
@@ -478,6 +532,60 @@ if ($assetExists) {
 
 if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
 
+$managedCopilotPath = $null
+if ($Variant -eq "external") {
+    $runtimeManifestPath = Join-Path $InstallDir "copilot-runtime.json"
+    if (-not (Test-Path $runtimeManifestPath)) {
+        Fail "Agent-server assets are missing copilot-runtime.json."
+    }
+    $runtimeManifest = Get-Content -Raw -Path $runtimeManifestPath | ConvertFrom-Json
+    $resolvedNpmRegistry = if ($NpmFeedRegistry) {
+        $NpmFeedRegistry
+    } else {
+        [string]$runtimeManifest.registry
+    }
+    if (-not $resolvedNpmRegistry) {
+        Fail "The TypeAgent npm feed registry is not configured."
+    }
+
+    if (-not (Test-Command claude)) {
+        $feedToken = Get-NpmFeedToken
+        if (-not $feedToken) {
+            Invoke-AzLoginForAccess -Reason "TypeAgent package feed sign-in is required to install Claude Code."
+            $feedToken = Get-NpmFeedToken
+        }
+        if (-not $feedToken) {
+            Fail "Could not authenticate to the TypeAgent package feed. npm was not invoked."
+        }
+        $userconfig = New-TransientNpmrc -Registry $resolvedNpmRegistry -Token $feedToken
+        try {
+            Write-Host "  Installing Claude Code CLI from the TypeAgent package feed"
+            Install-GlobalPackageFromTypeAgentFeed `
+                -Package "@anthropic-ai/claude-code" `
+                -Registry $resolvedNpmRegistry `
+                -UserConfig $userconfig
+        } finally {
+            Remove-Item (Split-Path -Parent $userconfig) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Host "  claude already on PATH: $((Get-Command claude).Source)"
+    }
+
+    if ($Provider -eq "copilot") {
+        Write-Step "Installing the SDK-compatible Copilot runtime"
+        & node $serve setup --provider copilot --runtime-only
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Copilot runtime installation from the TypeAgent package feed failed."
+        }
+        $runtimeTool = Join-Path $InstallDir "tools\copilotRuntime.mjs"
+        $managedCopilotPath = (& node $runtimeTool path | Select-Object -First 1)
+        if ($LASTEXITCODE -ne 0 -or -not $managedCopilotPath -or -not (Test-Path $managedCopilotPath)) {
+            Fail "The managed Copilot runtime was installed but its executable could not be resolved."
+        }
+        Write-Host "  Copilot runtime: $managedCopilotPath"
+    }
+}
+
 # --- 4. Install and register the Copilot CLI plugin ---------------------------
 Write-Step "Installing Copilot CLI plugin"
 $pluginSourceDir = $PluginInstallDir
@@ -487,16 +595,10 @@ $pluginName = "typeagent"
 $pluginDescription = "TypeAgent Copilot CLI plugin"
 $pluginResolvedVersion = $PluginVersion
 
-if (-not (Test-Command copilot)) {
-    if (-not (Test-Command npm)) {
-        Fail "GitHub Copilot CLI is required to register the plugin, and npm is not available to install it."
-    }
-
-    Write-Host "  Installing GitHub Copilot CLI (npm i -g @github/copilot)"
-    & npm install -g "@github/copilot"
-    if (-not (Test-Command copilot)) {
-        Fail "GitHub Copilot CLI was not found after installation."
-    }
+$pluginCopilotPath = if (Test-Command copilot) {
+    (Get-Command copilot).Source
+} else {
+    $managedCopilotPath
 }
 
 if ($Upgrade -and (Test-Path $pluginSourceDir)) {
@@ -563,25 +665,118 @@ if (-not (Test-Path $registerPluginScript)) {
 }
 
 $pluginRegisterLogPath = Join-Path (Join-Path $env:USERPROFILE ".typeagent") "logs\register-plugin.log"
-Write-Host "  Registering plugin with shared script"
-$registerArgs = @(
-    $registerPluginScript,
-    "--install-dir", $InstallDir,
-    "--plugin-source-dir", $pluginSourceDir,
-    "--marketplace-name", $PluginMarketplaceName,
-    "--marketplace-root", $PluginMarketplaceDir,
-    "--plugin-name", $pluginName,
-    "--plugin-description", $pluginDescription,
-    "--plugin-version", $pluginResolvedVersion,
-    "--log-path", $pluginRegisterLogPath
-)
-& node @registerArgs
-if ($LASTEXITCODE -ne 0) {
-    Fail "Copilot plugin registration failed. See log: $pluginRegisterLogPath"
+if ($pluginCopilotPath) {
+    Write-Host "  Registering plugin with shared script via $pluginCopilotPath"
+    $registerArgs = @(
+        $registerPluginScript,
+        "--install-dir", $InstallDir,
+        "--plugin-source-dir", $pluginSourceDir,
+        "--marketplace-name", $PluginMarketplaceName,
+        "--marketplace-root", $PluginMarketplaceDir,
+        "--plugin-name", $pluginName,
+        "--plugin-description", $pluginDescription,
+        "--plugin-version", $pluginResolvedVersion,
+        "--copilot-path", $pluginCopilotPath,
+        "--log-path", $pluginRegisterLogPath
+    )
+    & node @registerArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Copilot plugin registration failed. See log: $pluginRegisterLogPath"
+    }
+    Write-Host "  Copilot plugin '$pluginName' registered successfully"
+} else {
+    Write-Host "  Copilot CLI is not available. Plugin registration is deferred; rerun setup after installing a CLI." -ForegroundColor Yellow
 }
-Write-Host "  Copilot plugin '$pluginName' registered successfully"
 
-# --- 5. Provision config + start the daemon ----------------------------------
+# --- 5. Install the native VS Code Chat extension ----------------------------
+$vscodeChatInstalled = $false
+if (-not $NoVsCodeChat) {
+    $vscodeChatHelper = Join-Path (Split-Path -Parent $PSScriptRoot) "installers\common\install-vscode-typeagent.ps1"
+    if (-not (Test-Path -LiteralPath $vscodeChatHelper)) {
+        Fail "Shared VS Code Chat installer not found: $vscodeChatHelper"
+    }
+
+    $psExe = (Get-Process -Id $PID).Path
+    if (-not $psExe) {
+        $psExe = "powershell.exe"
+    }
+
+    Write-Step "Checking for compatible VS Code"
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $vscodeChatHelper -Action Discover
+    $discoveryExitCode = $LASTEXITCODE
+    if ($discoveryExitCode -eq 2) {
+        Write-Host "  VS Code was not found. Skipping TypeAgent Chat and desktop shortcut." -ForegroundColor Yellow
+    } elseif ($discoveryExitCode -eq 3) {
+        Write-Host "  VS Code is older than 1.133.0. Skipping TypeAgent Chat and desktop shortcut." -ForegroundColor Yellow
+    } elseif ($discoveryExitCode -ne 0) {
+        Fail "VS Code discovery failed. See $env:LOCALAPPDATA\TypeAgent\logs\vscode-chat-install.log."
+    } else {
+        Write-Step "Installing TypeAgent Chat for VS Code"
+        $vscodeChatVsix = ""
+        if ($VsCodeChatSource) {
+            if (Test-Path -LiteralPath $VsCodeChatSource -PathType Leaf) {
+                $vscodeChatVsix = (Resolve-Path -LiteralPath $VsCodeChatSource).Path
+            } elseif (Test-Path -LiteralPath $VsCodeChatSource -PathType Container) {
+                $vsixFiles = @(Get-ChildItem -LiteralPath $VsCodeChatSource -Filter "*.vsix" -File)
+                if ($vsixFiles.Count -ne 1) {
+                    Fail "Expected exactly one VSIX in '$VsCodeChatSource'; found $($vsixFiles.Count)."
+                }
+                $vscodeChatVsix = $vsixFiles[0].FullName
+            } else {
+                Fail "VS Code Chat source not found: $VsCodeChatSource"
+            }
+        } else {
+            if (Test-Path -LiteralPath $VsCodeChatInstallDir) {
+                Remove-Item -LiteralPath $VsCodeChatInstallDir -Recurse -Force
+            }
+            New-Item -ItemType Directory -Force -Path $VsCodeChatInstallDir | Out-Null
+
+            $resolvedVsCodeChatVersion = $VsCodeChatVersion
+            if ($VsCodeChatVersion -eq "latest") {
+                Write-Host "  Resolving latest version for $VsCodeChatPackageName..."
+                $resolvedVsCodeChatVersion = Resolve-LatestUniversalPackageVersion `
+                    -Organization $Org `
+                    -ProjectName $Project `
+                    -FeedName $Feed `
+                    -PackageName $VsCodeChatPackageName
+                Write-Host "  Resolved VS Code Chat version: $resolvedVsCodeChatVersion"
+            }
+
+            Write-Host "  Downloading $VsCodeChatPackageName ($resolvedVsCodeChatVersion) -> $VsCodeChatInstallDir"
+            $vscodeChatDownloadArgs = @(
+                "artifacts", "universal", "download",
+                "--organization", $Org,
+                "--project", $Project,
+                "--scope", "project",
+                "--feed", $Feed,
+                "--name", $VsCodeChatPackageName,
+                "--version", $resolvedVsCodeChatVersion,
+                "--path", $VsCodeChatInstallDir,
+                "--only-show-errors"
+            )
+            [void](Invoke-UniversalPackageDownload `
+                -Arguments $vscodeChatDownloadArgs `
+                -PackageName $VsCodeChatPackageName)
+
+            $vsixFiles = @(Get-ChildItem -LiteralPath $VsCodeChatInstallDir -Filter "*.vsix" -File)
+            if ($vsixFiles.Count -ne 1) {
+                Fail "Expected exactly one VSIX in '$VsCodeChatInstallDir'; found $($vsixFiles.Count)."
+            }
+            $vscodeChatVsix = $vsixFiles[0].FullName
+        }
+
+        & $psExe -NoProfile -ExecutionPolicy Bypass -File $vscodeChatHelper `
+            -Action Install `
+            -Owner standalone `
+            -VsixPath $vscodeChatVsix
+        if ($LASTEXITCODE -ne 0) {
+            Fail "TypeAgent Chat installation failed. See $env:LOCALAPPDATA\TypeAgent\logs\vscode-chat-install.log."
+        }
+        $vscodeChatInstalled = $true
+    }
+}
+
+# --- 6. Provision config + start the daemon ----------------------------------
 if ($Provider -eq "aisystems") {
     Write-Step "Provisioning config (getKeys, browser login)"
     $provisionOutput = & node $serve provision 2>&1
@@ -620,6 +815,12 @@ if ($Provider -eq "aisystems") {
     # Self-host provider: synthesize config.local.yaml locally (no Key Vault / az login).
     Write-Step "Provisioning config for '$Provider' provider (self-host, no Key Vault)"
     $provisionArgs = @($serve, "provision", "--provider", $Provider, "--force", "--embedding", $Embedding)
+    $provisionArgs += @("--local-embedding-model", $LocalEmbeddingModel, "--local-embedding-cache-dir", $LocalEmbeddingCacheDir)
+    if ($DownloadLocalEmbedding) { $provisionArgs += "--download-local-embedding" }
+    if ($EmbeddingSize -gt 0) { $provisionArgs += @("--embedding-size", "$EmbeddingSize") }
+    if (-not $PSBoundParameters.ContainsKey("Embedding") -and -not $PSBoundParameters.ContainsKey("LocalEmbeddingModel")) {
+        $provisionArgs += "--preserve-embedding-selection"
+    }
     if ($Provider -eq "ollama") {
         $provisionArgs += @("--ollama-host", $OllamaHost)
         if ($ChatModel) { $provisionArgs += @("--chat-model", $ChatModel) }
@@ -653,7 +854,11 @@ if ($Provider -eq "aisystems") {
         }
     }
     if ($Provider -eq "copilot") {
-        Write-Host "  Reminder: the 'copilot' CLI must be installed and authenticated (github login)." -ForegroundColor Yellow
+        Write-Step "Signing in to and verifying GitHub Copilot"
+        & node $serve setup --provider copilot
+        if ($LASTEXITCODE -ne 0) {
+            Fail "GitHub Copilot setup did not complete successfully."
+        }
     }
 }
 
@@ -674,7 +879,7 @@ $hasEmbeddingEnv = (-not [string]::IsNullOrWhiteSpace($env:AZURE_OPENAI_ENDPOINT
     (-not [string]::IsNullOrWhiteSpace($env:TYPEAGENT_EMBEDDING_PROVIDER))
 $hasEmbeddingInFile = $false
 if (Test-Path $configLocalPath) {
-    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpointEmbedding|endpoint_embedding|^embedding:|provider:\s*(local|openai|azure|none)" -Quiet)
+    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpointEmbedding|endpoint_embedding|^defaultEmbeddingModel:|^embedding:|provider:\s*(local|openai|azure|none)" -Quiet)
 }
 
 if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
@@ -689,7 +894,7 @@ if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
     Write-Warning $msg
 }
 
-# --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
+# --- 7. Optional: set up + host a Dev Tunnel for cross-device access ----------
 if ($DevTunnel) {
     Write-Step "Setting up Dev Tunnel (cross-device access)"
     if (-not (Test-Command devtunnel)) {
@@ -770,8 +975,11 @@ Write-Host "  Autostart: node `"$serve`" autostart status"
 if ($DevTunnel) {
     Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
 }
+if ($vscodeChatInstalled) {
+    Write-Host "  VS Code:  TypeAgent Chat installed; launch from the 'TypeAgent Chat' desktop shortcut"
+}
 
-# --- 7. Optional: install the TypeAgent Shell desktop app --------------------
+# --- 8. Optional: install the TypeAgent Shell desktop app --------------------
 if ($Shell) {
     Write-Step "Installing TypeAgent Shell (desktop app)"
     $installShellScript = Join-Path $PSScriptRoot "install-shell.ps1"

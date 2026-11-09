@@ -100,6 +100,8 @@ export type CommandResultEntry = {
     // Token usage accumulated across executed actions/commands (self-reported
     // via ActionResult.tokenUsage). `undefined` => not reported / unknown.
     actionTokenUsage?: import("./dispatcher.js").CompletionUsageStats;
+    // Canonical OpenTelemetry trace id of the root request span.
+    traceId?: string;
 };
 
 export type UserFeedbackRating = "up" | "down" | null;

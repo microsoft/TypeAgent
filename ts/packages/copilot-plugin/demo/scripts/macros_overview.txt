@@ -4,9 +4,6 @@
 # Updated demo (~7 minutes). One runtime, four flow types:
 # WebFlow, TaskFlow, PowerShell, Excel. Closes on the library
 # showing all of them side by side and the reliability benchmark.
-#
-# Builds on the Option B narrative from
-# codeDocs\teamDemos\2026-05-26_demo-brainstorm.md.
 # ============================================================
 
 @defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"

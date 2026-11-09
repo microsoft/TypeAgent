@@ -80,7 +80,7 @@ When `instanceDir` is absent (standalone Shell, CLI, tests), `instanceStorage` f
 ```typescript
 type DispatcherConnectOptions = {
   filter?: boolean;
-  clientType?: "shell" | "extension";
+  clientType?: "shell" | "extension" | "android";
   conversationId?: string; // Join a specific conversation by UUID. If omitted → connects to the default conversation.
 };
 ```

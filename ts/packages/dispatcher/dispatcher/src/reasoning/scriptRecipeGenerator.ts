@@ -1,16 +1,30 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ReasoningTrace } from "./tracing/types.js";
+import {
+    DEFAULT_GENERATION_MODEL,
+    runQueryWithTimeout,
+} from "../validation/queryWithTimeout.mjs";
 import registerDebug from "debug";
+import type { ScriptRecipe } from "@typeagent/agent-flows/powershell/recipe";
+export type {
+    ScriptRecipe,
+    ScriptParameter,
+    GrammarPattern,
+    SandboxPolicy,
+} from "@typeagent/agent-flows/powershell/recipe";
 
 const debug = registerDebug(
     "typeagent:dispatcher:reasoning:scriptRecipeGenerator",
 );
 
-const RECIPE_MODEL = "claude-sonnet-4-5-20250929";
+const RECIPE_MODEL = DEFAULT_GENERATION_MODEL;
+
+export type ScriptRecipeTextGenerator = (prompt: string) => Promise<string>;
+
+const generateRecipeText: ScriptRecipeTextGenerator = (prompt) =>
+    runQueryWithTimeout(prompt, { model: RECIPE_MODEL });
 
 export interface ScriptCapture {
     stepNumber: number;
@@ -19,49 +33,6 @@ export interface ScriptCapture {
     output: string;
     exitCode: number;
     originalRequest: string;
-}
-
-export interface ScriptRecipe {
-    version: 1;
-    actionName: string;
-    description: string;
-    displayName: string;
-    parameters: ScriptParameter[];
-    script: {
-        language: "powershell";
-        body: string;
-        expectedOutputFormat: "text" | "json" | "objects" | "table";
-    };
-    grammarPatterns: GrammarPattern[];
-    sandbox: SandboxPolicy;
-    source?: {
-        type: "reasoning" | "manual";
-        requestId?: string;
-        timestamp: string;
-        originalRequest?: string;
-    };
-}
-
-export interface ScriptParameter {
-    name: string;
-    type: "string" | "number" | "boolean" | "path";
-    required: boolean;
-    description: string;
-    default?: unknown;
-}
-
-export interface GrammarPattern {
-    pattern: string;
-    isAlias: boolean;
-    examples: string[];
-}
-
-export interface SandboxPolicy {
-    allowedCmdlets: string[];
-    allowedPaths: string[];
-    allowedModules: string[];
-    maxExecutionTime: number;
-    networkAccess: boolean;
 }
 
 const PS_DETECTION_PATTERN =
@@ -151,6 +122,10 @@ export function extractScriptsFromTrace(
  * Generates PowerShell recipes from PowerShell scripts found in reasoning traces.
  */
 export class ScriptRecipeGenerator {
+    constructor(
+        private readonly textGenerator: ScriptRecipeTextGenerator = generateRecipeText,
+    ) {}
+
     async generate(trace: ReasoningTrace): Promise<ScriptRecipe[]> {
         if (!trace.result.success) {
             debug(
@@ -192,21 +167,7 @@ export class ScriptRecipeGenerator {
     ): Promise<ScriptRecipe | null> {
         const prompt = this.buildPrompt(capture);
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: RECIPE_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
-        }
+        const result = await this.textGenerator(prompt);
 
         if (!result) return null;
 
@@ -251,19 +212,18 @@ Generate a script recipe JSON object that:
 1. Has a camelCase actionName derived from what the script does
 2. Has a human-readable displayName
 3. Generalizes hardcoded values (paths, search patterns, filenames, counts) into parameters with sensible defaults
-4. Parameters use types: "string", "number", "boolean", or "path" (for filesystem paths)
+4. Parameters use types: "string", "number", "boolean", "path" (for filesystem paths),
+   or "executable" (for values passed to executable command parameters such as Start-Process -FilePath)
 5. The script body uses PowerShell param() block with the generalized parameters
 6. Includes grammarPatterns array with objects containing:
    - pattern: AGR grammar pattern using $(paramName:wildcard) for strings/paths or $(paramName:number) for numbers
    - isAlias: true for terse shell-like forms (e.g. "ls"), false for natural language
    - examples: 2-3 example invocations
    Include at least one natural language pattern and one terse alias if applicable
-7. Includes a sandbox policy with:
-   - allowedCmdlets: only the cmdlets this script actually needs plus pipeline utilities (Select-Object, Where-Object, ForEach-Object, Format-Table, Out-String, Sort-Object)
-   - allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"] unless broader access needed
-   - allowedModules: PowerShell modules needed
-   - maxExecutionTime: reasonable timeout in seconds (15-60)
-   - networkAccess: false unless the script uses network cmdlets
+7. Includes requiredModules: installed PowerShell module names or paths needed by the script.
+   Include sandbox.maxExecutionTime: an operational timeout in seconds (15-60).
+   There is no cmdlet catalogue or arbitrary-code sandbox. Saving the recipe does not
+   authorize execution; user approval is required before code or modules run.
 8. expectedOutputFormat: "text", "json", "objects", or "table"
 
 Return ONLY a JSON object matching this schema (no markdown fences, no explanation):
@@ -273,7 +233,7 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
   "description": "what this script does",
   "displayName": "Human Readable Name",
   "parameters": [
-    { "name": "paramName", "type": "string|number|boolean|path", "required": true|false, "description": "...", "default": "optional default" }
+    { "name": "paramName", "type": "string|number|boolean|path|executable", "required": true|false, "description": "...", "default": "optional default" }
   ],
   "script": {
     "language": "powershell",
@@ -284,13 +244,8 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
     { "pattern": "list files in $(path:wildcard)", "isAlias": false, "examples": ["list files in downloads"] },
     { "pattern": "ls $(path:wildcard)", "isAlias": true, "examples": ["ls downloads"] }
   ],
-  "sandbox": {
-    "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
-    "maxExecutionTime": 30,
-    "networkAccess": false
-  }
+  "requiredModules": ["Microsoft.PowerShell.Management"],
+  "sandbox": { "maxExecutionTime": 30 }
 }`;
     }
 }

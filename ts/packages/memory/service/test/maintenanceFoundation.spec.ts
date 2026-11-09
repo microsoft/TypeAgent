@@ -1,0 +1,428 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { FileMemoryService } from "../src/fileMemoryService.js";
+import { hydrateInformational } from "../src/informationalWiki.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
+import { TypedViewStore } from "../src/viewStore.js";
+import type { IndexedDocument, IndexedFragmentRequest } from "../src/types.js";
+import type {
+    ViewBuildSnapshot,
+    WikiSubjectAssessment,
+} from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { settleConsolidation } from "./wikiConsolidationFixtures.js";
+
+const subjects = Array.from({ length: 14 }, (_, index) => `mechanism ${index}`);
+
+class FoundationIndex extends FakeSemanticCorpusIndex {
+    static failDerivative = false;
+    public constructor(private readonly location: string) {
+        super(location);
+    }
+    override async rebuild(documents: IndexedDocument[]): Promise<void> {
+        if (
+            FoundationIndex.failDerivative &&
+            this.location.includes("view-search-index")
+        )
+            throw new Error("Synthetic derivative failure");
+        await super.rebuild(documents);
+    }
+    async listSubjects(offset: number) {
+        return {
+            total: subjects.length,
+            items: offset
+                ? []
+                : subjects.map((term) => ({
+                      term,
+                      postingCount: 1,
+                      sourceIds: ["source"],
+                  })),
+        };
+    }
+    override async getKnowledgeGraph() {
+        return {
+            entities: [],
+            relationships: [],
+            topics: subjects.map((name) => ({
+                name,
+                sourceIds: ["source"],
+                mentionCount: 1,
+            })),
+        };
+    }
+    async readFragments(_request: IndexedFragmentRequest) {
+        const document = this.documents[0];
+        if (!document) throw new Error("Missing synthetic indexed input");
+        return {
+            fragments: [
+                {
+                    sourceId: document.source.sourceId,
+                    revisionId: document.revision.revisionId,
+                    snippet: document.content,
+                    locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
+                    score: 1,
+                },
+            ],
+            readChars: document.content.length,
+            limited: false,
+        };
+    }
+}
+
+test.each(["semantic", "transient", "derivative"] as const)(
+    "automatic maintenance isolates %s failure, reconciles committed effects and parks unchanged input",
+    async (mode) => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "memory-foundation-"),
+        );
+
+        const calls = new Map<string, number>();
+        let rejectTarget = true;
+        const adapter = {
+            identity: "offline-foundation-v1",
+            assessWikiSubject: async (): Promise<WikiSubjectAssessment> => ({
+                disposition: "distinct",
+                purpose: "Independent explanation",
+                reason: "Same sources do not imply equivalent scope",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            }),
+            generate: async (input: ViewBuildSnapshot) => {
+                const query = input.definition.wiki!.query;
+                calls.set(query, (calls.get(query) ?? 0) + 1);
+                if (
+                    rejectTarget &&
+                    query === subjects[0] &&
+                    mode === "transient"
+                )
+                    throw new Error("Synthetic unavailable provider");
+                const output = hydrateInformational(input, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
+                    title: query,
+                    prose: `${query} explains an independent operational mechanism and its boundaries.`,
+                    limits: "Synthetic selected evidence",
+                    citationIds: ["f0"],
+                });
+                if (
+                    rejectTarget &&
+                    query === subjects[0] &&
+                    mode === "semantic"
+                )
+                    output.content.citations[0].revisionId =
+                        "invented-revision";
+                return output;
+            },
+            validate: async () => {
+                throw new Error(
+                    "Informational work must not use universal support checks",
+                );
+            },
+        };
+        const open = () =>
+            new FileMemoryService(root, {
+                indexFactory: (_id, directory) =>
+                    new FoundationIndex(directory),
+                eventIndexFactory: (_id, directory) =>
+                    new FakeSemanticCorpusIndex(directory),
+                viewSynthesisAdapter: adapter,
+            });
+        let service = open();
+        FoundationIndex.failDerivative = mode === "derivative";
+        try {
+            const { corpusId } = await service.createCorpus(
+                `Foundation ${mode}`,
+            );
+            for (const family of ["projects", "wiki"] as const)
+                await service.maintainViews({
+                    corpusId,
+                    family,
+                    operation: "pause",
+                    expectedHead: (await service.listViews(corpusId)).head,
+                });
+            const ingestion = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Synthetic mechanisms",
+                    text: `${subjects.join(", ")} explain independent operational definitions, observations and governing qualifications.`,
+                },
+            });
+            expect(
+                (await waitForMemoryJob(service, ingestion.jobId)).state,
+            ).toBe("complete");
+            await service.maintainViews({
+                corpusId,
+                family: "wiki",
+                operation: "resume",
+                expectedHead: (await service.listViews(corpusId)).head,
+            });
+            const settled = await settleConsolidation(service, corpusId);
+            if (settled.wikiFamily?.pending)
+                throw new Error(
+                    JSON.stringify({
+                        status: settled.wikiFamily,
+                        calls: [...calls],
+                        family: await new TypedViewStore(root).getWikiFamily(
+                            corpusId,
+                        ),
+                        jobs: (await service.listViewBuilds(corpusId)).map(
+                            (job) => ({
+                                state: job.state,
+                                results: job.results.map((result) => ({
+                                    query: result.snapshot.definition.wiki
+                                        ?.query,
+                                    state: result.state,
+                                    reason: result.reason,
+                                })),
+                            }),
+                        ),
+                    }),
+                );
+            expect(settled.wikiFamily?.pending).toBe(false);
+            if (mode !== "derivative")
+                expect(settled.wikiFamily?.error).toContain(
+                    "technical targets parked",
+                );
+            expect(settled.views).toHaveLength(mode === "derivative" ? 14 : 13);
+            expect(calls.get(subjects[13])).toBe(1);
+            expect(calls.get(subjects[0])).toBe(mode === "transient" ? 2 : 1);
+            const jobs = await service.listViewBuilds(corpusId);
+            if (mode !== "derivative")
+                expect(
+                    jobs
+                        .flatMap((job) => job.results)
+                        .some(
+                            (result) =>
+                                result.state ===
+                                (mode === "semantic" ? "blocked" : "failed"),
+                        ),
+                ).toBe(true);
+            const before = [...calls];
+            const versions = settled.views
+                .map((view) => view.revisionId)
+                .sort();
+            await service.close();
+            if (mode !== "derivative") {
+                service = open();
+                await service.initialize();
+                expect((await service.listViews(corpusId)).head).toBe(
+                    settled.head,
+                );
+                expect([...calls]).toEqual(before);
+                await service.close();
+                await rm(
+                    path.join(root, corpusId, "views", "view-search-index"),
+                    {
+                        recursive: true,
+                        force: true,
+                    },
+                );
+            }
+            FoundationIndex.failDerivative = false;
+            if (mode === "derivative") {
+                // Simulate a clean family that missed a source/index generation hint.
+                const store = new TypedViewStore(root);
+                const family = await store.getWikiFamily(corpusId);
+                family.dirty = false;
+                family.indexVersion = "missed-generation";
+                await store.saveWikiFamily(corpusId, family);
+            }
+            service = open();
+            await service.initialize();
+            const recovered = await settleConsolidation(service, corpusId);
+            expect(recovered.wikiFamily?.pending).toBe(false);
+            expect(
+                recovered.views.map((view) => view.revisionId).sort(),
+            ).toEqual(versions);
+            expect([...calls]).toEqual(before);
+            for (const view of recovered.views) {
+                const publication = await service.getViewPublication({
+                    corpusId,
+                    viewId: view.viewId,
+                });
+                expect(publication.indexState).toBe("ready");
+                expect(publication.publishedRevisionId).toBe(view.revisionId);
+            }
+            if (mode !== "derivative") {
+                rejectTarget = false;
+                const failed = (await service.listViewBuilds(corpusId)).find(
+                    (job) =>
+                        job.results.some((result) =>
+                            ["failed", "blocked"].includes(result.state),
+                        ),
+                )!;
+                // Foreground inventory may still be pinned before maintenance committed.
+                const clock = (
+                    import.meta as ImportMeta & { jest: typeof jest }
+                ).jest;
+                const inventory = clock
+                    .spyOn(service, "listViews")
+                    .mockResolvedValue({
+                        ...(await service.listViews(corpusId)),
+                        head: failed.request.expectedHead,
+                    });
+                let retried = await service
+                    .retryViewBuild({
+                        corpusId,
+                        jobId: failed.jobId,
+                    })
+                    .finally(() => inventory.mockRestore());
+                for (
+                    let attempt = 0;
+                    attempt < 300 && retried.state === "running";
+                    attempt++
+                ) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                    retried = (await service.getViewBuild({
+                        corpusId,
+                        jobId: retried.jobId,
+                    }))!;
+                }
+                expect(retried.state).toBe("complete");
+                expect(calls.get(subjects[0])).toBe(
+                    mode === "semantic" ? 2 : 3,
+                );
+                expect((await service.listViews(corpusId)).views).toHaveLength(
+                    14,
+                );
+            }
+        } finally {
+            FoundationIndex.failDerivative = false;
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+);
+
+test.each(["maintenance", "queued", "build"] as const)(
+    "consolidation polling does not materialize inventories during active %s work",
+    async (kind) => {
+        let checks = 0;
+        let builds = 0;
+        let inventories = 0;
+        const service: Parameters<typeof settleConsolidation>[0] = {
+            getMaintenanceStatus: () => {
+                const active = kind !== "build" && checks++ < 2;
+                return {
+                    mode: "automatic",
+                    paused: false,
+                    settled: false,
+                    pending:
+                        kind === "queued" && active
+                            ? ["corpus:committed-read-cleanup"]
+                            : [],
+                    running:
+                        kind === "maintenance" && active
+                            ? ["corpus:committed-read-cleanup"]
+                            : [],
+                    failures: [],
+                    deferred: [],
+                    coalesced: 0,
+                };
+            },
+            listViewBuilds: async () => {
+                if (kind !== "build") {
+                    expect(checks).toBeGreaterThan(2);
+                    return [];
+                }
+                return [
+                    {
+                        jobId: "build",
+                        corpusId: "corpus",
+                        fingerprint: "input",
+                        request: {
+                            corpusId: "corpus",
+                            expectedHead: null,
+                            targets: [],
+                        },
+                        actor: "fixture",
+                        createdAt: "",
+                        updatedAt: "",
+                        state: builds++ < 2 ? "running" : "complete",
+                        results: [],
+                        publication: false,
+                    },
+                ];
+            },
+            listViews: async () => {
+                inventories++;
+                if (kind === "build") expect(builds).toBe(3);
+                return { head: null, views: [] };
+            },
+        };
+        expect(await settleConsolidation(service, "corpus")).toEqual({
+            head: null,
+            views: [],
+        });
+        expect(inventories).toBe(1);
+    },
+);
+
+test("consolidation polling rechecks queued maintenance after reading an inventory", async () => {
+    let inventories = 0;
+    let queuedChecks = 0;
+    const service: Parameters<typeof settleConsolidation>[0] = {
+        getMaintenanceStatus: () => ({
+            mode: "automatic",
+            paused: false,
+            settled: false,
+            pending:
+                inventories === 1 && queuedChecks++ < 2
+                    ? ["corpus:committed-read-cleanup"]
+                    : [],
+            running: [],
+            failures: [],
+            deferred: [],
+            coalesced: 0,
+        }),
+        listViewBuilds: async () => [],
+        listViews: async () => ({
+            head: ++inventories === 1 ? "before" : "settled",
+            views: [],
+        }),
+    };
+    expect(await settleConsolidation(service, "corpus")).toEqual({
+        head: "settled",
+        views: [],
+    });
+    expect(inventories).toBe(2);
+});
+
+test.each(["deferred", "failed", "paused", "manual"] as const)(
+    "consolidation polling permits unchanged %s maintenance without running it",
+    async (kind) => {
+        const key = "corpus:wiki";
+        const service: Parameters<typeof settleConsolidation>[0] = {
+            getMaintenanceStatus: () => ({
+                mode: kind === "manual" ? "manual" : "automatic",
+                paused: kind === "paused",
+                settled: false,
+                pending: [key],
+                running: [],
+                failures:
+                    kind === "failed"
+                        ? [{ key, error: "Synthetic parked failure" }]
+                        : [],
+                deferred:
+                    kind === "deferred"
+                        ? [{ key, reason: "Synthetic unchanged input" }]
+                        : [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => [],
+            listViews: async () => ({ head: "parked", views: [] }),
+        };
+        expect(await settleConsolidation(service, "corpus")).toEqual({
+            head: "parked",
+            views: [],
+        });
+    },
+);

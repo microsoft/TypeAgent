@@ -12,8 +12,12 @@
 The browser agent enables TypeAgent to control a web browser, extract
 knowledge from web pages, record and replay browser automation workflows,
 and dynamically discover actions on unfamiliar sites. It is the most
-architecturally complex agent in the system, spanning four OS processes
-and three communication transports.
+architecturally complex agent in the system, spanning multiple OS processes
+and communication transports.
+
+Agent-data pages also use a forked localhost view server. They are not
+extension pages and do not participate in active browser-control client
+selection; see [Localhost views](#localhost-views).
 
 ### Dual-Mode Architecture
 
@@ -89,6 +93,62 @@ the extension build toolchain):
 | `@typeagent/browser-control-rpc` | `agents/browserControlRpc/src/` | Shared browser types (`BrowserControl`, `serviceTypes`), the content-script RPC client, the cross-context HTML reducer, and PDF types. Light: no agent deps.                             |
 | `@typeagent/browser-extension`   | `agents/browserExtension/src/`  | The Chrome (`src/extension/`) + Electron (`src/electron/`) extension source, build scripts, and packaging.                                                                               |
 | `browser-typeagent`              | `agents/browser/src/`           | The core `AppAgent`: action handlers, knowledge/indexing, search, WebFlows, puppeteer, and the PDF viewer (`src/{agent,puppeteer,views}/`). Depends on `@typeagent/browser-control-rpc`. |
+
+---
+
+## Localhost views
+
+The browser agent owns the PDF reader and three agent-data applications. The
+library pages are built from `agents/browser/src/views/client/library/`
+and served by the same forked Express server as the PDF reader:
+
+| View                | Logical name         | Canonical route |
+| ------------------- | -------------------- | --------------- |
+| Annotations Library | `annotationsLibrary` | `/annotations/` |
+| Memory Hub          | `memoryHub`          | `/memory/hub/`  |
+| Automations         | `automationsLibrary` | `/automations/` |
+
+Canonical routes redirect to `/library/<page>.html`; query parameters and
+fragments survive navigation. Shared aliases and logical links are defined
+in `@typeagent/browser-control-rpc/viewRoutes`. Context menus, `@browser open`,
+Chrome navigation, and Electron navigation resolve the live host rather than
+embedding a port or extension ID. Electron uses agent-server `"view"` discovery.
+
+The retired `memoryCenter`, `knowledgeLibrary`, `entityGraph` and `topicGraph`
+names and URLs remain compatibility aliases to Hub Inbox, Search and fixed
+browser web Explore routes. Their standalone shells are no longer built.
+Management and advanced graph/analytics controllers are reusable Hub components;
+browser graph maintenance and local view preferences are in Settings.
+
+Explore's Overview follows the selected corpus scope and shows counts and
+knowledge/provenance cards. Overview and Reading analytics share bounded
+six-card previews and a filterable, sortable, 24-item View all browser.
+`memoryHubKnowledge` filters complete scoped collections before pagination;
+Reading analytics requests an explicit browser-only scope, not the selected
+corpus. Graph reads remain whole-corpus in the canonical memory API. The
+Activity trends histogram is not rendered.
+Entity graph and Topic graph are separate, explicitly
+browser-memory views using the existing Graphology layout endpoints and Cytoscape
+visualizers; Reading analytics is a fourth view. Overview does not plot mixed
+entity/topic nodes or automatically load the fixed-browser views. The canonical
+corpus graph DTO does not supply topic hierarchy or topic-to-topic edges.
+
+Chat Panel, Options, and the PDF interception bridge remain extension-owned.
+Auto-index settings stay in Options because extension storage owns them.
+The PDF bridge opens the agent-owned PDF reader; it is not the reader itself.
+
+Library operations follow a separate data path:
+
+```text
+Local page -> same-origin HTTP -> Express child -> typed agent-rpc IPC
+           -> browser-agent domain handler -> memory/knowledge/WebFlow service
+Agent progress -> typed IPC -> Express SSE -> local page
+```
+
+There is no generic browser-control bridge on this HTTP endpoint. Portable
+pages neither use Chrome runtime APIs nor connect as browser-control WebSocket
+clients. Annotations continue to use the same-origin `/api/pdf` API.
+See [Browser RPC](browserRpc.md#localhost-view-rpc) for the transport boundary.
 
 ---
 
@@ -266,6 +326,7 @@ graph TB
 | **Extension service worker** | Chrome MV3 service worker (ES module)                       | Maintains WebSocket connection to agent, implements browser control RPC, manages tabs and recording state via Chrome APIs. Wakes on events, no persistent state in memory.        |
 | **Content script**           | Chrome content script (isolated world) + MAIN world scripts | Runs per-tab. Handles DOM interaction, event capture, recording, auto-indexing, SPA navigation detection, PDF interception, and WebAgent runtime.                                 |
 | **Electron main**            | Electron main process                                       | Manages `WebContentsView` instances as browser tabs, provides direct browser control via `executeJavaScript()` and IPC-based content script RPC, handles CDP fingerprint masking. |
+| **View server**              | Forked Node.js Express child                                | Serves PDF/library HTML and local assets; forwards allowlisted library data operations to the parent over typed IPC and publishes progress through SSE.                           |
 
 The extension and Electron host are **alternative browser control backends**.
 The agent selects the active client based on availability and preference
@@ -511,7 +572,7 @@ interface BrowserActionContext {
   // Utilities
   localHostPort: number;
   tabTitleIndex?: any; // For tab switching by description
-  viewProcess?: ChildProcess; // Spawned browser process
+  viewProcess?: ChildProcess; // Forked localhost Express view server
   browserProcess?: ChildProcess;
   fuzzyMatchingModel?: any; // For entity resolution
 }

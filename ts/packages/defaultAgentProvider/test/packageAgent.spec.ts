@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { AppAgentProviderSetController } from "agent-dispatcher";
 import {
     buildPackageCommandTable,
@@ -10,6 +13,10 @@ import {
     PACKAGE_AGENT_NAME,
 } from "../src/installSources/packageAgent.js";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { McpServerSourceApi } from "../src/mcp/mcpAppAgentSource.js";
+import { NormalizedMcpServerConfig } from "../src/mcp/mcpServerConfig.js";
+import { McpInstallCandidate } from "../src/installSources/config.js";
+import type { MemoryViewPackageManager } from "../src/memoryViewPackages.js";
 
 const noopHost: AppAgentProviderSetController = {
     runExclusive: async (callback) => {
@@ -21,6 +28,67 @@ const noopHost: AppAgentProviderSetController = {
     },
 };
 
+test("memory-view package commands are separate and delegate without activation", async () => {
+    const calls: string[] = [];
+    const memoryViews: MemoryViewPackageManager = {
+        install: async () => {
+            throw new Error("Dry-run must not install");
+        },
+        update: async () => {
+            throw new Error("Not requested");
+        },
+        load: async () => {
+            throw new Error("Commands must not activate");
+        },
+        preview: async () => {
+            calls.push("preview");
+            return undefined;
+        },
+        available: async () => [],
+        list: async () => {
+            calls.push("list");
+            return [];
+        },
+        uninstall: async (name) => {
+            calls.push(`remove:${name}`);
+        },
+    };
+    const table = buildPackageCommandTable({
+        description: "sources",
+        commands: {},
+    });
+    const entry = table.commands["memory-view"];
+    if (!("commands" in entry))
+        throw new Error("Missing memory-view command subtree");
+    expect(table.defaultSubCommand).toBe("list");
+    expect(entry.defaultSubCommand).toBe("list");
+    const context = fakeActionContext({
+        memoryViews,
+        source: makeSource().api,
+        appAgentProviderSetController: noopHost,
+    });
+    await (entry.commands.list as CommandHandler).run(context, {
+        args: {},
+        flags: {},
+    });
+    await expect(
+        (entry.commands.install as CommandHandler).run(context, {
+            args: { target: "fixture" },
+            flags: { "dry-run": true },
+        }),
+    ).rejects.toThrow("No source");
+    await (entry.commands.uninstall as CommandHandler).run(context, {
+        args: { target: "fixture" },
+        flags: {},
+    });
+    expect(calls).toEqual(["list", "preview", "remove:fixture"]);
+    await expect(
+        (entry.commands.update as CommandHandler).run(context, {
+            args: { target: "fixture" },
+            flags: { "dry-run": true },
+        }),
+    ).rejects.toThrow("supported only");
+});
 type SourceCall =
     | {
           op: "install";
@@ -39,6 +107,19 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
 } {
     const calls: SourceCall[] = [];
     const api: InstalledAgentSourceApi = {
+        getAgentPackageState: () => undefined,
+        installExpected: async (nameOrTarget, expected) => {
+            calls.push({
+                op: "installExpected",
+                nameOrTarget,
+                expected,
+            } as any);
+            return {
+                name: nameOrTarget,
+                source: expected.source,
+                matchedByName: expected.matchKind === "defaultAgentName",
+            };
+        },
         install: async (nameOrTarget, ref, sourceName) => {
             calls.push({ op: "install", nameOrTarget, ref, sourceName });
             return {
@@ -48,6 +129,7 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
             };
         },
         preview: async () => undefined,
+        resolveMcp: async () => [],
         refresh: async () => {},
         uninstall: async (name) => {
             calls.push({ op: "uninstall", name });
@@ -100,6 +182,120 @@ function notifyCapturingActionContext(agentContext: PackageAgentContext) {
 
 function fakeSessionContext(agentContext: PackageAgentContext) {
     return { agentContext } as any;
+}
+
+function makeMcpSource(initial: NormalizedMcpServerConfig[] = []) {
+    const servers = new Map(initial.map((config) => [config.id, config]));
+    const calls: string[] = [];
+    const api: McpServerSourceApi = {
+        async addServer(config) {
+            calls.push(`add:${config.id}`);
+            servers.set(config.id, config);
+        },
+        async removeServer(id) {
+            calls.push(`remove:${id}`);
+            return servers.delete(id);
+        },
+        listServers: () => [...servers.values()],
+        getServer: (id) => servers.get(id),
+        async setTrust(id, trust) {
+            calls.push(`trust:${id}:${trust}`);
+            const config = servers.get(id)!;
+            const updated = { ...config, trust };
+            servers.set(id, updated);
+            return updated;
+        },
+        async setEnabled(id, enabled) {
+            calls.push(`enabled:${id}:${enabled}`);
+            const config = servers.get(id)!;
+            const updated = { ...config, enabled };
+            servers.set(id, updated);
+            return updated;
+        },
+        async updateServer(id, update) {
+            const config = servers.get(id)!;
+            const updated = { ...config, ...update };
+            servers.set(id, updated);
+            return updated;
+        },
+        async testServer(id, allowUntrusted) {
+            calls.push(`test:${id}:${allowUntrusted}`);
+            return { protocolVersion: "2025-06-18", tools: ["echo"] };
+        },
+    };
+    return { api, calls, servers };
+}
+
+function makeMcpConfig(
+    name: string,
+    overrides: Partial<NormalizedMcpServerConfig> = {},
+): NormalizedMcpServerConfig {
+    return {
+        id: `mcp:local:${name}`,
+        name,
+        transport: { kind: "stdio", command: "node", args: ["server.js"] },
+        enabled: false,
+        trust: "untrusted",
+        scope: "workspace",
+        provenance: {
+            source: "local",
+            sourceKind: "mcp-config",
+            ref: name,
+        },
+        ...overrides,
+    };
+}
+
+function makeMcpCandidate(
+    name: string,
+    overrides: Partial<NormalizedMcpServerConfig> = {},
+): McpInstallCandidate {
+    return {
+        extensionKind: "mcp",
+        source: "local",
+        sourceKind: "mcp-config",
+        ref: name,
+        config: makeMcpConfig(name, overrides),
+    };
+}
+
+function mcpActionContext(agentContext: PackageAgentContext, choice = 0) {
+    const captured: string[] = [];
+    const questions: string[] = [];
+    const context = {
+        sessionContext: {
+            agentContext,
+            notify: () => {},
+            popupQuestion: async (message: string) => {
+                questions.push(message);
+                return choice;
+            },
+        },
+        actionIO: {
+            appendDisplay: (content: any) => {
+                const text =
+                    typeof content === "string"
+                        ? content
+                        : Array.isArray(content?.content)
+                          ? content.content
+                                .map((row: string[]) => row.join(" "))
+                                .join("\n")
+                          : (content?.content ?? JSON.stringify(content));
+                captured.push(
+                    typeof text === "string"
+                        ? text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
+                        : text,
+                );
+            },
+            setDisplay: () => {},
+            takeAction: () => {},
+        },
+    } as any;
+    return {
+        context,
+        output: () => captured.join("\n"),
+        questions,
+    };
 }
 
 function capturingActionContext(agentContext: PackageAgentContext) {
@@ -158,12 +354,35 @@ function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
     return { context, output: () => captured.join(""), modes };
 }
 
+function getGroupHandler(
+    source: InstalledAgentSourceApi,
+    name: "list" | "show" | "install",
+): CommandHandler {
+    const table = buildPackageCommandTable(source.sourceCommands());
+    return (table.commands.group as any).commands[name] as CommandHandler;
+}
+
 function getHandler(
     source: InstalledAgentSourceApi,
     name: "install" | "uninstall" | "update" | "available" | "list",
 ): CommandHandler {
     const table = buildPackageCommandTable(source.sourceCommands());
     return table.commands[name] as CommandHandler;
+}
+
+function getMcpHandler(
+    source: InstalledAgentSourceApi,
+    name:
+        | "import"
+        | "inspect"
+        | "test"
+        | "trust"
+        | "untrust"
+        | "enable"
+        | "disable",
+): CommandHandler {
+    const table = buildPackageCommandTable(source.sourceCommands());
+    return (table.commands.mcp as any).commands[name] as CommandHandler;
 }
 
 describe("@package agent", () => {
@@ -413,14 +632,41 @@ describe("@package command table", () => {
         const table = buildPackageCommandTable(sourceTable as any);
         expect(Object.keys(table.commands).sort()).toEqual([
             "available",
+            "group",
             "install",
             "list",
+            "mcp",
+            "memory-view",
             "source",
             "uninstall",
             "update",
         ]);
         // `@package source` points at the exact host-provided table instance.
         expect(table.commands.source).toBe(sourceTable);
+        expect(
+            (table.commands.install as any).parameters.flags.type,
+        ).toMatchObject({ type: "string", default: "all" });
+        expect(
+            (table.commands.list as any).parameters.flags.type,
+        ).toMatchObject({
+            type: "string",
+            default: "agent",
+        });
+        expect(
+            Object.keys((table.commands.mcp as any).commands).sort(),
+        ).toEqual([
+            "auth",
+            "credentials",
+            "disable",
+            "enable",
+            "import",
+            "inspect",
+            "policy",
+            "status",
+            "test",
+            "trust",
+            "untrust",
+        ]);
         expect(table.defaultSubCommand).toBe("list");
     });
 });
@@ -928,5 +1174,847 @@ describe("@package install one-argument, dry-run, and refresh", () => {
             flags: { refresh: true, source: "path" },
         } as any);
         expect(refreshedWith).toBe("path");
+    });
+});
+
+describe("@package MCP management", () => {
+    it("previews and imports Copilot workspace configs disabled and untrusted", async () => {
+        const workspace = await mkdtemp(
+            path.join(os.tmpdir(), "mcp-package-import-"),
+        );
+        await writeFile(
+            path.join(workspace, ".mcp.json"),
+            JSON.stringify({
+                mcpServers: {
+                    discoveredEcho: { command: "node", args: ["echo.js"] },
+                },
+            }),
+        );
+        const { api } = makeSource();
+        const mcp = makeMcpSource();
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+
+        await getMcpHandler(api, "import").run(capture.context, {
+            flags: {
+                from: "copilot",
+                workspace,
+                "dry-run": false,
+            },
+        } as any);
+
+        const imported = [...mcp.servers.values()].find(
+            (config) => config.name === "discoveredEcho",
+        );
+        expect(capture.questions).toHaveLength(2);
+        expect(imported).toMatchObject({
+            enabled: false,
+            trust: "untrusted",
+            transport: { command: "node", args: ["echo.js"] },
+            provenance: {
+                source: path.join(workspace, ".mcp.json"),
+                sourceKind: "workspace-mcp",
+            },
+        });
+        expect(capture.output()).toContain("Imported");
+    });
+
+    it("rejects an implicit install when native and MCP candidates share a name", async () => {
+        const { api } = makeSource({
+            resolveMcp: async () => [makeMcpCandidate("echo")],
+            preview: async () => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: "echo",
+                },
+                matches: [
+                    {
+                        source: "feed",
+                        matchKind: "defaultAgentName",
+                        name: "echo",
+                    },
+                ],
+            }),
+        });
+        const { api: mcpSource } = makeMcpSource();
+        const handler = getHandler(api, "install");
+        await expect(
+            handler.run(
+                mcpActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                    mcpSource,
+                }).context,
+                {
+                    args: { target: "echo" },
+                    flags: { type: "all" },
+                } as any,
+            ),
+        ).rejects.toThrow(/matches both a native agent and an MCP server/);
+    });
+
+    it("previews an MCP install without persisting or prompting", async () => {
+        const candidate = makeMcpCandidate("echo", {
+            transport: {
+                kind: "stdio",
+                command: "node",
+                args: ["server.js"],
+                cwd: "C:\\workspace",
+                env: {
+                    TOKEN: { kind: "input", name: "api-token" },
+                    MODE: "safe",
+                },
+            },
+            enabledTools: ["echo"],
+        });
+        const { api } = makeSource({
+            resolveMcp: async () => [candidate],
+        });
+        const mcp = makeMcpSource();
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "install").run(capture.context, {
+            args: { target: "echo" },
+            flags: { type: "mcp", "dry-run": true },
+        } as any);
+        expect(capture.output()).toContain("Command: node server.js");
+        expect(capture.output()).toContain("Cwd: C:\\workspace");
+        expect(capture.output()).toContain(
+            "TOKEN=<credential input:api-token>",
+        );
+        expect(capture.output()).toContain("MODE=<literal>");
+        expect(capture.output()).toContain("Tools: echo");
+        expect(capture.questions).toEqual([]);
+        expect(mcp.calls).toEqual([]);
+    });
+
+    it("requires confirmation and installs disabled, untrusted, without plaintext credentials", async () => {
+        const candidate = makeMcpCandidate("echo", {
+            transport: {
+                kind: "http",
+                url: "https://example.com/mcp",
+                headers: {
+                    Authorization: { kind: "env", name: "MCP_TOKEN" },
+                },
+            },
+        });
+        const { api } = makeSource({
+            resolveMcp: async () => [candidate],
+        });
+        const mcp = makeMcpSource();
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "install").run(capture.context, {
+            args: { target: "echo" },
+            flags: { type: "mcp" },
+        } as any);
+        const stored = mcp.servers.get(candidate.config.id)!;
+        expect(capture.questions).toHaveLength(1);
+        expect(stored).toMatchObject({
+            enabled: false,
+            trust: "untrusted",
+            provenance: {
+                source: "local",
+                sourceKind: "mcp-config",
+                ref: "echo",
+            },
+        });
+        expect(JSON.stringify(stored)).not.toContain("plaintext-secret");
+        expect(JSON.stringify(stored)).toContain('"name":"MCP_TOKEN"');
+    });
+
+    it("cancels an MCP install without persisting", async () => {
+        const { api } = makeSource({
+            resolveMcp: async () => [makeMcpCandidate("echo")],
+        });
+        const mcp = makeMcpSource();
+        const capture = mcpActionContext(
+            {
+                appAgentProviderSetController: noopHost,
+                source: api,
+                mcpSource: mcp.api,
+            },
+            1,
+        );
+        await getHandler(api, "install").run(capture.context, {
+            args: { target: "echo" },
+            flags: { type: "mcp" },
+        } as any);
+        expect(mcp.calls).toEqual([]);
+        expect(capture.output()).toContain("MCP installation cancelled.");
+    });
+
+    it("cleans materialized MCP paths when post-materialization policy rejects", async () => {
+        const candidate = makeMcpCandidate("echo");
+        const materialized = makeMcpConfig("echo", {
+            provenance: {
+                source: "official",
+                sourceKind: "registry",
+                ref: "io.example/echo@1.0.0",
+                npmRegistryUrl: "https://registry.npmjs.org/",
+                ownedPaths: ["owned-root"],
+            },
+        });
+        const cleaned: NormalizedMcpServerConfig[] = [];
+        const { api } = makeSource({
+            resolveMcp: async () => [candidate],
+            materializeMcp: async () => materialized,
+            cleanupMcp: (config) => cleaned.push(config),
+        });
+        const mcp = makeMcpSource();
+        (mcp.api as any).getPolicy = () => ({
+            allowedTransports: ["stdio"],
+            allowPublicNpmRegistry: false,
+        });
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+
+        await expect(
+            getHandler(api, "install").run(capture.context, {
+                args: { target: "echo" },
+                flags: { type: "mcp" },
+            } as any),
+        ).rejects.toThrow(/public npm registry materialization is disabled/);
+
+        expect(cleaned).toEqual([materialized]);
+        expect(mcp.servers.size).toBe(0);
+    });
+
+    it("lists and uninstalls MCP servers through --type mcp", async () => {
+        const config = makeMcpConfig("echo");
+        const { api } = makeSource();
+        const mcp = makeMcpSource([config]);
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "list").run(capture.context, {
+            flags: { type: "mcp" },
+        } as any);
+        expect(capture.output()).toContain("echo node untrusted no local");
+        await getHandler(api, "uninstall").run(capture.context, {
+            args: { name: "echo" },
+            flags: { type: "mcp" },
+        } as any);
+        expect(mcp.calls).toContain(`remove:${config.id}`);
+        expect(mcp.servers.size).toBe(0);
+    });
+
+    it("re-resolves local config updates, previews changes, and preserves state", async () => {
+        const current = makeMcpConfig("echo", {
+            enabled: true,
+            trust: "trusted",
+        });
+        const candidate = makeMcpCandidate("echo", {
+            transport: {
+                kind: "stdio",
+                command: "node",
+                args: ["server-v2.js"],
+            },
+        });
+        const { api } = makeSource({
+            resolveMcp: async (ref, sourceName) => {
+                expect(ref).toBe("echo");
+                expect(sourceName).toBe("local");
+                return [candidate];
+            },
+        });
+        const mcp = makeMcpSource([current]);
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "update").run(capture.context, {
+            args: { name: "echo" },
+            flags: { type: "mcp" },
+        } as any);
+        expect(capture.output()).toContain("Changes: transport");
+        expect(mcp.servers.get(current.id)).toMatchObject({
+            enabled: true,
+            trust: "trusted",
+            transport: { args: ["server-v2.js"] },
+        });
+    });
+
+    it("materializes registry updates before replacement and cleans the superseded root", async () => {
+        const current = makeMcpConfig("echo", {
+            provenance: {
+                source: "official",
+                sourceKind: "registry",
+                ref: "io.example/echo@1.0.0",
+                canonicalServerName: "io.example/echo",
+                serverVersion: "1.0.0",
+                digest: "old",
+                ownedPaths: ["old-root"],
+            },
+        });
+        const candidate = makeMcpCandidate("echo", {
+            provenance: {
+                source: "official",
+                sourceKind: "registry",
+                ref: "io.example/echo@2.0.0",
+                canonicalServerName: "io.example/echo",
+                serverVersion: "2.0.0",
+                digest: "new",
+            },
+        });
+        const cleaned: string[][] = [];
+        const { api } = makeSource({
+            resolveMcp: async (ref, sourceName) => {
+                expect(ref).toBe("io.example/echo@2.0.0");
+                expect(sourceName).toBe("official");
+                return [candidate];
+            },
+            materializeMcp: async () => ({
+                ...candidate.config,
+                provenance: {
+                    ...candidate.config.provenance,
+                    ownedPaths: ["new-root"],
+                },
+            }),
+            cleanupMcp: (config) =>
+                cleaned.push(config.provenance.ownedPaths ?? []),
+        });
+        const mcp = makeMcpSource([current]);
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "update").run(capture.context, {
+            args: { name: "echo", range: "2.0.0" },
+            flags: { type: "mcp" },
+        } as any);
+        expect(mcp.servers.get(current.id)?.provenance).toMatchObject({
+            serverVersion: "2.0.0",
+            ownedPaths: ["new-root"],
+        });
+        expect(cleaned).toEqual([["old-root"]]);
+    });
+
+    it("cleans registry-owned content after a successful MCP uninstall", async () => {
+        const config = makeMcpConfig("echo", {
+            provenance: {
+                source: "official",
+                sourceKind: "registry",
+                ref: "io.example/echo@1.0.0",
+                ownedPaths: ["owned-root"],
+            },
+        });
+        const cleaned: string[][] = [];
+        const { api } = makeSource({
+            cleanupMcp: (removed) =>
+                cleaned.push(removed.provenance.ownedPaths ?? []),
+        });
+        const mcp = makeMcpSource([config]);
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getHandler(api, "uninstall").run(capture.context, {
+            args: { name: "echo" },
+            flags: { type: "mcp" },
+        } as any);
+        expect(cleaned).toEqual([["owned-root"]]);
+    });
+
+    it("supports trust and enable transitions", async () => {
+        const config = makeMcpConfig("echo");
+        const { api } = makeSource();
+        const mcp = makeMcpSource([config]);
+        const context = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        }).context;
+        await getMcpHandler(api, "trust").run(context, {
+            args: { name: "echo" },
+        } as any);
+        await getMcpHandler(api, "enable").run(context, {
+            args: { name: "echo" },
+        } as any);
+        expect(mcp.servers.get(config.id)).toMatchObject({
+            trust: "trusted",
+            enabled: true,
+        });
+    });
+
+    it("confirms an untrusted one-shot test without changing trust", async () => {
+        const config = makeMcpConfig("echo");
+        const { api } = makeSource();
+        const mcp = makeMcpSource([config]);
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        await getMcpHandler(api, "test").run(capture.context, {
+            args: { name: "echo" },
+        } as any);
+        expect(mcp.calls).toContain(`test:${config.id}:true`);
+        expect(mcp.servers.get(config.id)?.trust).toBe("untrusted");
+        expect(capture.output()).toContain("Tools: echo");
+    });
+
+    it("completes type flags and MCP names", async () => {
+        const config = makeMcpConfig("echo");
+        const { api } = makeSource();
+        const mcp = makeMcpSource([config]);
+        const session = fakeSessionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+        const install = await getHandler(api, "install").getCompletion!(
+            session,
+            {} as any,
+            ["--type"],
+        );
+        expect(install.groups[0].completions).toEqual(["agent", "mcp", "all"]);
+        const trust = await getMcpHandler(api, "trust").getCompletion!(
+            session,
+            {} as any,
+            ["name"],
+        );
+        expect(trust.groups[0].completions).toEqual(["echo"]);
+    });
+});
+
+describe("@package group", () => {
+    const fakeGroups = {
+        groups: {
+            developer: {
+                displayName: "Developer Tools",
+                description: "Coding tools",
+                agents: ["code", "powershell"],
+            },
+            media: {
+                displayName: "Media Tools",
+                description: "Media creation tools",
+                agents: ["photo", "image"],
+            },
+        },
+    };
+
+    it("group list renders table of configured groups", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "list");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, { args: {}, flags: {} } as any);
+        const text = output();
+        expect(text).toContain("developer");
+        expect(text).toContain("Developer Tools");
+        expect(text).toContain("media");
+        expect(text).toContain("Media Tools");
+    });
+
+    it("group commands surface the preserved catalog load error", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "list");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroupsError:
+                "Could not read agent group catalog from 'agentGroups.json'",
+        });
+
+        await expect(
+            handler.run(context, { args: {}, flags: {} } as any),
+        ).rejects.toThrow(/Could not read agent group catalog/);
+    });
+
+    it("group show displays member status", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "bundled" : undefined,
+        });
+        const handler = getGroupHandler(api, "show");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+        const text = output();
+        expect(text).toContain("Developer Tools");
+        expect(text).toContain("code");
+        expect(text).toContain("bundled (built-in)");
+        expect(text).toContain("powershell");
+        expect(text).toContain("not installed");
+    });
+
+    it("group show distinguishes unavailable and transitioning records", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "installed-unavailable" : "transitioning",
+        });
+        const handler = getGroupHandler(api, "show");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+
+        expect(output()).toContain("installed but unavailable");
+        expect(output()).toContain("operation in progress");
+    });
+
+    it("group show throws on unknown group with available groups list", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "show");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "unknownGroup" },
+                flags: {},
+            } as any),
+        ).rejects.toThrow(
+            /Unknown agent group 'unknownGroup'. Available groups: developer, media/,
+        );
+    });
+
+    it("group install --dry-run previews without installing", async () => {
+        const calls: string[] = [];
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async (target) => {
+                calls.push(`preview:${target}`);
+                return {
+                    winner: {
+                        source: "feed",
+                        matchKind: "defaultAgentName",
+                        name: target,
+                        packageName: `@typeagent/${target}-agent`,
+                    },
+                    matches: [],
+                };
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "media" },
+            flags: { "dry-run": true },
+        } as any);
+
+        expect(calls).toEqual(["preview:image"]);
+        const text = output();
+        expect(text).toContain("Dry run complete. No agents were installed.");
+        expect(text).toContain("bundled");
+        expect(text).toContain("to install");
+    });
+
+    it("group install --yes installs missing members sequentially using installExpected", async () => {
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "bundled" : undefined,
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                    packageName: `@typeagent/${target}-agent`,
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: { yes: true },
+        } as any);
+
+        expect(calls).toEqual([
+            expect.objectContaining({
+                op: "installExpected",
+                nameOrTarget: "powershell",
+            }),
+        ]);
+        const text = output();
+        expect(text).toContain(
+            "Group 'developer' installation complete (1 agent(s) newly installed)",
+        );
+        expect(text).toContain("remain disabled");
+        expect(text).toContain("powershell");
+        expect(text).toContain("installed");
+    });
+
+    it("rejects a group member that resolves to a different agent name", async () => {
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async () => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "packageName",
+                    name: "differentImage",
+                    packageName: "@typeagent/image-agent",
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: { yes: true },
+            } as any),
+        ).rejects.toThrow(/image -> differentImage/);
+        expect(calls).toEqual([]);
+    });
+
+    it("group install reports the actual path identity", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async (target) => ({
+                winner: {
+                    source: "local",
+                    sourceKind: "path",
+                    matchKind: "path",
+                    name: target,
+                    path: `C:\\agents\\${target}`,
+                },
+                matches: [],
+            }),
+            installExpected: async (target, expected) => ({
+                name: target,
+                source: expected.source,
+                sourceKind: "path",
+                ...(expected.path !== undefined ? { path: expected.path } : {}),
+                matchedByName: false,
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "media" },
+            flags: { yes: true },
+        } as any);
+
+        expect(output()).toContain("C:\\agents\\image");
+    });
+
+    it("group install cancels when confirmation is declined", async () => {
+        const { api } = makeSource({
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const capture = mcpActionContext(
+            {
+                appAgentProviderSetController: noopHost,
+                source: api,
+                agentGroups: fakeGroups,
+            },
+            1, // choice 1 = Cancel
+        );
+
+        await handler.run(capture.context, {
+            args: { group: "media" },
+            flags: { yes: false },
+        } as any);
+
+        expect(capture.questions).toHaveLength(1);
+        expect(capture.output()).toContain("Group installation cancelled.");
+    });
+
+    it("group install reports already present when no members are missing", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: () => "bundled",
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+
+        expect(output()).toContain(
+            "All agents in group 'developer' are already present.",
+        );
+    });
+
+    it("group install fails preflight if any member is unavailable", async () => {
+        const { api } = makeSource({
+            preview: async () => undefined,
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: {},
+            } as any),
+        ).rejects.toThrow(
+            /could not be resolved from configured sources: photo, image/,
+        );
+    });
+
+    it("group install preflights all members then rejects transitioning state without mutation", async () => {
+        const previews: string[] = [];
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "transitioning" : undefined,
+            preview: async (target) => {
+                previews.push(target);
+                return {
+                    winner: {
+                        source: "feed",
+                        matchKind: "defaultAgentName",
+                        name: target,
+                    },
+                    matches: [],
+                };
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: { yes: true },
+            } as any),
+        ).rejects.toThrow(/operation in progress: photo/);
+        expect(previews).toEqual(["image"]);
+        expect(calls).toEqual([]);
+    });
+
+    it("group install reports an interrupted current member and leaves later members not attempted", async () => {
+        const controller = new AbortController();
+        const installs: string[] = [];
+        const { api } = makeSource({
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                },
+                matches: [],
+            }),
+            installExpected: async (target) => {
+                installs.push(target);
+                controller.abort();
+                throw new Error("aborted");
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const capture = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+        capture.context.abortSignal = controller.signal;
+
+        await handler.run(capture.context, {
+            args: { group: "media" },
+            flags: { yes: true },
+        } as any);
+
+        expect(installs).toEqual(["photo"]);
+        expect(capture.output()).toContain(
+            "cancelled after installation started",
+        );
+        expect(capture.output()).toContain("not attempted");
+    });
+
+    it("group completion completes group names and source names", async () => {
+        const { api } = makeSource({
+            listSources: () => ["path", "typeagent"],
+        });
+        const handler = getGroupHandler(api, "install");
+        const result = await handler.getCompletion!(
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+                agentGroups: fakeGroups,
+            }),
+            {} as any,
+            ["group", "--source"],
+        );
+        const byName = new Map(
+            result.groups.map((g) => [g.name, g.completions]),
+        );
+        expect(byName.get("group")).toEqual(["developer", "media"]);
+        expect(byName.get("--source")).toEqual(["path", "typeagent"]);
     });
 });

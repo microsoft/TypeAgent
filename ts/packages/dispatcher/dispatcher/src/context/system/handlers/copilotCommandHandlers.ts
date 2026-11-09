@@ -495,7 +495,7 @@ class CopilotLoginCommandHandler implements CommandHandler {
         const cliPath = getCopilotCliPath();
         if (cliPath === undefined) {
             displayWarn(
-                "This session talks to a remote Copilot CLI server (cliUrl), so there is no local CLI to sign in here. Run 'copilot login' on the machine hosting that server.",
+                "No external Copilot CLI path is configured for interactive sign-in. Run 'node typeagent-serve.mjs setup --provider copilot', or run 'copilot login' on the machine hosting a configured remote runtime.",
                 context,
             );
             return;

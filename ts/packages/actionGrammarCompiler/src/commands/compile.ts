@@ -7,7 +7,7 @@ import fs from "node:fs";
 import {
     grammarToJson,
     loadGrammarRulesNoThrow,
-    recommendedOptimizations,
+    nfaCompatibleOptimizations,
     buildGrammarSourceMap,
     SchemaLoader,
     DebugInfoCollector,
@@ -99,7 +99,7 @@ export default class Compile extends Command {
                       startValueRequired: true,
                       schemaLoader,
                       debugCollector,
-                      optimizations: recommendedOptimizations,
+                      optimizations: nfaCompatibleOptimizations,
                   },
         );
 

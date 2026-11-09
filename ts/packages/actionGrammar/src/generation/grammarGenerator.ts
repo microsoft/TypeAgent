@@ -73,7 +73,7 @@ export interface Conversion {
 }
 
 /**
- * A helper rule defined by Claude for this specific grammar (e.g., rule-specific filler)
+ * A helper rule defined by the model for this specific grammar (e.g., rule-specific filler)
  */
 export interface AdditionalRule {
     /** Rule name without angle brackets, e.g. "ExtraneousPhrase" */
@@ -100,7 +100,7 @@ export interface GrammarAnalysis {
     grammarPattern: RuleRHS;
     // Reasoning about the choices made
     reasoning: string;
-    // Optional: extra rules Claude defined for this grammar (e.g., rule-specific filler)
+    // Optional: extra rules the model defined for this grammar (e.g., rule-specific filler)
     additionalRules?: AdditionalRule[];
     // Optional: new phrases to add to global phrase-set matchers (idempotent)
     phrasesToAdd?: Array<{ matcherName: string; phrase: string }>;
@@ -285,12 +285,10 @@ Output:
 }`;
 }
 
-export class ClaudeGrammarGenerator {
-    private model: string;
+export abstract class GrammarGenerator {
+    protected constructor(private readonly providerName: string) {}
 
-    constructor(model: string = "claude-sonnet-4-20250514") {
-        this.model = model;
-    }
+    protected abstract queryModel(fullPrompt: string): Promise<string>;
 
     async generateGrammar(
         testCase: GrammarTestCase,
@@ -306,7 +304,7 @@ export class ClaudeGrammarGenerator {
 
     /**
      * Refine a previously generated grammar rule that failed to match the original request.
-     * Gives Claude specific feedback: the failed rule, the tokenized request, and hints.
+     * Gives the model specific feedback: the failed rule, the tokenized request, and hints.
      */
     async refineGrammar(
         testCase: GrammarTestCase,
@@ -350,36 +348,9 @@ Generate a corrected rule now.`;
     }
 
     private async queryAndParse(fullPrompt: string): Promise<GrammarAnalysis> {
-        // Use the Agent SDK query function
-        const queryInstance = query({
-            prompt: fullPrompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        // Collect the result from the SDK
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                } else {
-                    const errors =
-                        "errors" in message
-                            ? (message as any).errors
-                            : undefined;
-                    throw new Error(
-                        `Claude query failed: ${errors?.join(", ") || "Unknown error"}`,
-                    );
-                }
-            }
-        }
-
+        const responseText = await this.queryModel(fullPrompt);
         if (!responseText) {
-            throw new Error("No response from Claude");
+            throw new Error(`No response from ${this.providerName}`);
         }
 
         return this.parseAnalysis(responseText);
@@ -467,7 +438,7 @@ Generate a corrected rule now.`;
         const jsonStart = text.indexOf("{");
         if (jsonStart === -1) {
             throw new Error(
-                `No JSON object found in Claude response. Response starts with: "${text.substring(0, 100)}..."`,
+                `No JSON object found in ${this.providerName} response. Response starts with: "${text.substring(0, 100)}..."`,
             );
         }
 
@@ -476,7 +447,7 @@ Generate a corrected rule now.`;
             const preamble = text.substring(0, jsonStart).trim();
             if (preamble.length > 0) {
                 debug(
-                    `Claude included text before JSON: "${preamble.substring(0, 100)}..."`,
+                    `${this.providerName} included text before JSON: "${preamble.substring(0, 100)}..."`,
                 );
             }
         }
@@ -500,7 +471,7 @@ Generate a corrected rule now.`;
 
         if (!jsonText) {
             throw new Error(
-                `Found opening brace but no matching closing brace in Claude response. Text from brace: "${text.substring(jsonStart, jsonStart + 100)}..."`,
+                `Found opening brace but no matching closing brace in ${this.providerName} response. Text from brace: "${text.substring(jsonStart, jsonStart + 100)}..."`,
             );
         }
 
@@ -509,7 +480,7 @@ Generate a corrected rule now.`;
             analysis = JSON.parse(jsonText);
         } catch (error) {
             throw new Error(
-                `Failed to parse JSON from Claude response: ${error instanceof Error ? error.message : String(error)}\nJSON text preview: ${jsonText.substring(0, 300)}...\nFull response preview: ${text.substring(0, 300)}...`,
+                `Failed to parse JSON from ${this.providerName} response: ${error instanceof Error ? error.message : String(error)}\nJSON text preview: ${jsonText.substring(0, 300)}...\nFull response preview: ${text.substring(0, 300)}...`,
             );
         }
 
@@ -531,7 +502,7 @@ Generate a corrected rule now.`;
             throw new Error("Rejected cases must include rejectionReason");
         }
 
-        // Clean up any unwanted text that Claude might have inserted into string fields
+        // Clean up any unwanted text that the model inserted into string fields
         this.sanitizeAnalysisStrings(analysis);
 
         return analysis;
@@ -539,7 +510,7 @@ Generate a corrected rule now.`;
 
     /**
      * Remove copyright notices, comments, and other unwanted text from analysis string fields
-     * Claude sometimes inserts these into the JSON, making the grammar patterns invalid
+     * Models sometimes insert these into the JSON, making the grammar patterns invalid
      */
     private sanitizeAnalysisStrings(analysis: GrammarAnalysis): void {
         const commentPatterns = [
@@ -564,7 +535,7 @@ Generate a corrected rule now.`;
 
             if (hadComments) {
                 debug(
-                    `Removed comment/copyright text from Claude response. Original: "${str.substring(0, 100)}..."`,
+                    `Removed comment/copyright text from model response. Original: "${str.substring(0, 100)}..."`,
                 );
             }
 
@@ -678,7 +649,7 @@ Generate a corrected rule now.`;
             }
         }
 
-        // Replace types in the matchPattern — normalize any type Claude used to the correct one
+        // Replace types in the matchPattern with the schema's required type
         let matchPattern = analysis.grammarPattern.matchPattern;
         for (const [varName, wildcardType] of wildcardTypes) {
             // Match $(varName:AnyType) and replace with $(varName:CorrectType)
@@ -695,7 +666,7 @@ Generate a corrected rule now.`;
         // Only rule-specific helper rules (additionalRules) need to be prepended.
         const preambleRules: string[] = [];
 
-        // Inject any rule-specific helper rules Claude defined
+        // Inject any rule-specific helper rules the model defined
         if (analysis.additionalRules) {
             for (const rule of analysis.additionalRules) {
                 preambleRules.push(rule.ruleText);
@@ -741,5 +712,38 @@ Generate a corrected rule now.`;
             return paramName.slice(0, -1);
         }
         return paramName;
+    }
+}
+
+export class ClaudeGrammarGenerator extends GrammarGenerator {
+    constructor(private readonly model: string = "claude-sonnet-4-20250514") {
+        super("Claude");
+    }
+
+    protected async queryModel(fullPrompt: string): Promise<string> {
+        const queryInstance = query({
+            prompt: fullPrompt,
+            options: {
+                model: this.model,
+                ...claudeExecutableOption(),
+            },
+        });
+
+        for await (const message of queryInstance) {
+            if (message.type !== "result") {
+                continue;
+            }
+            if (message.subtype === "success") {
+                return message.result || "";
+            }
+            const errors =
+                "errors" in message && Array.isArray(message.errors)
+                    ? message.errors
+                    : undefined;
+            throw new Error(
+                `Claude query failed: ${errors?.join(", ") || "Unknown error"}`,
+            );
+        }
+        return "";
     }
 }

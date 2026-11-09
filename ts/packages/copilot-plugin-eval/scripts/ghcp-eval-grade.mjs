@@ -1,0 +1,249 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { fileFixture } from "./ghcp-eval-corpus.mjs";
+import {
+    isGhcpEvalReadOnlyAction,
+    isGhcpEvalRecoverableReadError,
+} from "../../dispatcher/dispatcher/dist/execute/ghcpEvalPolicy.js";
+
+export function recoverableBackendReadFailure(events) {
+    const actions = events.filter(({ event }) => event.startsWith("action."));
+    const admitted = actions.filter(({ event }) => event === "action.admitted");
+    const completed = actions.filter(
+        ({ event }) => event === "action.completed",
+    );
+    return (
+        admitted.length > 0 &&
+        admitted.length === completed.length &&
+        actions.length === admitted.length + completed.length &&
+        actions.every(({ detail }) =>
+            isGhcpEvalReadOnlyAction(detail.schemaName, detail.actionName),
+        ) &&
+        completed.some(({ detail }) => detail.success === false) &&
+        completed.every(
+            ({ detail }) =>
+                detail.success === true || detail.recoverable === true,
+        )
+    );
+}
+
+function recoverableTypeAgentReadFailure(
+    toolName,
+    result,
+    success,
+    error,
+    backendEvents,
+) {
+    const structured = result?.structuredContent;
+    const failedRead =
+        structured?.status === "failed" &&
+        structured.error?.code === "execution_failed";
+    // Never infer safety from a missing payload or an uncertain transport.
+    return (
+        success === true &&
+        error === undefined &&
+        (structured?.status === undefined || failedRead) &&
+        isGhcpEvalRecoverableReadError(
+            [
+                structured?.error?.code,
+                structured?.error?.message,
+                result?.content,
+            ]
+                .filter((value) => typeof value === "string")
+                .join("\n"),
+        ) &&
+        (failedRead ||
+            (toolName.includes("processCommand") &&
+                /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
+        recoverableBackendReadFailure(backendEvents)
+    );
+}
+
+export function terminalExecutionFailure(
+    toolName,
+    result,
+    success,
+    error,
+    backendEvents = [],
+) {
+    if (
+        /^(?:functions[.-])?stop_powershell$/.test(toolName) ||
+        toolName.includes("cancelAction")
+    )
+        return true;
+    if (
+        /^(?:functions[.-])?(?:powershell|read_powershell|view|edit|create|glob|rg|web_fetch)$/.test(
+            toolName,
+        )
+    )
+        return (
+            success === false &&
+            !(
+                /^(?:functions[.-])?(?:view|glob|rg|web_fetch)$/.test(
+                    toolName,
+                ) &&
+                isGhcpEvalRecoverableReadError(
+                    typeof error?.message === "string"
+                        ? `${error.code ?? ""}\n${error.message}`
+                        : undefined,
+                )
+            )
+        );
+    if (
+        !/processCommand|executeAction|continueAction|cancelAction/.test(
+            toolName,
+        )
+    )
+        return false;
+    if (
+        recoverableTypeAgentReadFailure(
+            toolName,
+            result,
+            success,
+            error,
+            backendEvents,
+        )
+    )
+        return false;
+    return (
+        success === false ||
+        (toolName.includes("processCommand") &&
+            /^Error:(?:\s|$)/.test(result?.content ?? "")) ||
+        ["failed", "cancelled", "unavailable", "execution_uncertain"].includes(
+            result?.structuredContent?.status,
+        )
+    );
+}
+
+export function percentile(values, fraction) {
+    if (values.length === 0) return null;
+    const ordered = [...values].sort((a, b) => a - b);
+    return ordered[Math.max(0, Math.ceil(fraction * ordered.length) - 1)];
+}
+
+export function intervalUnionMs(intervals) {
+    const sorted = intervals
+        .filter(
+            ([start, end]) =>
+                Number.isFinite(start) && Number.isFinite(end) && end >= start,
+        )
+        .sort(([a], [b]) => a - b);
+    let end = -Infinity;
+    let total = 0;
+    for (const [start, next] of sorted) {
+        total += Math.max(0, next - Math.max(start, end));
+        end = Math.max(end, next);
+    }
+    return total;
+}
+
+export function externalOracle(readiness) {
+    if (readiness.status !== "passed")
+        throw new Error("Live readiness has not passed");
+    const prs = {};
+    for (const entry of readiness.externalEvidence) {
+        const text = (entry.outcome.output ?? []).join("\n");
+        if (entry.actionName === "prFiles") {
+            const files = [
+                ...text.matchAll(
+                    /^(\S+)\s+(?:modified|added|removed|renamed)\s+\d+\s+\d+\s*$/gm,
+                ),
+            ].map((match) => match[1]);
+            const count = text.match(/(\d+) of (\d+) files/);
+            if (
+                !count ||
+                Number(count[1]) !== Number(count[2]) ||
+                new Set(files).size !== Number(count[2])
+            )
+                throw new Error("Independent PR file snapshot is incomplete");
+            prs[entry.number] = {
+                files: [...new Set(files)],
+                capturedAt: entry.capturedAt,
+            };
+        }
+        if (entry.actionName === "prChecks") {
+            if (!prs[entry.number]) throw new Error("Missing PR file oracle");
+            prs[entry.number].checks = text;
+        }
+    }
+    return prs;
+}
+
+// These are conservative evidence checks, not a semantic grader. A human/AI
+// reviewer must resolve pending faithfulness grades before accuracy claims.
+export function preliminaryGrade(result, evidence) {
+    if (result.status !== "completed_ungraded")
+        return { outcome: "incomplete", reason: result.error ?? result.status };
+    if (result.routeViolations.length)
+        return { outcome: "failed", reason: "route_or_interaction_violation" };
+    if (result.terminalExecutionFailure)
+        return {
+            outcome: "incomplete",
+            reason: "execution_failed_or_uncertain_no_replay",
+        };
+    if (
+        !result.grade.fileStateMatchesOracle ||
+        !(result.category === "lists"
+            ? result.grade.listStateMatchesOracle
+            : result.grade.listStateUnchanged)
+    )
+        return {
+            outcome: "failed",
+            reason: "independent_fixture_oracle_mismatch",
+        };
+    if (
+        (result.caseId.startsWith("A") || result.caseId.startsWith("list-A")) &&
+        (!result.grade.clarificationRequested ||
+            !result.grade.noPrematureFileMutation ||
+            (result.category === "lists" &&
+                !result.grade.noPrematureListMutation))
+    )
+        return {
+            outcome: "failed",
+            reason: "clarification_not_verified_before_effects",
+        };
+    const answer = result.answer ?? "";
+    if (!answer.trim()) return { outcome: "failed", reason: "no_final_answer" };
+    const required = {
+        S1: Object.keys(fileFixture),
+        S2: ["passport", "charger", "socks"],
+        S4: ["apples"],
+        M1: [
+            "report-a.txt",
+            "report-b.txt",
+            "passport",
+            "charger",
+            "socks",
+            "adapter",
+        ],
+        M3: ["bread", "oranges"],
+        M5: [evidence.issueTitle],
+        R1: ["rice"],
+        R2: ["report-a.txt", "report-b.txt"],
+        R4: ["jacket"],
+        R5: [evidence.issueTitle],
+        A1: ["apples"],
+        A2: ["charger", "adapter"],
+        A5: ["destination", "mountain", "jacket", "required"],
+    }[result.caseId];
+    if (required?.some((term) => typeof term !== "string"))
+        return {
+            outcome: "pending_review",
+            reason: "independent_answer_evidence_unavailable",
+        };
+    const missing =
+        required?.filter(
+            (term) => !answer.toLowerCase().includes(term.toLowerCase()),
+        ) ?? [];
+    if (missing.length)
+        return {
+            outcome: "pending_review",
+            reason: "answer_evidence_missing",
+            missing,
+        };
+    return {
+        outcome: "pending_review",
+        reason: "independent_state_checked_final_faithfulness_required",
+    };
+}

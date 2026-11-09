@@ -1,0 +1,897 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { viewContentToText } from "@typeagent/memory-service/view-text";
+import {
+    conversationCorpusName,
+    conversationProducerId,
+    canonicalizeProcedure,
+    resolveReviewedWikiBudget,
+    type MemoryService,
+    type MemoryEvent,
+    type MemoryViewService,
+} from "@typeagent/memory-service";
+import type {
+    MemoryHubAnswer,
+    MemoryHubEvidence,
+    MemoryHubEvidenceContent,
+    MemoryHubEvidenceRequest,
+    MemoryHubFunctions,
+    MemoryHubSearchRequest,
+    MemoryHubSearchResult,
+} from "@typeagent/browser-control-rpc/viewRpc";
+import type { MemoryCenterCorpus } from "@typeagent/browser-control-rpc/serviceTypes";
+import { z } from "zod";
+import { randomUUID, createHash } from "node:crypto";
+import { RequestBudget, runWithRequestBudget } from "@typeagent/aiclient";
+import {
+    currentSearchTraceId,
+    isSearchTimingEnabled,
+    runWithSearchTiming,
+    timeSearchStage,
+} from "@typeagent/knowpro";
+import { loadMemoryHubCorpora, mapMemoryHubCorpora } from "./memoryHub.mjs";
+import { timed } from "./memoryHubQuerySupport.mjs";
+import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
+import { tryMemoryHubIntegratedAnswer } from "./memoryHubIntegratedAnswer.mjs";
+export { timed } from "./memoryHubQuerySupport.mjs";
+
+export type MemoryHubReadService = MemoryService & Partial<MemoryViewService>;
+export type MemoryHubSynthesizer = (
+    question: string,
+    evidence: MemoryHubEvidence[],
+) => Promise<MemoryHubAnswer>;
+export type MemoryHubIntentResolver = (
+    query: string,
+) => Promise<"find" | "ask">;
+
+function message(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+export async function queryCorpora(
+    service: MemoryHubReadService,
+    corpusId?: string,
+) {
+    return timeSearchStage("hub.corpusListing", () =>
+        timed(
+            loadMemoryHubCorpora(
+                { memoryListCorpora: () => service.listCorpora() },
+                corpusId,
+            ),
+        ),
+    );
+}
+
+function validateRequest(request: MemoryHubSearchRequest): void {
+    if (!request.query.trim())
+        throw new Error("Memory search query cannot be empty.");
+    if (
+        request.intent !== undefined &&
+        !["auto", "find", "ask"].includes(request.intent)
+    )
+        throw new Error("Unknown memory search intent.");
+    if (
+        request.intent &&
+        request.generateAnswer !== undefined &&
+        (request.intent === "auto" ||
+            request.generateAnswer !== (request.intent === "ask"))
+    )
+        throw new Error(
+            "Search intent conflicts with the explicit answer setting.",
+        );
+    if (
+        request.limit !== undefined &&
+        (!Number.isInteger(request.limit) ||
+            request.limit < 1 ||
+            request.limit > 100)
+    )
+        throw new Error("Memory search limit must be between 1 and 100.");
+    for (const date of [request.dateFrom, request.dateTo])
+        if (
+            date !== undefined &&
+            (!z.iso.datetime({ offset: true }).safeParse(date).success ||
+                !Number.isFinite(Date.parse(date)))
+        )
+            throw new Error("Invalid Memory search date.");
+    if (
+        request.dateFrom &&
+        request.dateTo &&
+        Date.parse(request.dateFrom) > Date.parse(request.dateTo)
+    )
+        throw new Error("Memory search date range is reversed.");
+}
+
+async function resolveSearchIntent(
+    request: MemoryHubSearchRequest,
+    resolver?: MemoryHubIntentResolver,
+): Promise<MemoryHubSearchRequest> {
+    if (!request.intent) return request;
+    if (request.intent !== "auto")
+        return { ...request, generateAnswer: request.intent === "ask" };
+    if (!resolver)
+        throw new Error(
+            "Automatic search intent is unavailable. Choose a response mode in Filters.",
+        );
+    const intent = await timeSearchStage("hub.intent", () =>
+        resolver(request.query),
+    );
+    if (intent !== "find" && intent !== "ask")
+        throw new Error(
+            "The decision model returned an invalid search intent.",
+        );
+    return { ...request, generateAnswer: intent === "ask" };
+}
+
+function inDateRange(
+    date: string | undefined,
+    request: MemoryHubSearchRequest,
+): boolean {
+    if (!request.dateFrom && !request.dateTo) return true;
+    if (!date || !Number.isFinite(Date.parse(date))) return false;
+    const time = Date.parse(date);
+    return (
+        (!request.dateFrom || time >= Date.parse(request.dateFrom)) &&
+        (!request.dateTo || time <= Date.parse(request.dateTo))
+    );
+}
+
+async function documentResults(
+    service: MemoryHubReadService,
+    corpus: MemoryCenterCorpus,
+    request: MemoryHubSearchRequest,
+    result: MemoryHubSearchResult,
+): Promise<MemoryHubEvidence[]> {
+    const traceId = currentSearchTraceId();
+    const bounded =
+        request.generateAnswer &&
+        (await service.getCapabilities()).derivedViews?.informationalWiki ===
+            true;
+    const searched = await timed(
+        service.search({
+            ...(traceId === undefined ? {} : { traceId }),
+            corpusId: corpus.corpusId,
+            query: request.query,
+            ...(bounded
+                ? { indexedFragments: true, limit: 12, maxResponseChars: 24000 }
+                : {}),
+            ...(!bounded ? { limit: 100, maxResponseChars: 100_000 } : {}),
+            ...(request.sourceTypes === undefined
+                ? {}
+                : { sourceTypes: request.sourceTypes }),
+            ...(request.tags === undefined ? {} : { tags: request.tags }),
+            ...(request.dateFrom === undefined
+                ? {}
+                : { dateFrom: request.dateFrom }),
+            ...(request.dateTo === undefined ? {} : { dateTo: request.dateTo }),
+        }),
+    );
+    result.warnings.push(
+        ...searched.warnings.map((warning) => `${corpus.name}: ${warning}`),
+    );
+    return searched.matches.map((evidence, index) => ({
+        id: JSON.stringify([
+            "source",
+            corpus.corpusId,
+            evidence.sourceId,
+            evidence.revisionId,
+            evidence.locator ?? evidence.evidenceId,
+        ]),
+        kind: "source",
+        corpusId: corpus.corpusId,
+        corpusName: corpus.name,
+        objectId: evidence.sourceId,
+        title: evidence.title,
+        snippet: evidence.snippet,
+        score: evidence.score,
+        rank: index + 1,
+        sourceId: evidence.sourceId,
+        revisionId: evidence.revisionId,
+        sourceType: evidence.sourceType,
+        ...(evidence.synopsis ? { synopsis: evidence.synopsis } : {}),
+        ...(evidence.locator === undefined
+            ? {}
+            : { locator: evidence.locator }),
+        ...(evidence.canonicalUri === undefined
+            ? {}
+            : { canonicalUri: evidence.canonicalUri }),
+        ...(evidence.capturedAt === undefined
+            ? {}
+            : { eventTime: evidence.capturedAt }),
+    }));
+}
+
+async function conversationResults(
+    service: MemoryHubReadService,
+    corpus: MemoryCenterCorpus,
+    request: MemoryHubSearchRequest,
+    conversationId: string | undefined,
+): Promise<MemoryHubEvidence[]> {
+    if (
+        request.conversationScope === "none" ||
+        request.sourceTypes?.length ||
+        request.tags?.length
+    )
+        return [];
+    if (request.conversationScope === "current" && !conversationId)
+        throw new Error(
+            "The host has not provided the current conversation identity.",
+        );
+    const traceId = currentSearchTraceId();
+    const searched = await timed(
+        service.searchEvents({
+            ...(traceId === undefined ? {} : { traceId }),
+            corpusId: corpus.corpusId,
+            query: request.query,
+            limit: 100,
+            producerIds: [conversationProducerId],
+            sourceKinds: ["conversation"],
+            ...(request.conversationScope === "current" && conversationId
+                ? { conversationIds: [conversationId] }
+                : {}),
+            ...(request.dateFrom === undefined
+                ? {}
+                : { eventFrom: request.dateFrom }),
+            ...(request.dateTo === undefined
+                ? {}
+                : { eventTo: request.dateTo }),
+        }),
+    );
+    return searched.matches.map(({ event, snippet, score }, index) => ({
+        id: JSON.stringify(["conversation", corpus.corpusId, event.eventId]),
+        kind: "conversation",
+        corpusId: corpus.corpusId,
+        corpusName: corpus.name,
+        objectId: event.eventId,
+        title: `${event.eventType} · ${event.eventTime}`,
+        snippet,
+        score,
+        rank: index + 1,
+        ...(event.conversationId === undefined
+            ? {}
+            : { conversationId: event.conversationId }),
+        ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
+        eventTime: event.eventTime,
+        authoritative:
+            event.metadata?.authority === "verified-observation" ||
+            event.metadata?.authority === "explicit",
+    }));
+}
+
+async function viewResults(
+    service: MemoryHubReadService,
+    corpus: MemoryCenterCorpus,
+    request: MemoryHubSearchRequest,
+): Promise<MemoryHubEvidence[]> {
+    if (request.retrievalPolicy === "sourcesOnly") return [];
+    const capabilities = await timed(service.getCapabilities());
+    if (!capabilities.derivedViews?.search) return [];
+    if (!service.searchViews)
+        throw new Error("Published view retrieval is unavailable in this host");
+    const matches = await timed(
+        service.searchViews({
+            corpusId: corpus.corpusId,
+            query: request.query,
+            limit: 100,
+            freshness: "current",
+            ...(request.viewKinds ? { kinds: request.viewKinds } : {}),
+        }),
+    );
+    const results: MemoryHubEvidence[] = [];
+    for (const match of matches) {
+        if (!capabilities.derivedViews.kinds.includes(match.view.content.kind))
+            continue;
+        if (!inDateRange(match.view.createdAt, request)) continue;
+        if (request.tags?.length || request.sourceTypes?.length) {
+            const sources = await Promise.all(
+                match.evidence.map((citation) =>
+                    timed(
+                        service.getSource(corpus.corpusId, citation.sourceId),
+                    ),
+                ),
+            );
+            if (
+                !sources.some(
+                    (source) =>
+                        source &&
+                        (!request.sourceTypes?.length ||
+                            request.sourceTypes.includes(source.sourceType)) &&
+                        (!request.tags?.length ||
+                            request.tags.every((tag) =>
+                                source.tags?.includes(tag),
+                            )),
+                )
+            )
+                continue;
+        }
+        results.push({
+            id: JSON.stringify([
+                "view",
+                corpus.corpusId,
+                match.view.viewId,
+                match.view.revisionId,
+            ]),
+            kind: "view",
+            corpusId: corpus.corpusId,
+            corpusName: corpus.name,
+            objectId: match.view.viewId,
+            title: match.view.content.title,
+            snippet: match.snippet,
+            score: match.score,
+            rank: results.length + 1,
+            revisionId: match.view.revisionId,
+            viewVersion: match.view.version,
+            viewKind: match.view.content.kind,
+            viewProvenance: match.view.provenance,
+            review: match.review,
+            freshness: match.freshness,
+            evidenceSources: match.evidence,
+        });
+    }
+    return results;
+}
+
+export function fuseEvidence(
+    lists: MemoryHubEvidence[][],
+    limit: number,
+): MemoryHubEvidence[] {
+    const fused = new Map<
+        string,
+        { evidence: MemoryHubEvidence; fusedScore: number }
+    >();
+    for (const list of lists) {
+        const seen = new Set<string>();
+        for (const item of list) {
+            if (seen.has(item.id)) continue;
+            seen.add(item.id);
+            if (!Number.isFinite(item.score))
+                throw new Error(
+                    "Memory retrieval returned a non-finite score.",
+                );
+            const previous = fused.get(item.id);
+            const score = 1 / (60 + item.rank);
+            if (previous) previous.fusedScore += score;
+            else fused.set(item.id, { evidence: item, fusedScore: score });
+        }
+    }
+    return [...fused.values()]
+        .sort(
+            (a, b) =>
+                b.fusedScore - a.fusedScore ||
+                a.evidence.id.localeCompare(b.evidence.id),
+        )
+        .slice(0, limit)
+        .map(({ evidence }) => evidence);
+}
+
+async function collectResults(
+    service: MemoryHubReadService,
+    corpora: MemoryCenterCorpus[],
+    request: MemoryHubSearchRequest,
+    result: MemoryHubSearchResult,
+    conversationId: string | undefined,
+): Promise<MemoryHubEvidence[][]> {
+    const lists: MemoryHubEvidence[][] = [];
+    const collect = async (
+        corpus: MemoryCenterCorpus,
+        operation: "search" | "conversations" | "views",
+        work: () => Promise<MemoryHubEvidence[]>,
+    ) => {
+        try {
+            const list = await timeSearchStage(
+                operation === "search"
+                    ? "hub.documentRetrieval"
+                    : operation === "views"
+                      ? "hub.viewRetrieval"
+                      : "hub.conversationRetrieval",
+                work,
+            );
+            if (list.some((item) => !Number.isFinite(item.score)))
+                throw new Error(
+                    "Memory retrieval returned a non-finite score.",
+                );
+            lists.push(list);
+        } catch (error) {
+            result.errors.push({
+                corpusId: corpus.corpusId,
+                operation,
+                message: message(error),
+            });
+        }
+    };
+    await mapMemoryHubCorpora(corpora, async (corpus) => {
+        if (corpus.name === conversationCorpusName) {
+            await collect(corpus, "conversations", () =>
+                conversationResults(service, corpus, request, conversationId),
+            );
+        } else {
+            await Promise.all([
+                collect(corpus, "search", () =>
+                    documentResults(service, corpus, request, result),
+                ),
+                collect(corpus, "views", () =>
+                    viewResults(service, corpus, request),
+                ),
+            ]);
+        }
+    });
+    return lists;
+}
+
+function pageText(
+    title: string,
+    text: string,
+    request: MemoryHubEvidenceRequest,
+    provenance: MemoryHubEvidenceContent["provenance"],
+): MemoryHubEvidenceContent {
+    const offset = request.offset ?? 0;
+    if (!Number.isInteger(offset) || offset < 0 || offset > text.length)
+        throw new Error("Invalid evidence content offset.");
+    const content = text.slice(offset, offset + 12_000);
+    const next = offset + content.length;
+    return {
+        title,
+        content,
+        offset,
+        totalChars: text.length,
+        ...(next < text.length ? { nextOffset: next } : {}),
+        provenance,
+    };
+}
+
+function validateConversation(event: MemoryEvent | undefined): MemoryEvent {
+    if (
+        !event ||
+        event.sourceKind !== "conversation" ||
+        event.producer.producerId !== conversationProducerId
+    )
+        throw new Error("Conversation evidence is no longer available.");
+    return event;
+}
+
+async function canonicalEventEvidence(
+    service: MemoryHubReadService,
+    request: MemoryHubEvidenceRequest,
+): Promise<MemoryHubEvidenceContent> {
+    if (
+        !(await service.getCapabilities()).derivedViews?.kinds.includes(
+            "timeline",
+        )
+    )
+        throw new Error("Timeline event evidence is disabled");
+    const event = await timed(
+        service.getEvent(request.corpusId, request.objectId),
+    );
+    if (!event)
+        throw new Error("Canonical event evidence is no longer available");
+    if (
+        createHash("sha256")
+            .update(canonicalizeProcedure(event))
+            .digest("hex") !== request.revisionId
+    )
+        throw new Error("Canonical event evidence revision changed");
+    return pageText(event.eventType, JSON.stringify(event), request, request);
+}
+
+async function sourceRangeEvidence(
+    service: MemoryHubReadService,
+    request: MemoryHubEvidenceRequest,
+    title: string,
+): Promise<MemoryHubEvidenceContent> {
+    if (request.locator?.startsWith("indexed:")) {
+        const fragment = await timed(
+            service.getSourceContent({
+                corpusId: request.corpusId,
+                sourceId: request.objectId,
+                ...(request.revisionId
+                    ? { revisionId: request.revisionId }
+                    : {}),
+                indexedLocator: request.locator,
+            }),
+        );
+        return pageText(
+            `${title} (indexed text, not original offsets)`,
+            fragment.content,
+            request,
+            request,
+        );
+    }
+    const match = /^chars:(\d+)-(\d+)$/.exec(request.locator ?? "");
+    const start = Number(match?.[1]);
+    const end = Number(match?.[2]);
+    const offset = request.offset ?? 0;
+    if (
+        !match ||
+        !request.revisionId ||
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        end <= start ||
+        !Number.isSafeInteger(offset) ||
+        offset < 0 ||
+        offset >= end - start
+    )
+        throw new Error("Invalid exact retained source range");
+    const content = await timed(
+        service.getSourceContent({
+            corpusId: request.corpusId,
+            sourceId: request.objectId,
+            revisionId: request.revisionId,
+            offset: start + offset,
+            maxChars: Math.min(12_000, end - start - offset),
+        }),
+    );
+    if (end > content.totalChars)
+        throw new Error("Exact source range exceeds its retained revision");
+    const next = offset + content.content.length;
+    return {
+        title,
+        content: content.content,
+        offset,
+        totalChars: end - start,
+        ...(next < end - start ? { nextOffset: next } : {}),
+        provenance: request,
+    };
+}
+
+async function evidenceContent(
+    service: MemoryHubReadService,
+    request: MemoryHubEvidenceRequest,
+): Promise<MemoryHubEvidenceContent> {
+    await queryCorpora(service, request.corpusId);
+    if (request.kind === "source") {
+        const source = await timed(
+            service.getSource(request.corpusId, request.objectId),
+        );
+        if (!source) throw new Error("Cited source is no longer available.");
+        if (request.locator)
+            return sourceRangeEvidence(service, request, source.title);
+        const content = await timed(
+            service.getSourceContent({
+                corpusId: request.corpusId,
+                sourceId: request.objectId,
+                ...(request.revisionId === undefined
+                    ? {}
+                    : { revisionId: request.revisionId }),
+                ...(request.offset === undefined
+                    ? {}
+                    : { offset: request.offset }),
+                maxChars: 12_000,
+            }),
+        );
+        return {
+            title: source.title,
+            content: content.content,
+            offset: content.offset,
+            totalChars: content.totalChars,
+            ...(content.truncated
+                ? { nextOffset: content.offset + content.content.length }
+                : {}),
+            provenance: { ...request, revisionId: content.revisionId },
+        };
+    }
+    if (request.kind === "view") {
+        return publishedViewEvidence(service, request);
+    }
+    if (request.kind === "event") {
+        return canonicalEventEvidence(service, request);
+    }
+
+    async function publishedViewEvidence(
+        service: MemoryHubReadService,
+        request: MemoryHubEvidenceRequest,
+    ): Promise<MemoryHubEvidenceContent> {
+        if (
+            !request.revisionId ||
+            !service.getView ||
+            !service.getViewPublication ||
+            !service.getCapabilities
+        )
+            throw new Error("Exact published view evidence is unavailable");
+        if (!(await service.getCapabilities()).derivedViews?.search)
+            throw new Error("Published views are disabled");
+        const publication = await service.getViewPublication({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+        });
+        if (
+            publication.blockedReason ||
+            publication.publishedRevisionId !== request.revisionId ||
+            publication.indexedRevisionId !== request.revisionId ||
+            publication.indexState !== "ready"
+        )
+            throw new Error(
+                "This published/indexed view revision is no longer current",
+            );
+        const view = await service.getView({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+            revisionId: request.revisionId,
+        });
+        const current = await service.getView({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+        });
+        if (!view || current?.state === "archived")
+            throw new Error("Published view is unavailable or archived");
+        for (const selected of view.definition.selector.sources) {
+            const source = await service.getSource(
+                request.corpusId,
+                selected.sourceId,
+            );
+            if (source?.activeRevisionId !== selected.revisionId)
+                throw new Error(
+                    "Published view evidence has changed; rebuild first",
+                );
+        }
+        for (const input of view.generation?.input?.inputs ?? []) {
+            if (input.evidence)
+                await canonicalEventEvidence(service, {
+                    corpusId: request.corpusId,
+                    kind: "event",
+                    objectId: input.evidence.eventId,
+                    revisionId: input.revisionId,
+                });
+        }
+        const text = viewContentToText(view.content);
+        return pageText(view.content.title, text, request, request);
+    }
+    const event = validateConversation(
+        await timed(service.getEvent(request.corpusId, request.objectId)),
+    );
+    return pageText(
+        `${event.eventType} · ${event.eventTime}`,
+        event.content ?? "",
+        request,
+        {
+            ...request,
+            ...(event.conversationId === undefined
+                ? {}
+                : { conversationId: event.conversationId }),
+            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
+        },
+    );
+}
+
+async function recheckIndexedAnswer(
+    service: MemoryHubReadService,
+    result: MemoryHubSearchResult,
+): Promise<void> {
+    for (const item of result.matches.filter((match) =>
+        result.answer?.citationIds.includes(match.id),
+    )) {
+        const anchors =
+            item.kind === "view"
+                ? (item.evidenceSources ?? [])
+                : item.sourceId && item.revisionId && item.locator
+                  ? [
+                        {
+                            sourceId: item.sourceId,
+                            revisionId: item.revisionId,
+                            locator: item.locator,
+                            excerpt: item.snippet,
+                        },
+                    ]
+                  : [];
+        for (const anchor of anchors.filter((citation) =>
+            citation.locator.startsWith("indexed:"),
+        )) {
+            const source = await service.getSource(
+                item.corpusId,
+                anchor.sourceId,
+            );
+            if (source?.activeRevisionId !== anchor.revisionId)
+                throw new Error(
+                    "Answer source changed or was removed before delivery",
+                );
+            const resolved = await service.getSourceContent({
+                corpusId: item.corpusId,
+                sourceId: anchor.sourceId,
+                revisionId: anchor.revisionId,
+                indexedLocator: anchor.locator,
+            });
+            if (resolved.content !== anchor.excerpt)
+                throw new Error(
+                    "Answer indexed evidence is unavailable or changed",
+                );
+        }
+    }
+}
+
+export function createMemoryHubQueryFunctions(
+    getService: () => MemoryHubReadService,
+    getConversationId: () => string | undefined,
+    synthesize: MemoryHubSynthesizer,
+    resolveIntent?: MemoryHubIntentResolver,
+): Pick<MemoryHubFunctions, "memoryHubSearch" | "memoryHubEvidence"> {
+    return {
+        async memoryHubSearch(request) {
+            const work = () =>
+                runWithSearchTiming(
+                    isSearchTimingEnabled() ? randomUUID() : undefined,
+                    "memoryHub.search",
+                    () =>
+                        timeSearchStage("hub.total", async () => {
+                            validateRequest(request);
+                            request = await resolveSearchIntent(
+                                request,
+                                resolveIntent,
+                            );
+                            const service = getService();
+                            const corpora = await queryCorpora(
+                                service,
+                                request.corpusId,
+                            );
+                            const result: MemoryHubSearchResult = {
+                                ...(request.intent
+                                    ? {
+                                          resolvedIntent: request.generateAnswer
+                                              ? ("ask" as const)
+                                              : ("find" as const),
+                                      }
+                                    : {}),
+                                query: request.query.trim(),
+                                matches: [],
+                                ranking: "reciprocal-rank-fusion",
+                                warnings: [],
+                                errors: [],
+                            };
+                            try {
+                                if (
+                                    await tryMemoryHubIntegratedAnswer(
+                                        service,
+                                        corpora,
+                                        request,
+                                        result,
+                                    )
+                                ) {
+                                    result.insights = {
+                                        provider: "canonical",
+                                        status: "unsupported",
+                                        ...(request.corpusId === undefined
+                                            ? {}
+                                            : { corpusId: request.corpusId }),
+                                        topTopics: [],
+                                        relatedEntities: [],
+                                        message:
+                                            "Integrated answering returns exact evidence and maintained-knowledge references; separate query insights are not generated for this answer path.",
+                                    };
+                                    return result;
+                                }
+                            } catch (error) {
+                                result.errors.push({
+                                    corpusId: request.corpusId ?? "*",
+                                    operation: "answer",
+                                    message: message(error),
+                                });
+                                return result;
+                            }
+                            const lists = await timeSearchStage(
+                                "hub.retrieval",
+                                () =>
+                                    collectResults(
+                                        service,
+                                        corpora,
+                                        request,
+                                        result,
+                                        getConversationId(),
+                                    ),
+                            );
+                            result.matches = timeSearchStage("hub.fusion", () =>
+                                fuseEvidence(lists, request.limit ?? 30),
+                            );
+                            result.insights = await timeSearchStage(
+                                "hub.insights",
+                                () =>
+                                    memoryHubSearchInsights(
+                                        service,
+                                        request,
+                                        result.matches.filter(
+                                            (evidence) =>
+                                                evidence.kind !== "view",
+                                        ),
+                                    ),
+                            );
+                            result.errors.sort(
+                                (a, b) =>
+                                    a.corpusId.localeCompare(b.corpusId) ||
+                                    a.operation.localeCompare(b.operation),
+                            );
+                            result.warnings = [
+                                ...new Set(result.warnings),
+                            ].sort();
+                            result.warnings.push(
+                                "Results are a bounded evidence selection, not complete corpus totals.",
+                            );
+                            if (
+                                request.generateAnswer &&
+                                result.matches.some(
+                                    (evidence) => evidence.kind !== "view",
+                                )
+                            ) {
+                                result.warnings.push(
+                                    "Answer context uses at most 20 evidence records and 32,000 characters overall; indexed source windows retain up to 2,000 characters. This is a limited selection, not exhaustive coverage.",
+                                );
+                                try {
+                                    result.answer = await timeSearchStage(
+                                        "hub.synthesis",
+                                        () =>
+                                            timed(
+                                                synthesize(
+                                                    result.query,
+                                                    result.matches.filter(
+                                                        (evidence) =>
+                                                            evidence.kind !==
+                                                                "view" ||
+                                                            (evidence.viewKind ===
+                                                                "wiki" &&
+                                                                evidence.evidenceSources?.some(
+                                                                    (
+                                                                        citation,
+                                                                    ) =>
+                                                                        citation.locator.startsWith(
+                                                                            "indexed:",
+                                                                        ),
+                                                                )),
+                                                    ),
+                                                ),
+                                            ),
+                                    );
+                                    const ids = new Set(
+                                        result.matches.map((item) => item.id),
+                                    );
+                                    if (
+                                        (result.answer.status !== "noAnswer" &&
+                                            !result.answer.citationIds
+                                                .length) ||
+                                        result.answer.citationIds.some(
+                                            (id) => !ids.has(id),
+                                        )
+                                    ) {
+                                        delete result.answer;
+                                        throw new Error(
+                                            "Answer generation returned unsupported citations.",
+                                        );
+                                    }
+                                    await recheckIndexedAnswer(service, result);
+                                } catch (error) {
+                                    delete result.answer;
+                                    result.errors.push({
+                                        corpusId: "*",
+                                        operation: "answer",
+                                        message: message(error),
+                                    });
+                                }
+                            } else if (
+                                request.generateAnswer &&
+                                result.matches.length
+                            ) {
+                                result.answer = {
+                                    status: "noAnswer",
+                                    text: "Only derived guides matched. Open their original evidence before making an independently corroborated answer.",
+                                    mode: "extractive",
+                                    citationIds: [],
+                                    followUps: [],
+                                };
+                            }
+                            return result;
+                        }),
+                    { generateAnswer: request.generateAnswer ?? false },
+                );
+            const reviewed =
+                request.generateAnswer ||
+                request.intent === "auto" ||
+                request.intent === "ask"
+                    ? resolveReviewedWikiBudget(
+                          process.env,
+                          process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ||
+                              undefined,
+                      )
+                    : undefined;
+            return reviewed
+                ? runWithRequestBudget(new RequestBudget(reviewed), work)
+                : work();
+        },
+        memoryHubEvidence: (request) => evidenceContent(getService(), request),
+    };
+}

@@ -92,7 +92,7 @@
   },
   "container": {
     "enabled": false,
-    "image": "node:22-slim",
+    "image": "node:24.22.1-slim",
     "networkMode": "bridge",
     "deriveVolumesFromPolicy": true,
     "derivePortsFromPolicy": true,

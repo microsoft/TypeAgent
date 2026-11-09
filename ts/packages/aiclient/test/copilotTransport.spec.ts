@@ -2,37 +2,84 @@
 // Licensed under the MIT License.
 
 import {
+    completeWithCopilotSession,
+    createCopilotRuntimeConnection,
     createCopilotTransportModel,
     CopilotEndpoint,
     CopilotEndpointProvider,
     CopilotEndpointUnavailableError,
+    selectCopilotModel,
 } from "../src/copilotModels.js";
+import type { ModelInfo } from "@github/copilot-sdk";
+import { otel } from "@typeagent/telemetry";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
 
-function makeSettings(): CopilotApiSettings {
+function makeSettings(modelName = "gpt-5-mini"): CopilotApiSettings {
     return {
         provider: "copilot",
         modelType: ModelType.Chat,
         endpoint: "copilot-cli",
-        modelName: "claude-haiku-4.5",
+        modelName,
         disableInfiniteSessions: true,
+        fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
         maxRetryAttempts: 0,
         retryPauseMs: 1,
         timeout: 5_000,
     };
 }
 
-function makeEndpoint(overrides?: Partial<CopilotEndpoint>): CopilotEndpoint {
+function makeChatCompletionsEndpoint(
+    overrides?: Partial<CopilotEndpoint>,
+): CopilotEndpoint {
     return {
         url: "https://api.example/chat/completions",
-        model: "claude-haiku-4.5",
+        model: "gpt-5-mini",
+        wireApi: "chat_completions",
         headers: {
             Authorization: "******",
             "Copilot-Integration-Id": "copilot-developer-cli",
         },
         ...overrides,
+    };
+}
+
+function makeLunaEndpoint(
+    overrides?: Partial<CopilotEndpoint>,
+): CopilotEndpoint {
+    return {
+        url: "https://api.example/responses",
+        model: "gpt-5.6-luna",
+        wireApi: "responses",
+        headers: {
+            Authorization: "******",
+            "Copilot-Integration-Id": "copilot-developer-cli",
+        },
+        ...overrides,
+    };
+}
+
+function makeModel(
+    id: string,
+    options?: {
+        reasoning?: boolean;
+        policy?: "enabled" | "disabled" | "unconfigured";
+    },
+): ModelInfo {
+    return {
+        id,
+        name: id,
+        capabilities: {
+            supports: {
+                vision: false,
+                reasoningEffort: options?.reasoning ?? false,
+            },
+            limits: { max_context_window_tokens: 128_000 },
+        },
+        ...(options?.policy !== undefined
+            ? { policy: { state: options.policy, terms: "" } }
+            : {}),
     };
 }
 
@@ -112,6 +159,289 @@ const CAPI_OK = {
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 };
 
+const RESPONSES_OK = {
+    output: [
+        {
+            type: "message",
+            content: [{ type: "output_text", text: '{"action":"getTime"}' }],
+        },
+    ],
+    usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+};
+
+describe("createCopilotRuntimeConnection", () => {
+    test("uses a configured runtime URI instead of an executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(
+                "localhost:4321",
+                "C:\\tools\\copilot.exe",
+            ),
+        ).toEqual({
+            kind: "uri",
+            url: "localhost:4321",
+            connectionToken: undefined,
+        });
+    });
+
+    test("preserves a concrete external executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(undefined, "C:\\tools\\copilot.exe"),
+        ).toEqual({
+            kind: "stdio",
+            path: "C:\\tools\\copilot.exe",
+            args: undefined,
+            env: undefined,
+        });
+    });
+
+    test("omits the path to select the SDK-managed runtime", () => {
+        expect(createCopilotRuntimeConnection(undefined, undefined)).toEqual({
+            kind: "stdio",
+            path: undefined,
+            args: undefined,
+            env: undefined,
+        });
+    });
+});
+
+describe("Copilot session fallback", () => {
+    test("completes text without the provider endpoint RPC", async () => {
+        let disconnected = false;
+        const result = await completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [
+                { role: "system", content: "Return plain text." },
+                { role: "user", content: "Hello" },
+            ],
+            undefined,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async ({
+                            prompt,
+                        }: {
+                            prompt: string;
+                        }) => ({
+                            data: {
+                                content: prompt.includes("Hello")
+                                    ? "ready"
+                                    : "",
+                            },
+                        }),
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        expect(result).toEqual({ success: true, data: "ready" });
+        expect(disconnected).toBe(true);
+    });
+
+    test("aborts and disconnects the fallback session", async () => {
+        const controller = new AbortController();
+        let aborted = false;
+        let disconnected = false;
+        const completion = completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [{ role: "user", content: "Wait" }],
+            controller.signal,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async () => new Promise<never>(() => {}),
+                        abort: async () => {
+                            aborted = true;
+                        },
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        controller.abort();
+        await expect(completion).resolves.toMatchObject({
+            success: false,
+        });
+        expect(aborted).toBe(true);
+        expect(disconnected).toBe(true);
+    });
+});
+
+describe("selectCopilotModel", () => {
+    test("uses the requested model when it is available", () => {
+        const selected = selectCopilotModel(
+            "gpt-6-luna",
+            ["gpt-5.4-mini"],
+            [
+                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-6-luna"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-6-luna");
+    });
+
+    test.each([
+        ["gpt-6-luna", "luna"],
+        ["gpt-6-sol", "sol"],
+        ["gpt-6.1-sol", "sol"],
+        ["gpt-6.1-terra", "terra"],
+    ])(
+        "uses GPT-5.6 %s tier before generic fallbacks when unavailable",
+        (requested, tier) => {
+            const selected = selectCopilotModel(
+                requested,
+                ["gpt-5.4-mini"],
+                [makeModel("gpt-5.4-mini"), makeModel(`gpt-5.6-${tier}`)],
+            );
+            expect(selected?.id).toBe(`gpt-5.6-${tier}`);
+        },
+    );
+
+    test.each(["gpt-6.1-sol", "gpt-6.1-terra"])(
+        "prefers the exact requested %s over the GPT-5.6 tier",
+        (requested) => {
+            const tier = requested.split("-").pop();
+            expect(
+                selectCopilotModel(
+                    requested,
+                    ["gpt-5.4-mini"],
+                    [
+                        makeModel(`gpt-5.6-${tier}`),
+                        makeModel(requested),
+                        makeModel("gpt-5.4-mini"),
+                    ],
+                )?.id,
+            ).toBe(requested);
+        },
+    );
+
+    test("skips a disabled GPT-5.6 tier fallback", () => {
+        const selected = selectCopilotModel(
+            "gpt-6-luna",
+            ["gpt-5.4-mini"],
+            [
+                makeModel("gpt-5.6-luna", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
+    });
+
+    test("uses the first configured concrete fallback", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["auto", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
+            [
+                makeModel("auto"),
+                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5-mini"),
+                makeModel("gpt-5.4"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
+    });
+
+    test("skips disabled fallback models", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
+            [
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
+                makeModel("gpt-5-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5-mini");
+    });
+
+    test("allows fallback models without an explicit policy decision", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
+            [
+                makeModel("gpt-5.4-mini", { policy: "unconfigured" }),
+                makeModel("gpt-5-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
+    });
+
+    test("uses the newest available model in the requested family", () => {
+        const selected = selectCopilotModel(
+            "claude-sonnet-5",
+            [],
+            [
+                makeModel("claude-sonnet-4.6"),
+                makeModel("claude-sonnet-6"),
+                makeModel("claude-sonnet-5.2"),
+            ],
+        );
+        expect(selected?.id).toBe("claude-sonnet-6");
+    });
+
+    test("uses the newest available model in the requested tier", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-5.5-sol"),
+                makeModel("gpt-5.7-sol"),
+                makeModel("gpt-6-astra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.7-sol");
+    });
+
+    test("uses the nearest general tier before a specialized model", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-6-astra"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-5.6-terra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.6-terra");
+    });
+
+    test("uses a deterministic concrete model as the final fallback", () => {
+        const selected = selectCopilotModel(
+            "missing-model",
+            [],
+            [makeModel("z-model"), makeModel("auto"), makeModel("a-model")],
+        );
+        expect(selected?.id).toBe("a-model");
+    });
+
+    test("handles long malformed model ids without family matching", () => {
+        const requested = "-0-a".repeat(10_000);
+        const selected = selectCopilotModel(
+            requested,
+            [],
+            [makeModel("z-model"), makeModel("a-model")],
+        );
+        expect(selected?.id).toBe("a-model");
+    });
+
+    test("returns undefined when no concrete model is enabled", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini"],
+            [
+                makeModel("auto"),
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
+            ],
+        );
+        expect(selected).toBeUndefined();
+    });
+});
+
 describe("createCopilotTransportModel", () => {
     const origFetch = globalThis.fetch;
     afterEach(() => {
@@ -125,7 +455,7 @@ describe("createCopilotTransportModel", () => {
             return jsonResponse(200, CAPI_OK);
         };
 
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -146,8 +476,11 @@ describe("createCopilotTransportModel", () => {
         const headers = fetchArgs[0].init.headers as Record<string, string>;
         expect(headers.Authorization).toBe("******");
         const body = JSON.parse(fetchArgs[0].init.body as string);
-        expect(body.model).toBe("claude-haiku-4.5");
+        expect(body.model).toBe("gpt-5-mini");
         expect(body.temperature).toBe(0);
+        expect(body).not.toHaveProperty("max_tokens");
+        expect(body).not.toHaveProperty("max_completion_tokens");
+        expect(body).not.toHaveProperty("max_output_tokens");
         expect(body.messages).toEqual([
             { role: "user", content: "what time is it" },
         ]);
@@ -155,7 +488,7 @@ describe("createCopilotTransportModel", () => {
 
     test("reports token usage from the response", async () => {
         (globalThis as any).fetch = async () => jsonResponse(200, CAPI_OK);
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const usage: any[] = [];
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -169,6 +502,41 @@ describe("createCopilotTransportModel", () => {
         expect(usage[0]).toEqual(CAPI_OK.usage);
     });
 
+    test("uses the responses wire API advertised by the endpoint", async () => {
+        const fetchArgs: Array<{ url: string; init: RequestInit }> = [];
+        (globalThis as any).fetch = async (url: string, init: RequestInit) => {
+            fetchArgs.push({ url, init });
+            return jsonResponse(200, RESPONSES_OK);
+        };
+        const { provider } = makeProvider([makeLunaEndpoint()]);
+        const model = createCopilotTransportModel(
+            makeSettings("gpt-5.6-luna"),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.complete("what time is it");
+        expect(result).toEqual({
+            success: true,
+            data: '{"action":"getTime"}',
+        });
+        expect(fetchArgs[0].url).toBe("https://api.example/responses");
+        const body = JSON.parse(fetchArgs[0].init.body as string);
+        expect(body.model).toBe("gpt-5.6-luna");
+        expect(body.temperature).toBeUndefined();
+        expect(body).not.toHaveProperty("max_tokens");
+        expect(body).not.toHaveProperty("max_completion_tokens");
+        expect(body).not.toHaveProperty("max_output_tokens");
+        expect(body.input).toEqual([
+            {
+                role: "user",
+                content: [{ type: "input_text", text: "what time is it" }],
+            },
+        ]);
+    });
+
     test("refreshes the endpoint once on a non-2xx then succeeds", async () => {
         let call = 0;
         (globalThis as any).fetch = async () => {
@@ -178,8 +546,10 @@ describe("createCopilotTransportModel", () => {
                 : jsonResponse(200, CAPI_OK);
         };
         const { provider, forceCalls } = makeProvider([
-            makeEndpoint(),
-            makeEndpoint({ url: "https://api.example/v2/chat/completions" }),
+            makeChatCompletionsEndpoint(),
+            makeChatCompletionsEndpoint({
+                url: "https://api.example/v2/chat/completions",
+            }),
         ]);
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -202,7 +572,9 @@ describe("createCopilotTransportModel", () => {
     test("returns an error when the refreshed call still fails", async () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
-        const { provider, forceCalls } = makeProvider([makeEndpoint()]);
+        const { provider, forceCalls } = makeProvider([
+            makeChatCompletionsEndpoint(),
+        ]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -215,6 +587,12 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // A single reactive refresh was attempted before giving up.
         expect(forceCalls.filter((f) => f === true)).toHaveLength(1);
+        // The HTTP status survives the flattening into a `Result` message.
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "authentication",
+            httpStatus: 401,
+            retryable: false,
+        });
     });
 
     test("returns an error when the endpoint is unavailable", async () => {
@@ -238,6 +616,41 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // No HTTP call is made when the endpoint can't be minted.
         expect(fetchCalls).toBe(0);
+        // The typed error's own classification survives being turned into a
+        // `Result` failure.
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "provider",
+            retryable: false,
+        });
+    });
+
+    test("classifies a cancelled call as cancelled, not as a provider failure", async () => {
+        const controller = new AbortController();
+        globalThis.fetch = async () => {
+            controller.abort();
+            throw new DOMException("The operation was aborted.", "AbortError");
+        };
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
+        const model = createCopilotTransportModel(
+            makeSettings(),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.complete(
+            "hi",
+            undefined,
+            undefined,
+            undefined,
+            controller.signal,
+        );
+        expect(result.success).toBe(false);
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "cancelled",
+            retryable: false,
+        });
     });
 
     test("sends image content through as vision input", async () => {
@@ -246,7 +659,7 @@ describe("createCopilotTransportModel", () => {
             fetchArgs.push({ url, init });
             return jsonResponse(200, CAPI_OK);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -277,10 +690,10 @@ describe("createCopilotTransportModel", () => {
                 "[DONE]",
             ]);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const usage: any[] = [];
         const model = createCopilotTransportModel(
-            makeSettings(),
+            makeSettings("gpt-5.6-luna"),
             {},
             undefined,
             undefined,
@@ -304,6 +717,45 @@ describe("createCopilotTransportModel", () => {
         expect(body.stream_options).toEqual({ include_usage: true });
     });
 
+    test("streams responses API deltas", async () => {
+        (globalThis as any).fetch = async () =>
+            sseResponse([
+                { type: "response.output_text.delta", delta: '{"action":' },
+                { type: "response.output_text.delta", delta: '"getTime"}' },
+                {
+                    type: "response.completed",
+                    response: {
+                        usage: { input_tokens: 10, output_tokens: 5 },
+                    },
+                },
+                "[DONE]",
+            ]);
+        const { provider } = makeProvider([makeLunaEndpoint()]);
+        const usage: any[] = [];
+        const model = createCopilotTransportModel(
+            makeSettings(),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.completeStream!("what time is it", (u) =>
+            usage.push(u),
+        );
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        const { text } = await drain(result.data);
+        expect(text).toBe('{"action":"getTime"}');
+        expect(usage).toEqual([
+            {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
+        ]);
+    });
+
     test("refreshes the endpoint once when the stream fails to connect", async () => {
         let call = 0;
         (globalThis as any).fetch = async () => {
@@ -313,8 +765,8 @@ describe("createCopilotTransportModel", () => {
                 : sseResponse([deltaChunk("ok"), "[DONE]"]);
         };
         const { provider, forceCalls } = makeProvider([
-            makeEndpoint(),
-            makeEndpoint(),
+            makeChatCompletionsEndpoint(),
+            makeChatCompletionsEndpoint(),
         ]);
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -336,7 +788,7 @@ describe("createCopilotTransportModel", () => {
     test("returns an error when the stream connection stays broken", async () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -355,7 +807,7 @@ describe("createCopilotTransportModel", () => {
             fetchArgs.push({ url, init });
             return sseResponse([deltaChunk("x"), "[DONE]"]);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},

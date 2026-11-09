@@ -35,6 +35,7 @@ import chalk from "chalk";
 import registerDebug from "debug";
 import { getRequestActionLogger } from "./requestActionLogger.js";
 import { getRequestId } from "../../commandHandlerContext.js";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 const debugExplain = registerDebug("typeagent:action:explain");
 
@@ -88,11 +89,14 @@ export class ActionCommandHandler implements CommandHandler {
         validateAction(actionSchema, action, true);
 
         // Execute the action
-        await executeActions(
+        const executionError = await executeActions(
             toExecutableActions([action as FullAction]),
             undefined,
             context,
         );
+        if (executionError?.fallbackToReasoning) {
+            displayError(executionError.error, context);
+        }
 
         // If naturalLanguage parameter is provided, populate cache
         const naturalLanguage = params.flags.naturalLanguage;

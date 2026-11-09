@@ -1,6 +1,6 @@
 # TypeAgent Development Container
 
-A fully configured Linux development environment for TypeAgent: Node.js 22,
+A fully configured Linux development environment for TypeAgent: the latest Node.js LTS,
 Python 3.12, .NET 8.0, pnpm, Azure CLI, GitHub CLI, and Claude Code, in a
 container you can run locally or in GitHub Codespaces.
 

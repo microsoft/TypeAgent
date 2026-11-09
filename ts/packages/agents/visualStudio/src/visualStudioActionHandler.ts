@@ -25,6 +25,16 @@ import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import { AddressInfo } from "net";
 import registerDebug from "debug";
+import {
+    acceptVisualStudioClientHello,
+    createVisualStudioReplayCache,
+    createVisualStudioRequestId,
+    createVisualStudioSecureFrame,
+    loadOrCreateVisualStudioBridgeCredential,
+    verifyVisualStudioSecureFrame,
+    type VisualStudioBridgeCredential,
+    type VisualStudioSessionKeys,
+} from "@typeagent/websocket-utils/visualStudioBridgeAuth";
 import { VisualStudioActions } from "./visualStudioSchema.js";
 import { isAllowedAgentOrigin } from "./originAllowlist.js";
 
@@ -40,28 +50,36 @@ type BridgeResponse = {
     error?: string;
 };
 
-class VisualStudioBridge {
-    // Multi-client tracking. The bridge accepts every VS extension that
-    // dials in (insertion-order-preserving Map so we can route to the
-    // most-recently-connected one). Keys are synthetic ids — the VS
-    // extension's `ClientWebSocket` doesn't expose anything we could
-    // use to distinguish two parallel instances.
-    private clients: Map<string, WebSocket> = new Map();
+type AuthenticatedClient = {
+    clientId: string;
+    clientInstanceId: string;
+    ws: WebSocket;
+    sessionId: string;
+    sessionExpiresAt: number;
+    keys: VisualStudioSessionKeys;
+    sendSequence: number;
+    receiveSequence: number;
+};
+
+export class VisualStudioBridge {
+    // Insertion order preserves the existing newest-client routing policy,
+    // but clients enter this map only after mutual authentication succeeds.
+    private clients: Map<string, AuthenticatedClient> = new Map();
     private clientIdCounter = 0;
-    // For each in-flight request we record which clientId we sent it
-    // to, so a disconnect on one VS only fails the requests that
-    // actually targeted that instance — other VS instances keep
-    // running. The id itself is bridge-wide (responses are looked up
-    // by id alone).
+    private readonly handshakeReplayCache = createVisualStudioReplayCache();
     private pending = new Map<
         string,
         {
             resolve: (r: BridgeResponse) => void;
             timer: NodeJS.Timeout;
             clientId: string;
+            sessionId: string;
+            ws: WebSocket;
         }
     >();
     private readonly sendTimeoutMs: number;
+    private stopped = false;
+    private stopPromise: Promise<void> | undefined;
 
     /**
      * Invoked on every client connect/disconnect with the current count
@@ -84,8 +102,10 @@ class VisualStudioBridge {
     private constructor(
         private readonly wss: WebSocketServer,
         public readonly port: number,
+        private readonly credential: VisualStudioBridgeCredential,
+        sendTimeoutMs?: number,
     ) {
-        this.sendTimeoutMs = resolveSendTimeoutMs();
+        this.sendTimeoutMs = sendTimeoutMs ?? resolveSendTimeoutMs();
         this.setupHandlers();
         debug(
             `VisualStudioBridge listening on port ${port} (sendTimeoutMs=${this.sendTimeoutMs})`,
@@ -102,7 +122,16 @@ class VisualStudioBridge {
      * Pass `0` to let the OS pick a free ephemeral port; the actual port
      * is then available via {@link port}.
      */
-    public static start(port: number = 0): Promise<VisualStudioBridge> {
+    public static async start(
+        port: number = 0,
+        options?: {
+            credential?: VisualStudioBridgeCredential;
+            sendTimeoutMs?: number;
+        },
+    ): Promise<VisualStudioBridge> {
+        const credential =
+            options?.credential ??
+            (await loadOrCreateVisualStudioBridgeCredential());
         return new Promise((resolve, reject) => {
             const wss = new WebSocketServer({
                 port,
@@ -161,7 +190,14 @@ class VisualStudioBridge {
                 wss.on("error", (err) => {
                     debug("Server error:", err);
                 });
-                resolve(new VisualStudioBridge(wss, address.port));
+                resolve(
+                    new VisualStudioBridge(
+                        wss,
+                        address.port,
+                        credential,
+                        options?.sendTimeoutMs,
+                    ),
+                );
             };
             wss.once("error", onError);
             wss.once("listening", onListening);
@@ -170,41 +206,100 @@ class VisualStudioBridge {
 
     private setupHandlers(): void {
         this.wss.on("connection", (ws: WebSocket) => {
-            const clientId = `vs-${++this.clientIdCounter}`;
-            this.clients.set(clientId, ws);
-            debug(
-                `host plugin connected (${clientId}); total=${this.clients.size}`,
-            );
-            this.emitClientCount();
+            if (this.stopped) {
+                ws.terminate();
+                return;
+            }
+            let client: AuthenticatedClient | undefined;
+            let sessionExpiryTimer: NodeJS.Timeout | undefined;
+            const handshakeTimer = setTimeout(() => {
+                if (client === undefined) {
+                    debug("Rejecting host plugin: authentication timed out");
+                    ws.close(1008, "Authentication failed");
+                }
+            }, 5_000);
             ws.on("message", (data: RawData) => {
+                if (this.stopped) {
+                    ws.terminate();
+                    return;
+                }
                 try {
-                    const response = JSON.parse(
-                        data.toString(),
-                    ) as BridgeResponse;
-                    const entry = this.pending.get(response.id);
-                    if (entry !== undefined) {
-                        clearTimeout(entry.timer);
-                        this.pending.delete(response.id);
-                        entry.resolve(response);
+                    const value: unknown = JSON.parse(data.toString());
+                    if (client === undefined) {
+                        const accepted = acceptVisualStudioClientHello(
+                            this.credential,
+                            value,
+                            this.handshakeReplayCache,
+                        );
+                        if (accepted === undefined) {
+                            debug(
+                                "Rejecting host plugin: authentication failed",
+                            );
+                            ws.close(1008, "Authentication failed");
+                            return;
+                        }
+                        if (this.stopped || ws.readyState !== WebSocket.OPEN) {
+                            ws.terminate();
+                            return;
+                        }
+                        clearTimeout(handshakeTimer);
+                        ws.send(JSON.stringify(accepted.hello));
+                        const clientId = `vs-${++this.clientIdCounter}`;
+                        client = {
+                            clientId,
+                            clientInstanceId: accepted.clientInstanceId,
+                            ws,
+                            sessionId: accepted.hello.sessionId,
+                            sessionExpiresAt: accepted.hello.expiresAt,
+                            keys: accepted.keys,
+                            sendSequence: 0,
+                            receiveSequence: 0,
+                        };
+                        this.clients.set(clientId, client);
+                        sessionExpiryTimer = setTimeout(
+                            () => {
+                                debug(
+                                    `host plugin session expired (${clientId})`,
+                                );
+                                ws.close(1008, "Session expired");
+                            },
+                            Math.max(1, accepted.hello.expiresAt - Date.now()),
+                        );
+                        debug(
+                            `host plugin authenticated (${clientId}); total=${this.clients.size}`,
+                        );
+                        this.emitClientCount();
+                        return;
                     }
+                    this.handleAuthenticatedMessage(client, value);
                 } catch (err) {
-                    debug("Failed to parse plugin message:", err);
+                    debug(
+                        client === undefined
+                            ? "Rejecting host plugin: malformed authentication message"
+                            : "Rejecting host plugin: invalid authenticated frame",
+                    );
+                    ws.close(1008, "Authentication failed");
                 }
             });
             const onDisconnect = (reason: string) => {
-                // Identity-guarded so the second of {close, error} is a
-                // no-op (Map.delete returns false the second time).
-                if (!this.clients.delete(clientId)) return;
+                clearTimeout(handshakeTimer);
+                if (sessionExpiryTimer !== undefined) {
+                    clearTimeout(sessionExpiryTimer);
+                }
+                if (
+                    client === undefined ||
+                    this.clients.get(client.clientId) !== client
+                ) {
+                    return;
+                }
+                this.clients.delete(client.clientId);
                 debug(
-                    `host plugin disconnected (${clientId}, ${reason}); remaining=${this.clients.size}`,
+                    `host plugin disconnected (${client.clientId}, ${reason}); remaining=${this.clients.size}`,
                 );
                 this.emitClientCount();
-                // Only fail the pending sends that targeted *this*
-                // client — other VS instances stay live and their
-                // pending requests must keep waiting for their own
-                // responses (or hit the per-request timeout).
                 this.failPendingForClient(
-                    clientId,
+                    client.clientId,
+                    client.sessionId,
                     new Error(`Host plugin disconnected: ${reason}`),
                 );
             };
@@ -214,6 +309,48 @@ class VisualStudioBridge {
                 onDisconnect(`error: ${err.message}`);
             });
         });
+    }
+
+    private handleAuthenticatedMessage(
+        client: AuthenticatedClient,
+        value: unknown,
+    ): void {
+        const verified = verifyVisualStudioSecureFrame<BridgeResponse>(
+            value,
+            client.sessionId,
+            client.receiveSequence + 1,
+            "response",
+            client.keys.clientToServer,
+            Date.now(),
+            client.sessionExpiresAt,
+        );
+        if (
+            verified === undefined ||
+            verified.payload.id !== verified.frame.id ||
+            typeof verified.payload.success !== "boolean"
+        ) {
+            debug("Rejecting host plugin: invalid authenticated response");
+            client.ws.close(1008, "Authentication failed");
+            return;
+        }
+        client.receiveSequence = verified.frame.sequence;
+        const entry = this.pending.get(verified.frame.id);
+        if (entry === undefined) {
+            debug("Ignoring host plugin response with no live request");
+            return;
+        }
+        if (
+            entry.clientId !== client.clientId ||
+            entry.sessionId !== client.sessionId ||
+            entry.ws !== client.ws
+        ) {
+            debug("Rejecting host plugin: response session mismatch");
+            client.ws.close(1008, "Authentication failed");
+            return;
+        }
+        clearTimeout(entry.timer);
+        this.pending.delete(verified.frame.id);
+        entry.resolve(verified.payload);
     }
 
     private emitClientCount(): void {
@@ -232,8 +369,8 @@ class VisualStudioBridge {
      */
     public getConnectedCount(): number {
         let n = 0;
-        for (const ws of this.clients.values()) {
-            if (ws.readyState === WebSocket.OPEN) n++;
+        for (const client of this.clients.values()) {
+            if (client.ws.readyState === WebSocket.OPEN) n++;
         }
         return n;
     }
@@ -252,10 +389,16 @@ class VisualStudioBridge {
         }
     }
 
-    private failPendingForClient(clientId: string, error: Error): void {
+    private failPendingForClient(
+        clientId: string,
+        sessionId: string,
+        error: Error,
+    ): void {
         const toFail: string[] = [];
         for (const [id, entry] of this.pending) {
-            if (entry.clientId === clientId) toFail.push(id);
+            if (entry.clientId === clientId && entry.sessionId === sessionId) {
+                toFail.push(id);
+            }
         }
         for (const id of toFail) {
             const entry = this.pending.get(id)!;
@@ -276,17 +419,25 @@ class VisualStudioBridge {
      * synchronous return would race the new bind into EADDRINUSE.
      */
     async stop(): Promise<void> {
+        if (this.stopPromise !== undefined) {
+            return this.stopPromise;
+        }
         debug("Closing VisualStudioBridge");
-        for (const ws of this.clients.values()) {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
+        this.stopped = true;
+        for (const ws of this.wss.clients) {
+            if (ws.readyState !== WebSocket.CLOSED) {
+                ws.terminate();
             }
         }
         this.clients.clear();
+        this.emitClientCount();
         // Reject any in-flight sends before the server closes; otherwise
         // callers awaiting `send()` hang forever after a manual disable.
         this.failPending(new Error("VisualStudioBridge stopped"));
-        return new Promise((resolve) => this.wss.close(() => resolve()));
+        this.stopPromise = new Promise((resolve) =>
+            this.wss.close(() => resolve()),
+        );
+        return this.stopPromise;
     }
 
     async send(actionName: string, parameters: unknown): Promise<unknown> {
@@ -301,8 +452,17 @@ class VisualStudioBridge {
         if (target === undefined) {
             throw new Error(`No host plugin connected on port ${this.port}`);
         }
-        const [clientId, ws] = target;
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const client = target;
+        const id = createVisualStudioRequestId();
+        const sequence = ++client.sendSequence;
+        const frame = createVisualStudioSecureFrame(
+            client.sessionId,
+            sequence,
+            "request",
+            id,
+            { actionName, parameters } satisfies Omit<BridgeRequest, "id">,
+            client.keys.serverToClient,
+        );
         return new Promise((resolve, reject) => {
             // Timeout so a plugin that accepts the WS frame but never
             // replies (deadlock, EnvDTE hang, killed mid-action) doesn't
@@ -320,20 +480,28 @@ class VisualStudioBridge {
             }, this.sendTimeoutMs);
             this.pending.set(id, {
                 timer,
-                clientId,
+                clientId: client.clientId,
+                sessionId: client.sessionId,
+                ws: client.ws,
                 resolve: (res) =>
                     res.success
                         ? resolve(res.result)
                         : reject(new Error(res.error)),
             });
             try {
-                ws.send(
-                    JSON.stringify({
+                client.ws.send(JSON.stringify(frame), (error) => {
+                    if (error == null) return;
+                    const entry = this.pending.get(id);
+                    if (entry === undefined) return;
+                    clearTimeout(entry.timer);
+                    this.pending.delete(id);
+                    entry.resolve({
                         id,
-                        actionName,
-                        parameters,
-                    } satisfies BridgeRequest),
-                );
+                        success: false,
+                        error: "VS bridge send failed",
+                    });
+                    client.ws.close();
+                });
             } catch (err) {
                 clearTimeout(timer);
                 this.pending.delete(id);
@@ -345,11 +513,16 @@ class VisualStudioBridge {
     // Map iteration is insertion-ordered; walk in reverse so the
     // newest OPEN connection wins. Returns undefined when no client
     // is currently OPEN.
-    private pickTargetClient(): [string, WebSocket] | undefined {
+    private pickTargetClient(): AuthenticatedClient | undefined {
         const entries = Array.from(this.clients.entries());
         for (let i = entries.length - 1; i >= 0; i--) {
-            const [id, ws] = entries[i];
-            if (ws.readyState === WebSocket.OPEN) return [id, ws];
+            const client = entries[i][1];
+            if (
+                client.ws.readyState === WebSocket.OPEN &&
+                client.sessionExpiresAt >= Date.now()
+            ) {
+                return client;
+            }
         }
         return undefined;
     }

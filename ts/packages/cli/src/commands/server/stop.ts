@@ -6,6 +6,7 @@ import {
     stopAgentServer,
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
+import { exitCli } from "../../telemetry.js";
 
 export default class ServerStop extends Command {
     static description = "Stop the running TypeAgent server";
@@ -25,6 +26,6 @@ export default class ServerStop extends Command {
     async run(): Promise<void> {
         const { flags } = await this.parse(ServerStop);
         await stopAgentServer(flags.port, flags.force);
-        process.exit(0);
+        exitCli(0);
     }
 }

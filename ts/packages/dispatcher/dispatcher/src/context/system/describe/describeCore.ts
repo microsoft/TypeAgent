@@ -15,6 +15,7 @@ import {
     createJsonTranslatorFromSchemaDef,
     type TypeChatJsonTranslatorWithSignal,
 } from "@typeagent/typechat-utils";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "./agentSchemaInfo.js";
 
@@ -591,7 +592,10 @@ export async function polishAgentView(
         `capability listing. Base it only on these facts; do not invent features.\n\n` +
         `Agent description: ${agent.description}\n` +
         `Actions:\n${actionList}`;
-    const result = await translator.translate(request);
+    const result = await withChatModelTelemetryContext(
+        { purpose: "capability-description", scope: "foreground" },
+        () => translator.translate(request),
+    );
     if (!result.success) return deterministic;
 
     return renderPolishedAgentView(agent, deterministic, result.data);
@@ -646,7 +650,10 @@ export async function polishActionView(
         `Base it only on the facts below; do not invent parameters or behavior.\n\n` +
         `Action summary: ${match.action.description}\n` +
         `Parameters:\n${paramList || "(none)"}`;
-    const result = await translator.translate(request);
+    const result = await withChatModelTelemetryContext(
+        { purpose: "capability-description", scope: "foreground" },
+        () => translator.translate(request),
+    );
     if (!result.success) return deterministic;
 
     return renderPolishedActionView(match, result.data);

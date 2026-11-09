@@ -64,6 +64,20 @@ describe("PendingInteractionManager", () => {
         manager = new PendingInteractionManager();
     });
 
+    it("strict cancellation rejects even an affirmative default and removes the entry", async () => {
+        const request = makeQuestionRequest({
+            interactionId: "strict",
+            defaultId: 0,
+        });
+        const result = manager.create<number>(request, undefined, {
+            rejectOnCancel: true,
+        });
+        const rejected = expect(result).rejects.toThrow("cancelled");
+        manager.cancel(request.interactionId, new Error("cancelled"));
+        await rejected;
+        expect(manager.size).toBe(0);
+    });
+
     // ---------------------------------------------------------------
     // 1. create + resolve: resolves promise with the given value
     // ---------------------------------------------------------------

@@ -10,6 +10,8 @@
  * non-empty.
  */
 
+import { copyTextToClipboard } from "./clipboard.js";
+
 type MenuItemId = "cut" | "copy" | "paste" | "selectAll";
 
 interface MenuItem {
@@ -193,26 +195,7 @@ export class ChatContextMenu {
 
 function copyText(text: string) {
     if (!text) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
-    } else {
-        fallbackCopy(text);
-    }
-}
-
-function fallbackCopy(text: string) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-        document.execCommand("copy");
-    } catch {
-        // Best-effort; nothing more to do.
-    }
-    ta.remove();
+    void copyTextToClipboard(text);
 }
 
 // Notify listeners (send-button enable state, completion fetch) that an

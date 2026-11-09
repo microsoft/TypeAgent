@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../dist"
+  },
+  "include": ["./**/*.ts"],
+  "references": [
+    { "path": "../../client/src" },
+    { "path": "../../service/src" },
+    { "path": "../../../aiclient/src" },
+    { "path": "../../../config/src" }
+  ]
+}

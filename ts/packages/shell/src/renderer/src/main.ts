@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/// <reference path="../../lib/lib.android.d.ts" />
-
 // Augment Window with the test hook exposed by the bootstrap below so that
 // Playwright tests can inject interactions without requiring a live
 // agent-server connection.
@@ -39,10 +37,6 @@ export function getClientAPI(): ClientAPI {
     } else {
         return getWebSocketAPI();
     }
-}
-
-export function getAndroidAPI() {
-    return globalThis.Android;
 }
 
 function getWebSocketAPI(): ClientAPI {
@@ -314,18 +308,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
     window.__clientIO__ = client.clientIO;
 
-    try {
-        if (Android !== undefined) {
-            Bridge.interfaces.Android.domReady((userMessage: string) => {
-                chatPanel.injectCommand(userMessage);
-            });
-        }
-    } catch (e) {
-        console.log(e);
-    }
-
     // get the user's name to show in the chat view
-    const token: SpeechToken | undefined = await getSpeechToken();
+    const token: SpeechToken | undefined =
+        (await clientAPI.getSpeechProvider()) === "azure"
+            ? await getSpeechToken()
+            : undefined;
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
         const decoded = jose.decodeJwt(actualToken);

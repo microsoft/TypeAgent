@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import {
     DispatcherConnectOptions,
+    JoinConversationResult,
     registerClientType,
     unregisterClient,
 } from "@typeagent/agent-server-protocol";
@@ -21,25 +22,66 @@ import type {
     QueueCancelReason,
     QueueSnapshot,
     DisplayLogEntry,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
+import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
     createDispatcherFromContext,
+    getAppAgentName,
     prewarmReasoning as prewarmDispatcherReasoning,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
 import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
+import {
+    loadWorkingDirectoryPolicy,
+    selectWorkingDirectoryProposal,
+    resolveWorkingDirectory,
+} from "./workingDirectoryPolicy.js";
+import {
+    StructuredActionBindings,
+    type StructuredActionLease,
+    validateStructuredActionJoin,
+} from "./structuredActionBindings.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
-const debugClientIOError = registerDebug("agent-server:clientIO:error");
-const debugInteraction = registerDebug("agent-server:interaction");
+const debugClientIOWarn = registerDebug("agent-server:clientIO:warn");
+const debugInteractionInfo = registerDebug("agent-server:interaction:info");
 const debugCommand = registerDebug("agent-server:command");
+
+function errMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+function throwAgentStateFailures(
+    name: string,
+    result: {
+        failed: {
+            schemas: [string, boolean, Error][];
+            actions: [string, boolean, Error][];
+            commands: [string, boolean, Error][];
+        };
+    },
+): void {
+    const failures = [
+        ...result.failed.schemas,
+        ...result.failed.actions,
+        ...result.failed.commands,
+    ].filter(([failedName]) => getAppAgentName(failedName) === name);
+    if (failures.length !== 0) {
+        throw new AggregateError(
+            failures.map(([, , error]) => error),
+            `Failed to enable dynamic agent '${name}'`,
+        );
+    }
+}
 
 type ClientRecord = {
     clientIO: ClientIO;
     filter: boolean;
+    disconnectController: AbortController;
 };
 
 export async function createSharedDispatcher(
@@ -52,6 +94,7 @@ export async function createSharedDispatcher(
         );
     }
     let nextConnectionId = 0;
+    const workingDirectoryPolicy = loadWorkingDirectoryPolicy();
     const clients = new Map<string, ClientRecord>();
     const pendingInteractions = new PendingInteractionManager();
 
@@ -98,9 +141,13 @@ export async function createSharedDispatcher(
                 count++;
             } catch (error) {
                 // Ignore errors in server mode.
-                debugClientIOError(
-                    `ClientIO error on ${name} for client ${connectionId}: ${error}`,
-                );
+                debugClientIOWarn("broadcast failed", {
+                    operation: name,
+                    connection: connectionId,
+                    requestId: requestId?.requestId,
+                    originator: requestId?.connectionId === connectionId,
+                    error: errMessage(error),
+                });
             }
         }
         return count;
@@ -180,6 +227,47 @@ export async function createSharedDispatcher(
             );
         },
 
+        requestSecurityApproval: async (requestId, request, source, signal) => {
+            const connectionId = requestId.connectionId;
+            const record =
+                connectionId === undefined
+                    ? undefined
+                    : clients.get(connectionId);
+            if (
+                connectionId === undefined ||
+                !record?.clientIO.requestSecurityApproval
+            ) {
+                throw new Error(
+                    "The requesting client cannot obtain trusted security approval.",
+                );
+            }
+            context.requestQueue.markBlocked(
+                requestId.requestId,
+                "interaction",
+            );
+            try {
+                const approvalSignal = AbortSignal.any([
+                    ...(signal ? [signal] : []),
+                    record.disconnectController.signal,
+                ]);
+                const answer = await record.clientIO.requestSecurityApproval(
+                    requestId,
+                    request,
+                    source,
+                    approvalSignal,
+                );
+                approvalSignal.throwIfAborted();
+                if (clients.get(connectionId) !== record) {
+                    throw new Error(
+                        "The approving client disconnected or changed.",
+                    );
+                }
+                return answer;
+            } finally {
+                context.requestQueue.markUnblocked(requestId.requestId);
+            }
+        },
+
         // ===== Async deferred pattern for blocking interactions =====
         // Create a deferred promise and broadcast to all clients; the first
         // client to respondToInteraction resolves it.
@@ -197,9 +285,13 @@ export async function createSharedDispatcher(
                 ...(defaultId !== undefined ? { defaultId } : {}),
             };
 
-            debugInteraction(
-                `question created: ${interactionId} message="${message}"`,
-            );
+            debugInteractionInfo("question created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source: request.source,
+                choiceCount: choices?.length,
+                messageLength: message?.length,
+            });
 
             // Broadcast to all connected clients
             broadcast("requestInteraction", requestId, (cio) =>
@@ -235,9 +327,11 @@ export async function createSharedDispatcher(
                 actionTemplates,
             };
 
-            debugInteraction(
-                `proposeAction created: ${interactionId} source="${source}"`,
-            );
+            debugInteractionInfo("proposeAction created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source,
+            });
 
             // Log + queue unconditionally so the interaction survives in
             // DisplayLog and is included in JoinSessionResult on next join.
@@ -272,9 +366,12 @@ export async function createSharedDispatcher(
                 form,
             };
 
-            debugInteraction(
-                `askForm created: ${interactionId} source="${request.source}" fields=${form.fields.length}`,
-            );
+            debugInteractionInfo("askForm created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source: request.source,
+                fieldCount: form.fields.length,
+            });
 
             // Log + queue unconditionally so the interaction survives in
             // DisplayLog and is included in JoinSessionResult on next join.
@@ -352,9 +449,11 @@ export async function createSharedDispatcher(
                 try {
                     return await provider.call(record.clientIO);
                 } catch (error) {
-                    debugClientIOError(
-                        `getUserContext failed for client ${connectionId}: ${error}`,
-                    );
+                    debugClientIOWarn("getUserContext failed", {
+                        connection: connectionId,
+                        requestId: requestId?.requestId,
+                        error: errMessage(error),
+                    });
                     return undefined;
                 }
             };
@@ -428,6 +527,10 @@ export async function createSharedDispatcher(
         ...options,
         clientIO,
     });
+    const structuredBindings = new StructuredActionBindings(
+        () => context.session,
+    );
+    const structuredLeases = new Map<string, StructuredActionLease>();
 
     // Intercept display methods on the shared clientIO to mirror display
     // traffic into the DisplayLog for later replay. Patches context.clientIO
@@ -573,10 +676,25 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            const anonymousScope = {};
+            validateStructuredActionJoin(options);
+            const structuredLease =
+                options?.structuredActions === undefined
+                    ? undefined
+                    : structuredBindings.acquire(
+                          options.conversationId!,
+                          connectionId,
+                          options.structuredActions.resumeToken,
+                      );
+            if (structuredLease !== undefined) {
+                structuredLeases.set(connectionId, structuredLease);
+            }
+            let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
                 filter: options?.filter ?? false,
+                disconnectController: new AbortController(),
             });
             // First (re)joining client — clear any pending grace timer.
             if (wasEmpty) {
@@ -590,6 +708,9 @@ export async function createSharedDispatcher(
                 context,
                 connectionId,
                 async () => {
+                    structuredLease?.release();
+                    structuredLeases.delete(connectionId);
+                    clients.get(connectionId)?.disconnectController.abort();
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
@@ -625,6 +746,12 @@ export async function createSharedDispatcher(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
                     );
                 },
+                structuredLease?.access ??
+                    (() => ({
+                        scope: anonymousScope,
+                        canDiscoverSchema: () => clients.has(connectionId),
+                        canExecute: false,
+                    })),
             );
             dispatchers.set(connectionId, dispatcher);
             debugConnect(
@@ -652,28 +779,142 @@ export async function createSharedDispatcher(
             // new request queues behind a request that only unblocks on the
             // (up to 20 min) interaction / reasoning-loop timeout.
             const baseSubmitCommand = dispatcher.submitCommand.bind(dispatcher);
-            dispatcher.submitCommand = async (...args) => {
+            dispatcher.submitCommand = async (
+                command,
+                attachments,
+                submitOptions,
+                clientRequestId,
+                requestedId,
+            ) => {
                 supersedeStalledInteraction(
                     "user",
                     "Superseded by a new request",
                 );
-                return baseSubmitCommand(...args);
+                const requestId = requestedId ?? randomUUID();
+                context.logger?.logEvent("server:requestReceived", {
+                    requestId,
+                    connectionId,
+                    attachmentCount: attachments?.length ?? 0,
+                });
+                const workingDirectory = resolveWorkingDirectory(
+                    selectWorkingDirectoryProposal(
+                        submitOptions?.workingDirectory,
+                        command,
+                        selectedWorkingDirectory,
+                    ),
+                    workingDirectoryPolicy,
+                );
+                if (workingDirectory.workingDirectory !== undefined) {
+                    selectedWorkingDirectory =
+                        workingDirectory.workingDirectory;
+                }
+                if (workingDirectory.rejectedRequested) {
+                    debugCommand(
+                        `Rejected client working directory for ${connectionId}; ` +
+                            (workingDirectory.source === "default"
+                                ? "using server default"
+                                : "coding root unavailable"),
+                    );
+                }
+                const {
+                    workingDirectory: _clientWorkingDirectory,
+                    ...optionsWithoutWorkingDirectory
+                } = submitOptions ?? {};
+                void _clientWorkingDirectory;
+                const hasOtherOptions =
+                    Object.keys(optionsWithoutWorkingDirectory).length > 0;
+                const normalizedOptions: ProcessCommandOptions | undefined =
+                    workingDirectory.workingDirectory !== undefined
+                        ? {
+                              ...optionsWithoutWorkingDirectory,
+                              workingDirectory:
+                                  workingDirectory.workingDirectory,
+                          }
+                        : hasOtherOptions
+                          ? optionsWithoutWorkingDirectory
+                          : undefined;
+                const result = await baseSubmitCommand(
+                    command,
+                    attachments,
+                    normalizedOptions,
+                    clientRequestId,
+                    requestId,
+                );
+                if (!result.ok) {
+                    context.logger?.logEvent(
+                        "server:requestRejected",
+                        {
+                            requestId,
+                            connectionId,
+                            reason: result.error,
+                        },
+                        "warning",
+                    );
+                    return result;
+                }
+
+                void result.entry.completion.then(
+                    (commandResult) => {
+                        const cancelled = commandResult?.cancelled === true;
+                        const status = cancelled
+                            ? "cancelled"
+                            : (commandResult?.disposition?.status ??
+                              "completed");
+                        const success =
+                            !cancelled &&
+                            commandResult?.disposition?.status !== "failed";
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success,
+                                cancelled,
+                                status,
+                            },
+                            success ? "info" : cancelled ? "warning" : "error",
+                        );
+                    },
+                    (error) => {
+                        const cancelled = error instanceof ServerStoppingError;
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success: false,
+                                cancelled,
+                                status: cancelled ? "cancelled" : "failed",
+                            },
+                            cancelled ? "warning" : "error",
+                        );
+                    },
+                );
+                return result;
             };
 
             return dispatcher;
         },
+        getStructuredActionBinding(connectionId) {
+            const lease = structuredLeases.get(connectionId);
+            return lease === undefined
+                ? undefined
+                : { resumeToken: lease.resumeToken };
+        },
         respondToInteraction(response: PendingInteractionResponse): void {
-            debugInteraction(
-                `respondToInteraction: ${response.interactionId} type=${response.type}`,
-            );
+            debugInteractionInfo("respondToInteraction", {
+                interactionId: response.interactionId,
+                type: response.type,
+            });
             const resolved = pendingInteractions.resolve(
                 response.interactionId,
                 response.value,
             );
             if (!resolved) {
-                debugInteraction(
-                    `respondToInteraction: interaction ${response.interactionId} not found (may have expired or been resolved already)`,
-                );
+                debugInteractionInfo("respondToInteraction: not found", {
+                    interactionId: response.interactionId,
+                    reason: "expired or already resolved",
+                });
             } else {
                 // Notify all clients that this interaction was resolved
                 broadcast("interactionResolved", undefined, (cio) =>
@@ -692,15 +933,16 @@ export async function createSharedDispatcher(
             }
         },
         cancelInteraction(interactionId: string): void {
-            debugInteraction(`cancelInteraction: ${interactionId}`);
+            debugInteractionInfo("cancelInteraction", { interactionId });
             const cancelled = pendingInteractions.cancel(
                 interactionId,
                 new Error("Cancelled by client"),
             );
             if (!cancelled) {
-                debugInteraction(
-                    `cancelInteraction: interaction ${interactionId} not found (may have expired or been resolved already)`,
-                );
+                debugInteractionInfo("cancelInteraction: not found", {
+                    interactionId,
+                    reason: "expired or already resolved",
+                });
             } else {
                 broadcast("interactionCancelled", undefined, (cio) =>
                     cio.interactionCancelled(interactionId),
@@ -750,9 +992,11 @@ export async function createSharedDispatcher(
                 try {
                     clientRecord.clientIO.appendDisplay(agentMessage, "block");
                 } catch (error) {
-                    debugClientIOError(
-                        `ClientIO error on broadcastSystemMessage for client ${connectionId}: ${error}`,
-                    );
+                    debugClientIOWarn("broadcast failed", {
+                        operation: "broadcastSystemMessage",
+                        connection: connectionId,
+                        error: errMessage(error),
+                    });
                 }
             }
         },
@@ -762,12 +1006,16 @@ export async function createSharedDispatcher(
                 // Remove synchronously so clientCount reflects post-leave state
                 // before any async close work completes. The close callback
                 // also calls clients.delete; the double-delete is idempotent.
+                clients.get(connectionId)?.disconnectController.abort();
                 clients.delete(connectionId);
                 await dispatcher.close();
             }
         },
         async closeAllClients() {
             const promises: Promise<void>[] = [];
+            for (const record of clients.values()) {
+                record.disconnectController.abort();
+            }
             for (const dispatcher of dispatchers.values()) {
                 promises.push(dispatcher.close());
             }
@@ -775,6 +1023,7 @@ export async function createSharedDispatcher(
         },
         async close() {
             cancelNoClientsGraceTimer();
+            structuredBindings.close();
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
@@ -805,6 +1054,55 @@ export async function createSharedDispatcher(
                     context,
                     context.session.getConfig(),
                 );
+            });
+        },
+        async replaceDynamicAgent(
+            name: string,
+            currentManifest: AppAgentManifest,
+            currentAppAgent: AppAgent,
+            nextManifest: AppAgentManifest,
+            nextAppAgent: AppAgent,
+        ): Promise<void> {
+            await context.commandLock(async () => {
+                await context.agents.removeAgent(
+                    name,
+                    context.agentCache.grammarStore,
+                );
+                try {
+                    await context.agents.addDynamicAgent(
+                        name,
+                        nextManifest,
+                        nextAppAgent,
+                    );
+                    const result = await context.agents.setState(
+                        context,
+                        context.session.getConfig(),
+                    );
+                    throwAgentStateFailures(name, result);
+                } catch (e) {
+                    try {
+                        await context.agents.removeAgent(
+                            name,
+                            context.agentCache.grammarStore,
+                        );
+                        await context.agents.addDynamicAgent(
+                            name,
+                            currentManifest,
+                            currentAppAgent,
+                        );
+                        const rollbackResult = await context.agents.setState(
+                            context,
+                            context.session.getConfig(),
+                        );
+                        throwAgentStateFailures(name, rollbackResult);
+                    } catch (rollbackError) {
+                        throw new AggregateError(
+                            [e, rollbackError],
+                            `Failed to replace dynamic agent '${name}' and restore the previous registration`,
+                        );
+                    }
+                    throw e;
+                }
             });
         },
         async removeDynamicAgent(name: string): Promise<void> {
@@ -846,6 +1144,9 @@ export type SharedDispatcher = {
         closeFn: () => void,
         options?: DispatcherConnectOptions,
     ): Dispatcher;
+    getStructuredActionBinding(
+        connectionId: string,
+    ): JoinConversationResult["structuredActions"];
     respondToInteraction(response: PendingInteractionResponse): void;
     cancelInteraction(interactionId: string): void;
     getPendingInteractions(
@@ -871,6 +1172,14 @@ export type SharedDispatcher = {
         name: string,
         manifest: AppAgentManifest,
         appAgent: AppAgent,
+    ): Promise<void>;
+    /** Replace a dynamic agent and restore the previous one if setup fails. */
+    replaceDynamicAgent(
+        name: string,
+        currentManifest: AppAgentManifest,
+        currentAppAgent: AppAgent,
+        nextManifest: AppAgentManifest,
+        nextAppAgent: AppAgent,
     ): Promise<void>;
     /** Remove a previously added dynamic agent. No-op if it doesn't exist. */
     removeDynamicAgent(name: string): Promise<void>;

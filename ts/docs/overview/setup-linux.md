@@ -14,10 +14,11 @@ Skip or change steps to suit your environment.
   - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
   - `\. "$HOME/.nvm/nvm.sh"`
   - `nvm install --lts`
+  - `nvm use --lts`
 - Clone and build:
   - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent`
   - `cd ~/src/TypeAgent/ts`
-  - `corepack enable`
+  - `npm install --global pnpm`
   - `pnpm setup`
   - `pnpm i`
   - `pnpm run build`

@@ -10,12 +10,12 @@ import {
 } from "../src/endpointPool.js";
 import { ModelType } from "../src/openai.js";
 
-// Deterministic RNG for reproducible random-within-tier selection.
-function seededRng(seed: number): () => number {
+// Deterministic index picker for reproducible random-within-tier selection.
+function seededRng(seed: number): (n: number) => number {
     let state = seed >>> 0;
-    return () => {
+    return (n: number) => {
         state = (state * 1664525 + 1013904223) >>> 0;
-        return state / 0xffffffff;
+        return Math.floor((state / 0xffffffff) * n);
     };
 }
 

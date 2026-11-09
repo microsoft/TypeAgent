@@ -5,44 +5,10 @@ import Database from "better-sqlite3";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 
 import registerDebug from "debug";
 const debug = registerDebug("agent-server:copilot:reader");
 const debugError = registerDebug("agent-server:copilot:reader:error");
-
-/**
- * Resolve the correct `better-sqlite3` native binary for the current runtime.
- *
- * The prebuilt `better_sqlite3.node` in `build/Release` is ABI-specific: a
- * binary built for Node.js can't load under Electron and vice versa. The repo
- * keeps ABI-specific copies alongside the package (mirroring the convention in
- * `memory-storage`): `prebuild-node/` for Node processes (the separate
- * agent-server, CLI, tests) and `prebuild-electron/` for the in-process
- * Electron shell. We point better-sqlite3 at the matching one so it loads in
- * either host.
- *
- * Falls back to `undefined` (the default `build/Release` binary) when the
- * matching prebuild dir is absent — correct for the packaged Electron app,
- * where electron-builder rebuilds `build/Release` for Electron directly.
- */
-function resolveNativeBinding(): string | undefined {
-    try {
-        const require = createRequire(import.meta.url);
-        const packageJsonPath = require.resolve("better-sqlite3/package.json");
-        const isElectron = process?.versions?.electron !== undefined;
-        const prebuildDir = isElectron ? "prebuild-electron" : "prebuild-node";
-        const nativeBinding = path.join(
-            packageJsonPath,
-            "..",
-            prebuildDir,
-            "better_sqlite3.node",
-        );
-        return fs.existsSync(nativeBinding) ? nativeBinding : undefined;
-    } catch {
-        return undefined;
-    }
-}
 
 /**
  * Read-only access to GitHub Copilot Chat's local session store
@@ -312,11 +278,9 @@ export function openCopilotSessionStore(
 
     let db: Database.Database;
     try {
-        const nativeBinding = resolveNativeBinding();
         db = new Database(dbPath, {
             readonly: true,
             fileMustExist: true,
-            ...(nativeBinding ? { nativeBinding } : {}),
         });
         db.pragma("busy_timeout = 5000");
     } catch (e) {

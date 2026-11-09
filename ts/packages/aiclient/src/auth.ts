@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AccessToken, DefaultAzureCredential } from "@azure/identity";
+import {
+    AccessToken,
+    DefaultAzureCredential,
+    type TokenCredential,
+} from "@azure/identity";
 import { Result, success, error } from "typechat";
 
 export interface AuthTokenProvider {
@@ -9,17 +13,34 @@ export interface AuthTokenProvider {
     refreshToken(): Promise<Result<string>>;
 }
 
+export type AzureCredentialFactory = () => TokenCredential;
+
 export enum AzureTokenScopes {
     CogServices = "https://cognitiveservices.azure.com/.default",
     AzureMaps = "https://atlas.microsoft.com/.default",
     AzureSearch = "https://search.azure.com/",
 }
 
+const defaultAzureCredentialFactory: AzureCredentialFactory = () =>
+    new DefaultAzureCredential();
+let azureCredentialFactory = defaultAzureCredentialFactory;
+
+/**
+ * Select the credential factory used by identity-authenticated Azure clients.
+ * Hosts with a validated runtime profile may inject a narrower credential;
+ * all other callers retain the normal DefaultAzureCredential chain.
+ */
+export function setAzureCredentialFactory(
+    factory?: AzureCredentialFactory,
+): void {
+    azureCredentialFactory = factory ?? defaultAzureCredentialFactory;
+}
+
 export function createAzureTokenProvider(
     scope: AzureTokenScopes,
     expirationBufferMs: number = 5 * 60 * 1000, // 5 minute buffer on renewal
 ): AuthTokenProvider {
-    const credential = new DefaultAzureCredential();
+    let credential: TokenCredential | undefined;
     let accessToken: AccessToken | undefined;
     let refreshPromise: Promise<Result<string>> | undefined;
     return {
@@ -37,10 +58,14 @@ export function createAzureTokenProvider(
 
     async function refreshToken(): Promise<Result<string>> {
         try {
+            credential ??= createDefaultCredential();
             const tokenResponse = await credential.getToken(scope);
+            if (tokenResponse === null) {
+                return error("Azure credential returned no access token.");
+            }
             tokenResponse.expiresOnTimestamp -= expirationBufferMs;
             accessToken = tokenResponse;
-            return success(accessToken.token);
+            return success(tokenResponse.token);
         } catch (e: any) {
             return error(e.toString());
         }
@@ -73,6 +98,6 @@ export function createAzureTokenProvider(
     }
 }
 
-export function createDefaultCredential(): DefaultAzureCredential {
-    return new DefaultAzureCredential();
+export function createDefaultCredential(): TokenCredential {
+    return azureCredentialFactory();
 }

@@ -12,6 +12,7 @@ import {
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import { exitCli } from "../../telemetry.js";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -137,6 +138,6 @@ export default class ExplainCommand extends Command {
             await connection?.close();
         }
 
-        process.exit(0);
+        exitCli(0);
     }
 }

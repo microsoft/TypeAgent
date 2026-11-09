@@ -19,6 +19,7 @@ import {
 } from "./shellSettings.js";
 import { readFileSync } from "node:fs";
 import { closeLocalWhisper } from "./localWhisperCommandHandler.js";
+import { localAsrHost } from "./localAsrHost.js";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     initializeInstance,
@@ -29,6 +30,12 @@ import {
     fatal,
 } from "./instance.js";
 import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
+import { otel } from "@typeagent/telemetry";
+import registerDebug from "debug";
+import {
+    isAllowedConfigFilePath,
+    resolveLocalConfigPath,
+} from "@typeagent/config";
 
 import {
     debugShell,
@@ -203,37 +210,40 @@ async function initialize() {
 
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
+    const telemetryConfig = otel.resolveTelemetryConfig();
+    await otel.initTelemetry({
+        config: telemetryConfig,
+        processName: "shell",
+        debugModules: [registerDebug],
+        debugBridge: {
+            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+        },
+    });
+    structuredLogs = telemetryConfig.structuredLogs === true;
     // Standalone hosts the agent-server in-process, so warm up the aiclient
     // runtime config locally. The connect-only shell delegates all model work
     // to the remote server and never imports aiclient here.
     if (standalone) {
         void warmupRuntimeConfig();
     }
-    protocol.handle("typeagent-browser", (request) => {
-        const url = new URL(request.url);
-        const pathname = url.pathname;
-        const queryString = url.search;
-
-        const browserExtensionUrls = (global as any).browserExtensionUrls;
-        if (browserExtensionUrls && browserExtensionUrls[pathname]) {
-            const resolvedUrl = browserExtensionUrls[pathname] + queryString;
-            debugShell(`Protocol handler: ${request.url} -> ${resolvedUrl}`);
-
+    protocol.handle("typeagent-browser", async (request) => {
+        try {
             const shellWindow = getShellWindow();
-            if (shellWindow) {
-                shellWindow.createBrowserTab(new URL(resolvedUrl), {
-                    background: false,
-                });
+            if (!shellWindow) {
+                throw new Error("Shell window is not available");
             }
-
-            // Return a redirect response
+            const resolvedUrl = await shellWindow.resolveCustomProtocolUrl(
+                new URL(request.url),
+            );
             return new Response("", {
                 status: 302,
-                headers: { Location: resolvedUrl },
+                headers: { Location: resolvedUrl.href },
             });
-        } else {
-            debugShell(`Protocol handler: Unknown library page: ${pathname}`);
-            return new Response("Not Found", { status: 404 });
+        } catch (error) {
+            debugShellError("Failed to resolve browser view:", error);
+            return new Response("Failed to resolve request.", {
+                status: 503,
+            });
         }
     });
 
@@ -312,28 +322,34 @@ async function initialize() {
         shell.openPath(path);
     });
 
+    ipcMain.on("open-config-file", async (event, candidate: string) => {
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+        const expected = resolveLocalConfigPath();
+        if (!isAllowedConfigFilePath(candidate, expected)) {
+            debugShellError("Rejected non-config local-file link");
+            return;
+        }
+        await shell.openPath(candidate);
+    });
+
     ipcMain.on("open-url-in-browser-tab", async (event, url: string) => {
         // Make sure the event is from the chat view of the current shell window
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
 
-        // Handle custom protocol URLs
-        if (url.startsWith("typeagent-browser://")) {
-            const parsedUrl = new URL(url);
-            const pathname = parsedUrl.pathname;
-            const queryString = parsedUrl.search;
-
-            const browserExtensionUrls = (global as any).browserExtensionUrls;
-            if (browserExtensionUrls && browserExtensionUrls[pathname]) {
-                const resolvedUrl =
-                    browserExtensionUrls[pathname] + queryString;
-                shellWindow.createBrowserTab(new URL(resolvedUrl), {
+        if (
+            url.startsWith("typeagent-browser://") ||
+            url.startsWith("http://") ||
+            url.startsWith("https://")
+        ) {
+            try {
+                await shellWindow.createBrowserTab(new URL(url), {
                     background: false,
                 });
+            } catch (error) {
+                debugShellError("Failed to open browser link:", error);
             }
-        } else if (url.startsWith("http://") || url.startsWith("https://")) {
-            // Handle HTTP/HTTPS URLs - open them in a new browser tab
-            shellWindow.createBrowserTab(new URL(url), { background: false });
         }
     });
 
@@ -352,8 +368,6 @@ async function initialize() {
     initializeExternalStorageIpcHandlers(instanceDir);
     initializePDFViewerIpcHandlers();
 
-    initializeQuit();
-
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
@@ -368,6 +382,7 @@ async function initialize() {
                 parsedArgs.hidden,
                 parsedArgs.idleTimeout,
                 parsedArgs.resume,
+                structuredLogs,
             );
     });
 
@@ -382,6 +397,7 @@ async function initialize() {
         parsedArgs.hidden,
         parsedArgs.idleTimeout,
         parsedArgs.resume,
+        structuredLogs,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -396,6 +412,13 @@ async function initialize() {
     });
 }
 
+initializeQuit();
+process.once("SIGINT", () => {
+    app.quit();
+});
+process.once("SIGTERM", () => {
+    app.quit();
+});
 app.whenReady().then(initialize).catch(fatal);
 
 // Defense-in-depth: log unhandled promise rejections instead of crashing.
@@ -410,6 +433,7 @@ process.on("unhandledRejection", (reason: any) => {
 });
 
 let reloadingInstance = false;
+let structuredLogs = false;
 export async function reloadInstance() {
     reloadingInstance = true;
     try {
@@ -425,6 +449,7 @@ export async function reloadInstance() {
             parsedArgs.hidden,
             parsedArgs.idleTimeout,
             parsedArgs.resume,
+            structuredLogs,
         );
     } finally {
         reloadingInstance = false;
@@ -441,10 +466,21 @@ function initializeQuit() {
         globalShortcut.unregisterAll();
 
         closeLocalWhisper();
+        await localAsrHost.dispose();
 
         debugShellCleanup("Closing instance");
 
-        await closeInstance(true);
+        try {
+            await closeInstance(true);
+        } catch (error) {
+            debugShellError("Failed to close shell instance", error);
+        }
+
+        try {
+            await otel.shutdownTelemetry();
+        } catch (error) {
+            debugShellError("Failed to shut down telemetry", error);
+        }
 
         debugShellCleanup("Quitting");
         canQuit = true;

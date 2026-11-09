@@ -4,6 +4,7 @@
 import { AddressObject, simpleParser } from "mailparser";
 import { email } from "@typeagent/knowledge-processor";
 import { readAllText } from "@typeagent/agent-runtime";
+import { parseTemporalValue } from "@typeagent/knowpro";
 
 /**
  * Load an email in MIME format
@@ -33,6 +34,11 @@ export async function importEmailFromMimeText(
         return undefined;
     }
 
+    const sentOnRaw = mimeMail.headerLines
+        .find((header) => header.key === "date")
+        ?.line.replace(/^date:\s*/i, "");
+    const sentOn =
+        sentOnRaw === undefined ? undefined : parseTemporalValue(sentOnRaw);
     const email: email.Email = {
         body: mimeMail.text,
         from: importAddress(mimeMail.from)[0],
@@ -40,7 +46,8 @@ export async function importEmailFromMimeText(
         cc: importAddresses(mimeMail.cc),
         bcc: importAddresses(mimeMail.bcc),
         subject: mimeMail.subject,
-        sentOn: mimeMail.date?.toISOString(),
+        sentOn: sentOn?.instantUtc,
+        sentOnRaw,
     };
     return email;
 }

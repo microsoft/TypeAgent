@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomInt } from "node:crypto";
 import registerDebug from "debug";
 import { priorityQueue } from "async";
 import { azureApiSettingsFromEnv } from "./azureSettings.js";
@@ -104,6 +105,10 @@ export function getEndpointRootEnvVar(
     provider: ModelProviders,
     modelType: ModelType,
 ): string {
+    if (modelType === ModelType.Decision)
+        throw new Error(
+            "Native decisions require typed deployment configuration",
+        );
     if (provider === "openai") {
         return modelType === ModelType.Chat
             ? EnvVars.OPENAI_ENDPOINT
@@ -246,7 +251,7 @@ function makeThrottler(maxConcurrency: number): FetchThrottler {
         async (task) => task(),
         maxConcurrency,
     );
-    return (fn: () => Promise<any>) => q.push<any>(fn);
+    return (fn: () => Promise<Response>) => q.pushAsync<Response>(fn);
 }
 
 /**
@@ -453,7 +458,7 @@ export type PickResult =
 export function pickEndpoint(
     pool: EndpointPool,
     now: number = Date.now(),
-    rng: () => number = Math.random,
+    rng: (n: number) => number = randomInt,
 ): PickResult {
     if (pool.members.length === 0) {
         throw new Error(`pool ${pool.modelKey} has no members`);
@@ -472,7 +477,7 @@ export function pickEndpoint(
             .get(tier)!
             .filter((m) => m.cooldownUntil <= now);
         if (ready.length > 0) {
-            const pick = ready[Math.floor(rng() * ready.length)];
+            const pick = ready[rng(ready.length)];
             return { kind: "ready", member: pick };
         }
     }

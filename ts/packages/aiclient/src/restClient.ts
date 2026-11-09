@@ -4,7 +4,16 @@
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
 import { filterSecretsFromJsonString } from "@typeagent/common-utils";
+import { otel } from "@typeagent/telemetry";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
+import type { ModelRequestConstraints } from "@typeagent/config";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
+import { getOutputCapacity } from "./outputCapacity.js";
+import {
+    RequestAdmissionError,
+    reserveSerializedRequestForDispatch,
+    bindRequestBudgetScope,
+} from "./requestBudget.js";
 import {
     markSuccess,
     markThrottled,
@@ -280,11 +289,76 @@ async function callFetch(
     options?: RequestInit,
     timeout?: number,
     throttler?: FetchThrottler,
+    requestConstraints?: ModelRequestConstraints,
+    onAttempt?: () => void,
+    reserveCapacityRetry: () => boolean = () => true,
+    capacityOwner?: object,
 ) {
+    const capacity = getOutputCapacity(
+        url,
+        options,
+        requestConstraints,
+        capacityOwner,
+    );
     const safeOptions = redactRequestBody(options);
-    return throttler
-        ? throttler(() => fetchWithTimeout(url, safeOptions, timeout))
-        : fetchWithTimeout(url, safeOptions, timeout);
+    const send = bindRequestBudgetScope(async () => {
+        const started = performance.now();
+        let current =
+            safeOptions && capacity ? capacity.apply(safeOptions) : safeOptions;
+        for (let attempt = 0; ; attempt++) {
+            current?.signal?.throwIfAborted();
+            if (requestConstraints) {
+                if (typeof current?.body !== "string")
+                    throw new RequestAdmissionError(
+                        "Configured request constraints require a serialized body",
+                    );
+                checkSerializedRequestConstraints(
+                    current.body,
+                    requestConstraints,
+                );
+            }
+            const finish = await reserveSerializedRequestForDispatch(
+                current,
+                requestConstraints?.outputTokens,
+            );
+            onAttempt?.();
+            const attemptStarted = performance.now();
+            let response: Response | undefined;
+            try {
+                const remaining =
+                    timeout === undefined
+                        ? undefined
+                        : Math.max(1, timeout - (performance.now() - started));
+                response = await fetchWithTimeout(url, current, remaining);
+                await finish?.({
+                    state: "returned",
+                    status: response?.status,
+                    at: new Date().toISOString(),
+                    elapsedMs: performance.now() - attemptStarted,
+                });
+            } catch (error) {
+                await finish?.({
+                    state: "failed",
+                    at: new Date().toISOString(),
+                    elapsedMs: performance.now() - attemptStarted,
+                });
+                throw error;
+            }
+            if (!response || !capacity || !current || attempt > 0)
+                return response;
+            const reduced = await capacity.reduce(response, current);
+            if (!reduced) return response;
+            debugRetry(
+                `capacity retry on ${hostOf(url)}: output=${reduced.previousTokens}->${reduced.tokens} reason=${reduced.reason}`,
+            );
+            if (timeout !== undefined && performance.now() - started >= timeout)
+                return response;
+            if (!reserveCapacityRetry()) return response;
+            await response.body?.cancel();
+            current = capacity.apply(current);
+        }
+    });
+    return throttler ? throttler(send) : send();
 }
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
@@ -312,15 +386,47 @@ async function getErrorMessage(
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? ` Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
 }
 
+/**
+ * Shared by both "no `Response` at all" paths - the single-endpoint path
+ * throws {@link noResponseError}, the pool path uses this value inline - so
+ * they cannot describe the same event differently.
+ */
+const NO_RESPONSE_CLASSIFICATION: otel.TelemetryErrorClassification =
+    Object.freeze({
+        errorCategory: "network",
+        retryable: true,
+    });
+
+/**
+ * The error the single-endpoint path throws when `callFetch` resolves without
+ * a `Response`. It declares its own classification so the generic catch below
+ * classifies it as exactly what the pool path states directly.
+ */
+function noResponseError(): Error {
+    return Object.assign(new Error("fetch: No response"), {
+        ...NO_RESPONSE_CLASSIFICATION,
+    });
+}
+
 // Append the endpoint to a fetch error so failures name which
 // deployment/region was hit (e.g. an Azure "deployment does not exist" 404
 // points at the exact endpoint). The URL carries no secret - the api-key
 // rides in request headers, not the URL.
+//
+// The message quotes the provider's response body, so telemetry must never
+// parse or export it. `classification` carries the bounded facts instead,
+// since a `Result` failure has no room for them, letting the model wrapper
+// report a real 401/429/timeout instead of a blanket `provider`. `undefined`
+// is left off deliberately so that `provider` fallback still applies.
 function fetchErrorWithEndpoint(
     endpoint: string,
     detail: string,
+    classification: otel.TelemetryErrorClassification | undefined,
 ): Result<Response> {
-    return error(`fetch error: ${detail} (endpoint: ${endpoint})`);
+    const result = error(`fetch error: ${detail} (endpoint: ${endpoint})`);
+    return classification === undefined
+        ? result
+        : otel.attachTelemetryErrorClassification(result, classification);
 }
 
 /**
@@ -340,6 +446,9 @@ export async function fetchWithRetry(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
+    requestConstraints?: ModelRequestConstraints,
+    onAttempt?: () => void,
+    capacityOwner?: object,
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
@@ -353,11 +462,25 @@ export async function fetchWithRetry(
     let retryCount = 0;
     const startTime: number = Date.now();
     const host = hostOf(url);
+    let capacityRetried = false;
     try {
         while (true) {
-            const result = await callFetch(url, options, timeout, throttler);
+            const result = await callFetch(
+                url,
+                options,
+                timeout,
+                throttler,
+                requestConstraints,
+                onAttempt,
+                () => {
+                    if (capacityRetried) return false;
+                    capacityRetried = true;
+                    return true;
+                },
+                capacityOwner,
+            );
             if (result === undefined) {
-                throw new Error("fetch: No response");
+                throw noResponseError();
             }
             debugHeader(result.status, result.statusText);
             debugHeader(result.headers);
@@ -386,6 +509,7 @@ export async function fetchWithRetry(
                 return fetchErrorWithEndpoint(
                     url,
                     await getErrorMessage(result, retryCount, elapsed),
+                    otel.classifyTelemetryHttpStatus(result.status),
                 );
             } else if (debugError.enabled) {
                 debugError(await getErrorMessage(result));
@@ -426,10 +550,14 @@ export async function fetchWithRetry(
             retryCount++;
         }
     } catch (e: any) {
-        if (isAbortError(e)) {
+        if (isAbortError(e) || e instanceof RequestAdmissionError) {
             throw e;
         }
-        return fetchErrorWithEndpoint(url, e.cause?.message ?? e.message);
+        return fetchErrorWithEndpoint(
+            url,
+            e.cause?.message ?? e.message,
+            otel.classifyTelemetryErrorIfRecognized(e),
+        );
     }
 }
 
@@ -527,7 +655,12 @@ async function fetchWithTimeout(
             throw e;
         }
         if (isAbortError(ex)) {
-            throw new Error(`fetch timeout ${timeoutMs}ms`);
+            // Our own deadline fired, not the caller's cancellation. The
+            // standard `TimeoutError` name keeps it from being reported as a
+            // cancellation.
+            const timeout = new Error(`fetch timeout ${timeoutMs}ms`);
+            timeout.name = "TimeoutError";
+            throw timeout;
         }
         throw e;
     } finally {
@@ -561,12 +694,26 @@ function isTransientHttpError(code: number): boolean {
     return false;
 }
 
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(toAbortError(signal.reason));
+        const onAbort = () => {
+            clearTimeout(timer);
+            reject(toAbortError(signal?.reason));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+        }, ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+    });
 }
 
 function isAbortError(e: unknown): e is Error {
-    return e instanceof Error && e.name === "AbortError";
+    return (
+        (e instanceof Error || e instanceof DOMException) &&
+        e.name === "AbortError"
+    );
 }
 
 /**
@@ -610,6 +757,7 @@ export type PoolCallOptions = {
     overallBudgetMs?: number | undefined;
     retryPauseMs?: number | undefined;
     signal?: AbortSignal | undefined;
+    onAttempt?: ((member: EndpointPoolMember) => void) | undefined;
 };
 
 // code-complexity-allow: endpoint-pool retry/cooldown flow needs explicit per-status handling.
@@ -648,8 +796,16 @@ async function fetchWithPool(
             init,
             settings.maxRetryAttempts,
             settings.retryPauseMs,
-            settings.timeout,
+            options?.overallBudgetMs !== undefined
+                ? Math.min(
+                      settings.timeout ?? options.overallBudgetMs,
+                      options.overallBudgetMs,
+                  )
+                : settings.timeout,
             settings.throttler,
+            settings.requestConstraints,
+            () => options?.onAttempt?.(member),
+            member,
         );
     }
 
@@ -662,6 +818,7 @@ async function fetchWithPool(
     const startTime = Date.now();
     let lastError: Result<Response> | undefined;
     let attempts = 0;
+    let capacityRetried = false;
 
     while (true) {
         const elapsed = Date.now() - startTime;
@@ -690,7 +847,7 @@ async function fetchWithPool(
             debugPool(
                 `pool ${pool.modelKey} all cooling; sleeping ${wait}ms for ${pick.member.suffix || "<bare>"}`,
             );
-            await sleep(wait);
+            await sleep(wait, options?.signal);
             continue;
         }
 
@@ -735,11 +892,19 @@ async function fetchWithPool(
                 init,
                 perAttemptTimeout,
                 member.settings.throttler,
+                member.settings.requestConstraints,
+                () => options?.onAttempt?.(member),
+                () => {
+                    if (capacityRetried) return false;
+                    capacityRetried = true;
+                    return true;
+                },
+                member,
             );
         } catch (e: any) {
             // If the caller's abort signal fired, propagate immediately
             // instead of rotating to another pool member.
-            if (isAbortError(e)) {
+            if (isAbortError(e) || e instanceof RequestAdmissionError) {
                 throw e;
             }
             // Network error, timeout (AbortError re-thrown as "fetch timeout"),
@@ -751,6 +916,7 @@ async function fetchWithPool(
             lastError = fetchErrorWithEndpoint(
                 member.settings.endpoint,
                 e?.cause?.message ?? e?.message ?? String(e),
+                otel.classifyTelemetryErrorIfRecognized(e),
             );
             continue;
         }
@@ -771,6 +937,7 @@ async function fetchWithPool(
             lastError = fetchErrorWithEndpoint(
                 member.settings.endpoint,
                 "No response",
+                NO_RESPONSE_CLASSIFICATION,
             );
             continue;
         }
@@ -792,6 +959,7 @@ async function fetchWithPool(
                     attempts,
                     Date.now() - startTime,
                 ),
+                otel.classifyTelemetryHttpStatus(response.status),
             );
             continue;
         }
@@ -807,6 +975,7 @@ async function fetchWithPool(
                     attempts,
                     Date.now() - startTime,
                 ),
+                otel.classifyTelemetryHttpStatus(response.status),
             );
             continue;
         }
@@ -816,6 +985,7 @@ async function fetchWithPool(
         return fetchErrorWithEndpoint(
             member.settings.endpoint,
             await getErrorMessage(response, attempts, Date.now() - startTime),
+            otel.classifyTelemetryHttpStatus(response.status),
         );
     }
 }

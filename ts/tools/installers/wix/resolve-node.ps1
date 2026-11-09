@@ -19,8 +19,39 @@
   install locations of Node itself and the common version managers. On success
   it prepends node's directory to $env:PATH (so npm/npx and child `node`
   invocations resolve too) and returns the full path to node.exe. Returns $null
-  when no Node can be found, letting callers warn-and-continue rather than fail.
+  when no supported Node can be found, letting callers warn-and-continue.
 #>
+
+function Resolve-TypeAgentUserDataDir(
+    [string]$UserDataDir,
+    [string]$LocalAppDataDir
+) {
+    if ($UserDataDir) {
+        return [System.IO.Path]::GetFullPath($UserDataDir)
+    }
+
+    if ($LocalAppDataDir) {
+        $localAppDataPath = [System.IO.Path]::GetFullPath($LocalAppDataDir)
+        $appDataDirectory = [System.IO.Directory]::GetParent($localAppDataPath.TrimEnd('\'))
+        if ($appDataDirectory -and $appDataDirectory.Parent) {
+            return Join-Path $appDataDirectory.Parent.FullName ".typeagent"
+        }
+    }
+
+    try {
+        $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
+        $profilePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath -ErrorAction Stop).ProfileImagePath
+        if ($profilePath) {
+            $expandedProfilePath = [System.Environment]::ExpandEnvironmentVariables($profilePath)
+            return Join-Path ([System.IO.Path]::GetFullPath($expandedProfilePath)) ".typeagent"
+        }
+    } catch {
+        # No usable profile registry entry.
+    }
+
+    throw "Could not resolve the installing user's TypeAgent data directory."
+}
 
 function Update-PathFromRegistry {
     # Rebuild $env:PATH from the persisted Machine + User values so nodes
@@ -46,12 +77,13 @@ function Update-PathFromRegistry {
     }
 }
 
-function Get-NodeMajor([string]$nodeExe) {
+function Test-SupportedNode([string]$nodeExe) {
     try {
-        $v = & $nodeExe -e "process.stdout.write(String(process.versions.node.split('.')[0]))" 2>$null
-        return [int]$v
+        & $nodeExe -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);" 2>$null
+        return ($LASTEXITCODE -eq 0)
     } catch {
-        return 0
+        Write-Verbose "Could not validate Node at '$nodeExe': $_"
+        return $false
     }
 }
 
@@ -64,6 +96,12 @@ function Resolve-NodeExe {
     $cmd = Get-Command node.exe -ErrorAction SilentlyContinue
     if (-not $cmd) { $cmd = Get-Command node -ErrorAction SilentlyContinue }
     if ($cmd -and $cmd.Source -and (Test-Path $cmd.Source)) { $found += $cmd.Source }
+    $pathEntries = $env:PATH -split ';' |
+        ForEach-Object { $_.Trim().Trim('"') } |
+        Where-Object { $_ }
+    foreach ($pathEntry in $pathEntries) {
+        $found += (Join-Path $pathEntry "node.exe")
+    }
 
     # 2) Official installer / winget: Program Files\nodejs.
     foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramW6432)) {
@@ -102,8 +140,7 @@ function Resolve-NodeExe {
     }
 
     foreach ($candidate in ($found | Where-Object { $_ } | Select-Object -Unique)) {
-        if (Test-Path $candidate) {
-            # Prefer Node >= 22 but accept anything usable as a last resort.
+        if ((Test-Path $candidate) -and (Test-SupportedNode $candidate)) {
             $dir = Split-Path -Parent $candidate
             $env:PATH = "$dir;$env:PATH"
             return $candidate

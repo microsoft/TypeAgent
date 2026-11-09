@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../tsconfig.bundle-typecheck.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "exactOptionalPropertyTypes": false,
+    "lib": ["DOM", "ES2022", "DOM.Iterable"],
+    "outDir": "../../../../dist/views/public/library"
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["./**/*.test.ts"]
+}

@@ -19,8 +19,19 @@
  */
 
 import type { ConfigTree, FlatEnv } from "../types.js";
+import {
+    modelRequestConstraintsToFlat,
+    modelRequestConstraintsToTree,
+} from "./requestConstraints.js";
+import { simpleConfigMappingsForSection } from "../mappings.js";
 import { regionFromUrl, regionToEnvSuffix } from "./regions.js";
 import { buildConfig } from "./build.js";
+import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
 import {
     AuthMode,
     Config,
@@ -29,6 +40,10 @@ import {
     DeploymentMode,
     IDENTITY,
     authModeFromString,
+    wireApiFromString,
+    DEFAULT_WIRE_API,
+    type WireApi,
+    type EmbeddingConfig,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +66,7 @@ function endpointToYaml(
     deploymentDefaultCapacity?: number,
 ): ConfigTree {
     const out: ConfigTree = { endpoint: ep.endpoint };
+    if (ep.model !== undefined) out.model = ep.model;
     if (!authEquals(ep.auth, sectionDefaultAuth)) {
         out.auth = authToYaml(ep.auth);
     }
@@ -76,6 +92,11 @@ function endpointToYaml(
     // (PTU=1, PAYG=2). Keeps the YAML quiet for the common case.
     const defaultPriority = ep.mode === "PTU" ? 1 : 2;
     if (ep.priority !== defaultPriority) out.priority = ep.priority;
+    // Only emit wireApi when it differs from the default so back-compat
+    // configs (chat_completions) stay byte-identical.
+    if (ep.wireApi !== undefined && ep.wireApi !== DEFAULT_WIRE_API) {
+        out.wireApi = ep.wireApi;
+    }
     return out;
 }
 
@@ -272,6 +293,10 @@ export function configToTree(config: Config): ConfigTree {
         azure.deployments = deployments;
     }
     tree.azureOpenAI = azure;
+    if (config.modelRequestConstraints)
+        tree.modelRequestConstraints = modelRequestConstraintsToTree(
+            config.modelRequestConstraints,
+        );
 
     if (config.openAI) {
         const o = config.openAI;
@@ -471,6 +496,8 @@ export function configToTree(config: Config): ConfigTree {
         const c: ConfigTree = {};
         if (config.copilot.defaultModel !== undefined)
             c.defaultModel = config.copilot.defaultModel;
+        if (config.copilot.fallbackModels !== undefined)
+            c.fallbackModels = [...config.copilot.fallbackModels];
         if (config.copilot.cliPath !== undefined)
             c.cliPath = config.copilot.cliPath;
         if (config.copilot.cliUrl !== undefined)
@@ -491,17 +518,57 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(c).length > 0) tree.copilot = c;
     }
 
+    if (config.decision) tree.decision = decisionToTree(config.decision);
     if (config.embedding) {
+        validateEmbeddingConfig(config.embedding);
         const e: ConfigTree = {};
+        if (config.embedding.deployment !== undefined)
+            e.deployment = config.embedding.deployment;
         if (config.embedding.provider !== undefined)
             e.provider = config.embedding.provider;
         if (config.embedding.model !== undefined)
             e.model = config.embedding.model;
         if (config.embedding.cacheDir !== undefined)
             e.cacheDir = config.embedding.cacheDir;
+        if (config.embedding.size !== undefined) e.size = config.embedding.size;
+        if (config.embedding.maxBatchSize !== undefined)
+            e.maxBatchSize = config.embedding.maxBatchSize;
+        if (config.embedding.runtime !== undefined)
+            e.runtime = config.embedding.runtime;
+        if (config.embedding.modalities !== undefined)
+            e.modalities = [...config.embedding.modalities];
+        if (config.embedding.revision !== undefined)
+            e.revision = config.embedding.revision;
+        if (config.embedding.localFilesOnly !== undefined)
+            e.localFilesOnly = config.embedding.localFilesOnly;
+        if (config.embedding.maxPending !== undefined)
+            e.maxPending = config.embedding.maxPending;
         if (Object.keys(e).length > 0) tree.embedding = e;
     }
 
+    resolveEmbeddingConfig(config);
+    if (config.embeddingModels !== undefined)
+        tree.embeddingModels = JSON.parse(
+            JSON.stringify(config.embeddingModels),
+        );
+    if (config.defaultEmbeddingModel !== undefined)
+        tree.defaultEmbeddingModel = config.defaultEmbeddingModel;
+    return tree;
+}
+
+function decisionToTree(decision: NonNullable<Config["decision"]>): ConfigTree {
+    const tree: ConfigTree = {};
+    if (decision.provider !== undefined) tree.provider = decision.provider;
+    if (decision.azure) {
+        const azure: ConfigTree = {};
+        if (decision.azure.deploymentKey !== undefined)
+            azure.deploymentKey = decision.azure.deploymentKey;
+        if (decision.azure.deploymentName !== undefined)
+            azure.deploymentName = decision.azure.deploymentName;
+        tree.azure = azure;
+    }
+    if (decision.copilot?.model !== undefined)
+        tree.copilot = { model: decision.copilot.model };
     return tree;
 }
 
@@ -510,6 +577,8 @@ export function configToTree(config: Config): ConfigTree {
 // ---------------------------------------------------------------------------
 
 const TYPED_SECTION_KEYS = new Set([
+    "embeddingModels",
+    "defaultEmbeddingModel",
     "azureOpenAI",
     "openAI",
     "speech",
@@ -526,6 +595,8 @@ const TYPED_SECTION_KEYS = new Set([
     "copilot",
     "modelProvider",
     "embedding",
+    "decision",
+    "modelRequestConstraints",
 ]);
 
 export function isTypedSectionKey(key: string): boolean {
@@ -556,6 +627,16 @@ function asString(node: unknown, where: string): string {
     return node;
 }
 
+function asStringArray(node: unknown, where: string): string[] {
+    if (
+        !Array.isArray(node) ||
+        node.some((value) => typeof value !== "string")
+    ) {
+        throw new Error(`Expected a string array at '${where}'.`);
+    }
+    return node;
+}
+
 function asNumber(node: unknown, where: string): number {
     if (typeof node !== "number" || !Number.isFinite(node)) {
         throw new Error(
@@ -580,11 +661,15 @@ function readEndpointEntry(
     capacity?: number | null;
     region?: string;
     tpm?: number;
+    wireApi?: WireApi;
+    model?: string;
 } {
     const obj = asObject(node, where);
     const out: ReturnType<typeof readEndpointEntry> = {
         endpoint: asString(obj.endpoint, `${where}.endpoint`),
     };
+    if (obj.model !== undefined)
+        out.model = asString(obj.model, `${where}.model`);
     if (obj.auth !== undefined) out.auth = readAuth(obj.auth, `${where}.auth`);
     if (obj.region !== undefined)
         out.region = asString(obj.region, `${where}.region`);
@@ -607,6 +692,20 @@ function readEndpointEntry(
         out.capacity = asNumber(obj.capacity, `${where}.capacity`);
     }
     if (obj.tpm !== undefined) out.tpm = asNumber(obj.tpm, `${where}.tpm`);
+    if (obj.wireApi !== undefined) {
+        const raw = asString(obj.wireApi, `${where}.wireApi`);
+        const at = wireApiFromString(raw);
+        if (at === undefined) {
+            throw new Error(
+                `Invalid wireApi at '${where}.wireApi': expected ` +
+                    `chat_completions, responses, or messages.`,
+            );
+        }
+        // Explicit default collapses to omitted (same as never set).
+        if (at !== DEFAULT_WIRE_API) {
+            out.wireApi = at;
+        }
+    }
     return out;
 }
 
@@ -754,7 +853,10 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                 if (
                     capacity !== undefined ||
                     ep.tpm !== undefined ||
-                    priority !== defPriority
+                    ep.model !== undefined ||
+                    priority !== defPriority ||
+                    (ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API)
                 ) {
                     const o: Record<string, unknown> = {
                         suffix,
@@ -763,7 +865,14 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     };
                     if (capacity !== undefined) o.capacity = capacity;
                     if (ep.tpm !== undefined) o.tpm = ep.tpm;
+                    if (ep.model !== undefined) o.model = ep.model;
                     o.priority = priority;
+                    if (
+                        ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API
+                    ) {
+                        o.wireApi = ep.wireApi;
+                    }
                     overrides.push(o);
                 }
             }
@@ -773,7 +882,11 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                         (o) =>
                             "{" +
                             Object.entries(o)
-                                .map(([k, v]) => `${k}:${v}`)
+                                .map(([k, v]) =>
+                                    k === "model"
+                                        ? `${k}:${JSON.stringify(v)}`
+                                        : `${k}:${v}`,
+                                )
                                 .join(",") +
                             "}",
                     )
@@ -846,129 +959,65 @@ function emitOpenAIVariant(
         );
 }
 
-function emitSpeech(node: unknown, out: FlatEnv): void {
-    const s = asObject(node, "speech");
-    if (s.auth !== undefined)
-        out.SPEECH_SDK_KEY = authToYaml(readAuth(s.auth, "speech.auth"));
-    if (s.region !== undefined)
-        out.SPEECH_SDK_REGION = asString(s.region, "speech.region");
-    if (s.endpoint !== undefined)
-        out.SPEECH_SDK_ENDPOINT = asString(s.endpoint, "speech.endpoint");
+function emitSimpleMappedSection(
+    section: string,
+    node: unknown,
+    out: FlatEnv,
+    onLeafError?: (error: Error) => void,
+): void {
+    const sectionNode = asObject(node, section);
+    for (const mapping of simpleConfigMappingsForSection(section)) {
+        const segments = mapping.configPath.split(".").slice(1);
+        let parent = sectionNode;
+        let where = section;
+        let missing = false;
+        for (const segment of segments.slice(0, -1)) {
+            where += `.${segment}`;
+            const child = parent[segment];
+            if (child === undefined) {
+                missing = true;
+                break;
+            }
+            parent = asObject(child, where);
+        }
+        if (missing) continue;
+
+        const value = parent[segments[segments.length - 1]];
+        if (value === undefined) continue;
+        try {
+            switch (mapping.valueKind) {
+                case "auth":
+                    out[mapping.envVar] = authToYaml(
+                        readAuth(value, mapping.configPath),
+                    );
+                    break;
+                case "number":
+                    out[mapping.envVar] = String(
+                        asNumber(value, mapping.configPath),
+                    );
+                    break;
+                case "string":
+                    out[mapping.envVar] = asString(value, mapping.configPath);
+                    break;
+            }
+        } catch (error) {
+            if (onLeafError === undefined) {
+                throw error;
+            }
+            onLeafError(
+                error instanceof Error ? error : new Error(String(error)),
+            );
+        }
+    }
 }
 
-function emitMaps(node: unknown, out: FlatEnv): void {
-    const m = asObject(node, "maps");
-    if (m.clientId !== undefined)
-        out.AZURE_MAPS_CLIENTID = asString(m.clientId, "maps.clientId");
-    if (m.endpoint !== undefined)
-        out.AZURE_MAPS_ENDPOINT = asString(m.endpoint, "maps.endpoint");
-}
-
-function emitMsGraph(node: unknown, out: FlatEnv): void {
-    const m = asObject(node, "msGraph");
-    if (m.clientId !== undefined)
-        out.MSGRAPH_APP_CLIENTID = asString(m.clientId, "msGraph.clientId");
-    if (m.clientSecret !== undefined)
-        out.MSGRAPH_APP_CLIENTSECRET = asString(
-            m.clientSecret,
-            "msGraph.clientSecret",
-        );
-    if (m.tenantId !== undefined)
-        out.MSGRAPH_APP_TENANTID = asString(m.tenantId, "msGraph.tenantId");
-    if (m.username !== undefined)
-        out.MSGRAPH_APP_USERNAME = asString(m.username, "msGraph.username");
-    if (m.password !== undefined)
-        out.MSGRAPH_APP_PASSWD = asString(m.password, "msGraph.password");
-}
-
-function emitGoogleCalendar(node: unknown, out: FlatEnv): void {
-    const g = asObject(node, "googleCalendar");
-    if (g.clientId !== undefined)
-        out.GOOGLE_CALENDAR_CLIENT_ID = asString(
-            g.clientId,
-            "googleCalendar.clientId",
-        );
-    if (g.clientSecret !== undefined)
-        out.GOOGLE_CALENDAR_CLIENT_SECRET = asString(
-            g.clientSecret,
-            "googleCalendar.clientSecret",
-        );
-}
-
-function emitSpotify(node: unknown, out: FlatEnv): void {
-    const s = asObject(node, "spotify");
-    if (s.clientId !== undefined)
-        out.SPOTIFY_APP_CLI = asString(s.clientId, "spotify.clientId");
-    if (s.clientSecret !== undefined)
-        out.SPOTIFY_APP_CLISEC = asString(
-            s.clientSecret,
-            "spotify.clientSecret",
-        );
-    if (s.port !== undefined)
-        out.SPOTIFY_APP_PORT = String(asNumber(s.port, "spotify.port"));
-}
-
-function emitWikipedia(node: unknown, out: FlatEnv): void {
-    const w = asObject(node, "wikipedia");
-    if (w.clientId !== undefined)
-        out.WIKIPEDIA_CLIENT_ID = asString(w.clientId, "wikipedia.clientId");
-    if (w.clientSecret !== undefined)
-        out.WIKIPEDIA_CLIENT_SECRET = asString(
-            w.clientSecret,
-            "wikipedia.clientSecret",
-        );
-    if (w.endpoint !== undefined)
-        out.WIKIPEDIA_ENDPOINT = asString(w.endpoint, "wikipedia.endpoint");
-}
-
-function emitStorage(node: unknown, out: FlatEnv): void {
+function emitStorage(
+    node: unknown,
+    out: FlatEnv,
+    onLeafError?: (error: Error) => void,
+): void {
     const s = asObject(node, "storage");
-    if (s.azure !== undefined) {
-        const a = asObject(s.azure, "storage.azure");
-        if (a.account !== undefined)
-            out.AZURE_STORAGE_ACCOUNT = asString(
-                a.account,
-                "storage.azure.account",
-            );
-        if (a.container !== undefined)
-            out.AZURE_STORAGE_CONTAINER = asString(
-                a.container,
-                "storage.azure.container",
-            );
-    }
-    if (s.aws !== undefined) {
-        const a = asObject(s.aws, "storage.aws");
-        if (a.bucketName !== undefined)
-            out.AWS_S3_BUCKET_NAME = asString(
-                a.bucketName,
-                "storage.aws.bucketName",
-            );
-        if (a.region !== undefined)
-            out.AWS_S3_REGION = asString(a.region, "storage.aws.region");
-        if (a.accessKeyId !== undefined)
-            out.AWS_ACCESS_KEY_ID = asString(
-                a.accessKeyId,
-                "storage.aws.accessKeyId",
-            );
-        if (a.secretAccessKey !== undefined)
-            out.AWS_SECRET_ACCESS_KEY = asString(
-                a.secretAccessKey,
-                "storage.aws.secretAccessKey",
-            );
-    }
-    if (s.database !== undefined) {
-        const d = asObject(s.database, "storage.database");
-        if (d.cosmosDbConnectionString !== undefined)
-            out.COSMOSDB_CONNECTION_STRING = asString(
-                d.cosmosDbConnectionString,
-                "storage.database.cosmosDbConnectionString",
-            );
-        if (d.mongoDbConnectionString !== undefined)
-            out.MONGODB_CONNECTION_STRING = asString(
-                d.mongoDbConnectionString,
-                "storage.database.mongoDbConnectionString",
-            );
-    }
+    emitSimpleMappedSection("storage", node, out, onLeafError);
     if (s.elastic !== undefined) {
         const e = asObject(s.elastic, "storage.elastic");
         if (e.apiKey !== undefined)
@@ -976,12 +1025,6 @@ function emitStorage(node: unknown, out: FlatEnv): void {
         if (e.uri !== undefined)
             out.ELASTIC_URI = asString(e.uri, "storage.elastic.uri");
     }
-}
-
-function emitVault(node: unknown, out: FlatEnv): void {
-    const v = asObject(node, "vault");
-    if (v.shared !== undefined)
-        out.TYPEAGENT_SHAREDVAULT = asString(v.shared, "vault.shared");
 }
 
 function emitAzureFoundry(node: unknown, out: FlatEnv): void {
@@ -1050,8 +1093,46 @@ function emitModelProvider(node: unknown, out: FlatEnv): void {
     out.TYPEAGENT_MODEL_PROVIDER = node;
 }
 
+function emitDecision(node: unknown, out: FlatEnv): void {
+    const d = asObject(node, "decision");
+    if (d.provider !== undefined)
+        out.TYPEAGENT_DECISION_PROVIDER = asString(
+            d.provider,
+            "decision.provider",
+        );
+    if (d.azure !== undefined) {
+        const a = asObject(d.azure, "decision.azure");
+        if (a.deploymentKey !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY = asString(
+                a.deploymentKey,
+                "decision.azure.deploymentKey",
+            );
+        if (a.deploymentName !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME = asString(
+                a.deploymentName,
+                "decision.azure.deploymentName",
+            );
+    }
+    if (d.copilot !== undefined) {
+        const c = asObject(d.copilot, "decision.copilot");
+        if (c.model !== undefined)
+            out.TYPEAGENT_DECISION_COPILOT_MODEL = asString(
+                c.model,
+                "decision.copilot.model",
+            );
+    }
+    // Flat env and YAML must reject the same invalid provider/model values.
+    buildConfig(out);
+}
+
 function emitEmbedding(node: unknown, out: FlatEnv): void {
     const e = asObject(node, "embedding");
+    validateEmbeddingConfig(e as EmbeddingConfig, true);
+    if (e.deployment !== undefined)
+        out.TYPEAGENT_EMBEDDING_DEPLOYMENT = asString(
+            e.deployment,
+            "embedding.deployment",
+        );
     if (e.provider !== undefined)
         out.TYPEAGENT_EMBEDDING_PROVIDER = asString(
             e.provider,
@@ -1064,6 +1145,32 @@ function emitEmbedding(node: unknown, out: FlatEnv): void {
             e.cacheDir,
             "embedding.cacheDir",
         );
+    if (e.size !== undefined)
+        out.TYPEAGENT_EMBEDDING_SIZE = String(
+            asNumber(e.size, "embedding.size"),
+        );
+    if (e.maxBatchSize !== undefined)
+        out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
+            asNumber(e.maxBatchSize, "embedding.maxBatchSize"),
+        );
+    if (e.runtime !== undefined)
+        out.TYPEAGENT_EMBEDDING_RUNTIME = asString(
+            e.runtime,
+            "embedding.runtime",
+        );
+    if (e.modalities !== undefined)
+        out.TYPEAGENT_EMBEDDING_MODALITIES = JSON.stringify(e.modalities);
+    if (e.revision !== undefined)
+        out.TYPEAGENT_EMBEDDING_REVISION = asString(
+            e.revision,
+            "embedding.revision",
+        );
+    if (e.localFilesOnly !== undefined)
+        out.TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY = e.localFilesOnly ? "1" : "0";
+    if (e.maxPending !== undefined)
+        out.TYPEAGENT_EMBEDDING_MAX_PENDING = String(
+            asNumber(e.maxPending, "embedding.maxPending"),
+        );
 }
 
 function emitCopilot(node: unknown, out: FlatEnv): void {
@@ -1072,6 +1179,10 @@ function emitCopilot(node: unknown, out: FlatEnv): void {
         out.COPILOT_DEFAULT_MODEL = asString(
             c.defaultModel,
             "copilot.defaultModel",
+        );
+    if (c.fallbackModels !== undefined)
+        out.COPILOT_FALLBACK_MODELS = JSON.stringify(
+            asStringArray(c.fallbackModels, "copilot.fallbackModels"),
         );
     if (c.cliPath !== undefined)
         out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");
@@ -1121,9 +1232,27 @@ function emitReasoning(node: unknown, out: FlatEnv): void {
  * `configToEnv` but operating on the YAML object form (no Map types,
  * regions as object keys).
  */
-export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
+export function typedSectionToFlat(
+    key: string,
+    node: unknown,
+    onLeafError?: (error: Error) => void,
+): FlatEnv {
     const out: FlatEnv = {};
     switch (key) {
+        case "decision":
+            emitDecision(node, out);
+            break;
+        case "embeddingModels":
+            out[EMBEDDING_MODELS_KEY] = JSON.stringify(node);
+            break;
+        case "defaultEmbeddingModel":
+            out[DEFAULT_EMBEDDING_MODEL_KEY] = asString(
+                node,
+                "defaultEmbeddingModel",
+            );
+            break;
+        case "modelRequestConstraints":
+            return modelRequestConstraintsToFlat(node);
         case "azureOpenAI":
             emitAzureOpenAI(node, out);
             break;
@@ -1131,28 +1260,28 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             emitOpenAI(node, out);
             break;
         case "speech":
-            emitSpeech(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "maps":
-            emitMaps(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "msGraph":
-            emitMsGraph(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "googleCalendar":
-            emitGoogleCalendar(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "spotify":
-            emitSpotify(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "wikipedia":
-            emitWikipedia(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "storage":
-            emitStorage(node, out);
+            emitStorage(node, out, onLeafError);
             break;
         case "vault":
-            emitVault(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "azureFoundry":
             emitAzureFoundry(node, out);

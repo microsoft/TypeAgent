@@ -164,7 +164,6 @@ External: `debug`, `type-fest`
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
-- [@typeagent/android-mobile-agent](../../packages/agents/androidMobile/README.md)
 - [@typeagent/azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
 - [@typeagent/browser](../../packages/agents/browser/README.md)
 - [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)

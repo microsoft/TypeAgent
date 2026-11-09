@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // so ../.. is the package root.
 const packageRoot = path.join("..", "..");
 
-/** Resolve a path relative to the package root (works from compiled dist/). */
+// Resolve a path relative to the package root (works from compiled dist/).
 export function getPackageFilePath(packageRootRelativePath: string): string {
     if (path.isAbsolute(packageRootRelativePath)) {
         return packageRootRelativePath;
@@ -23,12 +23,19 @@ export function getPackageFilePath(packageRootRelativePath: string): string {
 
 export const packageRootAbs = getPackageFilePath(".");
 
-/** datasets: <package>/data/translationBench/ */
+// datasets: <package>/data/translationBench/
 export function dataDir(): string {
     return getPackageFilePath(path.join("data", "translationBench"));
 }
 
-/** run output: <package>/results/translationBench/ */
+// run output: <package>/results/translationBench/
 export function resultsDir(): string {
     return getPackageFilePath(path.join("results", "translationBench"));
+}
+
+// Synthesizer seed assets under dist/translationBench/synthesizer/seed/
+export function synthesizerSeedDir(): string {
+    return getPackageFilePath(
+        path.join("dist", "translationBench", "synthesizer", "seed"),
+    );
 }

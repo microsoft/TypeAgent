@@ -21,6 +21,7 @@ import {
 } from "./shellSettings.js";
 import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import { resolveBrowserViewUrl } from "@typeagent/browser-control-rpc/viewRoutes";
 import type { QueueSnapshot } from "agent-dispatcher";
 import {
     BrowserViewManager,
@@ -811,26 +812,9 @@ export class ShellWindow {
     /**
      * Resolve custom typeagent-browser protocol URLs
      */
-    public resolveCustomProtocolUrl(targetUrl: URL): URL {
-        const browserExtensionUrls = (global as any).browserExtensionUrls;
-        if (browserExtensionUrls) {
-            // Map custom protocol to actual extension URL
-            const libraryName = targetUrl.pathname;
-
-            if (libraryName && browserExtensionUrls[libraryName]) {
-                const resolvedUrl = new URL(browserExtensionUrls[libraryName]);
-                debugShellWindow(
-                    `Resolved custom protocol URL: ${targetUrl.toString()} -> ${resolvedUrl.toString()}`,
-                );
-                return resolvedUrl;
-            } else {
-                throw new Error(`Unknown library page: ${libraryName}`);
-            }
-        } else {
-            throw new Error(
-                "Browser extension not loaded - library pages unavailable",
-            );
-        }
+    public async resolveCustomProtocolUrl(targetUrl: URL): Promise<URL> {
+        const baseUrl = await BrowserAgentIpc.getinstance().getViewHostUrl();
+        return new URL(resolveBrowserViewUrl(targetUrl.href, baseUrl));
     }
 
     private computeWindowBounds(
@@ -911,7 +895,7 @@ export class ShellWindow {
         // Handle custom typeagent-browser protocol
         let resolvedUrl = url;
         if (url.protocol === "typeagent-browser:") {
-            resolvedUrl = this.resolveCustomProtocolUrl(url);
+            resolvedUrl = await this.resolveCustomProtocolUrl(url);
         }
 
         const tabId = await this.browserViewManager.createBrowserTab({
@@ -1111,41 +1095,11 @@ export class ShellWindow {
 
     private async constructPDFViewerUrl(pdfUrl: string): Promise<string> {
         try {
-            const browserIpc = BrowserAgentIpc.getinstance();
-
-            const response = await new Promise<any>((resolve, reject) => {
-                const timeoutId = setTimeout(() => {
-                    reject(new Error("Timeout getting view host URL"));
-                }, 10000);
-
-                const messageId = Math.random().toString(36).substring(7);
-                const message = {
-                    id: messageId,
-                    method: "getViewHostUrl",
-                    params: {},
-                };
-
-                const originalHandler = browserIpc.onMessageReceived;
-                browserIpc.onMessageReceived = (response: any) => {
-                    if (response.id === messageId) {
-                        clearTimeout(timeoutId);
-                        browserIpc.onMessageReceived = originalHandler;
-                        resolve(response.result);
-                    } else if (originalHandler) {
-                        originalHandler(response);
-                    }
-                };
-
-                browserIpc.send(message).catch(reject);
-            });
-
-            if (!response || !response.url) {
-                throw new Error(
-                    "Unable to get view host URL from TypeAgent service",
-                );
-            }
-
-            const viewerUrl = `${response.url}/pdf/?url=${encodeURIComponent(pdfUrl)}`;
+            const baseUrl =
+                await BrowserAgentIpc.getinstance().getViewHostUrl();
+            const viewer = new URL("/pdf/", baseUrl);
+            viewer.searchParams.set("url", pdfUrl);
+            const viewerUrl = viewer.href;
             debugShellWindow(`Constructed PDF viewer URL: ${viewerUrl}`);
             return viewerUrl;
         } catch (error) {

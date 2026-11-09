@@ -1,0 +1,724 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+    InProcessMemoryServiceClient,
+    McpMemoryServiceClient,
+} from "../dist/memoryClient.js";
+import {
+    readViewDetail,
+    viewDetailPageRequestSchema,
+} from "../dist/viewDetailProtocol.js";
+import {
+    viewDetailPage,
+    viewDetailPageChars,
+    viewDetailMaxChars,
+} from "@typeagent/memory-service";
+import {
+    viewConflictSchema,
+    viewHistoryEntrySchema,
+    viewResolutionSchema,
+    viewSaveRequestSchema,
+    viewSnapshotSchema,
+    viewSynthesisSchema,
+    viewToolNames,
+    viewVersionSchema,
+    viewReadRequestSchema,
+} from "../dist/viewProtocol.js";
+import { viewMaintenanceRequestSchema } from "../dist/viewMaintenanceProtocol.js";
+import { searchRequestSchema } from "../dist/protocol.js";
+
+test("paged details retain a complete large Unicode view over bounded typed MCP results", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    version.content.sections = Array.from({ length: 20 }, (_, index) => ({
+        ...section,
+        id: `section-${index}`,
+        body: "retained \u{1f50e} evidence\n".repeat(4500),
+    }));
+    let calls = 0;
+    const client = new McpMemoryServiceClient({
+        callTool: async ({ name, arguments: request }) => {
+            assert.equal(name, viewToolNames.getViewDetailPage);
+            viewDetailPageRequestSchema.parse(request);
+            const page = viewDetailPage(version, request);
+            assert.ok(page.text.length <= viewDetailPageChars);
+            const response = {
+                content: [
+                    { type: "text", text: JSON.stringify(page, null, 2) },
+                ],
+                structuredContent: { result: page },
+            };
+            assert.ok(
+                Buffer.byteLength(JSON.stringify(response)) < 10 * 1024 * 1024,
+            );
+            calls++;
+            return response;
+        },
+    });
+    const complete = await readViewDetail(client, {
+        corpusId: version.corpusId,
+        viewId: version.viewId,
+    });
+    assert.deepEqual(complete, version);
+    assert.ok(calls > 1);
+});
+
+test("maximally escaped detail pages fit the default native MCP message limit", () => {
+    const text = "\ud800".repeat(viewDetailPageChars);
+    const page = { text };
+    const response = {
+        content: [{ type: "text", text: JSON.stringify(page, null, 2) }],
+        structuredContent: { result: page },
+    };
+    assert.ok(Buffer.byteLength(JSON.stringify(response)) < 10 * 1024 * 1024);
+});
+
+for (const failure of [
+    "missing",
+    "corpus",
+    "view",
+    "total",
+    "projection",
+    "revision",
+    "digest",
+    "offset",
+    "continuation",
+    "corrupt",
+    "revoked",
+]) {
+    test(`paged details fail without returning a partial view after ${failure}`, async () => {
+        const { version } = persisted(structuredClone(synthesis));
+        version.content.sections = Array.from({ length: 2 }, (_, index) => ({
+            ...section,
+            id: `section-${index}`,
+            body: "x".repeat(120000),
+        }));
+        let calls = 0;
+        await assert.rejects(
+            readViewDetail(
+                {
+                    async getViewDetailPage(request) {
+                        calls++;
+                        if (calls === 2) {
+                            if (failure === "missing") return undefined;
+                            if (failure === "revoked")
+                                throw new Error("Source authorization revoked");
+                        }
+                        const page = viewDetailPage(version, request);
+                        if (calls === 2) {
+                            if (failure === "corpus") page.corpusId = "other";
+                            if (failure === "view") page.viewId = "other";
+                            if (failure === "total") page.totalChars++;
+                            if (failure === "projection")
+                                page.projection = "presentation";
+                            if (failure === "revision")
+                                page.revisionId = "other";
+                            if (failure === "digest")
+                                page.digest = "a".repeat(64);
+                            if (failure === "offset") page.offset++;
+                            if (failure === "continuation")
+                                page.nextOffset = page.offset;
+                            if (failure === "corrupt")
+                                page.text = "z" + page.text.slice(1);
+                        }
+                        return page;
+                    },
+                },
+                { corpusId: version.corpusId, viewId: version.viewId },
+            ),
+        );
+        const pageCount = Math.ceil(
+            JSON.stringify(version).length / viewDetailPageChars,
+        );
+        assert.ok(calls >= 2 && calls <= pageCount);
+    });
+}
+
+test("paged detail continuation pins identity and rejects unbounded or changed reads", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    const request = { corpusId: version.corpusId, viewId: version.viewId };
+    assert.equal(
+        viewDetailPageRequestSchema.safeParse({ ...request, offset: 1 })
+            .success,
+        false,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, offset: 1 }),
+        /pinned/,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, digest: "a".repeat(64) }),
+        /changed/,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, offset: -1 }),
+        /continuation/,
+    );
+    assert.equal(
+        await readViewDetail(
+            { getViewDetailPage: async () => undefined },
+            request,
+        ),
+        undefined,
+    );
+    await assert.rejects(readViewDetail({}, request), /does not support/);
+    version.content.sections[0].body = "x".repeat(viewDetailMaxChars);
+    assert.throws(
+        () => viewDetailPage(version, request),
+        /complete-read character bound/,
+    );
+});
+
+test("presentation details retain content and citations without mutating retained build inputs", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    const retained = structuredClone(version);
+    const complete = await readViewDetail(
+        {
+            getViewDetailPage: async (request) =>
+                viewDetailPage(version, request),
+        },
+        {
+            corpusId: version.corpusId,
+            viewId: version.viewId,
+            projection: "presentation",
+        },
+    );
+    assert.deepEqual(complete.content, version.content);
+    assert.deepEqual(complete.relationships, version.relationships);
+    assert.deepEqual(complete.generation.content, version.generation.content);
+    assert.equal(complete.generation.input, undefined);
+    assert.deepEqual(version, retained);
+});
+
+for (const transport of ["inProcess", "mcp"]) {
+    test(`${transport} answers forward the exact foreground abort signal`, async () => {
+        const controller = new AbortController();
+        const request = { corpusId: "corpus", question: "Why?" };
+        const failure = new Error("Synthetic cancelled request");
+        let received;
+        const client =
+            transport === "inProcess"
+                ? new InProcessMemoryServiceClient({
+                      async answer(args, signal) {
+                          received = { args, signal };
+                          throw failure;
+                      },
+                  })
+                : new McpMemoryServiceClient({
+                      async callTool(tool, options) {
+                          assert.equal(tool.name, "memory_answer");
+                          received = {
+                              args: tool.arguments,
+                              signal: options.signal,
+                          };
+                          throw failure;
+                      },
+                  });
+        await assert.rejects(
+            () => client.answer(request, controller.signal),
+            (error) => error === failure,
+        );
+        assert.deepEqual(received.args, request);
+        assert.equal(received.signal, controller.signal);
+    });
+}
+
+test("exact view reads retain the context flag and reject nonboolean values", () => {
+    const request = {
+        corpusId: "corpus",
+        viewId: "view",
+        includeContext: false,
+    };
+    assert.deepEqual(viewReadRequestSchema.parse(request), request);
+    assert.equal(
+        viewReadRequestSchema.safeParse({ ...request, includeContext: "false" })
+            .success,
+        false,
+    );
+    assert.deepEqual(
+        viewReadRequestSchema.parse({ corpusId: "corpus", viewId: "view" }),
+        { corpusId: "corpus", viewId: "view" },
+    );
+});
+
+test("bounded indexed search flag survives protocol round-trip and rejects nonboolean input", () => {
+    const request = {
+        corpusId: "corpus",
+        query: "qualification",
+        indexedFragments: true,
+        limit: 12,
+        maxResponseChars: 24000,
+    };
+    assert.deepEqual(
+        searchRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    assert.equal(
+        searchRequestSchema.safeParse({ ...request, indexedFragments: "true" })
+            .success,
+        false,
+    );
+});
+
+test("informational family requests round-trip without weakening legacy target guards", () => {
+    for (const operation of ["update", "rebuild", "pause", "resume"]) {
+        const request = {
+            corpusId: "corpus",
+            expectedHead: null,
+            family: "wiki",
+            operation,
+        };
+        assert.deepEqual(
+            viewMaintenanceRequestSchema.parse(
+                JSON.parse(JSON.stringify(request)),
+            ),
+            request,
+        );
+        assert.equal(
+            viewMaintenanceRequestSchema.safeParse({ ...request, targets: [] })
+                .success,
+            false,
+        );
+        assert.equal(
+            viewMaintenanceRequestSchema.safeParse({
+                ...request,
+                approval: true,
+            }).success,
+            false,
+        );
+    }
+    assert.equal(
+        viewMaintenanceRequestSchema.safeParse({
+            corpusId: "corpus",
+            expectedHead: null,
+            targets: [],
+        }).success,
+        false,
+    );
+    assert.equal(
+        viewMaintenanceRequestSchema.safeParse({
+            corpusId: "corpus",
+            expectedHead: null,
+            family: "wiki",
+            operation: "invent",
+        }).success,
+        false,
+    );
+});
+
+const source = { sourceId: "source", revisionId: "source-revision" };
+const definition = {
+    viewId: "guide",
+    kind: "troubleshootingGuide",
+    selector: { kind: "sources", sources: [source] },
+};
+const section = {
+    id: "section",
+    role: "diagnostic",
+    heading: "Inspect",
+    body: "Inspect the evidence.",
+};
+const citation = {
+    ...source,
+    locator: "chars:0-1",
+    excerpt: "x",
+};
+const edge = {
+    id: "support",
+    predicate: "supportedBy",
+    from: { kind: "section", viewId: "guide", sectionId: "section" },
+    to: { kind: "source", ...source },
+    citations: [citation],
+};
+const synthesis = {
+    content: {
+        kind: "troubleshootingGuide",
+        title: "Guide",
+        sections: [section],
+        citations: [citation],
+    },
+    relationships: [edge],
+    outcome: "diagnosticOnly",
+    missingEvidence: [],
+};
+const hash = "a".repeat(64);
+const head = "a".repeat(40);
+const conflictId = "00000000-0000-4000-8000-000000000001";
+const snapshot = {
+    corpusId: "corpus",
+    actor: "actor",
+    definition,
+    expectedVersion: 0,
+    bounds: {},
+    inputs: [{ ...source, title: "Source", content: "x", contentHash: hash }],
+    pipeline: "troubleshooting-v1",
+    model: "model",
+    fingerprint: hash,
+};
+
+test("distinct indexed project summaries round-trip through save and MCP without weakening legacy inventories", async () => {
+    const roles = [
+        "goalsScope",
+        "owners",
+        "status",
+        "milestones",
+        "decisions",
+        "risks",
+        "context",
+    ];
+    const details = [
+        { kind: "goalsScope" },
+        { kind: "owners", assignments: [] },
+        {
+            kind: "status",
+            project: "active",
+            incident: "unknown",
+            capacity: "unknown",
+        },
+        { kind: "milestones", items: [] },
+        { kind: "decisions", items: [] },
+        {
+            kind: "risks",
+            items: [],
+            openQuestions: ["Who approves the next rehearsal?"],
+        },
+        { kind: "context", asOf: null, basis: "unknown" },
+    ];
+    const output = {
+        ...synthesis,
+        content: {
+            kind: "projectBrief",
+            construction: "informational-project-summary-v1",
+            status: "partial",
+            coverageNote: "Approval owner remains unknown",
+            title: "Project",
+            citations: [citation],
+            sections: roles.map((role, i) => ({
+                ...section,
+                id: role,
+                role,
+                details: details[i],
+            })),
+        },
+    };
+    const projectDefinition = {
+        ...definition,
+        kind: "projectBrief",
+        projectSummary: {
+            construction: "informational-project-summary-v1",
+            query: "Project migration",
+            aliases: [],
+            excludedSourceIds: [],
+        },
+    };
+    const request = { ...saveRequest(output), definition: projectDefinition };
+    assert.deepEqual(
+        viewSaveRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    const legacy = structuredClone(request);
+    delete legacy.content.construction;
+    delete legacy.definition.projectSummary;
+    assert.equal(viewSaveRequestSchema.safeParse(legacy).success, false);
+    const { version } = persisted(output);
+    version.definition = {
+        ...projectDefinition,
+        revisionId: "definition-revision",
+    };
+    assert.deepEqual(viewVersionSchema.parse(version), version);
+    const client = new McpMemoryServiceClient({
+        callTool: async ({ name }) => {
+            assert.equal(name, viewToolNames.getView);
+            return { content: [], structuredContent: { result: version } };
+        },
+    });
+    assert.deepEqual(
+        await client.getView({ corpusId: "corpus", viewId: "guide" }),
+        version,
+    );
+    assert.equal(
+        viewSaveRequestSchema.safeParse({
+            ...request,
+            definition: {
+                ...projectDefinition,
+                projectSummary: {
+                    ...projectDefinition.projectSummary,
+                    construction: "project-brief-v1",
+                },
+            },
+        }).success,
+        false,
+    );
+});
+
+function persisted(output) {
+    const sources = [
+        ...new Map(
+            output.relationships.map(({ to }) => [
+                `${to.sourceId}:${to.revisionId}`,
+                { sourceId: to.sourceId, revisionId: to.revisionId },
+            ]),
+        ).values(),
+    ];
+    const outputDefinition = {
+        ...definition,
+        selector: { kind: "sources", sources },
+    };
+    const version = {
+        corpusId: "corpus",
+        viewId: "guide",
+        revisionId: "view-revision",
+        version: 1,
+        state: "draft",
+        createdAt: "2026-10-08T00:00:00Z",
+        actor: "actor",
+        provenance: "generated",
+        definition: { ...outputDefinition, revisionId: "definition-revision" },
+        content: output.content,
+        generation: {
+            candidateId: "candidate",
+            content: output.content,
+            fingerprint: hash,
+            relationships: output.relationships,
+        },
+        relationships: output.relationships.map((relationship) => ({
+            ...relationship,
+            schemaVersion: 1,
+            family: "evidence",
+            origin: "generator",
+            reviewState: "unreviewed",
+        })),
+    };
+    const conflict = {
+        event: { kind: "viewMergeConflict", editIds: [], evidence: [source] },
+        conflictId,
+        identity: hash,
+        corpusId: "corpus",
+        viewId: "guide",
+        jobId: conflictId,
+        createdAt: version.createdAt,
+        actor: "actor",
+        state: "pending",
+        expectedRevisionId: version.revisionId,
+        input: {
+            ...snapshot,
+            definition: outputDefinition,
+            inputs: sources.map((selected) => ({
+                ...selected,
+                title: "Source",
+                content: "x\n\n".repeat(4000),
+                contentHash: hash,
+            })),
+        },
+        base: version.generation,
+        human: version,
+        candidate: output,
+        targets: ["section"],
+        reason: "Concurrent edit",
+    };
+    return { version, conflict };
+}
+
+const largeOutputs = [
+    [
+        "one item's 2000 edge citations",
+        () => {
+            const citations = Array.from({ length: 2000 }, (_, index) => ({
+                ...citation,
+                locator: `chars:${index * 3}-${index * 3 + 1}`,
+            }));
+            return {
+                ...synthesis,
+                content: { ...synthesis.content, citations },
+                relationships: [{ ...edge, citations }],
+            };
+        },
+    ],
+    [
+        "per-source aggregation of two items' 4000 edge citations",
+        () => {
+            const citations = Array.from({ length: 4000 }, (_, index) => ({
+                ...citation,
+                locator: `chars:${index * 3}-${index * 3 + 1}`,
+            }));
+            return {
+                ...synthesis,
+                content: { ...synthesis.content, citations },
+                relationships: [{ ...edge, citations }],
+            };
+        },
+    ],
+    [
+        "aggregate content citations and 1001 relationships",
+        () => {
+            const sections = Array.from({ length: 501 }, (_, index) => ({
+                ...section,
+                id: `section-${index}`,
+            }));
+            const relationships = Array.from({ length: 1001 }, (_, index) => {
+                const endpoint = { ...source, sourceId: `source-${index % 2}` };
+                return {
+                    ...edge,
+                    id: `support-${index}`,
+                    from: {
+                        ...edge.from,
+                        sectionId: sections[Math.floor(index / 2)].id,
+                    },
+                    to: { kind: "source", ...endpoint },
+                    citations: [{ ...citation, ...endpoint }],
+                };
+            });
+            return {
+                ...synthesis,
+                content: {
+                    ...synthesis.content,
+                    sections,
+                    citations: relationships.flatMap(
+                        (relationship) => relationship.citations,
+                    ),
+                },
+                relationships,
+            };
+        },
+    ],
+];
+
+for (const [label, makeOutput] of largeOutputs) {
+    test(`response schemas preserve ${label}`, () => {
+        const { version, conflict } = persisted(makeOutput());
+        assert.deepEqual(viewVersionSchema.parse(version), version);
+        assert.deepEqual(viewConflictSchema.parse(conflict), conflict);
+        assert.deepEqual(viewSnapshotSchema.parse({ head, views: [version] }), {
+            head,
+            views: [version],
+        });
+        assert.deepEqual(
+            viewHistoryEntrySchema.parse({ commitId: head, version }),
+            { commitId: head, version },
+        );
+    });
+
+    test(`MCP response parser preserves ${label}`, async () => {
+        const { version, conflict } = persisted(makeOutput());
+        const history = { commitId: head, version };
+        const responses = {
+            [viewToolNames.getView]: version,
+            [viewToolNames.listViews]: { head, views: [version] },
+            [viewToolNames.getViewHistory]: [history],
+            [viewToolNames.saveViewDraft]: history,
+            [viewToolNames.resolveViewConflict]: history,
+            [viewToolNames.getViewConflict]: conflict,
+        };
+        const client = new McpMemoryServiceClient({
+            callTool: async ({ name }) => ({
+                content: [],
+                structuredContent: { result: responses[name] },
+            }),
+        });
+        const request = { corpusId: "corpus", viewId: "guide" };
+        assert.deepEqual(await client.getView(request), version);
+        assert.deepEqual(await client.listViews("corpus"), {
+            head,
+            views: [version],
+        });
+        assert.deepEqual(await client.getViewHistory(request), [history]);
+        assert.deepEqual(
+            await client.saveViewDraft(saveRequest(synthesis)),
+            history,
+        );
+        assert.deepEqual(
+            await client.resolveViewConflict(resolutionRequest(synthesis)),
+            history,
+        );
+        assert.deepEqual(
+            await client.getViewConflict({ corpusId: "corpus", conflictId }),
+            conflict,
+        );
+    });
+}
+
+function saveRequest(output) {
+    return {
+        corpusId: "corpus",
+        viewId: "guide",
+        expectedHead: head,
+        expectedVersion: 1,
+        definition,
+        content: output.content,
+        relationships: output.relationships,
+    };
+}
+
+function resolutionRequest(output) {
+    return {
+        corpusId: "corpus",
+        conflictId,
+        expectedHead: head,
+        expectedVersion: 1,
+        expectedRevisionId: "view-revision",
+        inputFingerprint: hash,
+        choice: "combined",
+        combined: output,
+    };
+}
+
+for (const field of ["edge citations", "content citations", "relationships"]) {
+    test(`inbound ${field} remain bounded at 1000`, () => {
+        for (const length of [1000, 1001]) {
+            const output = {
+                ...synthesis,
+                content: {
+                    ...synthesis.content,
+                    citations:
+                        field === "content citations"
+                            ? Array(length).fill(citation)
+                            : [citation],
+                },
+                relationships:
+                    field === "relationships"
+                        ? Array(length).fill(edge)
+                        : [
+                              {
+                                  ...edge,
+                                  citations:
+                                      field === "edge citations"
+                                          ? Array(length).fill(citation)
+                                          : [citation],
+                              },
+                          ],
+            };
+            const accepted = length === 1000;
+            assert.equal(
+                viewSynthesisSchema.safeParse(output).success,
+                accepted,
+            );
+            assert.equal(
+                viewSaveRequestSchema.safeParse(saveRequest(output)).success,
+                accepted,
+            );
+            assert.equal(
+                viewResolutionSchema.safeParse(resolutionRequest(output))
+                    .success,
+                accepted,
+            );
+        }
+    });
+}
+
+test("response schemas still reject malformed evidence", () => {
+    for (const invalidEdge of [
+        { ...edge, citations: [] },
+        { ...edge, citations: [{ ...citation, locator: "invalid" }] },
+        { ...edge, predicate: "invalid" },
+        { ...edge, to: { ...edge.to, kind: "section" } },
+    ]) {
+        const { version, conflict } = persisted({
+            ...synthesis,
+            relationships: [invalidEdge],
+        });
+        assert.equal(viewVersionSchema.safeParse(version).success, false);
+        assert.equal(viewConflictSchema.safeParse(conflict).success, false);
+    }
+});

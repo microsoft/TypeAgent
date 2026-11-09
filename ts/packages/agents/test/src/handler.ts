@@ -55,6 +55,11 @@ async function executeAction(
             return createActionResult(`The sum of ${a} and ${b} is ${a + b}`);
         case "random":
             return createActionResult(`Random number: ${Math.random()}`);
+        case "fallbackError":
+            return {
+                error: "Fallback action failed",
+                fallbackToReasoning: true,
+            };
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
     }

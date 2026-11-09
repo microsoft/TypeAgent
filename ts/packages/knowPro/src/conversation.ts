@@ -5,7 +5,11 @@ import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
 import {
     tryCreateEmbeddingModel,
+    getEmbeddingSize,
     TextEmbeddingModel,
+    embeddingIdentityKey,
+    embeddingModelForRole,
+    resolveEmbeddingModel,
 } from "@typeagent/aiclient";
 import {
     TextEmbeddingIndexSettings,
@@ -16,10 +20,67 @@ import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
 export interface ConversationSettings {
+    preparedIndexing?: import("./preparedIndexing.js").PreparedIndexingSettings;
+    overlapMessageEmbeddings?: boolean;
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;
     semanticRefIndexSettings: SemanticRefIndexSettings;
+}
+
+export async function prepareConversationEmbeddings(
+    settings: ConversationSettings,
+): Promise<import("./serialization.js").PersistedEmbeddingIdentities> {
+    const identities: import("./serialization.js").PersistedEmbeddingIdentities =
+        {};
+    let complete = true;
+    const lanes = {
+        relatedTerms: settings.relatedTermIndexSettings.embeddingIndexSettings,
+        message: settings.messageTextIndexSettings.embeddingIndexSettings,
+        thread: settings.threadSettings,
+    };
+    const resolutions = new Map<
+        TextEmbeddingModel,
+        Promise<TextEmbeddingModel>
+    >();
+    for (const [lane, indexSettings] of Object.entries(lanes)) {
+        if (!indexSettings?.embeddingModel) continue;
+        const original = indexSettings.embeddingModel;
+        let resolution = resolutions.get(original);
+        if (!resolution) {
+            resolution = resolveEmbeddingModel(original);
+            resolutions.set(original, resolution);
+        }
+        const model = await resolution;
+        indexSettings.embeddingModel = model;
+        let dimensions: number | undefined;
+        for (const role of ["query", "document"] as const) {
+            const identity = embeddingModelForRole(
+                model,
+                role,
+            ).embeddingIdentity;
+            if (!identity) {
+                complete = false;
+                continue;
+            }
+            embeddingIdentityKey(identity);
+            if (dimensions !== undefined && dimensions !== identity.dimensions)
+                throw new Error("Embedding model role dimensions disagree");
+            dimensions = identity.dimensions;
+            indexSettings.embeddingSize = identity.dimensions;
+            identities[`${lane}.${role}`] = identity;
+        }
+    }
+    const dimensions = new Set(
+        Object.values(lanes).flatMap((lane) =>
+            lane?.embeddingModel ? [lane.embeddingSize] : [],
+        ),
+    );
+    if (dimensions.size > 1)
+        throw new Error(
+            "Conversation embedding lanes must use the same dimensions for the shared vector file.",
+        );
+    return complete ? identities : {};
 }
 
 let embeddingUnavailableAnnounced = false;
@@ -32,7 +93,8 @@ export function createConversationSettings(
     // self-host without a local embedder). Embedding-backed indexes then no-op
     // and search degrades to exact/alias/edit-distance matching.
     embeddingModel ??= tryCreateEmbeddingModel();
-    embeddingSize ??= 1536;
+    embeddingSize ??=
+        embeddingModel?.embeddingIdentity?.dimensions ?? getEmbeddingSize();
     if (embeddingModel === undefined && !embeddingUnavailableAnnounced) {
         embeddingUnavailableAnnounced = true;
         console.warn(

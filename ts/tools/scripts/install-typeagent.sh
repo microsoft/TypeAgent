@@ -15,12 +15,17 @@ UPGRADE=0
 NO_START=0
 NO_AUTOSTART=0
 PROVIDER="aisystems"
-EMBEDDING="local"
+EMBEDDING=""
 OLLAMA_HOST="http://localhost:11434"
 CHAT_MODEL=""
 COPILOT_MODEL=""
 EMBEDDING_ENDPOINT=""
 EMBEDDING_MODEL=""
+LOCAL_EMBEDDING_MODEL="minilm"
+LOCAL_EMBEDDING_CACHE_DIR=""
+EMBEDDING_SIZE=""
+DOWNLOAD_LOCAL_EMBEDDING=0
+PRESERVE_EMBEDDING_SELECTION=1
 OPENAI_KEY=""
 SHELL_INSTALL=0
 SHELL_STORAGE=""
@@ -51,12 +56,17 @@ Options:
   --provider <name>                  Endpoint provider: aisystems (default), ollama, or copilot.
                                      aisystems downloads config from Key Vault (needs az access);
                                      ollama/copilot synthesize config.local.yaml locally.
-  --embedding <mode>                 Embedding source for ollama/copilot: local (default), ollama, openai, none
+  --embedding <mode>                 Embedding source: copilot, local, ollama, openai, none
+                                     Defaults to copilot for Copilot chat, local otherwise.
   --ollama-host <url>                Ollama base URL (default: http://localhost:11434)
   --chat-model <name>                Ollama chat model (default: llama3.2)
-  --copilot-model <name>             Copilot chat model (default: claude-haiku-4.5)
+  --copilot-model <name>             Copilot chat model (default: gpt-5.6-luna)
   --embedding-endpoint <url>         Embedding endpoint (openai embedding mode; full path)
   --embedding-model <name>           Embedding model name
+  --local-embedding-model <name>     minilm (default) or embeddinggemma (multi-GB text+image)
+  --local-embedding-cache-dir <path> Persistent pinned model snapshot cache
+  --embedding-size <n>               Dimensions for a custom hosted embedding model
+  --download-local-embedding         Explicit permission to download the selected model
   --openai-key <key>                 API key for openai embedding mode
   --shell                            Also install the TypeAgent Shell (desktop app) after the agent-server
   --shell-storage <account>          Azure Storage account with the shell build (used with az login)
@@ -82,8 +92,8 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
 }
 
-node_major() {
-  node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))'
+node_is_supported() {
+  node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
 }
 
 resolve_latest_upack_version() {
@@ -157,7 +167,11 @@ while [[ $# -gt 0 ]]; do
     --no-start) NO_START=1; shift ;;
     --no-autostart) NO_AUTOSTART=1; shift ;;
     --provider) PROVIDER="$2"; shift 2 ;;
-    --embedding) EMBEDDING="$2"; shift 2 ;;
+    --embedding) EMBEDDING="$2"; PRESERVE_EMBEDDING_SELECTION=0; shift 2 ;;
+    --local-embedding-model) LOCAL_EMBEDDING_MODEL="$2"; PRESERVE_EMBEDDING_SELECTION=0; shift 2 ;;
+    --local-embedding-cache-dir) LOCAL_EMBEDDING_CACHE_DIR="$2"; shift 2 ;;
+    --embedding-size) EMBEDDING_SIZE="$2"; shift 2 ;;
+    --download-local-embedding) DOWNLOAD_LOCAL_EMBEDDING=1; shift ;;
     --ollama-host) OLLAMA_HOST="$2"; shift 2 ;;
     --chat-model) CHAT_MODEL="$2"; shift 2 ;;
     --copilot-model) COPILOT_MODEL="$2"; shift 2 ;;
@@ -180,9 +194,12 @@ case "$PROVIDER" in
   aisystems|ollama|copilot) ;;
   *) fail "Unknown --provider '$PROVIDER' (expected aisystems, ollama, or copilot)" ;;
 esac
+if [[ -z "$EMBEDDING" ]]; then
+  EMBEDDING="local"
+fi
 case "$EMBEDDING" in
-  local|ollama|openai|none) ;;
-  *) fail "Unknown --embedding '$EMBEDDING' (expected local, ollama, openai, or none)" ;;
+  copilot|local|ollama|openai|none) ;;
+  *) fail "Unknown --embedding '$EMBEDDING' (expected copilot, local, ollama, openai, or none)" ;;
 esac
 
 if [[ -z "${INSTALL_DIR:-}" ]]; then
@@ -198,8 +215,8 @@ PLUGIN_MARKETPLACE_DIR="${PLUGIN_MARKETPLACE_DIR:-$HOME/.copilot/marketplaces/ty
 PLUGIN_REGISTER_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/typeagent/register-plugin.log"
 
 require_cmd node
-if [[ "$(node_major)" -lt 22 ]]; then
-  fail "Node.js >= 22 required; found $(node --version)"
+if ! node_is_supported; then
+  fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(node --version)"
 fi
 
 require_cmd az
@@ -301,6 +318,11 @@ if [[ "$PROVIDER" == "aisystems" ]]; then
 else
   log_step "Provisioning TypeAgent config for '$PROVIDER' provider (self-host, no Key Vault)"
   PROVISION_ARGS=(provision --provider "$PROVIDER" --force --embedding "$EMBEDDING")
+  PROVISION_ARGS+=(--local-embedding-model "$LOCAL_EMBEDDING_MODEL")
+  [[ -n "$LOCAL_EMBEDDING_CACHE_DIR" ]] && PROVISION_ARGS+=(--local-embedding-cache-dir "$LOCAL_EMBEDDING_CACHE_DIR")
+  [[ -n "$EMBEDDING_SIZE" ]] && PROVISION_ARGS+=(--embedding-size "$EMBEDDING_SIZE")
+  [[ "$DOWNLOAD_LOCAL_EMBEDDING" == "1" ]] && PROVISION_ARGS+=(--download-local-embedding)
+  [[ "$PRESERVE_EMBEDDING_SELECTION" == "1" ]] && PROVISION_ARGS+=(--preserve-embedding-selection)
   if [[ "$PROVIDER" == "ollama" ]]; then
     PROVISION_ARGS+=(--ollama-host "$OLLAMA_HOST")
     [[ -n "$CHAT_MODEL" ]] && PROVISION_ARGS+=(--chat-model "$CHAT_MODEL")

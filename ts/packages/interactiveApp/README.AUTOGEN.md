@@ -122,7 +122,6 @@ External: `string-width`
 - [document-processor](../../examples/docuProc/README.md)
 - [examples-lib](../../examples/examplesLib/README.md)
 - [knowpro-test](../../packages/knowProTest/README.md)
-- [memory-mcp](../../examples/mcpMemory/README.md)
 - [playground](../../examples/playground/README.md)
 - schema-studio
 - [search-action-test](../../examples/searchActionTest/README.md)

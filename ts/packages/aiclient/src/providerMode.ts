@@ -17,6 +17,9 @@
  * `copilot.defaultModel`).
  */
 
+import { DEFAULT_COPILOT_MODEL } from "./copilotModelDefaults.js";
+import { DEFAULT_AZURE_CHAT_DEPLOYMENT } from "./chatModelDefaults.js";
+
 export type ProviderMode = "azure" | "openai" | "ollama" | "copilot";
 
 export const PROVIDER_MODES: readonly ProviderMode[] = [
@@ -27,12 +30,40 @@ export const PROVIDER_MODES: readonly ProviderMode[] = [
 ] as const;
 
 let active: ProviderMode | undefined;
+let configured: ProviderMode | undefined;
+let overrideGeneration = 0;
+
+export function getProviderOverrideGeneration(): number {
+    return overrideGeneration;
+}
+
+export function setConfiguredModelProvider(
+    mode: ProviderMode | undefined,
+): void {
+    configured = mode;
+}
 
 export function getActiveModelProvider(): ProviderMode | undefined {
+    if (active !== undefined) {
+        return active;
+    }
+    if (configured !== undefined) return configured;
+
+    const environmentProvider =
+        process.env.TYPEAGENT_MODEL_PROVIDER?.trim().toLowerCase();
+    return environmentProvider !== undefined &&
+        (PROVIDER_MODES as readonly string[]).includes(environmentProvider)
+        ? (environmentProvider as ProviderMode)
+        : undefined;
+}
+
+/** Explicit in-memory override only; does not consult ambient process config. */
+export function getModelProviderOverride(): ProviderMode | undefined {
     return active;
 }
 
 export function setActiveModelProvider(mode: ProviderMode | undefined): void {
+    if (active !== mode) overrideGeneration++;
     active = mode;
 }
 
@@ -48,6 +79,9 @@ const CANONICAL_NAMES = [
     "GPT_5",
     "GPT_5_MINI",
     "GPT_5_NANO",
+    "GPT_6_LUNA",
+    "GPT_6_1_SOL",
+    "GPT_6_1_TERRA",
     "GPT_V",
 ] as const;
 
@@ -57,20 +91,28 @@ function isCanonicalName(s: string): s is CanonicalName {
     return (CANONICAL_NAMES as readonly string[]).includes(s);
 }
 
+export function usesProviderDefault(canonical: string): boolean {
+    const key = canonical.toUpperCase();
+    return key === "DEFAULT" || !isCanonicalName(key);
+}
+
 /**
- * Built-in name maps per non-Azure mode. Azure mode is identity — the
- * canonical names already are Azure deployment names, so no rewriting.
+ * Built-in name maps per non-Azure mode. Azure names are identity-mapped
+ * except DEFAULT, which selects the shared named Luna deployment.
  * OpenAI mode is identity for now (callers rarely use OpenAI-specific
  * names; the `openai:LOCAL` form is the explicit escape).
  */
 const COPILOT_MAP: Record<CanonicalName, string> = {
-    DEFAULT: "claude-sonnet-4.5",
-    GPT_35_TURBO: "claude-haiku-4.5",
-    GPT_4_O: "gpt-4o",
-    GPT_5: "claude-sonnet-4.5",
-    GPT_5_MINI: "gpt-4o-mini",
-    GPT_5_NANO: "gpt-4o-mini",
-    GPT_V: "gpt-4o",
+    DEFAULT: DEFAULT_COPILOT_MODEL,
+    GPT_35_TURBO: "gpt-6-luna",
+    GPT_4_O: "gpt-6-sol",
+    GPT_5: "gpt-6.1-terra",
+    GPT_5_MINI: "gpt-6-luna",
+    GPT_5_NANO: "gpt-6-luna",
+    GPT_6_LUNA: "gpt-6-luna",
+    GPT_6_1_SOL: "gpt-6.1-sol",
+    GPT_6_1_TERRA: "gpt-6.1-terra",
+    GPT_V: "gpt-6-sol",
 };
 
 const OLLAMA_MAP: Record<CanonicalName, string> = {
@@ -80,6 +122,9 @@ const OLLAMA_MAP: Record<CanonicalName, string> = {
     GPT_5: "llama3.1:70b",
     GPT_5_MINI: "llama3.2:3b",
     GPT_5_NANO: "llama3.2:1b",
+    GPT_6_LUNA: "llama3.2",
+    GPT_6_1_SOL: "llama3.1:70b",
+    GPT_6_1_TERRA: "llama3.1:70b",
     GPT_V: "llava",
 };
 
@@ -98,6 +143,9 @@ export function resolveTarget(mode: ProviderMode, canonical: string): string {
         case "ollama":
             return isCanonicalName(key) ? OLLAMA_MAP[key] : OLLAMA_MAP.DEFAULT;
         case "azure":
+            return key === "DEFAULT"
+                ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+                : canonical;
         case "openai":
             // Identity: pass the original name through (callers already
             // use Azure-deployment-style names).

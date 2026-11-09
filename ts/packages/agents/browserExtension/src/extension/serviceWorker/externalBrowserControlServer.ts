@@ -20,6 +20,14 @@ import { ContentScriptRpc } from "@typeagent/browser-control-rpc/contentScriptRp
 import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { runBrowserAction } from "./browserActions";
+import {
+    resolveLocalBrowserViewUrl,
+    type ViewHostLookup,
+} from "./browserViewNavigation";
+import { createPageCapture } from "./pageCapture";
+import { createUiDecisionBrowser } from "./uiDecisionBrowser";
+import { awaitDocumentPageLoad } from "./pageLoad";
+import { getShoppingMode } from "./storage";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "@typeagent/aiclient";
 
@@ -31,6 +39,48 @@ async function ensureActiveTab() {
         );
     }
     return targetTab;
+}
+
+async function getWindowIdByTitle(title: string): Promise<number> {
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) {
+        throw new Error("Browser window title is empty.");
+    }
+
+    const { caseInsensitiveWindowTitleMatching = true } =
+        await chrome.storage.sync.get({
+            caseInsensitiveWindowTitleMatching: true,
+        });
+    const normalizeTitle = (value: string) =>
+        caseInsensitiveWindowTitleMatching
+            ? value.trim().toLowerCase()
+            : value.trim();
+    const normalizedTitle = normalizeTitle(trimmedTitle);
+
+    const windows = await chrome.windows.getAll({ populate: true });
+    const matchingWindows = windows.filter((window) => {
+        if (window.type !== "normal" || window.id === undefined) {
+            return false;
+        }
+        // A browser window's visible title comes from its active tab. Inactive
+        // tab titles identify tabs, not separate windows.
+        const activeTab = window.tabs?.find((tab) => tab.active);
+        return (
+            activeTab?.title !== undefined &&
+            normalizeTitle(activeTab.title) === normalizedTitle
+        );
+    });
+
+    if (matchingWindows.length === 0) {
+        throw new Error(`No browser window found with title '${title}'.`);
+    }
+    if (matchingWindows.length > 1) {
+        throw new Error(
+            `Multiple browser windows found with title '${title}'.`,
+        );
+    }
+
+    return matchingWindows[0].id!;
 }
 
 /**
@@ -82,17 +132,43 @@ function isNoReceiverError(error: unknown): boolean {
     );
 }
 
-export function createExternalBrowserServer(channel: RpcChannel) {
+export function createExternalBrowserServer(
+    channel: RpcChannel,
+    lookupViewHost: ViewHostLookup,
+) {
     const rpcMap = new Map<
         number,
         { channel: ChannelAdapter; contentScriptRpc: ContentScriptRpc }
     >();
+    const documentRpcMap = new Map<
+        string,
+        {
+            tabId: number;
+            channel: ChannelAdapter;
+            contentScriptRpc: ContentScriptRpc;
+        }
+    >();
+
+    function disconnectDocumentRpcs(tabId: number) {
+        for (const [key, entry] of documentRpcMap) {
+            if (entry.tabId === tabId) {
+                entry.channel.notifyDisconnected();
+                documentRpcMap.delete(key);
+            }
+        }
+    }
 
     chrome.tabs.onRemoved.addListener((tabId) => {
+        disconnectDocumentRpcs(tabId);
         const entry = rpcMap.get(tabId);
         if (entry) {
             entry.channel.notifyDisconnected();
             rpcMap.delete(tabId);
+        }
+    });
+    chrome.tabs.onUpdated.addListener((tabId, change) => {
+        if (change.status === "loading" || change.url !== undefined) {
+            disconnectDocumentRpcs(tabId);
         }
     });
 
@@ -208,41 +284,59 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         return contentScriptRpc;
     }
 
+    function getDocumentRpc(tabId: number, documentId: string) {
+        const key = `${tabId}:${documentId}`;
+        const existing = documentRpcMap.get(key);
+        if (existing) return existing.contentScriptRpc;
+        const channel = createChannelAdapter(async (message, cb) => {
+            try {
+                // Retrying injection cannot target a replacement document.
+                const response: unknown = await sendTabMessageWithInjection(
+                    tabId,
+                    { type: "captureRpc", message },
+                    { documentId },
+                );
+                if (
+                    !response ||
+                    typeof response !== "object" ||
+                    !("captureRpcAccepted" in response) ||
+                    response.captureRpcAccepted !== true
+                ) {
+                    throw new Error(
+                        "Explicit-page capture is unavailable in this document.",
+                    );
+                }
+            } catch (error) {
+                cb?.(error as Error);
+            }
+        });
+        const contentScriptRpc = createContentScriptRpcClient(channel.channel);
+        documentRpcMap.set(key, { tabId, channel, contentScriptRpc });
+        return contentScriptRpc;
+    }
+    const pageCapture = createPageCapture(getDocumentRpc);
+    const uiDecisionBrowser = createUiDecisionBrowser(ensureActiveTab);
+
     async function getActiveTabRpc() {
         const targetTab = await ensureActiveTab();
         return getContentScriptRpc(targetTab.id!);
     }
 
-    function resolveCustomProtocolUrl(url: string): string {
-        // Handle typeagent-browser custom protocol
-        if (url.startsWith("typeagent-browser://")) {
-            const customUrl = new URL(url);
-            const customPath = customUrl.pathname;
-            const queryString = customUrl.search;
-
-            // Map custom protocol to actual extension URL
-            const libraryMapping: Record<string, string> = {
-                "/annotationsLibrary.html": "views/annotationsLibrary.html",
-                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
-                "/macrosLibrary.html": "views/macrosLibrary.html",
-                "/entityGraphView.html": "views/entityGraphView.html",
-                "/topicGraphView.html": "views/topicGraphView.html",
-            };
-
-            const extensionPath = libraryMapping[customPath];
-            if (extensionPath) {
-                // Append query parameters to preserve entity/topic selection
-                return chrome.runtime.getURL(extensionPath) + queryString;
-            } else {
-                throw new Error(`Unknown library page: ${customPath}`);
-            }
-        }
-
-        return url;
-    }
-
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender) => {
+            if (message.type === "captureRpc") {
+                const tabId = sender.tab?.id;
+                if (
+                    tabId !== undefined &&
+                    sender.frameId === 0 &&
+                    sender.documentId
+                ) {
+                    documentRpcMap
+                        .get(`${tabId}:${sender.documentId}`)
+                        ?.channel.notifyMessage(message.message);
+                }
+                return;
+            }
             if (message.type === "rpc") {
                 const tabId = sender.tab?.id;
                 if (tabId) {
@@ -253,9 +347,16 @@ export function createExternalBrowserServer(channel: RpcChannel) {
     );
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
+        ...uiDecisionBrowser,
+        getCapturePages: () => pageCapture.getCapturePages(),
+        capturePageSnapshot: (pageId) =>
+            pageCapture.capturePageSnapshot(pageId),
         openWebPage: async (url: string, options?: { newTab?: boolean }) => {
             // Resolve custom protocol URLs to actual extension URLs
-            const resolvedUrl = resolveCustomProtocolUrl(url);
+            const resolvedUrl = await resolveLocalBrowserViewUrl(
+                url,
+                lookupViewHost,
+            );
 
             const targetTab = await getActiveTab();
             // Register the load-complete listener BEFORE issuing the
@@ -410,7 +511,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             );
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 console.log(
                     `[followLinkByText] resolvedUrl="${resolvedUrl}" openInNewTab=${openInNewTab}`,
                 );
@@ -447,7 +551,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const url = await contentScriptRpc.getPageLinksByPosition(position);
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 if (openInNewTab) {
                     await chrome.tabs.create({
                         url: resolvedUrl,
@@ -462,13 +569,26 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             return url;
         },
 
-        closeWindow: async () => {
+        closeWindow: async (title?: string) => {
+            const runtimeTitle: unknown = title;
+            if (
+                runtimeTitle !== undefined &&
+                typeof runtimeTitle !== "string"
+            ) {
+                throw new Error("Browser window title must be a string.");
+            }
+            if (typeof runtimeTitle === "string") {
+                await chrome.windows.remove(
+                    await getWindowIdByTitle(runtimeTitle),
+                );
+                return;
+            }
+
             const current = await chrome.windows.getCurrent();
-            if (current.id) {
-                await chrome.windows.remove(current.id);
-            } else {
+            if (current.id === undefined) {
                 throw new Error("No current window found to close.");
             }
+            await chrome.windows.remove(current.id);
         },
 
         search: async (
@@ -580,23 +700,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
         getBrowserSettings: async () => {
-            try {
-                const result = await chrome.storage.sync.get([
-                    "autoIndexing",
-                    "extractionMode",
-                ]);
-
-                return {
-                    autoIndexing: result.autoIndexing === true,
-                    extractionMode: result.extractionMode || "content",
-                };
-            } catch (error) {
-                console.error("Failed to get browser settings:", error);
-                return {
-                    autoIndexing: false,
-                    extractionMode: "content",
-                };
-            }
+            const [result, shoppingMode] = await Promise.all([
+                chrome.storage.sync.get(["autoIndexing", "extractionMode"]),
+                getShoppingMode(),
+            ]);
+            return {
+                autoIndexing: result.autoIndexing === true,
+                extractionMode: result.extractionMode || "content",
+                shoppingMode,
+            };
         },
 
         getHtmlFragments: async (
@@ -649,8 +761,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         awaitPageLoad: async (timeout?: number) => {
             const targetTab = await ensureActiveTab();
-            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
-            return contentScriptRpc.awaitPageLoad(timeout);
+            return awaitDocumentPageLoad(targetTab.id!, timeout ?? 5000);
         },
         awaitPageInteraction: async (timeout?: number) => {
             const targetTab = await ensureActiveTab();

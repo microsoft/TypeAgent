@@ -1,15 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
-import type { ScriptRecipe } from "../types/scriptRecipe.js";
+import { openai } from "@typeagent/aiclient";
+import {
+    getRequiredModules,
+    type ScriptRecipe,
+} from "../types/scriptRecipe.js";
+import { validatePowerShellIdentifier } from "@typeagent/agent-flows/powershell/integrity";
 import { basename } from "path";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:analyzer");
 
-const ANALYSIS_MODEL = "claude-sonnet-4-5-20250929";
+const ANALYSIS_MODEL = "copilot:gpt-6.1-sol";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB
 
 export class ScriptAnalyzer {
@@ -18,6 +21,8 @@ export class ScriptAnalyzer {
         filePath: string,
         overrideActionName?: string,
     ): Promise<ScriptRecipe> {
+        if (overrideActionName !== undefined)
+            validatePowerShellIdentifier(overrideActionName);
         if (scriptContent.length > MAX_SCRIPT_SIZE) {
             throw new Error(
                 `Script too large for analysis (${(scriptContent.length / 1024).toFixed(0)}KB, max 100KB)`,
@@ -31,23 +36,14 @@ export class ScriptAnalyzer {
             overrideActionName,
         );
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: ANALYSIS_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
+        const completion = await openai
+            .createChatModel(ANALYSIS_MODEL)
+            .complete(prompt);
+        if (!completion.success) {
+            throw new Error(`Script analysis failed: ${completion.message}`);
         }
-
-        if (!result) {
+        const result = completion.data;
+        if (!result.trim()) {
             throw new Error("LLM returned no result during script analysis");
         }
 
@@ -61,17 +57,30 @@ export class ScriptAnalyzer {
         }
 
         const recipe = JSON.parse(jsonMatch[1]) as ScriptRecipe;
+        validatePowerShellIdentifier(recipe.actionName);
         if (!recipe.actionName || !recipe.script?.body) {
             throw new Error(
                 "Analysis produced invalid recipe: missing actionName or script.body",
             );
         }
+        if (recipe.script.body !== scriptContent) {
+            throw new Error(
+                "Analysis changed the imported PowerShell script content.",
+            );
+        }
 
         recipe.version = 1;
+        recipe.requiredModules = getRequiredModules(recipe);
+        recipe.sandbox = {
+            maxExecutionTime: Math.min(
+                Math.max(recipe.sandbox?.maxExecutionTime ?? 30, 1),
+                120,
+            ),
+        };
         recipe.source = {
-            type: "manual",
+            type: "imported",
             timestamp: new Date().toISOString(),
-            originalRequest: `Imported from ${filePath}`,
+            originalRequest: "Imported PowerShell script",
         };
 
         return recipe;
@@ -101,7 +110,9 @@ Analyze this script and generate a recipe JSON object:
 2. **description**: Concise description of what the script does.
 3. **displayName**: Human-readable name.
 4. **parameters**: Extract from the param() block if present. Map PowerShell types:
-   [string] -> "string", [int] -> "number", [bool]/[switch] -> "boolean", paths -> "path".
+   [string] -> "string", [int] -> "number", [bool]/[switch] -> "boolean",
+   filesystem paths -> "path", and values passed to executable command parameters
+   such as Start-Process -FilePath -> "executable".
    Include defaults from the param() block. If no param() block exists, infer likely
    parameters from hardcoded values in the script.
 5. **script.body**: Use the EXACT script content provided. Do NOT modify it.
@@ -111,9 +122,11 @@ Analyze this script and generate a recipe JSON object:
    - isAlias: true for terse shell-like forms, false for natural language
    - examples: 2-3 example invocations
    Include at least one natural language pattern and one terse alias if applicable.
-8. **sandbox**: Only cmdlets actually used in the script plus standard pipeline utilities
-   (Select-Object, Where-Object, ForEach-Object, Format-Table, Out-String, Sort-Object).
-   Set networkAccess: true only if the script uses network cmdlets (Invoke-WebRequest, etc.).
+8. **requiredModules**: Installed module names needed by this script, or [].
+   Dependencies are loaded only after user authorization. There is no cmdlet catalogue.
+9. **sandbox.maxExecutionTime**: Operational timeout, between 1 and 120 seconds.
+   After authorization, the script runs with the current user's permissions.
+   It is not sandboxed. Importing or analyzing it does not authorize execution.
 
 Return ONLY a JSON object matching this schema (no markdown fences, no explanation):
 {
@@ -122,7 +135,7 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
   "description": "what this script does",
   "displayName": "Human Readable Name",
   "parameters": [
-    { "name": "paramName", "type": "string|number|boolean|path", "required": true, "description": "...", "default": "optional default" }
+    { "name": "paramName", "type": "string|number|boolean|path|executable", "required": true, "description": "...", "default": "optional default" }
   ],
   "script": {
     "language": "powershell",
@@ -133,13 +146,8 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
     { "pattern": "natural language $(param:wildcard)", "isAlias": false, "examples": ["example"] },
     { "pattern": "short $(param:wildcard)", "isAlias": true, "examples": ["example"] }
   ],
-  "sandbox": {
-    "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
-    "maxExecutionTime": 30,
-    "networkAccess": false
-  }
+  "requiredModules": [],
+  "sandbox": { "maxExecutionTime": 30 }
 }`;
     }
 }

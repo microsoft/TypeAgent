@@ -740,8 +740,3 @@ fi
 
 show_platform_recommendations
 show_next_steps
-
-echo ""
-echo -e "${GRAY}For more information, see the DevContainer documentation:${NC}"
-echo -e "${GRAY}  codeDocs/TypeAgent/forUser/2026-05-12_devcontainer-agent-sandboxing-proposal.md${NC}"
-echo ""

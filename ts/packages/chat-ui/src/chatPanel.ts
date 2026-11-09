@@ -44,6 +44,7 @@ import {
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
 import { createBellIconSvg } from "./icons.js";
+import { copyTextToClipboard } from "./clipboard.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -79,6 +80,7 @@ import type {
 } from "./providers.js";
 import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
+import { highlightJson } from "./highlight.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import {
@@ -104,7 +106,6 @@ const SENT_STATUS_TIMEOUT_MS = 1500;
  * via `ChatPanel.setAvatarMap`.
  */
 export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
-    androidmobile: "📱",
     browser: "🌐",
     calendar: "📅",
     chat: "💬",
@@ -205,6 +206,7 @@ export type HistoryEntry =
           actionTokenUsage?: CompletionUsageStats;
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
+          traceId?: string;
       }
     | { kind: "explained"; requestId: string; data: NotifyExplainedData }
     | { kind: "system"; text: string };
@@ -286,92 +288,6 @@ function escapeHtml(s: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
-}
-
-// Lightweight JSON syntax highlighter — returns HTML with span wrappers
-// around tokens. Implemented as a hand-rolled scanner rather than a
-// single tokenizing regex so we have no chance of polynomial backtracking
-// on adversarial input (the JSON comes from action data which can carry
-// arbitrary user content). Also escapes <, >, & in any character that
-// passes through.
-// Avoids pulling in highlight.js / Prism just to colorize the action
-// JSON popup.
-// code-complexity-allow: hand-rolled JSON scanner kept branchy to avoid regex backtracking
-function highlightJson(json: string): string {
-    const escapeChar = (c: string): string =>
-        c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
-    const wrap = (cls: string, text: string): string =>
-        `<span class="${cls}">${text}</span>`;
-
-    let out = "";
-    let i = 0;
-    const n = json.length;
-    while (i < n) {
-        const ch = json[i];
-        if (ch === '"') {
-            // Linear scan to the matching closing quote, honoring `\\`
-            // and `\"` escapes. Each character is consumed at most once,
-            // so this is O(n) worst case.
-            let j = i + 1;
-            let raw = '"';
-            while (j < n) {
-                const cj = json[j];
-                if (cj === "\\" && j + 1 < n) {
-                    raw += "\\" + escapeChar(json[j + 1]);
-                    j += 2;
-                    continue;
-                }
-                raw += escapeChar(cj);
-                j++;
-                if (cj === '"') break;
-            }
-            i = j;
-            // If a colon follows (optionally with whitespace), this is a
-            // JSON object key; otherwise a string value.
-            let k = i;
-            while (k < n && (json[k] === " " || json[k] === "\t")) k++;
-            if (json[k] === ":") {
-                out += wrap("json-key", raw + json.slice(i, k + 1));
-                i = k + 1;
-            } else {
-                out += wrap("json-string", raw);
-            }
-        } else if (
-            (ch >= "0" && ch <= "9") ||
-            (ch === "-" &&
-                i + 1 < n &&
-                json[i + 1] >= "0" &&
-                json[i + 1] <= "9")
-        ) {
-            let j = i + 1;
-            while (
-                j < n &&
-                ((json[j] >= "0" && json[j] <= "9") ||
-                    json[j] === "." ||
-                    json[j] === "e" ||
-                    json[j] === "E" ||
-                    json[j] === "+" ||
-                    json[j] === "-")
-            ) {
-                j++;
-            }
-            out += wrap("json-number", json.slice(i, j));
-            i = j;
-        } else if (json.startsWith("true", i)) {
-            out += wrap("json-bool", "true");
-            i += 4;
-        } else if (json.startsWith("false", i)) {
-            out += wrap("json-bool", "false");
-            i += 5;
-        } else if (json.startsWith("null", i)) {
-            out += wrap("json-null", "null");
-            i += 4;
-        } else {
-            out += escapeChar(ch);
-            i++;
-        }
-    }
-    return out;
 }
 
 // Generates a UUID for tagging user-message bubbles. Falls back to a
@@ -1196,7 +1112,7 @@ export class ChatPanel {
         copyBtn.textContent = "Copy";
         copyBtn.title = "Copy to clipboard";
         copyBtn.addEventListener("click", () => {
-            void navigator.clipboard?.writeText(text);
+            void copyTextToClipboard(text);
         });
         header.appendChild(copyBtn);
 
@@ -1501,7 +1417,10 @@ export class ChatPanel {
             this.speechState === "always-on" ||
             this.speechState === "wake-word";
         this.micButton.classList.toggle("listening", listening);
-        this.micButton.disabled = this.speechState === "disabled";
+        this.micButton.disabled =
+            this.speechState === "disabled" ||
+            this.speechState === "preparing" ||
+            this.speechState === "finalizing";
         // Filled mic glyph; the `listening` class drives the pulse styling.
         this.micButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>`;
     }
@@ -1512,7 +1431,16 @@ export class ChatPanel {
             this.speechState === "listening" ||
             this.speechState === "always-on" ||
             this.speechState === "wake-word";
-        if (listening) {
+        if (
+            this.speechState === "preparing" ||
+            this.speechState === "finalizing"
+        ) {
+            this.voiceBanner.textContent =
+                this.speechState === "preparing"
+                    ? "Preparing speech recognition..."
+                    : "Finishing transcription...";
+            this.voiceBanner.style.display = "";
+        } else if (listening) {
             this.voiceBanner.textContent =
                 this.speechState === "wake-word"
                     ? "Waiting for wake word…"
@@ -1720,7 +1648,18 @@ export class ChatPanel {
             // Give the partial-completion (host-driven) controller first
             // crack at the keystroke so its Tab/Enter/Esc/Arrow handling
             // wins over chat-ui's local completions and history nav.
+            //
+            // When the partial-completion controller consumes Escape purely
+            // to dismiss its own popup, we also stop propagation so the
+            // host's document-level Escape handler doesn't treat this
+            // keystroke as a permission-prompt denial or a request-cancel
+            // gesture. `preventDefault` alone is not enough: hosts that
+            // register capture-phase listeners look at defaultPrevented, and
+            // hosts that don't check it would still fire on the bubble.
             if (this.partialCompletion?.handleKeyDownPreSend(e)) {
+                if (e.key === "Escape") {
+                    e.stopPropagation();
+                }
                 return;
             }
             if (e.key === "Tab" && this.completions.length > 0) {
@@ -1734,8 +1673,12 @@ export class ChatPanel {
                 this.send();
             } else if (e.key === "Escape") {
                 if (this.completions.length > 0) {
-                    // preventDefault so host's doc-level Esc handler doesn't double-handle.
+                    // Escape only closes the local completion popup here.
+                    // Stop propagation so the host's document-level Esc
+                    // handler doesn't also deny a visible permission prompt
+                    // or start the double-Esc "cancel all" clock.
                     e.preventDefault();
+                    e.stopPropagation();
                     this.clearCompletions();
                     return;
                 }
@@ -3041,6 +2984,29 @@ export class ChatPanel {
     }
 
     /**
+     * Attach compact metadata to the final agent response for a request.
+     * Returns false when the request has no rendered response bubble.
+     */
+    public appendRequestMetadata(requestId: string, text: string): boolean {
+        const threadId = this.resolveThreadId(requestId);
+        const requestContainers =
+            this.requestAgentContainers.get(threadId) ?? [];
+        const answerAnchor = this.lastStepAnchorByThread.get(threadId);
+        const target =
+            requestContainers.find(
+                (container) => container.div === answerAnchor,
+            ) ??
+            this.threadContainers.get(threadId) ??
+            requestContainers.at(-1);
+        if (target === undefined) {
+            return false;
+        }
+        target.appendMetadata(text);
+        this.scrollToBottom(false);
+        return true;
+    }
+
+    /**
      * Drop the bubble association for a completed thread/request id. Future
      * add/replaceAgentMessage calls with this id will create a fresh bubble.
      * Called by hosts when a request completes; safe to call for unknown ids.
@@ -3977,6 +3943,7 @@ export class ChatPanel {
                         tokenUsage: entry.tokenUsage,
                         actionTokenUsage: entry.actionTokenUsage,
                         parsePhase: entry.parsePhase,
+                        traceId: entry.traceId,
                     });
                 }
                 break;
@@ -4634,6 +4601,7 @@ export class ChatPanel {
             actionTokenUsage?: CompletionUsageStats;
             parsePhase?: PhaseTiming;
             cancelled?: boolean;
+            traceId?: string;
         },
     ) {
         if (this.statusContainer) {
@@ -4723,6 +4691,7 @@ export class ChatPanel {
                 result.totalDuration,
                 result.actionTokenUsage,
                 firstMessageMs,
+                result.traceId,
             );
         }
         // Request is finalized; future updates for this id should start with
@@ -6860,6 +6829,7 @@ class AgentMessageContainer {
     private reasoning = false;
     private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
+    private metadataDiv?: HTMLDivElement;
 
     // Invoked after this bubble renders content. ChatPanel uses it to detect
     // the `data-live-title` marker and track the bubble in the top rail.
@@ -6968,12 +6938,22 @@ class AgentMessageContainer {
         beforeElement.before(this.div);
     }
 
+    public appendMetadata(text: string): void {
+        if (this.metadataDiv === undefined) {
+            this.metadataDiv = document.createElement("div");
+            this.metadataDiv.className = "chat-response-metadata";
+            this.messageDiv.after(this.metadataDiv);
+        }
+        this.metadataDiv.textContent = text;
+    }
+
     public updateMetrics(
         actionLabel: string,
         phase?: PhaseTiming,
         totalDuration?: number,
         tokenUsage?: CompletionUsageStats,
         firstMessageMs?: number,
+        traceId?: string,
     ) {
         // Layout: .metrics-details flex row with three columns
         //   left   — "First Message" + Tokens + phase.marks (one line each)
@@ -7016,6 +6996,9 @@ class AgentMessageContainer {
             );
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
+        }
+        if (traceId !== undefined && traceId.length > 0) {
+            leftLines.push(`Trace ID: <b>${escapeHtml(traceId)}</b>`);
         }
         // Thinking (reasoning) tokens: the subset of completion tokens the
         // model spent on chain-of-thought, tabulated per reasoning block. Shown

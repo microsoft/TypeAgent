@@ -3,13 +3,76 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
-import type { BrowserActionContext } from "./browserActions.mjs";
+import {
+    getSessionBrowserControl,
+    type BrowserActionContext,
+} from "./browserActions.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
     handleWebsiteAction,
     handleWebsiteLibraryStats,
 } from "./browserActionHandler.mjs";
+import { createAutomationViewFunctions } from "./automationViewHandlers.mjs";
+import { createMemoryHubFunctions } from "./memoryHub.mjs";
+import { createMemoryHubQueryFunctions } from "./memoryHubQuery.mjs";
+import { createMemoryHubUnderstandingFunctions } from "./memoryHubUnderstanding.mjs";
+import { createMemoryHubExploreFunctions } from "./memoryHubExplore.mjs";
+import { createMemoryHubGraphFunctions } from "./memoryHubGraph.mjs";
+import { createMemoryHubKnowledgeFunctions } from "./memoryHubKnowledge.mjs";
+import {
+    createMemoryHubSynthesizer,
+    createMemoryHubIntentResolver,
+} from "./memoryHubAnswer.mjs";
+import { createMemoryHubCaptureFunctions } from "./memoryHubCapture.mjs";
+import { createMemoryHubSourceOriginalFunctions } from "./memoryHubSourceOriginal.mjs";
+import { createMemoryHubViewUsageFunctions } from "./memoryHubViewUsage.mjs";
+import { createMemoryHubRunbookImportFunctions } from "./memoryHubRunbookImports.mjs";
+import { createMemoryViewFunctions } from "./memoryViews.mjs";
+import {
+    ensureBrowserViewHost,
+    type BrowserViewDomainFunctions,
+} from "./viewService.mjs";
+
+export function createViewServiceDomain(
+    context: SessionContext<BrowserActionContext>,
+): BrowserViewDomainFunctions {
+    const handlers = createAgentInvokeHandlers(context);
+    const service = () => {
+        const memory = context.agentContext.memoryServiceClient;
+        if (!memory) throw new Error("Durable memory service is not available");
+        return memory;
+    };
+    const hub = createMemoryHubFunctions(handlers);
+    return {
+        ...handlers,
+        ...hub,
+        ...createMemoryHubUnderstandingFunctions(service),
+        ...createMemoryHubQueryFunctions(
+            service,
+            () => context.conversationId,
+            createMemoryHubSynthesizer(),
+            createMemoryHubIntentResolver(),
+        ),
+        ...createMemoryHubExploreFunctions(service),
+        ...createMemoryHubGraphFunctions(service),
+        ...createMemoryHubKnowledgeFunctions(service),
+        ...createMemoryHubSourceOriginalFunctions(service),
+        ...createMemoryHubViewUsageFunctions(service),
+        ...createMemoryHubRunbookImportFunctions(service),
+        ...createMemoryHubCaptureFunctions(
+            () => getSessionBrowserControl(context),
+            () => context.agentContext.browserMemoryService,
+            () => context.agentContext.localHostPort,
+        ),
+        getAutoIndexSetting: () =>
+            getSessionBrowserControl(context).getAutoIndexSetting(),
+        ...createAutomationViewFunctions(
+            handlers,
+            () => context.agentContext.automationCatalog,
+        ),
+    };
+}
 
 /**
  * Creates the BrowserAgentInvokeFunctions handlers that will be registered
@@ -20,8 +83,37 @@ import {
 export function createAgentInvokeHandlers(
     context: SessionContext<BrowserActionContext>,
 ): BrowserAgentInvokeFunctions {
+    function getMemoryService() {
+        const service = context.agentContext.memoryServiceClient;
+        if (!service) {
+            throw new Error("Durable memory service is not available");
+        }
+        return service;
+    }
+
     async function knowledgeHandler(method: string, params: any): Promise<any> {
         return handleKnowledgeAction(method, params, context);
+    }
+
+    async function extractionHandler(params: any): Promise<any> {
+        if (Array.isArray(params.htmlFragments)) {
+            return knowledgeHandler("extractKnowledgeFromPage", params);
+        }
+        const browserControl = getSessionBrowserControl(context);
+        const url = params.url ?? (await browserControl.getPageUrl());
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+        return knowledgeHandler("extractKnowledgeFromPage", {
+            ...params,
+            url,
+            title: params.title ?? url,
+            htmlFragments,
+            extractEntities: params.extractEntities ?? true,
+            extractRelationships: params.extractRelationships ?? true,
+            suggestQuestions: params.suggestQuestions ?? true,
+        });
     }
 
     async function discoveryHandler(method: string, params: any): Promise<any> {
@@ -37,9 +129,140 @@ export function createAgentInvokeHandlers(
     }
 
     const handlers: BrowserAgentInvokeFunctions = {
+        memoryCreateCorpus: ({ name, description }) =>
+            getMemoryService().createCorpus(name, description),
+        memoryListCorpora: () => getMemoryService().listCorpora(),
+        memoryListEvents: (params) => getMemoryService().listEvents(params),
+        ...createMemoryViewFunctions(getMemoryService),
+        memoryGetCorpus: async ({ corpusId }) => {
+            const service = getMemoryService();
+            const corpus = await service.getCorpus(corpusId);
+            if (corpus && service.warmViewIndexes)
+                await service.warmViewIndexes(corpusId);
+            return corpus;
+        },
+        memoryListSources: (params) =>
+            getMemoryService().listSourcesPage(params),
+        memoryGetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().getSource(corpusId, sourceId),
+        memoryGetSourceContent: (params) =>
+            getMemoryService().getSourceContent(params),
+        memoryGetSourceSynopsis: (params) => {
+            const service = getMemoryService();
+            if (!service.getSourceSynopsis)
+                throw new Error("Source synopses are not supported");
+            return service.getSourceSynopsis(params);
+        },
+        memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
+            getMemoryService().getSourceKnowledge(corpusId, sourceId),
+        memoryListSourceKnowledgeSuppressions: ({ corpusId, sourceId }) => {
+            const operation =
+                getMemoryService().listSourceKnowledgeSuppressions;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), corpusId, sourceId);
+        },
+        memorySuppressSourceKnowledge: (params) => {
+            const operation = getMemoryService().suppressSourceKnowledge;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), params);
+        },
+        memoryRestoreSourceKnowledge: (params) => {
+            const operation = getMemoryService().restoreSourceKnowledge;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), params);
+        },
+        memoryImportDocument: ({
+            corpusId,
+            title,
+            markdown,
+            canonicalUri,
+            tags,
+        }) =>
+            getMemoryService().ingestDocument({
+                corpusId,
+                source: {
+                    sourceType: "markdown",
+                    title,
+                    markdown,
+                    capturedAt: new Date().toISOString(),
+                    ...(canonicalUri === undefined ? {} : { canonicalUri }),
+                    ...(tags === undefined ? {} : { tags }),
+                },
+                pipeline: {
+                    mode: "content",
+                    updatePolicy: "retainRevisionHistory",
+                },
+            }),
+        memoryReplaceSource: async ({
+            corpusId,
+            sourceId,
+            expectedActiveRevisionId,
+            text,
+            retainRevisionHistory,
+        }) => {
+            const service = getMemoryService();
+            const existing = await service.getSource(corpusId, sourceId);
+            if (!existing) {
+                throw new Error(`Memory source '${sourceId}' was not found`);
+            }
+            const sourceContent =
+                existing.sourceType === "html"
+                    ? { html: text }
+                    : existing.sourceType === "text"
+                      ? { text }
+                      : { markdown: text };
+            return service.replaceSource({
+                corpusId,
+                sourceId,
+                expectedActiveRevisionId,
+                source: {
+                    sourceType: existing.sourceType,
+                    title: existing.title,
+                    ...(existing.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: existing.canonicalUri }),
+                    ...(existing.tags === undefined
+                        ? {}
+                        : { tags: existing.tags }),
+                    ...(existing.metadata === undefined
+                        ? {}
+                        : { metadata: existing.metadata }),
+                    ...sourceContent,
+                },
+                ...(retainRevisionHistory === undefined
+                    ? {}
+                    : { retainRevisionHistory }),
+            });
+        },
+        memoryPreviewForgetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().previewForgetSource(corpusId, sourceId),
+        memoryForgetSource: (params) => getMemoryService().forgetSource(params),
+        memoryReindexCorpus: ({ corpusId }) =>
+            getMemoryService().reindexCorpus(corpusId),
+        memoryReindexSource: ({ corpusId, sourceId }) =>
+            getMemoryService().reindexSource(corpusId, sourceId),
+        memoryListJobs: (params) => getMemoryService().listJobs(params),
+        memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
+        memoryListActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.listActivity(params);
+        },
+        memoryForgetActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.forgetActivity(params);
+        },
+
         // Knowledge extraction
-        extractKnowledgeFromPage: (params: any) =>
-            knowledgeHandler("extractKnowledgeFromPage", params),
+        extractKnowledgeFromPage: extractionHandler,
         // Knowledge queries
         searchWebMemories: (params: any) =>
             websiteHandler("searchWebMemories", params),
@@ -50,12 +273,8 @@ export function createAgentInvokeHandlers(
         searchByTopics: (params: any) =>
             websiteHandler("searchByTopics", params),
         hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
-        getHierarchicalTopics: (params: any) =>
-            knowledgeHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
             knowledgeHandler("getTopicImportanceLayer", params),
-        getTopicViewportNeighborhood: (params: any) =>
-            knowledgeHandler("getTopicViewportNeighborhood", params),
         getTopicMetrics: (params: any) =>
             knowledgeHandler("getTopicMetrics", params),
         getTopicDetails: (params: any) =>
@@ -76,10 +295,6 @@ export function createAgentInvokeHandlers(
             knowledgeHandler("buildKnowledgeGraph", params),
         rebuildKnowledgeGraph: (params: any) =>
             knowledgeHandler("rebuildKnowledgeGraph", params),
-        testMergeTopicHierarchies: (params: any) =>
-            knowledgeHandler("testMergeTopicHierarchies", params),
-        mergeTopicHierarchies: (params: any) =>
-            knowledgeHandler("mergeTopicHierarchies", params),
         getGlobalGraphLayoutData: (params: any) =>
             knowledgeHandler("getGlobalGraphLayoutData", params),
         getEntityNeighborhood: (params: any) =>
@@ -150,10 +365,12 @@ export function createAgentInvokeHandlers(
         },
 
         // View host
-        getViewHostUrl: (_params: any) =>
-            Promise.resolve({
-                url: `http://localhost:${context.agentContext.localHostPort}`,
-            }),
+        getViewHostUrl: async (_params: any) => ({
+            url: await ensureBrowserViewHost(
+                context,
+                createViewServiceDomain(context),
+            ),
+        }),
 
         // Tab index - use tabTitleIndex directly from context
         addTabIdToIndex: async (params: any) => {

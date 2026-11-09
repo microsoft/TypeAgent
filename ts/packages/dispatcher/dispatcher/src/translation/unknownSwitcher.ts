@@ -13,8 +13,8 @@ import {
     getActionDescription,
     SchemaCreator as sc,
 } from "@typeagent/action-schema";
-import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
 import { PromptLogger } from "@typeagent/telemetry";
+import { withChatModelTelemetryPurpose } from "@typeagent/aiclient";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
@@ -47,7 +47,7 @@ function createSelectionActionTypeDefinition(
         return undefined;
     }
 
-    const typeName = `${getCombinedActionSchemaTypeName(actionConfig)}Assistant`;
+    const typeName = `AssistantSelection_${Buffer.from(schemaName, "utf8").toString("hex")}`;
 
     const schema = sc.type(
         typeName,
@@ -78,23 +78,6 @@ function createSelectionSchema(
     };
 }
 
-const selectSchemaCache = new Map<
-    string,
-    InlineTranslatorSchemaDef | undefined
->();
-function getSelectionSchema(
-    schemaName: string,
-    provider: ActionConfigProvider,
-): InlineTranslatorSchemaDef | undefined {
-    if (selectSchemaCache.has(schemaName)) {
-        return selectSchemaCache.get(schemaName);
-    }
-
-    const result = createSelectionSchema(schemaName, provider);
-    selectSchemaCache.set(schemaName, result);
-    return result;
-}
-
 const unknownAssistantSelectionSchemaDef: InlineTranslatorSchemaDef = {
     kind: "inline",
     typeName: "UnknownAssistantSelection",
@@ -115,7 +98,7 @@ export function getAssistantSelectionSchemas(
 ) {
     const schemaEntries: AssistantSelectionSchemaEntry[] = [];
     for (const schemaName of schemaNames) {
-        const schema = getSelectionSchema(schemaName, provider);
+        const schema = createSelectionSchema(schemaName, provider);
         if (schema !== undefined) {
             schemaEntries.push({ name: schemaName, schema });
         }
@@ -157,25 +140,25 @@ export async function selectFromPartitions(
     );
     // Start all translations in parallel.
     const promises = partitions.map(({ translator }) =>
-        translator
-            .translate(request, signal)
-            .catch((err): Result<AssistantSelection> => {
-                // Let AbortError propagate so callers see cancellation rather
-                // than a generic failure result. Non-abort errors are converted
-                // to a failure result so a single bad partition doesn't block
-                // the others from being checked.
-                if (
-                    err instanceof Error &&
-                    (err.name === "AbortError" ||
-                        (err as DOMException).name === "AbortError")
-                ) {
-                    throw err;
-                }
-                return {
-                    success: false,
-                    message: err instanceof Error ? err.message : String(err),
-                };
-            }),
+        withChatModelTelemetryPurpose("schema-selection", () =>
+            translator.translate(request, signal),
+        ).catch((err): Result<AssistantSelection> => {
+            // Let AbortError propagate so callers see cancellation rather
+            // than a generic failure result. Non-abort errors are converted
+            // to a failure result so a single bad partition doesn't block
+            // the others from being checked.
+            if (
+                err instanceof Error &&
+                (err.name === "AbortError" ||
+                    (err as DOMException).name === "AbortError")
+            ) {
+                throw err;
+            }
+            return {
+                success: false,
+                message: err instanceof Error ? err.message : String(err),
+            };
+        }),
     );
     // Await results in partition order; return as soon as outcome is decided.
     for (const promise of promises) {
@@ -204,6 +187,7 @@ export function loadAssistantSelectionJsonTranslator(
     schemaNames: Iterable<string>,
     provider: ActionConfigProvider,
     promptLogger?: PromptLogger,
+    model?: string,
 ) {
     const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
@@ -241,6 +225,7 @@ export function loadAssistantSelectionJsonTranslator(
                                 "Select the assistant to handle the request",
                         },
                     ],
+                    model,
                     promptLogger,
                 },
             );

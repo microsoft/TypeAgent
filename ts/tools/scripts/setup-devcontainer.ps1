@@ -814,11 +814,6 @@ function Main {
     Show-PlatformRecommendations -Environment $environment
     Show-NextSteps -Environment $environment -Prerequisites $prerequisites
 
-    Write-Host ""
-    Write-Host "For more information, see the DevContainer documentation:" -ForegroundColor Gray
-    Write-Host "  D:\repos\codeDocs\TypeAgent\forUser\2026-05-12_devcontainer-agent-sandboxing-proposal.md" -ForegroundColor Gray
-    Write-Host ""
-
     # If elevated instance, pause so user can see results
     if ($ElevatedInstance) {
         Write-Host "Press any key to continue..." -ForegroundColor Gray

@@ -29,11 +29,29 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --conf
 
 Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAgentServer()`.
 
+### Network exposure
+
+The listener binds loopback (`127.0.0.1`), so only this machine can reach it,
+and refuses WebSocket upgrades whose `Origin` is neither a loopback page nor a
+TypeAgent browser extension. This matters because the server has no
+authentication: a client that connects can join conversations, read the signed-in
+user's identity, and run agent commands with the local user's permissions.
+
+For cross-device access use the [dev tunnel](#dev-tunnel-cross-device-access) -
+the tunnel host runs on this machine and reaches the server over loopback, so it
+works unchanged.
+
+`--host <address>` (or `AGENT_SERVER_HOST`) widens the bind for deployments that
+must publish the port, such as a container that isolates the workspace. The
+server prints a warning banner whenever it binds anything but loopback; only do
+this behind a network boundary you control.
+
 ### Server flags
 
 | Flag                       | Description                                                                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `--port <port>`            | Port to listen on (default: 8999)                                                                                                       |
+| `--host <address>`         | Address to bind (default: `127.0.0.1`). Also settable via `AGENT_SERVER_HOST`.                                                          |
 | `--config <name>`          | Load `config.<name>.json` instead of the default config                                                                                 |
 | `--idle-timeout <seconds>` | Exit after this many seconds with no connected clients (default: disabled). The CLI passes 600 (10 min) when it auto-spawns the server. |
 
@@ -80,6 +98,40 @@ When the dispatcher or an agent calls a `ClientIO` method, the routing layer use
 | Display (`setDisplay`, `appendDisplay`, `notify`, `setUserRequest`) | Forwarded to the client matching `connectionId`              |
 | Interactive (`askYesNo`, `proposeAction`, `requestChoice`)          | Forwarded to the originating client; awaits response         |
 | Broadcast                                                           | Sent to all clients (filter flag controls per-client opt-in) |
+
+---
+
+## Coding working directories
+
+Coding requests execute against the agent-server filesystem. A connected
+client's `workingDirectory` is therefore only a proposal; the server
+canonicalizes it and applies its own policy before the dispatcher sees it.
+
+- `TYPEAGENT_CODE_ALLOWED_ROOTS` is a path-delimited list of server-local roots
+  clients may select (`;` on Windows, `:` on Linux/macOS). When omitted, the
+  server does not add a root restriction.
+- `TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY` is a server-local directory used
+  when the client omits a path or proposes one outside the allowed roots. When
+  omitted, a local agent-server defaults to its process working directory.
+- `TYPEAGENT_CODING_SESSION_MAX_AGE_DAYS` controls when persisted TypeAgent
+  coding sessions are deleted. The default is seven days. Cleanup only targets
+  session IDs beginning with `typeagent-code-`.
+
+For remote or multi-user deployments, configure both settings and isolate
+workspaces at the process/container boundary. If no authorized proposal or
+default exists, non-coding requests continue normally, while coding requests
+report that no server-side working directory is available.
+
+When a request contains an existing absolute server-local file or directory
+path, the server uses that path (or the file's parent directory) as the proposed
+coding root. Users can also say, for example, `Use C:\work\project as my coding
+working directory`; the selection remains active for later requests from that
+connected client and remains subject to the server allowlist.
+
+The allowlist is a deployment security boundary and cannot be widened through
+natural language. With `TYPEAGENT_CODE_ALLOWED_ROOTS` unset, any existing local
+directory is selectable. When it is set, users can switch only among directories
+under those configured roots.
 
 ---
 

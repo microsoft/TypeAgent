@@ -23,12 +23,16 @@ server.
 
 ### Build & install locally (recommended for development)
 
-From this directory:
+From the [TypeScript workspace root](../..):
 
 ```sh
-npm install
-npm run deploy:local
+pnpm run setup
+pnpm run build vscode-shell
+pnpm --filter vscode-shell run deploy:local
 ```
+
+The extension uses the workspace's `pnpm-lock.yaml`; do not run `npm install`
+or create a separate npm lockfile in this package.
 
 `deploy:local` packages the extension and installs it into your active
 `code` CLI in one step. Reload the VS Code window after the first install.
@@ -114,6 +118,46 @@ You can manage conversations two ways:
   The dispatcher's `system.conversation` agent translates these to the same `manage-conversation` action handled by the slash commands.
 
 > Conversation-management results are rendered inline in the chat. Switching results (`new`/`switch`/`prev`/`next`) appear as a fresh agent bubble in the newly-joined conversation, after the switch completes.
+
+### Permission prompts
+
+Copilot and Claude tool permissions use the same prompt and approval policy.
+The prompt offers **Deny** and an approval scope. Open the approval menu, select
+a scope, then click the primary approval button. The selected scope is
+checkmarked in the menu and replaces the primary button label before submission.
+
+Available scopes depend on the request:
+
+- **Allow once** grants only the displayed operation.
+- **This tool for current request** grants matching tool operations until the
+  current request completes.
+- **All tools for current request** grants eligible operations until the current
+  request completes.
+- **This tool for this session** is shown when the reasoning provider's
+  SDK supports a session-scoped rule for that tool.
+- **All tools for this session** grants eligible operations for the current
+  TypeAgent session.
+
+Managed-policy and sandbox-bypass operations always require explicit approval.
+After the request completes, its final dispatcher message includes a
+`Permissions:` line listing the granted scope. Pressing `Esc` denies the visible
+permission prompt before cancelling its request; when the approval menu is open,
+the first `Esc` closes only the menu. Dismissing a completion popup with `Esc`
+does not deny the visible permission or arm the double-`Esc` cancel gesture.
+
+Automatic session approval can also be controlled directly:
+
+```text
+@allow all
+@allow off
+```
+
+Equivalent natural-language requests include "allow all permissions for this
+session" and "ask me to approve tool permissions again." `@allow off` revokes
+both the blanket "Allow all for session" grant and every "Allow this tool for
+this session" grant recorded in the TypeAgent host. In-flight request-scoped
+approvals (`Allow all for request` / `Allow this tool for request`) are left
+alone so they still cover the currently executing request.
 
 ### Cancelling a running request
 

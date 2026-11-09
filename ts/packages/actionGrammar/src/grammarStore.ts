@@ -19,6 +19,13 @@ import { Grammar, GrammarJson } from "./grammarTypes.js";
 import { grammarFromJson } from "./grammarDeserializer.js";
 import { grammarToJson } from "./grammarSerializer.js";
 
+export type GrammarRuleStatus = "active" | "suspended";
+
+export type GrammarRuleActionBinding = {
+    sourceId: string;
+    actionFingerprint: string;
+};
+
 /**
  * Stored grammar rule with metadata
  */
@@ -35,7 +42,25 @@ export interface StoredGrammarRule {
     actionName?: string;
     // The schema/agent this belongs to
     schemaName: string;
+    // Hash of the action schema used to generate this rule.
+    schemaHash?: string;
+    // Optional identity supplied by the dynamic action provider.
+    actionBinding?: GrammarRuleActionBinding;
+    status?: GrammarRuleStatus;
+    invalidationReason?: string;
 }
+
+export type GrammarSchemaIdentity = {
+    schemaHash: string;
+    sourceId?: string;
+    actionFingerprints?: Readonly<Record<string, string>>;
+};
+
+export type GrammarRuleReconciliation = {
+    activated: number;
+    suspended: number;
+    unchanged: number;
+};
 
 /**
  * Grammar store data structure (JSON serializable)
@@ -72,7 +97,7 @@ export class GrammarStore {
 
     constructor() {
         this.data = {
-            version: "1.0",
+            version: "1.1",
             nextId: 1,
             schemas: {},
         };
@@ -131,7 +156,7 @@ export class GrammarStore {
      */
     public async addRule(
         rule: Omit<StoredGrammarRule, "timestamp" | "id">,
-    ): Promise<void> {
+    ): Promise<StoredGrammarRule> {
         if (this.data.nextId === undefined) {
             this.data.nextId = 1;
         }
@@ -139,6 +164,7 @@ export class GrammarStore {
             ...rule,
             id: this.data.nextId++,
             timestamp: Date.now(),
+            status: rule.status ?? "active",
         };
 
         if (!this.data.schemas[rule.schemaName]) {
@@ -149,6 +175,7 @@ export class GrammarStore {
         this._compiledCache = undefined;
         this.modified = true;
         await this.doAutoSave();
+        return storedRule;
     }
 
     /**
@@ -156,6 +183,12 @@ export class GrammarStore {
      */
     public getRulesForSchema(schemaName: string): StoredGrammarRule[] {
         return this.data.schemas[schemaName] || [];
+    }
+
+    public getActiveRulesForSchema(schemaName: string): StoredGrammarRule[] {
+        return this.getRulesForSchema(schemaName).filter(
+            (rule) => rule.status !== "suspended",
+        );
     }
 
     /**
@@ -167,6 +200,49 @@ export class GrammarStore {
             rules.push(...schemaRules);
         }
         return rules;
+    }
+
+    public getAllActiveRules(): StoredGrammarRule[] {
+        return this.getAllRules().filter((rule) => rule.status !== "suspended");
+    }
+
+    public async reconcileSchema(
+        schemaName: string,
+        identity: GrammarSchemaIdentity,
+    ): Promise<GrammarRuleReconciliation> {
+        const result: GrammarRuleReconciliation = {
+            activated: 0,
+            suspended: 0,
+            unchanged: 0,
+        };
+        let changed = false;
+        for (const rule of this.getRulesForSchema(schemaName)) {
+            const reason = getInvalidationReason(rule, identity);
+            const nextStatus: GrammarRuleStatus =
+                reason === undefined ? "active" : "suspended";
+            if (
+                rule.status === nextStatus &&
+                rule.invalidationReason === reason
+            ) {
+                result.unchanged++;
+                continue;
+            }
+            rule.status = nextStatus;
+            if (reason === undefined) {
+                delete rule.invalidationReason;
+                result.activated++;
+            } else {
+                rule.invalidationReason = reason;
+                result.suspended++;
+            }
+            changed = true;
+        }
+        if (changed) {
+            this._compiledCache = undefined;
+            this.modified = true;
+            await this.doAutoSave();
+        }
+        return result;
     }
 
     /**
@@ -245,7 +321,7 @@ export class GrammarStore {
      */
     public clear(): void {
         this.data = {
-            version: "1.0",
+            version: "1.1",
             nextId: this.data.nextId ?? 1,
             schemas: {},
         };
@@ -258,6 +334,7 @@ export class GrammarStore {
      */
     public async load(filePath: string): Promise<void> {
         const resolvedPath = path.resolve(filePath);
+        let migrated = false;
 
         if (!fs.existsSync(resolvedPath)) {
             throw new Error(`Grammar store file not found: ${resolvedPath}`);
@@ -268,7 +345,7 @@ export class GrammarStore {
         if (fileContent === "") {
             // Empty file indicates new/empty store
             this.data = {
-                version: "1.0",
+                version: "1.1",
                 nextId: 1,
                 schemas: {},
             };
@@ -285,6 +362,7 @@ export class GrammarStore {
 
         // Migration: assign stable IDs to rules from older files that lack them
         if (!this.data.nextId) {
+            migrated = true;
             let maxId = 0;
             for (const rules of Object.values(this.data.schemas)) {
                 for (const rule of rules) {
@@ -298,13 +376,26 @@ export class GrammarStore {
                 for (const rule of rules) {
                     if (!rule.id) {
                         rule.id = this.data.nextId++;
+                        migrated = true;
                     }
+                }
+            }
+        }
+        if (this.data.version !== "1.1") {
+            this.data.version = "1.1";
+            migrated = true;
+        }
+        for (const rules of Object.values(this.data.schemas)) {
+            for (const rule of rules) {
+                if (rule.status === undefined) {
+                    rule.status = "active";
+                    migrated = true;
                 }
             }
         }
 
         this.filePath = resolvedPath;
-        this.modified = false;
+        this.modified = migrated;
     }
 
     /**
@@ -382,7 +473,7 @@ export class GrammarStore {
             return this._compiledCache;
         }
 
-        const allRules = this.getAllRules();
+        const allRules = this.getAllActiveRules();
 
         if (allRules.length === 0) {
             return undefined;
@@ -413,7 +504,7 @@ export class GrammarStore {
      * Export grammars for a specific schema as a single .agr file
      */
     public exportSchemaGrammar(schemaName: string): string {
-        const rules = this.getRulesForSchema(schemaName);
+        const rules = this.getActiveRulesForSchema(schemaName);
 
         if (rules.length === 0) {
             return "";
@@ -443,6 +534,32 @@ export class GrammarStore {
             await this.save();
         }
     }
+}
+
+function getInvalidationReason(
+    rule: StoredGrammarRule,
+    identity: GrammarSchemaIdentity,
+): string | undefined {
+    if (rule.actionBinding !== undefined) {
+        if (rule.actionBinding.sourceId !== identity.sourceId) {
+            return "action source changed";
+        }
+        const fingerprint =
+            rule.actionName === undefined
+                ? undefined
+                : identity.actionFingerprints?.[rule.actionName];
+        if (fingerprint !== rule.actionBinding.actionFingerprint) {
+            return "action definition changed";
+        }
+        return undefined;
+    }
+    if (
+        rule.schemaHash !== undefined &&
+        rule.schemaHash !== identity.schemaHash
+    ) {
+        return "action schema changed";
+    }
+    return undefined;
 }
 
 /**

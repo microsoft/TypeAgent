@@ -1,43 +1,179 @@
 # Memory architecture
 
-TypeAgent memory uses a method called **Structured RAG** for indexing and querying agent conversations.
+TypeAgent memory lets you search saved conversations and documents, ask questions
+about them, and build documents that update when their sources change.
 
-Classic RAG is defined as embedding each conversation turn into a vector, and then for each user request embedding the user request and then placing into the answer generation prompt the top conversation turns by cosine similarity to the user request.
+The memory service stores sources and events. KnowPro indexes their content for
+search. Editable documents called Views collect selected evidence into wiki pages,
+project briefs, timelines and troubleshooting guides. Each View keeps references
+to its sources so you can check its claims.
 
-Structured RAG is defined as the following steps:
+For implementation details, see [Current system](current-system.md). For test
+results and release readiness, see the
+[evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md).
 
-- For each conversation turn (message):
-  - Extract short topic sentences and tree-structured entity and relationship information.
-  - Extract key terms from the entities and topics.
-  - Add these terms to the primary index that maps terms to entities and topics which in turn point back to messages. Structured information may accompany a message, for example to/from information for an e-mail thread or location information from an image description.  Add any structured information to a relational table associated with the conversation.
-- For each user request:
-  - Convert the user request into a query expression.  If the user request refers to structured information, the query expression will include a relational query to be joined with the unstructured data query result.  The relational query may include comparison operators.
-  - For the unstructured data, the query expression consists of two parts: scope expressions and tree-pattern expressions.
-    - Scope expressions, such as time range, restrict search results to a subset of the conversation.  Scope expressions can include topic descriptions, which specify the subset of the conversation that matches the description.
-    - Tree-pattern expressions match specific trees extracted from the conversation and can be connected by logical operators.
-  - Execute the query, yielding lists of entities and topics, ordered by relevance score
-  - Select the top entities and topics and add them to the answer prompt
-  - If the topics and entities do not use all of the token budget, add to the prompt the messages referenced by the top entities and topics.
-  - Submit the answer prompt to a language model to generate the final answer.
+## How the pieces fit
 
-Structured RAG can use simple language models to extract entities and topics.  This enables Structured RAG to index large conversations, like sets of meeting transcripts.  With fine tuning, simple models deliver indices with only a small loss of precision and recall relative to indices built with large language models.
+![Sources feed shared retained evidence and a KnowPro index. Query-time recall serves Chat/Search and agents/MCP clients; View builders produce maintained documents.](diagrams/memory-overview.svg)
 
-The current Structured RAG implementation in the [KnowPro](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/knowPro/README.md) package uses secondary indices for scope expressions such as document range and time range.  The implementation also uses secondary indices for related terms, such as "novel" for "book".  During query, the memory system discovers related terms and caches them.  Models also offer related terms during information extraction.
+[Full-size SVG](diagrams/memory-overview.svg)
 
-Structured RAG has the following advantages over state-of-the-art memory using classic RAG:
+Sources feed both search and View generation. Instructional notes and guides are
+stored as ordinary sources; skills and macros are managed separately outside the
+memory service.
 
-1. **Size**:  Structured RAG can retain all of the information extracted from every conversation with the agent.  Structured RAG uses a standard inverted index to map terms to entities, topics and messages.  This choice benefits from the 30 plus years of perfecting inverted indices for Internet search, in libraries like Lucene and services like Azure AI Search.  These indices are a fraction of the size of the vector databases used to index conversations in classic RAG.  For example, using current embedding models yields for each message a 4K vector of semantic information.  In contrast, structured RAG stores only the dense information extracted for each turn, and a back-pointer to the message. Consequently, structured RAG indices can often remain resident in RAM and use a single VM, whereas classic RAG can often require disk operations distributed over a set of VM instances.  For these reasons, on a large scale, Structured RAG is substantially faster at finding relevant information and requires substantially less cost to operate. Most importantly, while systems based on classic RAG will forget information over time and overlook information as more of it is crammed into a token window, Structured RAG retains all of its information, increases the density of that information, and uses a small prompt, increasing the probability that the model generating the answer can give attention to the most relevant information.
-2. **Structure**:  Structured RAG extracts structured information from each conversation turn.  On average, this information is much denser than the text of the conversation turn, containing only the essential entities and relationships in the turn, plus a short topic sentence.  This information density enables Structured RAG to put more relevant information into the answer generation prompt.  The retention of structured semantics from each conversation turn enables higher specificity in queries, for example "what e-mail did Kevin send to Satya about new AI models?" or "who won the match where Messi used the crimson soccer ball?"  By relying on a single cosine similarity score, Classic RAG will include for example crimson t-shirts and blue soccer balls for the latter query, reducing the relevance of the information provided for answer generation.
-3. **Inference**:  Because Structured RAG has dense, structured information, it can apply further inference to memories, expanding the number of queries it can handle.  For example, if the original index contains an entity such as "artist(Paul Simon)", inference can add additional type information to that entity such as "person(Paul Simon)", which will help in answering a question like "what people did we talk about yesterday?"
-4. **Diverse knowledge sources**:  Structured RAG can combine extracted structure with pre-existing structure, for example the sender, receiver and subject of an e-mail message, or the location information provided with an image description.  This enables Structured RAG to return useful answers for queries that reference both the provided and extracted structure such as "what was the cactus I saw on my Arizona hike last month?"
-5. **Associative memory**:  Structured RAG can support pre-fetching associations as a user types their request.  For example, if the user types "what was the cactus...", the agent can begin fetching memories associated with cactus even before the user finishes typing their request.  Having discrete index terms also enables agents to use completion hints when a user is typing or speaking a request.  For example a user may type or say "play walk..." and the agent can supply completions "walk this way", "walk on the wild side" etc.
-6. **Tools for memory exploration and management**:  When memories are stored as embeddings, little can be done to manage the memories.  Structured indices and tables on the other hand can be explored and managed using additional tools that employ direct query languages or even natural language query coupled with a set of management and exploration tools.
+### What memory stores
 
-## Implementations
+| Representation                    | What it does                                                                                                         | Limit                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Retained sources and typed events | Keeps identity, exact revisions, provenance, corrections, suppression and forgetting                                 | Storing a user's claim or guess doesn't make it true                     |
+| KnowPro index                     | Holds extracted entities, topics, actions, relationships and postings, and runs retrieval                            | You can rebuild it from sources. It is not a graph database              |
+| Editable Views                    | Wiki pages, project briefs, timelines and troubleshooting guides, with citations, generated bases, edits and history | Generated text is not independent evidence and can't authorize execution |
+| Navigation projections            | Maintained Topics and per-revision source synopses                                                                   | Good for browsing. Cite the original source, not the synopsis            |
 
-- The [KnowPro](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/knowPro/README.md) package (in-development) contains the most recent implementation exploring the ideas of Structured RAG.
+### Two processing paths
+
+Recall happens at question time. TypeAgent interprets the question, retrieves
+supporting passages, and returns snippets or a cited answer. Searching sources
+works whether or not any View exists. The answer can itself be saved later as
+conversation evidence, so recall isn't guaranteed to leave no trace.
+
+View construction produces reusable, versioned documents. Wiki and Projects find
+their own subjects and pull a bounded set of indexed fragments. Timeline and
+troubleshooting builders check the full evidence of the sources you select. Both
+kinds keep exact evidence identities, recheck eligibility before saving, and
+either keep your edits or report a conflict. See [Derived Views](derived-views.md).
+
+## Where to start
+
+| If you are a...                           | Read                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Maintainer or integration author          | [Current system](current-system.md)                                                                                      |
+| Working on View lifecycle or citations    | [Derived Views](derived-views.md)                                                                                        |
+| Working on maintenance or editing         | [View maintenance](view-maintenance.md)                                                                                  |
+| Product engineer, evaluator or demo owner | [Memory scenarios](scenarios.md)                                                                                         |
+| Release planner                           | [Implementation evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md) |
+| Interested in Structured RAG              | [Structured RAG](#structured-rag), below                                                                                 |
+
+## What works today
+
+### Conversation recall
+
+When a memory service is available, the conversation memory is the profile's
+event ledger. The dispatcher records typed turns, evidence and outcomes, each
+with an authority label. `@conversation find` locates conversations by name.
+`search`, `summarize` and `index` use the conversation service, and `index`
+imports user turns from older history.
+
+The reasoning tool `search_memory` combines conversation recall with saved-document
+search. It does not search saved procedures or derived Views. Two paths work
+differently: hosts without the service use the legacy path, and the Copilot
+memory plugin has its own workspace memory. Both are covered in
+[Current system](current-system.md#conversation-memory).
+
+### Managed document memory
+
+The native `@memory` agent, browser clients and MCP all use the same service
+contracts for corpora, sources, revisions, ingestion jobs, search, answers and
+management. `@memory` validates local folder paths before it submits content.
+MCP clients send content themselves because MCP can't read an arbitrary client
+filesystem.
+
+There is one model-driven `content` pipeline and no fast, balanced or deep
+presets. `ask` writes an answer from retrieved evidence, and `ask --extractive`
+returns snippets only. See [Search and answer semantics](current-system.md#search-and-answer-semantics).
+
+### Browser and web activity
+
+The browser saves normalized page content, and it records visits, bookmarks,
+captures and imports as separate events. The Memory Hub shows sources, revisions,
+knowledge, jobs, Views, Topics and editing controls. Capturing a source or its
+assets is about evidence. It doesn't author procedures.
+
+<a id="procedural-memory"></a>
+
+### Derived knowledge, not a procedure store
+
+The service builds the four View kinds and handles their drafts, history,
+maintenance, conflicts, publication and search. It no longer detects, stores,
+retrieves or promotes saved procedures. Instruction-document and AgentEdition
+helpers still exist for other consumers, but they don't add a procedure service.
+
+## Defaults and maturity
+
+Views and the informational Wiki and Projects families are on by default in
+configured hosts. Set `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` to turn off Views, or
+`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false` to turn off informational maintenance.
+If a provider is missing or a setting is invalid, the service reports an error
+instead of returning a made-up result.
+
+Four things are checked separately: source indexing, quality of generated
+documents, UI acceptance and release readiness. Offline tests don't certify
+arbitrary corpora. Check the dated [evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
+rather than assuming a default setting or an old trial means a feature is accepted.
+
+## Storage and ownership
+
+One local owner manages the profile store. Sources and events are the retained
+evidence, and KnowPro indexes are derived from them. Editable View content,
+generated bases, conflicts, maintenance records and Topics live in the per-corpus
+View store, backed by a private Git history. They don't live in the product
+repository or in a second source store.
+
+Replacing, suppressing or forgetting a source limits what current reads can see
+and blocks late model writes. When forgetting is authorized, the service removes
+dependent local state and withholds reads until cleanup finishes. It can't erase
+external exports, backups or leftover data on the disk. See
+[History and forgetting](derived-views.md#history-and-forgetting).
+
+## Known limits
+
+- Extraction, question interpretation and answer synthesis can lose or misread context.
+- A valid typed query doesn't prove the system understood what you meant. A citation
+  that resolves doesn't prove the passage supports the generated claim.
+- Wiki and Projects output is bounded and may not cover everything in a collection.
+- "Published" and "ready for search" are separate states.
+- Edit protection keeps your text from being overwritten but isn't an approval.
+  Privacy removal overrides it.
+- A Topic or graph link between two items doesn't make them the same project or entity.
+- The local service doesn't provide remote sync, distributed ownership or enterprise governance.
+
+## Structured RAG
+
+KnowPro combines extracted structure with query interpretation at runtime:
+
+1. Extract entities, actions, facets, topics and source ranges from content.
+2. Index terms and semantic references that point back to the original passages.
+3. Translate the natural-language question into a query that matches a schema.
+4. Apply scopes, structured matching and ranking, plus related-term or embedding
+   retrieval where configured.
+5. Read the relevant evidence and return snippets or a cited answer.
+
+Take "Who rejected scaling, and why?" The query can match on actor and action,
+then read the original passage for the reason. The answer can still be wrong if
+extraction missed the rejection, if translation picked only a general topic, or
+if synthesis dropped the reason.
+
+The structure makes the constraints easy to inspect. It doesn't prove better
+accuracy, latency, cost or retention than vector retrieval. Related-term embeddings
+take part in structured retrieval and not only as a last fallback. When you compare
+approaches, use the same evidence, workload and questions.
+
+## Code
+
+- [KnowPro](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/knowPro):
+  extraction, indexes and search.
+- [Memory service](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/service):
+  durable evidence, management, derived Views and maintenance.
+- [Memory MCP server](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/mcp-server):
+  typed access for external clients.
+- [Memory agent](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/agents/memory):
+  native commands and local import, using the injected service.
+- [Conversation memory](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/conversation):
+  a KnowPro-based library. Library users are not the same as the service-backed event ledger.
 
 ## Demos
 
-- [One minute demo](https://youtu.be/jTHOt4O7YuM): A command-line test of Structured RAG vs Classic RAG recall.  With 3K input tokens, Structured RAG recalls all 63 books discussed in 25 Behind the Tech podcasts, while Classic RAG recalls 15 books using twice as many input tokens.  Not shown, at 128K input tokens, Classic RAG recalls 31 books.
-- [Ninety second demo](https://youtu.be/CWgrAEK123U): Agent memory implemented using Structured RAG.
+The [one-minute Structured RAG demo](https://youtu.be/jTHOt4O7YuM) and the
+[ninety-second agent-memory demo](https://youtu.be/CWgrAEK123U) are older
+examples. They aren't current benchmarks or acceptance results.

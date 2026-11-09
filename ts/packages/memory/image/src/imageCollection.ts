@@ -26,6 +26,7 @@ import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import {
     tryCreateEmbeddingModel,
     TextEmbeddingModel,
+    getEmbeddingSize,
 } from "@typeagent/aiclient";
 //import registerDebug from "debug";
 import sqlite from "better-sqlite3";
@@ -73,7 +74,7 @@ export class ImageCollection
         if (!dbPath) {
             dbPath = ":memory:";
         }
-        this.db = ms.sqlite.createDatabase(dbPath, true);
+        this.db = db ?? ms.sqlite.createDatabase(dbPath, false);
         this.locations = new GeoTable(this.db);
         this.exposure = new ExposureTable(this.db);
 
@@ -173,6 +174,7 @@ export class ImageCollection
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
         };
         return conversationData;
     }
@@ -186,6 +188,9 @@ export class ImageCollection
                 m.tags,
             );
             image.timestamp = m.timestamp;
+            image.metadata.dataFrameValues = { ...m.metadata.dataFrameValues };
+            image.metadata.imageEntity = m.metadata.imageEntity;
+            image.metadata.mediaEvidence = m.metadata.mediaEvidence;
             return image;
         });
         this.messages = new MessageCollection<Image>(messages);
@@ -201,6 +206,11 @@ export class ImageCollection
                 data.relatedTermsIndexData,
             );
         }
+        if (data.messageIndexData) {
+            this.secondaryIndexes.messageIndex?.deserialize(
+                data.messageIndexData,
+            );
+        }
         await buildTransientSecondaryIndexes(this, this.settings);
     }
 
@@ -214,15 +224,17 @@ export class ImageCollection
         const data = await this.serialize();
         await writeConversationDataToFile(data, dirPath, baseFileName);
 
-        // if we have an in-memory database we need to write it out to disk
-        if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
-            const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
-
-            if (fs.existsSync(dbFile)) {
-                fs.unlinkSync(dbFile);
+        const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
+        if (this.db && path.resolve(this.db.name) !== path.resolve(dbFile)) {
+            const staging = `${dbFile}.${process.pid}.pending`;
+            try {
+                await this.db.backup(staging);
+                fs.renameSync(staging, dbFile);
+            } finally {
+                if (fs.existsSync(staging)) fs.unlinkSync(staging);
             }
-
-            this.db?.exec(`vacuum main into '${dbFile}'`);
+        } else {
+            this.db?.pragma("wal_checkpoint(FULL)");
         }
     }
 
@@ -230,17 +242,32 @@ export class ImageCollection
         dirPath: string,
         baseFileName: string,
     ): Promise<ImageCollection | undefined> {
-        const imageCollection = new ImageCollection();
-        const data = await readConversationDataFromFile(
-            dirPath,
-            baseFileName,
-            imageCollection.settings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
+        const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
+        const imageCollection = new ImageCollection(
+            "",
+            [],
+            [],
+            [],
+            fs.existsSync(dbFile) ? dbFile : "",
         );
-        if (data) {
-            imageCollection.deserialize(data);
+        try {
+            const data = await readConversationDataFromFile(
+                dirPath,
+                baseFileName,
+                imageCollection.settings.relatedTermIndexSettings
+                    .embeddingIndexSettings?.embeddingSize,
+            );
+            if (data) {
+                await imageCollection.deserialize(data);
+            } else {
+                imageCollection.close();
+                return undefined;
+            }
+            return imageCollection;
+        } catch (error) {
+            imageCollection.close();
+            throw error;
         }
-        return imageCollection;
     }
 
     public static async fromBuffer(
@@ -257,7 +284,7 @@ export class ImageCollection
         );
 
         if (data) {
-            imageCollection.deserialize(data);
+            await imageCollection.deserialize(data);
         }
 
         return imageCollection;
@@ -282,7 +309,12 @@ export class ImageCollection
                           this.secondaryIndexes.termToRelatedTermsIndex
                               .fuzzyIndex,
                   ),
-            1536,
+            innerModel?.embeddingIdentity?.dimensions ?? getEmbeddingSize(),
         ];
+    }
+
+    public close(): void {
+        this.db?.close();
+        this.db = undefined;
     }
 }

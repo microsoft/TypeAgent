@@ -118,4 +118,46 @@ class DisplayContentParserTest {
             display.text
         )
     }
+
+    @Test
+    fun `carries the display message kind`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "text")
+                        .put("content", "\u21aa routed to list \u2014 recent topic")
+                        .put("kind", "info")
+                )
+        )
+
+        assertEquals(MessageKind.INFO, display.kind)
+        assertEquals("\u21aa routed to list \u2014 recent topic", display.text)
+    }
+
+    @Test
+    fun `defaults to no kind when absent`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "text")
+                        .put("content", "Created list: to-do")
+                )
+        )
+
+        assertEquals(MessageKind.NONE, display.kind)
+    }
+
+    @Test
+    fun `reads the agent message kind for ephemeral routing`() {
+        val agentMessage = JSONObject()
+            .put("kind", "toast")
+            .put("message", "hi")
+
+        assertEquals("toast", extractAgentMessageKind(agentMessage))
+        assertEquals(null, extractAgentMessageKind(JSONObject().put("message", "hi")))
+    }
 }

@@ -67,9 +67,11 @@ export class ConversationThreads implements IConversationThreads {
 
     public async buildIndex(): Promise<void> {
         this.embeddingIndex.clear();
-        for (let i = 0; i < this.threads.length; ++i) {
-            const thread = this.threads[i];
-            await this.embeddingIndex.addText(thread.description);
+        const result = await this.embeddingIndex.addTextBatch(
+            this.threads.map((thread) => thread.description),
+        );
+        if (result.error !== undefined) {
+            throw new Error(result.error);
         }
     }
 

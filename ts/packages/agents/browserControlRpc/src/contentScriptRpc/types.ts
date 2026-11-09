@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { BrowserCaptureSnapshot } from "../browserControl.js";
+
 export type ContentScriptRpc = {
+    capturePageSnapshot(
+        expectedUrl: string,
+    ): Promise<Omit<BrowserCaptureSnapshot, "pageId">>;
     scrollUp(): Promise<void>;
     scrollDown(): Promise<void>;
     getPageLinksByQuery(query: string): Promise<string | undefined>;

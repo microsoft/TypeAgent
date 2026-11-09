@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "evaluatorOnly": true,
+  "not_for_import": true,
+  "execution": "not-run",
+  "scope": "Authorized future product actions in an isolated synthetic collection, never source imports. No active user stores or Memory Center 61563.",
+  "actions": [
+    {
+      "id": "protect-lease",
+      "when": "after initial maintenance settles, before T1",
+      "kind": "authenticated-human-edit",
+      "targetSelection": "Resolve the actual canonical lease/capacity article from runtime evidence and record its page ID, generated base and edit version externally; no canned title.",
+      "changes": ["Deliberately edit and protect the title.", "Add and protect a personal synthetic review annotation."],
+      "verification": ["Human author identity and protection are retained.", "Subsequent agent text is not mislabeled human-authored."],
+      "recovery": "Use only the disposable evaluation collection; preserve conflict evidence outside imports."
+    },
+    {
+      "id": "conflict-protected",
+      "when": "during T1 maintenance",
+      "kind": "protected-edit-overlap",
+      "precondition": "protect-lease accepted with actual captured edit version",
+      "proposal": "Submit one genuine maintenance proposal overlapping the protected annotation or title, while allowing the unprotected command correction and unrelated targets to proceed.",
+      "verification": ["Specific recoverable conflict rather than overwrite.", "Unrelated target progress is observed, not inferred.", "No blanket family approval or halt."],
+      "recovery": "Keep the conflict unresolved for measurement; any user resolution is separately counted."
+    },
+    {
+      "id": "forget-temporary",
+      "when": "after T2 source delta operations",
+      "kind": "authorized-product-source-forget",
+      "sourceKey": "sb-temporary-handoff",
+      "expectedFixtureRevision": 1,
+      "expectedActiveBefore": 25,
+      "expectedActiveAfter": 24,
+      "runtimeProcedure": [
+        "Map the fixture key to its actual product sourceId and activeRevisionId in the isolated collection.",
+        "Before forgetting, record actual derived IDs and read-but-not-cited influence; protect one dependent annotation and hold one in-flight result that read the source.",
+        "Use previewForgetSource on the actual source and obtain the product confirmationToken through the authorized evaluation flow.",
+        "Call forgetSource with corpusId, actual sourceId and confirmationToken. Tokens are runtime-only and never placed in this fixture.",
+        "Release the held result only after durable removal denial; inspect rejection and recovery of dependent artifacts.",
+        "Verify all retained source revisions absent, active count 24, and source/index/synopsis/topic/view/history/context no longer reveal the routing convention."
+      ],
+      "verification": ["Privacy outranks protection.", "No late result, undo or historical redirect resurrects removed content.", "Actual product receipts distinguish denial, purge enrollment and completed purge."],
+      "recovery": "Resume source-owned purge recovery after interruption; never restore forgotten evidence from a historical view."
+    },
+    {
+      "id": "restart-repeat",
+      "when": "at a runtime-selected accepted T1 or T2 canonical commit, before index/acknowledgement",
+      "kind": "crash-restart-and-unchanged-repeat",
+      "runtimeProcedure": [
+        "Capture actual job, target, commit and derivative-index state externally.",
+        "Interrupt only the explicitly owned disposable evaluator process at the stated post-commit boundary.",
+        "Restart through the product's normal recovery path and observe index repair without duplicating accepted content.",
+        "Repeat maintenance unchanged after eligible discovery settles, recording actual synthesis calls and content revision counts."
+      ],
+      "verification": ["Zero synthesis calls on settled unchanged repeat.", "No duplicate content revision.", "Unsettled work remains visible and independent targets continue."],
+      "recovery": "Keep durable accepted effects; repair derivatives rather than regenerating accepted content."
+    }
+  ]
+}

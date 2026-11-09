@@ -1,0 +1,736 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import {
+    McpServer,
+    ResourceTemplate,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+    answerRequestSchema,
+    answerResultSchema,
+    capabilitiesSchema,
+    changeListRequestSchema,
+    changePageSchema,
+    clearedCountSchema,
+    corpusSchema,
+    eventAppendRequestSchema,
+    eventAppendResultSchema,
+    eventForgetRequestSchema,
+    eventForgetResultSchema,
+    eventListRequestSchema,
+    eventPageSchema,
+    eventSearchRequestSchema,
+    eventSearchResultSchema,
+    identifierSchema,
+    ingestRequestSchema,
+    ingestResultSchema,
+    jobListRequestSchema,
+    jobPageSchema,
+    jobStatusSchema,
+    knowledgeGraphSchema,
+    memoryToolNames,
+    optionalCorpusStatusSchema,
+    optionalEventSchema,
+    optionalJobStatusSchema,
+    optionalSourceSchema,
+    reindexResultSchema,
+    searchRequestSchema,
+    searchResultSchema,
+    sourceContentRequestSchema,
+    sourceContentSchema,
+    sourceSynopsisRequestSchema,
+    sourceSynopsisSchema,
+    sourceForgetPreviewSchema,
+    sourceForgetRequestSchema,
+    sourceForgetResultSchema,
+    sourceListRequestSchema,
+    sourcePageSchema,
+    sourceReplaceRequestSchema,
+    sourceSchema,
+} from "@typeagent/memory-client";
+import type {
+    DocumentIngestRequest,
+    JobListRequest,
+    MemoryAnswerRequest,
+    MemoryChangeListRequest,
+    MemoryEventAppendRequest,
+    MemoryEventForgetRequest,
+    MemoryEventListRequest,
+    MemoryEventSearchRequest,
+    MemorySearchRequest,
+    MemoryService,
+    SourceContentRequest,
+    SourceForgetRequest,
+    SourceListRequest,
+    SourceReplaceRequest,
+} from "@typeagent/memory-service";
+import { z } from "zod";
+import { registerViewTools } from "./viewTools.js";
+import { registerGraphTools } from "./graphTools.js";
+import { registerFrameTools } from "./frameTools.js";
+import { registerAgentSessionTools } from "./agentSessionTools.js";
+import { registerUnderstandingTools } from "./understandingTools.js";
+import { registerMemoryPreview } from "./memoryPreview.js";
+import { parseViewDraftCapability } from "@typeagent/memory-service";
+import { observeMemoryUiCapability } from "./memoryUiCapability.js";
+
+const corpusCreateInputSchema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+});
+const corpusIdInputSchema = z.object({ corpusId: identifierSchema });
+const sourceGetInputSchema = z.object({
+    corpusId: identifierSchema,
+    sourceId: identifierSchema,
+});
+const jobInputSchema = z.object({ jobId: identifierSchema });
+const eventInputSchema = z.object({
+    corpusId: identifierSchema,
+    eventId: identifierSchema,
+});
+const jobWaitInputSchema = jobInputSchema.extend({
+    pollIntervalMs: z.number().int().min(25).max(5_000).optional(),
+});
+
+function outputSchema(schema: z.ZodType) {
+    return z.object({ result: schema });
+}
+
+function toolResult(value: unknown): CallToolResult {
+    return {
+        content: [{ type: "text", text: JSON.stringify(value, undefined, 2) }],
+        structuredContent: { result: value },
+    };
+}
+
+function toolError(error: unknown): CallToolResult {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+        isError: true,
+        content: [{ type: "text", text: message }],
+    };
+}
+
+export function memoryPreviewsEnabled(): boolean {
+    const raw = process.env.TYPEAGENT_MEMORY_PREVIEWS;
+    return (
+        raw !== undefined &&
+        parseViewDraftCapability(raw, "TYPEAGENT_MEMORY_PREVIEWS")
+    );
+}
+
+export class MemoryMcpServer {
+    public readonly server: McpServer;
+    private supportsUi = () => false;
+    private readonly requestSignal: AbortSignal | undefined;
+
+    public constructor(
+        private readonly service: MemoryService,
+        options: { previews?: boolean; requestSignal?: AbortSignal } = {},
+    ) {
+        this.requestSignal = options.requestSignal;
+        this.server = new McpServer({
+            name: "typeagent-memory",
+            version: "0.0.1",
+        });
+        this.registerTools();
+        registerUnderstandingTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        if (options.previews ?? memoryPreviewsEnabled())
+            registerMemoryPreview(this.server, service, () =>
+                this.supportsUi(),
+            );
+        registerGraphTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerFrameTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerViewTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerAgentSessionTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        this.registerResources();
+    }
+
+    public async start(transport: Transport = new StdioServerTransport()) {
+        await this.service.initialize?.();
+        await this.server.connect(transport);
+        this.supportsUi = observeMemoryUiCapability(transport);
+    }
+
+    public async close(): Promise<void> {
+        await this.server.close();
+    }
+
+    private registerTools(): void {
+        this.server.registerTool(
+            memoryToolNames.changesList,
+            {
+                description:
+                    "List committed metadata-only memory changes retained for 90 days.",
+                inputSchema: changeListRequestSchema,
+                outputSchema: outputSchema(changePageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() => {
+                    if (this.service.listChanges === undefined) {
+                        throw new Error("Memory changes are not supported");
+                    }
+                    return this.service.listChanges(
+                        request as MemoryChangeListRequest,
+                    );
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusCreate,
+            {
+                description: "Create a durable memory corpus.",
+                inputSchema: corpusCreateInputSchema,
+                outputSchema: outputSchema(corpusSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ name, description }) =>
+                this.run(() => this.service.createCorpus(name, description)),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusList,
+            {
+                description: "List available memory corpora.",
+                outputSchema: outputSchema(corpusSchema.array()),
+                annotations: { readOnlyHint: true },
+            },
+            async () => this.run(() => this.service.listCorpora()),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusGet,
+            {
+                description:
+                    "Get corpus status, durable counts, and index version.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(optionalCorpusStatusSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getCorpus(corpusId)) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusClear,
+            {
+                description:
+                    "Clear all sources and indexes from a memory corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(clearedCountSchema),
+                annotations: { destructiveHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => this.service.clearCorpus(corpusId)),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusReindex,
+            {
+                description:
+                    "Atomically rebuild all derived indexes for a corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(reindexResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ corpusId }, extra) =>
+                this.run(() =>
+                    this.service.reindexCorpus(corpusId, extra.signal),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceList,
+            {
+                description: "List source metadata in a memory corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(sourceSchema.array()),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => this.service.listSources(corpusId)),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceListPage,
+            {
+                description:
+                    "List source metadata with bounded deterministic pagination.",
+                inputSchema: sourceListRequestSchema,
+                outputSchema: outputSchema(sourcePageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listSourcesPage(request as SourceListRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceGet,
+            {
+                description: "Get source and revision metadata.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(optionalSourceSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, sourceId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getSource(corpusId, sourceId)) ??
+                        null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceContentGet,
+            {
+                description:
+                    "Read a bounded range from an active or named source revision.",
+                inputSchema: sourceContentRequestSchema,
+                outputSchema: outputSchema(sourceContentSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.getSourceContent(
+                        request as SourceContentRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceKnowledgeGet,
+            {
+                description:
+                    "Get entities, topics, and relationships derived from one source.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(knowledgeGraphSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, sourceId }) =>
+                this.run(() =>
+                    this.service.getSourceKnowledge(corpusId, sourceId),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceSynopsisGet,
+            {
+                description:
+                    "Read the exact retained revision's generated synopsis, original UTF-16 evidence and honest scan/fidelity limits. This is a navigation aid, never independent citation evidence.",
+                inputSchema: sourceSynopsisRequestSchema,
+                outputSchema: outputSchema(sourceSynopsisSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() => {
+                    if (!this.service.getSourceSynopsis)
+                        throw new Error("Source synopses are not supported");
+                    return this.service.getSourceSynopsis({
+                        corpusId: request.corpusId,
+                        sourceId: request.sourceId,
+                        ...(request.revisionId !== undefined
+                            ? { revisionId: request.revisionId }
+                            : {}),
+                    });
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.documentIngest,
+            {
+                description:
+                    "Submit Markdown, text, HTML, or VTT content for durable indexing.",
+                inputSchema: ingestRequestSchema,
+                outputSchema: outputSchema(ingestResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request, extra) =>
+                this.run(async () => {
+                    const admission = new AbortController();
+                    const cancel = () => admission.abort(extra.signal.reason);
+                    extra.signal.addEventListener("abort", cancel, {
+                        once: true,
+                    });
+                    if (extra.signal.aborted) cancel();
+                    try {
+                        return await this.service.ingestDocument(
+                            request as unknown as DocumentIngestRequest,
+                            admission.signal,
+                        );
+                    } finally {
+                        extra.signal.removeEventListener("abort", cancel);
+                    }
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceReplace,
+            {
+                description:
+                    "Replace a source only if its active revision still matches.",
+                inputSchema: sourceReplaceRequestSchema,
+                outputSchema: outputSchema(ingestResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request, extra) =>
+                this.run(() =>
+                    this.service.replaceSource(
+                        request as unknown as SourceReplaceRequest,
+                        extra.signal,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceForgetPreview,
+            {
+                description:
+                    "Preview source deletion and issue a short-lived confirmation token.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(sourceForgetPreviewSchema),
+                annotations: { readOnlyHint: false, destructiveHint: false },
+            },
+            async ({ corpusId, sourceId }) =>
+                this.run(() =>
+                    this.service.previewForgetSource(corpusId, sourceId),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceForget,
+            {
+                description:
+                    "Confirm source deletion and rebuild indexes without its derived data.",
+                inputSchema: sourceForgetRequestSchema,
+                outputSchema: outputSchema(sourceForgetResultSchema),
+                annotations: { destructiveHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.forgetSource(request as SourceForgetRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceReindex,
+            {
+                description:
+                    "Atomically rebuild corpus indexes for a source management request.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(reindexResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ corpusId, sourceId }, extra) =>
+                this.run(() =>
+                    this.service.reindexSource(
+                        corpusId,
+                        sourceId,
+                        extra.signal,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.jobGet,
+            {
+                description: "Get durable ingestion job status and progress.",
+                inputSchema: jobInputSchema,
+                outputSchema: outputSchema(optionalJobStatusSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ jobId }) =>
+                this.run(
+                    async () => (await this.service.getJob(jobId)) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.jobList,
+            {
+                description:
+                    "List durable jobs with corpus, source, and state filters.",
+                inputSchema: jobListRequestSchema,
+                outputSchema: outputSchema(jobPageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listJobs(request as JobListRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.jobCancel,
+            {
+                description: "Request cancellation of an ingestion job.",
+                inputSchema: jobInputSchema,
+                outputSchema: outputSchema(optionalJobStatusSchema),
+                annotations: { destructiveHint: true },
+            },
+            async ({ jobId }) =>
+                this.run(
+                    async () => (await this.service.cancelJob(jobId)) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.jobWait,
+            {
+                description:
+                    "Wait for an ingestion job while reporting MCP progress.",
+                inputSchema: jobWaitInputSchema,
+                outputSchema: outputSchema(jobStatusSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ jobId, pollIntervalMs }, extra) =>
+                this.run(async () => {
+                    const interval = pollIntervalMs ?? 250;
+                    while (true) {
+                        if (extra.signal.aborted) {
+                            await this.service.cancelJob(jobId);
+                            throw (
+                                extra.signal.reason ??
+                                new Error("Job wait cancelled")
+                            );
+                        }
+                        const job = await this.service.getJob(jobId);
+                        if (job === undefined) {
+                            throw new Error(`Unknown memory job '${jobId}'`);
+                        }
+                        const progressToken = extra._meta?.progressToken;
+                        if (progressToken !== undefined) {
+                            await extra.sendNotification({
+                                method: "notifications/progress",
+                                params: {
+                                    progressToken,
+                                    progress: job.progress.completed,
+                                    ...(job.progress.total === undefined
+                                        ? {}
+                                        : { total: job.progress.total }),
+                                    ...(job.progress.message === undefined
+                                        ? {}
+                                        : { message: job.progress.message }),
+                                },
+                            });
+                        }
+                        if (
+                            [
+                                "complete",
+                                "partial",
+                                "failed",
+                                "cancelled",
+                            ].includes(job.state)
+                        ) {
+                            return job;
+                        }
+                        await new Promise<void>((resolve) =>
+                            setTimeout(resolve, interval),
+                        );
+                    }
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventAppend,
+            {
+                description: "Append a durable event to a memory corpus.",
+                inputSchema: eventAppendRequestSchema,
+                outputSchema: outputSchema(eventAppendResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.appendEvent(
+                        request as MemoryEventAppendRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventGet,
+            {
+                description: "Get a durable event by identifier.",
+                inputSchema: eventInputSchema,
+                outputSchema: outputSchema(optionalEventSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, eventId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getEvent(corpusId, eventId)) ??
+                        null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventList,
+            {
+                description:
+                    "List durable events with filters and deterministic pagination.",
+                inputSchema: eventListRequestSchema,
+                outputSchema: outputSchema(eventPageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listEvents(request as MemoryEventListRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventSearch,
+            {
+                description: "Search durable events with optional filters.",
+                inputSchema: eventSearchRequestSchema,
+                outputSchema: outputSchema(eventSearchResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.searchEvents(
+                        request as MemoryEventSearchRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventForget,
+            {
+                description:
+                    "Delete durable events and optionally their linked sources.",
+                inputSchema: eventForgetRequestSchema,
+                outputSchema: outputSchema(eventForgetResultSchema),
+                annotations: { destructiveHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.forgetEvents(
+                        request as MemoryEventForgetRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.search,
+            {
+                description:
+                    "Search a corpus and return bounded, source-linked evidence.",
+                inputSchema: searchRequestSchema,
+                outputSchema: outputSchema(searchResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.search(request as MemorySearchRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.answer,
+            {
+                description:
+                    "Answer a question from memory. By default the answer is synthesized by the KnowPro answer generator over retrieved evidence; set answerMode to extractive for verbatim evidence snippets. Citations are always source-linked.",
+                inputSchema: answerRequestSchema,
+                outputSchema: outputSchema(answerResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request, extra) => {
+                const controller = new AbortController();
+                const signals = this.requestSignal
+                    ? [extra.signal, this.requestSignal]
+                    : [extra.signal];
+                const cancel = () => controller.abort();
+                for (const signal of signals) {
+                    if (signal.aborted) cancel();
+                    else
+                        signal.addEventListener("abort", cancel, {
+                            once: true,
+                        });
+                }
+                try {
+                    return await this.run(() =>
+                        this.service.answer(
+                            request as MemoryAnswerRequest,
+                            controller.signal,
+                        ),
+                    );
+                } finally {
+                    for (const signal of signals)
+                        signal.removeEventListener("abort", cancel);
+                }
+            },
+        );
+        this.server.registerTool(
+            memoryToolNames.knowledgeGraphGet,
+            {
+                description:
+                    "Get entities, topics, and relationships extracted from a durable corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(knowledgeGraphSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => this.service.getKnowledgeGraph(corpusId)),
+        );
+        this.server.registerTool(
+            memoryToolNames.capabilities,
+            {
+                description: "Report memory service capabilities and warnings.",
+                outputSchema: outputSchema(capabilitiesSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async () => this.run(() => this.service.getCapabilities()),
+        );
+    }
+
+    private registerResources(): void {
+        this.server.registerResource(
+            "memory-job",
+            new ResourceTemplate("typeagent-memory://jobs/{jobId}", {
+                list: undefined,
+            }),
+            { mimeType: "application/json" },
+            async (uri, variables) => {
+                const job = await this.service.getJob(String(variables.jobId));
+                if (job === undefined) {
+                    throw new Error(`Unknown memory job '${variables.jobId}'`);
+                }
+                return this.jsonResource(uri, job);
+            },
+        );
+        this.server.registerResource(
+            "memory-source",
+            new ResourceTemplate(
+                "typeagent-memory://corpora/{corpusId}/sources/{sourceId}",
+                { list: undefined },
+            ),
+            { mimeType: "application/json" },
+            async (uri, variables) => {
+                const source = await this.service.getSource(
+                    String(variables.corpusId),
+                    String(variables.sourceId),
+                );
+                if (source === undefined) {
+                    throw new Error(
+                        `Unknown memory source '${variables.sourceId}'`,
+                    );
+                }
+                return this.jsonResource(uri, source);
+            },
+        );
+    }
+
+    private async run(
+        operation: () => Promise<unknown>,
+    ): Promise<CallToolResult> {
+        try {
+            return toolResult(await operation());
+        } catch (error) {
+            return toolError(error);
+        }
+    }
+
+    private jsonResource(uri: URL, value: unknown) {
+        return {
+            contents: [
+                {
+                    uri: uri.href,
+                    mimeType: "application/json",
+                    text: JSON.stringify(value, undefined, 2),
+                },
+            ],
+        };
+    }
+}

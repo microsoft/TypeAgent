@@ -7,7 +7,12 @@ import {
     TextEmbeddingModelWithCache,
 } from "@typeagent/knowledge-processor";
 import { collections } from "@typeagent/agent-runtime";
-import { createEmbeddingModelWithCache } from "./common.js";
+import {
+    createEmbeddingModelWithCache,
+    ConversationEmbeddingState,
+    readMemoryDataFromFile,
+    writeMemoryDataToFile,
+} from "./common.js";
 
 import registerDebug from "debug";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
@@ -24,6 +29,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
     private embeddingSize: number | undefined;
+    private embeddingState = new ConversationEmbeddingState();
 
     constructor(
         public nameTag: string = "",
@@ -57,6 +63,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
     public async buildIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.embeddingState.prepare(this.settings, this);
         this.beginIndexing();
         try {
             const result = await kp.buildConversationIndex(
@@ -80,6 +87,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
     public async buildSecondaryIndexes(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.SecondaryIndexingResults> {
+        await this.embeddingState.prepare(this.settings, this);
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
         const result = await kp.buildSecondaryIndexes(
             this,
@@ -92,7 +100,13 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
     }
 
     public async serialize(): Promise<PodcastData> {
+        const identities = await this.embeddingState.prepare(
+            this.settings,
+            this,
+        );
         const data: PodcastData = {
+            embeddingIdentities:
+                Object.keys(identities).length > 0 ? identities : undefined,
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
@@ -107,6 +121,16 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
     }
 
     public async deserialize(podcastData: PodcastData): Promise<void> {
+        const identities = await this.embeddingState.prepare(
+            this.settings,
+            this,
+        );
+        kp.validateConversationEmbeddingIdentities(
+            podcastData,
+            identities,
+            this.settings.messageTextIndexSettings.embeddingIndexSettings
+                .embeddingSize,
+        );
         this.nameTag = podcastData.nameTag;
         const podcastMessages = podcastData.messages.map((m) => {
             const metadata = new PodcastMessageMeta(m.metadata.speaker);
@@ -157,7 +181,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         baseFileName: string,
     ): Promise<void> {
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+        await writeMemoryDataToFile(data, this.settings, dirPath, baseFileName);
     }
 
     public static async readFromFile(
@@ -166,14 +190,15 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         settings?: kp.ConversationSettings,
     ): Promise<Podcast | undefined> {
         const podcast = new Podcast(undefined, undefined, undefined, settings);
-        const data = await kp.readConversationDataFromFile(
+        const data = await readMemoryDataFromFile(
+            podcast.settings,
             dirPath,
             baseFileName,
-            podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
-                ?.embeddingSize,
         );
         if (data) {
-            podcast.deserialize(data);
+            await podcast.deserialize(data);
+        } else {
+            return undefined;
         }
         return podcast;
     }
@@ -276,4 +301,4 @@ export class PodcastSecondaryIndexes extends kp.ConversationSecondaryIndexes {
 }
 
 export interface PodcastData
-    extends kp.IConversationDataWithIndexes<PodcastMessage> {}
+    extends kp.EmbeddingIdentifiedConversationData<PodcastMessage> {}

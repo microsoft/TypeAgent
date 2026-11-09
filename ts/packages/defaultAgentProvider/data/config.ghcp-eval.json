@@ -1,0 +1,21 @@
+{
+  "description": "Isolated GHCP evaluation: lists and read-only GitHub, file, and network workload",
+  "agents": {
+    "list": {
+      "name": "@typeagent/list-agent",
+      "execMode": "dispatcher"
+    },
+    "github-cli": {
+      "name": "@typeagent/github-cli-agent",
+      "execMode": "dispatcher"
+    },
+    "powershell": {
+      "name": "@typeagent/powershell-typeagent",
+      "execMode": "dispatcher"
+    },
+    "ipconfig": {
+      "name": "@typeagent/ipconfig-agent",
+      "execMode": "dispatcher"
+    }
+  }
+}

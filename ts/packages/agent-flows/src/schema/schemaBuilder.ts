@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { FlowSchemaEntry } from "../types.js";
+import type { FlowSchemaEntry } from "../types.js";
 
 export function generateFlowActionTypes(enabledFlows: FlowSchemaEntry[]): {
     typeDefinitions: string;

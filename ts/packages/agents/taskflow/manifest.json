@@ -5,6 +5,9 @@
   "schema": {
     "description": "Task flow actions. Flows are taught from examples and registered for reuse.",
     "schemaFile": "./src/schema/userActions.mts",
-    "schemaType": "TaskFlowActions"
+    "schemaType": "TaskFlowActions",
+    "actionPolicies": {
+      "listTaskFlows": { "effects": "read-only" }
+    }
   }
 }

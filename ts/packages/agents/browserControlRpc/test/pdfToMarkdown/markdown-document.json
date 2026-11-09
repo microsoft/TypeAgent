@@ -1,0 +1,79 @@
+{
+  "pages": [
+    {
+      "number": 1,
+      "blocks": [
+        { "type": "header", "text": "Discard recurring header" },
+        { "type": "heading", "level": 1, "text": "Local mathematics" },
+        { "type": "heading", "level": 9, "text": "Bounded heading" },
+        { "type": "paragraph", "text": "When x² + y₂ = 5, then tg x = 1." },
+        {
+          "type": "paragraph",
+          "text": "Bold italic and scripts",
+          "runs": [
+            { "text": " Bold ", "bold": true },
+            { "text": "italic ", "italic": true },
+            { "text": "both", "bold": true, "italic": true },
+            { "text": " x" },
+            { "text": "2 ", "script": "super" },
+            { "text": "+ y" },
+            { "text": "2", "script": "sub" },
+            { "text": " = 5\nliteral * and $ ", "bold": true }
+          ]
+        },
+        { "type": "list_item", "level": 0, "marker": "1.", "text": "First" },
+        { "type": "list_item", "level": 1, "marker": "-", "text": "Nested" },
+        {
+          "type": "list_item",
+          "level": 0,
+          "marker": "a)",
+          "text": "Letter marker"
+        },
+        {
+          "type": "table",
+          "rows": [
+            ["A|B", "Heading"],
+            ["one\ntwo"],
+            ["x² + 1 = 0", "value", "extra"]
+          ]
+        },
+        {
+          "type": "formula",
+          "text": "fraction",
+          "latex": "\\frac{a}{b} + \\sqrt{x}",
+          "number": "(2.1)"
+        },
+        { "type": "caption", "text": "Table 1: Measured values" },
+        { "type": "code", "text": "const value = 1;\nreturn value;" },
+        {
+          "type": "figure",
+          "caption": "Figure 1: Signals",
+          "text": "10 20 30\nSignal strength 40",
+          "image": {
+            "name": "p1-figure-1.png",
+            "mime": "image/png",
+            "data": "fixture-only"
+          }
+        },
+        { "type": "figure", "text": "Words without an image" },
+        {
+          "type": "paragraph",
+          "text": "A quoted sentence is ordinary text upstream."
+        },
+        { "type": "footer", "text": "Discard recurring footer" },
+        { "type": "page_number", "text": "1" }
+      ]
+    },
+    {
+      "number": 2,
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Continue without a synthetic page heading."
+        },
+        { "type": "formula", "text": "E = mc²" },
+        { "type": "paragraph", "text": "" }
+      ]
+    }
+  ]
+}

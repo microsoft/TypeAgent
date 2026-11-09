@@ -9,6 +9,7 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     equalNormalizedObject,
+    toExecutableActions,
     toFullActions,
 } from "@typeagent/agent-cache";
 import type {
@@ -38,6 +39,7 @@ import {
     isPendingRequest,
 } from "../../../translation/multipleActionSchema.js";
 import registerDebug from "debug";
+import { recordGhcpEvalEvent } from "../../../execute/ghcpEvalPolicy.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
 import {
@@ -46,6 +48,7 @@ import {
     SessionContext,
     CompletionDirection,
     CompletionGroups,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
@@ -54,13 +57,108 @@ import {
     isUnknownAction,
 } from "../dispatcherUtils.js";
 import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
+import {
+    executeCodingRequest,
+    executeReasoning as executeCopilotReasoning,
+} from "../../../reasoning/copilot.js";
+import {
+    classifyCodingRequest,
+    clearCodingAffinity,
+    establishCodingAffinity,
+    isCodeAgentRequest,
+    isCodingWorkingDirectorySelection,
+    isGenericFallbackCandidate,
+} from "../../../reasoning/codingRouting.js";
+import {
+    parseRecordingDirective,
+    type CommandDisposition,
+} from "@typeagent/dispatcher-types";
+import { resolveActiveSchemaScope } from "../../../translation/activeSchemaScope.js";
+import {
+    getPowerShellCapabilityDisposition,
+    getPowerShellCapabilityOutcome,
+} from "../../../reasoning/powershellCapabilityOutcome.js";
+import {
+    logTranslationCompleted,
+    logTranslationStarted,
+} from "../../../otel/structuredEvents.js";
+import { readTranslationRoutingFromError } from "../../../otel/translationSpan.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
     failedAction: string;
     error: string;
 };
+
+function setDisposition(
+    context: CommandHandlerContext,
+    disposition: CommandDisposition,
+): void {
+    ensureCommandResult(context).disposition = disposition;
+}
+
+function getActionSchemas(
+    actions: { action: { schemaName: string } }[],
+): string[] {
+    return [...new Set(actions.map(({ action }) => action.schemaName))];
+}
+
+function applyPowerShellCapabilityOutcome(
+    context: CommandHandlerContext,
+): boolean {
+    if (
+        context.currentOptions?.reasoningProfile !==
+        "powershellCapabilityFallback"
+    ) {
+        return false;
+    }
+
+    const commandResult = ensureCommandResult(context);
+    const outcome = getPowerShellCapabilityOutcome(commandResult.actions);
+    if (!outcome) {
+        commandResult.lastError =
+            "PowerShell capability reasoning did not report a typed outcome.";
+        setDisposition(context, {
+            status: "failed",
+            path: "reasoning",
+            mayHaveSideEffects: false,
+        });
+        return true;
+    }
+
+    commandResult.capabilityOutcome = outcome;
+    if (outcome.status === "failed") {
+        commandResult.lastError = outcome.reason;
+    }
+    setDisposition(context, getPowerShellCapabilityDisposition(outcome));
+    return true;
+}
+
+function getSuccessfulPowerShellReasoningAction(
+    context: CommandHandlerContext,
+): TypeAgentAction | undefined {
+    if (
+        context.currentOptions?.reasoningProfile !==
+        "powershellCapabilityFallback"
+    ) {
+        return undefined;
+    }
+    const actions = ensureCommandResult(context).actions;
+    const outcome = getPowerShellCapabilityOutcome(actions);
+    if (outcome?.status !== "handledExisting") {
+        return undefined;
+    }
+    return actions
+        ? [...actions]
+              .reverse()
+              .find(
+                  (action) =>
+                      action.schemaName === outcome.schema &&
+                      action.actionName === outcome.actionName,
+              )
+        : undefined;
+}
 
 async function runConfiguredReasoning(
     request: string,
@@ -231,13 +329,17 @@ async function canTranslateWithoutContext(
             newActions,
         });
     } catch (e: any) {
-        logger?.logEvent("contextlessTranslation", {
-            requestAction,
-            actions: oldActions,
-            history: requestAction.history,
-            newActions,
-            error: e.message,
-        });
+        logger?.logEvent(
+            "contextlessTranslation",
+            {
+                requestAction,
+                actions: oldActions,
+                history: requestAction.history,
+                newActions,
+                error: e.message,
+            },
+            "error",
+        );
         throw e;
     }
 }
@@ -399,7 +501,7 @@ function findMatchedGrammarRule(
     const store = context.persistedGrammarStore;
     const candidates =
         store
-            ?.getRulesForSchema(primary.schemaName)
+            ?.getActiveRulesForSchema(primary.schemaName)
             .filter((rule) => rule.actionName === primary.actionName) ?? [];
     if (candidates.length === 1) {
         return { rule: candidates[0].grammarText };
@@ -500,6 +602,7 @@ async function requestExplain(
     context: CommandHandlerContext,
     attachments: CachedImageWithDetails[] | undefined,
     translationResult: InterpretResult,
+    allowLearning: boolean,
 ) {
     // Make sure the current requestId is captured
     const requestId = getRequestId(context);
@@ -603,16 +706,31 @@ async function requestExplain(
         );
         return;
     }
+    if (!allowLearning) {
+        return;
+    }
 
     const options = getExplainerOptions(requestAction, context);
     if (options === undefined) {
         return;
     }
 
-    const processRequestActionP = context.agentCache.processRequestAction(
-        requestAction,
-        true,
-        options,
+    const processRequestActionP = withChatModelTelemetryContext(
+        {
+            phase: context.explanationAsynchronousMode
+                ? "explanation"
+                : "translation",
+            purpose: "cache-generation",
+            scope: context.explanationAsynchronousMode
+                ? "background"
+                : "foreground",
+        },
+        () =>
+            context.agentCache.processRequestAction(
+                requestAction,
+                true,
+                options,
+            ),
     );
 
     if (context.explanationAsynchronousMode) {
@@ -691,23 +809,42 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            // Requests with recording/reasoning prefixes bypass translation entirely
-            // and go straight to Claude reasoning.
-            const REASONING_PREFIXES = [
-                "learn:",
-                "dev:",
-                "remember how to ",
-                "record ",
-            ];
-            const lowerRequest = request.trimStart().toLowerCase();
+            // Recording directives bypass translation and go straight to the
+            // configured reasoning engine.
+            const recordingDirective = parseRecordingDirective(request);
             const forceReasoningEnv =
                 process.env.CLAUDE_FORCE_REASONING === "1";
             if (
                 !systemContext.noReasoning &&
-                (forceReasoningEnv ||
-                    REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p)))
+                (forceReasoningEnv || recordingDirective !== undefined)
             ) {
-                await runConfiguredReasoning(request, context);
+                try {
+                    await runConfiguredReasoning(request, context);
+                    setDisposition(systemContext, {
+                        status: "handled",
+                        path: "reasoning",
+                    });
+                } catch (error) {
+                    setDisposition(systemContext, {
+                        status: "failed",
+                        path: "reasoning",
+                        mayHaveSideEffects: true,
+                    });
+                    throw error;
+                }
+                return;
+            }
+
+            const activeSchemaScope = resolveActiveSchemaScope(
+                systemContext.agents.getActiveSchemas(),
+                systemContext.currentOptions?.activeSchemas,
+                systemContext.currentOptions?.activeSchemaFamilies,
+            );
+            if (activeSchemaScope.unavailable.length > 0) {
+                setDisposition(systemContext, {
+                    status: "notHandled",
+                    reason: "noActiveSchema",
+                });
                 return;
             }
 
@@ -731,14 +868,31 @@ export class RequestCommandHandler implements CommandHandler {
                 addRequestToMemory(systemContext, request);
             }
             let interpretResult: InterpretResult;
+            const requestId = getRequestId(systemContext).requestId;
+            logTranslationStarted(systemContext.logger, {
+                requestId,
+                schemaNames: activeSchemaScope.schemaNames,
+            });
+            // Measure the translation phase at this call boundary with a
+            // monotonic-ish wall clock (consistent with the reasoning span's
+            // `Date.now()` convention) so the duration is a real fact on the
+            // event, not something the exporter has to reconstruct from span
+            // timestamps. Covers the success, failure, and cancellation paths.
+            const translationStartedAt = Date.now();
             try {
                 interpretResult = await interpretRequest(
                     context,
                     request,
                     cachedAttachments,
                     history,
+                    activeSchemaScope.schemaNames,
                 );
             } catch (e: any) {
+                setDisposition(systemContext, {
+                    status: "failed",
+                    path: "command",
+                    mayHaveSideEffects: false,
+                });
                 if (systemContext.userRequestKnowledgeExtraction === true) {
                     addResultToMemory(
                         systemContext,
@@ -746,15 +900,40 @@ export class RequestCommandHandler implements CommandHandler {
                         DispatcherName,
                     );
                 }
-                systemContext?.logger?.logEvent("request:exception", {
-                    request,
-                    message: e.message,
-                    stack: e.stack,
+                logTranslationCompleted(systemContext.logger, {
+                    requestId,
+                    // `strategy` is only a placeholder on the failure path (the
+                    // terminal route is unknown). The routing summary carried on
+                    // the error is the source of truth: `logTranslationCompleted`
+                    // derives `routingReason` from the routes actually observed
+                    // and omits it when none reached a terminal decision, so a
+                    // cache-stage failure is never mislabelled `llm_translation`.
+                    strategy: "translate",
+                    success: false,
+                    // Only what is known from outside the error; a cancellation
+                    // carried by the thrown value is recognized from `error`.
+                    cancelled:
+                        systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - translationStartedAt,
+                    routing: readTranslationRoutingFromError(e),
+                    error: e,
+                    actions: [],
                 });
+                debugRequest(`Request translation failed: ${e.message}`);
                 throw e;
             }
 
             const { requestAction, tokenUsage } = interpretResult;
+            logTranslationCompleted(systemContext.logger, {
+                requestId,
+                strategy: interpretResult.fromUser
+                    ? "user"
+                    : interpretResult.fromCache || "translate",
+                success: true,
+                elapsedMs: Date.now() - translationStartedAt,
+                routing: interpretResult.routing,
+                actions: requestAction.actions,
+            });
 
             if (tokenUsage) {
                 ensureCommandResult(systemContext).tokenUsage = tokenUsage;
@@ -775,6 +954,74 @@ export class RequestCommandHandler implements CommandHandler {
                         ...tokenUsage,
                     };
                 }
+            }
+
+            const genericFallback = isGenericFallbackCandidate(requestAction);
+            if (genericFallback) {
+                const codingDecision = classifyCodingRequest(
+                    request,
+                    systemContext.codingAffinity !== undefined,
+                    attachments?.length ?? 0,
+                );
+                if (codingDecision === "coding") {
+                    if (establishCodingAffinity(systemContext) === undefined) {
+                        displayError(
+                            "Coding requires a valid server-side working directory. " +
+                                "Configure TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY or " +
+                                "TYPEAGENT_CODE_ALLOWED_ROOTS on agent-server, or submit an authorized workingDirectory.",
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: false,
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    if (isCodingWorkingDirectorySelection(request)) {
+                        displayStatus(
+                            `Coding working directory: ${systemContext.codingAffinity!.workingDirectory}`,
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    delete ensureCommandResult(systemContext).actionTokenUsage;
+                    try {
+                        await executeCodingRequest(
+                            request,
+                            context,
+                            attachments,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                    } catch (error) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: true,
+                            schemas: ["code.swe"],
+                        });
+                        throw error;
+                    }
+                    return;
+                }
+                if (systemContext.codingAffinity !== undefined) {
+                    clearCodingAffinity(systemContext);
+                }
+            } else if (
+                systemContext.codingAffinity !== undefined &&
+                !isCodeAgentRequest(requestAction)
+            ) {
+                clearCodingAffinity(systemContext);
             }
 
             // If translation produced unknown or clarification actions,
@@ -801,23 +1048,113 @@ export class RequestCommandHandler implements CommandHandler {
                             action.actionName === "clarifyMultipleAgentMatches"
                         )),
             );
+            const hasUnknownAction = requestAction.actions.some(({ action }) =>
+                isUnknownAction(action),
+            );
+            const hasClarificationAction = requestAction.actions.some(
+                ({ action }) => action.schemaName === DispatcherClarifyName,
+            );
+            if (
+                needsReasoning &&
+                systemContext.noReasoning &&
+                (systemContext.currentOptions?.activeSchemas !== undefined ||
+                    systemContext.currentOptions?.activeSchemaFamilies !==
+                        undefined)
+            ) {
+                const commandResult = ensureCommandResult(systemContext);
+                commandResult.actions = requestAction.actions.map(
+                    ({ action }) => action,
+                );
+                setDisposition(systemContext, {
+                    status: "notHandled",
+                    reason: hasUnknownAction ? "unknown" : "clarification",
+                });
+                return;
+            }
             let reasoningHandled = false;
-            if (needsReasoning && !systemContext.noReasoning) {
+            let allowLearning = false;
+            let explanationResult = interpretResult;
+            if (needsReasoning) {
+                recordGhcpEvalEvent("translation.reasoning.decision", {
+                    hasUnknownAction,
+                    hasClarificationAction,
+                    enabled:
+                        !systemContext.noReasoning &&
+                        systemContext.currentOptions
+                            ?.translationReasoningFallback !== false,
+                });
+            }
+            if (
+                needsReasoning &&
+                !systemContext.noReasoning &&
+                systemContext.currentOptions?.translationReasoningFallback !==
+                    false
+            ) {
                 try {
+                    debugRequest("translation.reasoning.enter", {
+                        hasUnknownAction,
+                        hasClarificationAction,
+                    });
+                    recordGhcpEvalEvent("translation.reasoning.enter");
                     await runConfiguredReasoning(request, context);
+                    debugRequest("translation.reasoning.completed");
+                    recordGhcpEvalEvent("translation.reasoning.completed");
                     reasoningHandled = true;
+                    if (!applyPowerShellCapabilityOutcome(systemContext)) {
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                        });
+                    }
+                    const reasoningAction =
+                        getSuccessfulPowerShellReasoningAction(systemContext);
+                    if (reasoningAction !== undefined) {
+                        explanationResult = {
+                            ...interpretResult,
+                            fromCache: false,
+                            fromUser: false,
+                            requestAction: new RequestAction(
+                                request,
+                                toExecutableActions([
+                                    reasoningAction as FullAction,
+                                ]),
+                                requestAction.history,
+                            ),
+                        };
+                        allowLearning = true;
+                    }
                 } catch (e: any) {
+                    debugRequest("translation.reasoning.failed");
+                    recordGhcpEvalEvent("translation.reasoning.failed");
                     debugRequest(
                         `Reasoning fallback failed, using default handler: ${e.message}`,
                     );
                 }
             }
             if (!reasoningHandled) {
+                let observedAction = false;
+                let observedIncompleteAction = false;
                 const execResult = await executeActions(
                     requestAction.actions,
                     requestAction.history?.entities,
                     context,
+                    (_action, result) => {
+                        observedAction = true;
+                        if (
+                            result.error !== undefined ||
+                            result.pendingChoice !== undefined
+                        ) {
+                            observedIncompleteAction = true;
+                        }
+                    },
                 );
+                allowLearning =
+                    execResult === undefined &&
+                    observedAction &&
+                    !observedIncompleteAction &&
+                    !hasUnknownAction &&
+                    !hasClarificationAction;
+                const actionSchemas = getActionSchemas(requestAction.actions);
 
                 // Error-triggered reasoning: if an action failed and at least one
                 // schema in the request opts in via errorReasoning: true, give Claude
@@ -825,7 +1162,8 @@ export class RequestCommandHandler implements CommandHandler {
                 if (
                     !systemContext.noReasoning &&
                     execResult !== undefined &&
-                    execResult.fallbackToReasoning
+                    execResult.fallbackToReasoning &&
+                    process.env.TYPEAGENT_GHCP_EVAL_FIXTURES === undefined
                 ) {
                     const needsErrorReasoning = requestAction.actions.some(
                         ({ action }) => {
@@ -868,6 +1206,11 @@ export class RequestCommandHandler implements CommandHandler {
                                 },
                             );
                             errorReasoningResolved = true;
+                            setDisposition(systemContext, {
+                                status: "handled",
+                                path: "reasoning",
+                                schemas: actionSchemas,
+                            });
                         } catch (e: any) {
                             debugRequest(
                                 `Error-triggered reasoning failed, keeping original error: ${e.message}`,
@@ -878,15 +1221,48 @@ export class RequestCommandHandler implements CommandHandler {
                     // or failed to resolve the failure, surface the original
                     // action error instead of silently reporting success.
                     if (!errorReasoningResolved) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "action",
+                            mayHaveSideEffects: true,
+                            schemas: actionSchemas,
+                        });
                         displayError(execResult.error, context);
                     }
+                } else if (execResult !== undefined) {
+                    setDisposition(systemContext, {
+                        status: "failed",
+                        path: "action",
+                        mayHaveSideEffects: true,
+                        schemas: actionSchemas,
+                    });
+                } else if (hasUnknownAction) {
+                    setDisposition(systemContext, {
+                        status: "notHandled",
+                        reason: "unknown",
+                    });
+                } else if (
+                    hasClarificationAction &&
+                    systemContext.noReasoning
+                ) {
+                    setDisposition(systemContext, {
+                        status: "notHandled",
+                        reason: "clarification",
+                    });
+                } else {
+                    setDisposition(systemContext, {
+                        status: "handled",
+                        path: "action",
+                        schemas: actionSchemas,
+                    });
                 }
             }
 
             await requestExplain(
                 systemContext,
                 cachedAttachments,
-                interpretResult,
+                explanationResult,
+                allowLearning,
             );
         } finally {
             profiler?.stop();

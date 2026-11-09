@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import path from "node:path";
 import {
     ActionContext,
     AppAgent,
@@ -25,17 +26,30 @@ import {
     AppAgentProvider,
     AppAgentProviderSetController,
 } from "agent-dispatcher";
+import type { McpServerSourceApi } from "../mcp/mcpAppAgentSource.js";
+import type {
+    EnvValue,
+    NormalizedMcpServerConfig,
+} from "../mcp/mcpServerConfig.js";
 import chalk from "chalk";
+import { enforceMcpPolicy } from "../mcp/mcpPolicy.js";
+import { McpConfigDiscovery } from "../mcp/mcpConfigDiscovery.js";
 import {
+    ExtensionKind,
     InstallMatchKind,
     InstallPreview,
+    InstallPreviewMatch,
     InstallResult,
+    McpInstallCandidate,
     deriveMatchKind,
     SourceStatus,
     UninstallOutcomeStatus,
     UpdateOutcomeStatus,
     UpdateResult,
 } from "./config.js";
+import { type AgentGroupCatalog, findAgentGroup } from "./agentGroups.js";
+import type { MemoryViewPackageManager } from "../memoryViewPackages.js";
+import { buildMemoryViewCommandTable } from "./memoryViewCommands.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -54,6 +68,10 @@ export interface AvailableAgentInfo {
     readonly defaultAgentName?: string | undefined;
     readonly packageName?: string | undefined;
     readonly description?: string | undefined;
+    // Which kind of extension this row installs; absent means "agent". Threaded
+    // from the source's `AvailableInstallRow` so `@package available --type`
+    // can filter native agents from MCP servers.
+    readonly extensionKind?: ExtensionKind | undefined;
 }
 
 /** Agent information grouped under one configured install source. */
@@ -93,6 +111,18 @@ export interface InstalledAgentSourceApi {
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
     ): Promise<InstallResult>;
+    // Classify the package state without rereading the durable record store.
+    getAgentPackageState(name: string): AgentPackageState | undefined;
+    // Install an agent expecting it to match the preflight winner from preview().
+    // Pins resolution to the previewed source and validates expected identity
+    // before materialization.
+    installExpected(
+        nameOrTarget: string,
+        expected: InstallPreviewMatch,
+        issuingController: AppAgentProviderSetController,
+        onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
+    ): Promise<InstallResult>;
     // Dry-run: report how a one/two-argument target would resolve (winning
     // source, match kind, installed name, and the full shadow set) without
     // installing anything. `--refresh` may still rewrite a cache-backed source's
@@ -103,6 +133,18 @@ export interface InstalledAgentSourceApi {
         sourceName: string | undefined,
         onStatus?: SourceStatus,
     ): Promise<InstallPreview | undefined>;
+    // Resolve normalized MCP artifacts without native materialization. The
+    // full match set lets the command reject source ambiguity.
+    resolveMcp(
+        ref: string,
+        sourceName?: string,
+        onStatus?: SourceStatus,
+    ): Promise<McpInstallCandidate[]>;
+    materializeMcp?(
+        candidate: McpInstallCandidate,
+        abortSignal?: AbortSignal,
+    ): Promise<NormalizedMcpServerConfig>;
+    cleanupMcp?(config: NormalizedMcpServerConfig): void;
     // Refresh cache-backed source metadata (feed descriptor caches) before an
     // install/preview/listing. When `sourceName` is given, only that source is
     // refreshed. A fetch failure throws so the `--refresh` command fails rather
@@ -144,9 +186,11 @@ export interface InstalledAgentSourceApi {
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
     // Enumerable install targets grouped in source order. Optional source
-    // filter narrows results to one source.
+    // filter narrows results to one source; optional `type` filter narrows to
+    // one extension kind ("agent" / "mcp").
     listAvailableAgents(opts?: {
         sourceName?: string;
+        type?: ExtensionKind;
     }): Promise<AgentSourceGroup<AvailableAgentInfo>[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
@@ -160,12 +204,170 @@ export interface InstalledAgentSourceApi {
  * closures. So a handler can never reach back into dispatcher internals.
  */
 export interface PackageAgentContext {
+    readonly memoryViews?: MemoryViewPackageManager;
     readonly appAgentProviderSetController: AppAgentProviderSetController;
     readonly source: InstalledAgentSourceApi;
+    readonly mcpSource?: McpServerSourceApi;
+    readonly agentGroups?: AgentGroupCatalog;
+    readonly agentGroupsError?: string;
 }
 
 type PackageActionContext = ActionContext<PackageAgentContext>;
 type PackageSessionContext = SessionContext<PackageAgentContext>;
+type PackageType = Exclude<ExtensionKind, "memory-view"> | "all";
+
+export type AgentPackageState =
+    | "bundled"
+    | "installed"
+    | "installed-unavailable"
+    | "transitioning";
+
+function requireAgentGroupCatalog(
+    context: PackageAgentContext,
+): AgentGroupCatalog {
+    if (context.agentGroups !== undefined) {
+        return context.agentGroups;
+    }
+    throw new Error(
+        context.agentGroupsError ??
+            "The agent group catalog is unavailable. Reinstall or repair TypeAgent and retry.",
+    );
+}
+
+function parsePackageType(
+    value: string | undefined,
+    defaultValue: PackageType,
+): PackageType {
+    const type = value ?? defaultValue;
+    if (type !== "agent" && type !== "mcp" && type !== "all") {
+        throw new Error(
+            `Invalid --type '${type}'. Expected 'agent', 'mcp', or 'all'.`,
+        );
+    }
+    return type;
+}
+
+function requireMcpSource(context: PackageSessionContext): McpServerSourceApi {
+    const source = context.agentContext.mcpSource;
+    if (source === undefined) {
+        throw new Error("MCP server management is not available on this host.");
+    }
+    return source;
+}
+
+function mcpServerNames(context: PackageSessionContext): string[] {
+    return (
+        context.agentContext.mcpSource
+            ?.listServers()
+            .map((config) => config.name)
+            .sort((a, b) => a.localeCompare(b)) ?? []
+    );
+}
+
+function findMcpServer(
+    mcpSource: McpServerSourceApi,
+    nameOrId: string,
+    sourceName?: string,
+): NormalizedMcpServerConfig | undefined {
+    return mcpSource
+        .listServers()
+        .find(
+            (config) =>
+                (config.id === nameOrId || config.name === nameOrId) &&
+                (sourceName === undefined ||
+                    config.provenance.source === sourceName),
+        );
+}
+
+function materializeMcp(
+    source: InstalledAgentSourceApi,
+    candidate: McpInstallCandidate,
+    signal?: AbortSignal,
+): Promise<NormalizedMcpServerConfig> {
+    return (
+        source.materializeMcp?.(candidate, signal) ??
+        candidate.materialize?.(signal) ??
+        Promise.resolve(candidate.config)
+    );
+}
+
+function cleanupMcp(
+    source: InstalledAgentSourceApi,
+    config: NormalizedMcpServerConfig,
+): void {
+    source.cleanupMcp?.(config);
+}
+
+function describeEnvValue(value: EnvValue): string {
+    return typeof value === "string"
+        ? "<literal>"
+        : "kind" in value
+          ? `<credential ${value.kind}:${value.name}>`
+          : "<template>";
+}
+
+function describeMcpConfig(config: NormalizedMcpServerConfig): string {
+    const lines = [
+        `MCP server '${config.name}' (${config.id})`,
+        `Source: ${config.provenance.source}${config.provenance.ref === undefined ? "" : ` / ${config.provenance.ref}`}`,
+        `State: ${config.trust}, ${config.enabled ? "enabled" : "disabled"}`,
+    ];
+    if (config.transport.kind === "stdio") {
+        lines.push(
+            `Command: ${[config.transport.command, ...(config.transport.args ?? [])].join(" ")}`,
+        );
+        if (config.transport.cwd !== undefined) {
+            lines.push(`Cwd: ${config.transport.cwd}`);
+        }
+        const env = config.transport.env;
+        if (env !== undefined) {
+            lines.push(
+                `Environment: ${Object.entries(env)
+                    .map(
+                        ([name, value]) => `${name}=${describeEnvValue(value)}`,
+                    )
+                    .join(", ")}`,
+            );
+        }
+    } else {
+        lines.push(`URL: ${config.transport.url}`);
+        if (config.transport.headers !== undefined) {
+            lines.push(
+                `Headers: ${Object.entries(config.transport.headers)
+                    .map(
+                        ([name, value]) => `${name}=${describeEnvValue(value)}`,
+                    )
+                    .join(", ")}`,
+            );
+        }
+    }
+    lines.push(
+        `Tools: ${config.enabledTools?.join(", ") ?? "all advertised tools"}`,
+    );
+    return lines.join("\n");
+}
+
+function describeMcpChanges(
+    current: NormalizedMcpServerConfig,
+    next: NormalizedMcpServerConfig,
+): string {
+    const changes: string[] = [];
+    if (JSON.stringify(current.transport) !== JSON.stringify(next.transport)) {
+        changes.push("transport");
+    }
+    if (current.description !== next.description) {
+        changes.push("description");
+    }
+    if (
+        JSON.stringify(current.enabledTools) !==
+        JSON.stringify(next.enabledTools)
+    ) {
+        changes.push("enabled tools");
+    }
+    return changes.length === 0
+        ? "No configuration changes."
+        : changes.join(", ");
+}
 
 // Names of agents that can be uninstalled/updated.
 function managedAgentNames(context: PackageSessionContext): string[] {
@@ -212,44 +414,102 @@ function displaySourceTables<T>(
 }
 
 class ListInstalledCommandHandler implements CommandHandler {
-    public readonly description = "List installed agents";
-    public readonly parameters = {} as const;
+    public readonly description = "List installed agents and MCP servers";
+    public readonly parameters = {
+        flags: {
+            type: {
+                description: "List 'agent', 'mcp', or 'all'",
+                char: "t",
+                type: "string",
+                default: "agent",
+            },
+        },
+    } as const;
     public async run(
         context: PackageActionContext,
-        _params: ParsedCommandParams<typeof this.parameters>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { source } = context.sessionContext.agentContext;
+        const type = parsePackageType(params.flags?.type, "agent");
+        const { source, mcpSource } = context.sessionContext.agentContext;
         // `@package list` shows mutable installed records only.
         const groups = source.listInstalled();
-        if (groups.length === 0) {
+        const servers = mcpSource?.listServers() ?? [];
+        if (
+            (type === "agent" && groups.length === 0) ||
+            (type === "mcp" && servers.length === 0) ||
+            (type === "all" && groups.length === 0 && servers.length === 0)
+        ) {
+            if (type === "mcp") {
+                displayResult("No installed MCP servers found.", context);
+                return;
+            }
             displayResult("No installed agents found.", context);
             return;
         }
 
-        // Preserve source order, matching `@package available`. Sort agents
-        // within each source and render each heading and table as a block.
-        displaySourceTables(
-            context,
-            groups,
-            ["Name", "Reference"],
-            (a, b) => a.name.localeCompare(b.name),
-            (record) => [
-                chalk.cyanBright(record.name),
-                record.ref !== undefined
-                    ? chalk.gray(record.ref)
-                    : chalk.gray("—"),
-            ],
-        );
+        if (type !== "mcp") {
+            // Preserve source order, matching `@package available`. Sort agents
+            // within each source and render each heading and table as a block.
+            displaySourceTables(
+                context,
+                groups,
+                ["Name", "Reference"],
+                (a, b) => a.name.localeCompare(b.name),
+                (record) => [
+                    chalk.cyanBright(record.name),
+                    record.ref !== undefined
+                        ? chalk.gray(record.ref)
+                        : chalk.gray("—"),
+                ],
+            );
 
-        context.actionIO.appendDisplay(
-            {
-                type: "text",
-                content: chalk.gray(
-                    "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
-                ),
-            },
-            "block",
-        );
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: chalk.gray(
+                        "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
+                    ),
+                },
+                "block",
+            );
+        }
+        if (type !== "agent" && servers.length > 0) {
+            displaySourceTables(
+                context,
+                [
+                    {
+                        source: "MCP servers",
+                        agents: servers,
+                    },
+                ],
+                ["Name", "Transport", "Trust", "Enabled", "Source"],
+                (a, b) => a.name.localeCompare(b.name),
+                (config) => [
+                    chalk.cyanBright(config.name),
+                    config.transport.kind === "stdio"
+                        ? config.transport.command
+                        : config.transport.url,
+                    config.trust,
+                    config.enabled ? "yes" : "no",
+                    config.provenance.source,
+                ],
+            );
+        }
+    }
+
+    public async getCompletion(
+        _context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        return {
+            groups: names
+                .filter((name) => name === "--type")
+                .map((name) => ({
+                    name,
+                    completions: ["agent", "mcp", "all"],
+                })),
+        };
     }
 }
 
@@ -263,6 +523,13 @@ class ListAvailableCommandHandler implements CommandHandler {
                 char: "s",
                 type: "string",
                 optional: true,
+            },
+            type: {
+                description:
+                    "Filter by extension kind: 'agent', 'mcp', or 'all'",
+                char: "t",
+                type: "string",
+                default: "all",
             },
             refresh: {
                 description:
@@ -279,13 +546,22 @@ class ListAvailableCommandHandler implements CommandHandler {
     ) {
         const { source } = context.sessionContext.agentContext;
         const sourceName = params.flags?.source ?? undefined;
+        const typeFlag = params.flags?.type ?? "all";
+        if (typeFlag !== "all" && typeFlag !== "agent" && typeFlag !== "mcp") {
+            throw new Error(
+                `Invalid --type '${typeFlag}'. Expected 'agent', 'mcp', or 'all'.`,
+            );
+        }
+        const type =
+            typeFlag === "all" ? undefined : (typeFlag as ExtensionKind);
         if (params.flags?.refresh) {
             displayStatus("Refreshing source metadata...", context);
             await source.refresh(sourceName);
         }
-        const groups = await source.listAvailableAgents(
-            sourceName !== undefined ? { sourceName } : undefined,
-        );
+        const groups = await source.listAvailableAgents({
+            ...(sourceName !== undefined ? { sourceName } : {}),
+            ...(type !== undefined ? { type } : {}),
+        });
         if (groups.length === 0) {
             displayResult("No installable agents found.", context);
             return;
@@ -324,6 +600,12 @@ class ListAvailableCommandHandler implements CommandHandler {
                     completions: source.listSources(),
                 });
             }
+            if (name === "--type") {
+                completions.push({
+                    name,
+                    completions: ["agent", "mcp", "all"],
+                });
+            }
         }
         return { groups: completions };
     }
@@ -346,6 +628,12 @@ class InstallCommandHandler implements CommandHandler {
             },
         },
         flags: {
+            type: {
+                description: "Install an 'agent', 'mcp', or infer with 'all'",
+                char: "t",
+                type: "string",
+                default: "all",
+            },
             source: {
                 description:
                     "Resolve only against this named source, bypassing the order.",
@@ -397,18 +685,242 @@ class InstallCommandHandler implements CommandHandler {
             : `source '${m.source}'`;
     }
 
+    private async runMcpInstall(
+        context: PackageActionContext,
+        candidate: McpInstallCandidate,
+        installedName: string,
+        dryRun: boolean,
+    ): Promise<void> {
+        const mcpSource = requireMcpSource(context.sessionContext);
+        const existing = mcpSource
+            .listServers()
+            .find(
+                (config) =>
+                    config.id === candidate.config.id ||
+                    config.name === installedName,
+            );
+        if (existing !== undefined && !dryRun) {
+            throw new Error(
+                `MCP server '${existing.name}' is already installed. Use '@package update ${existing.name} --type mcp'.`,
+            );
+        }
+        const previewConfig: NormalizedMcpServerConfig = {
+            ...candidate.config,
+            name: installedName,
+            enabled: false,
+            trust: "untrusted",
+        };
+        const policy = mcpSource.getPolicy?.();
+        if (policy !== undefined) {
+            enforceMcpPolicy(policy, "install", previewConfig);
+        }
+        displayResult(describeMcpConfig(previewConfig), context);
+        if (dryRun) {
+            displayResult(
+                `MCP server '${installedName}' would be installed disabled and untrusted.`,
+                context,
+            );
+            return;
+        }
+        const choice = await context.sessionContext.popupQuestion(
+            `Install MCP server '${installedName}' from ${candidate.sourceKind} source '${candidate.source}'? It will remain disabled and untrusted.`,
+            ["Install", "Cancel"],
+            1,
+        );
+        if (choice !== 0) {
+            displayResult("MCP installation cancelled.", context);
+            return;
+        }
+        const source = context.sessionContext.agentContext.source;
+        const materialized = await materializeMcp(
+            source,
+            candidate,
+            context.abortSignal,
+        );
+        const config: NormalizedMcpServerConfig = {
+            ...materialized,
+            name: installedName,
+            enabled: false,
+            trust: "untrusted",
+        };
+        try {
+            if (policy !== undefined) {
+                enforceMcpPolicy(policy, "install", config);
+            }
+            await mcpSource.addServer(
+                config,
+                context.sessionContext.agentContext
+                    .appAgentProviderSetController,
+            );
+        } catch (error) {
+            cleanupMcp(source, config);
+            throw error;
+        }
+        displayResult(
+            `MCP server '${installedName}' installed disabled and untrusted via ${candidate.sourceKind} source '${candidate.source}'.`,
+            context,
+        );
+    }
+
+    private async tryRunMcpInstall(
+        context: PackageActionContext,
+        target: string,
+        explicitName: string | undefined,
+        nameOrTarget: string,
+        ref: string | undefined,
+        sourceName: string | undefined,
+        type: PackageType,
+        dryRun: boolean,
+    ): Promise<{ handled: boolean; nativePreview?: InstallPreview }> {
+        if (type === "agent") {
+            return { handled: false };
+        }
+        const source = context.sessionContext.agentContext.source;
+        const mcpMatches = await source.resolveMcp(
+            target,
+            sourceName,
+            type === "mcp"
+                ? (message) => displayStatus(message, context)
+                : undefined,
+        );
+        if (mcpMatches.length > 1) {
+            throw new Error(
+                `Multiple MCP sources resolve '${target}': ${mcpMatches
+                    .map((match) => match.source)
+                    .join(", ")}. Use --source to choose one.`,
+            );
+        }
+        let nativePreview: InstallPreview | undefined;
+        if (type === "all" && mcpMatches.length > 0) {
+            nativePreview = await source.preview(
+                nameOrTarget,
+                ref,
+                sourceName,
+                (message) => displayStatus(message, context),
+            );
+            if (nativePreview !== undefined) {
+                throw new Error(
+                    `'${target}' matches both a native agent and an MCP server. Use --type agent|mcp or --source.`,
+                );
+            }
+        }
+        if (mcpMatches.length === 1) {
+            await this.runMcpInstall(
+                context,
+                mcpMatches[0],
+                explicitName ?? mcpMatches[0].config.name,
+                dryRun,
+            );
+            return { handled: true };
+        }
+        if (type === "mcp") {
+            throw new Error(
+                sourceName === undefined
+                    ? `No MCP source could resolve '${target}'.`
+                    : `'${target}' not found in MCP source '${sourceName}'.`,
+            );
+        }
+        return {
+            handled: false,
+            ...(nativePreview === undefined ? {} : { nativePreview }),
+        };
+    }
+
+    private async runNativePreview(
+        context: PackageActionContext,
+        target: string,
+        nameOrTarget: string,
+        ref: string | undefined,
+        sourceName: string | undefined,
+        existingPreview: InstallPreview | undefined,
+    ): Promise<void> {
+        const source = context.sessionContext.agentContext.source;
+        const preview =
+            existingPreview ??
+            (await source.preview(nameOrTarget, ref, sourceName, (message) =>
+                displayStatus(message, context),
+            ));
+        if (preview === undefined) {
+            displayResult(`No source would resolve '${target}'.`, context);
+            return;
+        }
+        const { winner, matches } = preview;
+        let message = `'${target}' would resolve via ${this.describeSource(
+            winner,
+        )} as ${this.describeMatch(winner)} and install as '${winner.name}'.`;
+        const shadows = matches.slice(1);
+        if (shadows.length > 0) {
+            const list = shadows
+                .map(
+                    (match) =>
+                        `${this.describeSource(match)} (${this.describeMatch(
+                            match,
+                        )})`,
+                )
+                .join(", ");
+            message += ` Also matched: ${list}.`;
+        }
+        displayResult(message, context);
+    }
+
+    private async runNativeInstall(
+        context: PackageActionContext,
+        target: string,
+        nameOrTarget: string,
+        ref: string | undefined,
+        sourceName: string | undefined,
+        explicit: boolean,
+    ): Promise<void> {
+        const { appAgentProviderSetController, source } =
+            context.sessionContext.agentContext;
+        displayStatus(`Resolving '${target}'...`, context);
+        const result = await source.install(
+            nameOrTarget,
+            ref,
+            sourceName,
+            appAgentProviderSetController,
+            (message) => displayStatus(message, context),
+            context.abortSignal,
+        );
+        for (const warning of result.warnings ?? []) {
+            displayWarn(warning, context);
+        }
+        const pkgPart =
+            result.packageName !== undefined
+                ? ` from package '${result.packageName}'`
+                : "";
+        if (!explicit) {
+            const matchKind: InstallMatchKind = deriveMatchKind({
+                matchedByName: result.matchedByName,
+                path: result.path,
+            });
+            displayResult(
+                `Matched ${this.describeMatch({
+                    matchKind,
+                    name: result.name,
+                    packageName: result.packageName,
+                    path: result.path,
+                })}.`,
+                context,
+            );
+        }
+        let message = `Agent '${result.name}' installed${pkgPart} via ${this.describeSource(result)}; it will load in each session shortly.`;
+        if (result.ref !== undefined && result.ref !== result.packageName) {
+            message += ` Durable ref: ${result.ref}.`;
+        }
+        displayResult(message, context);
+    }
+
     public async run(
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const {
-            appAgentProviderSetController: appAgentProviderSetController,
-            source,
-        } = context.sessionContext.agentContext;
+        const { source } = context.sessionContext.agentContext;
         const { args, flags } = params;
         const { target, name } = args;
         const sourceName = flags.source ?? undefined;
         const explicit = name !== undefined;
+        const type = parsePackageType(flags.type, "all");
 
         // Two-argument form: the explicit installed name must be legal. This
         // runs before any resolution so a bad name fails fast.
@@ -431,86 +943,40 @@ class InstallCommandHandler implements CommandHandler {
             await source.refresh(sourceName);
         }
 
-        if (flags["dry-run"]) {
-            const preview = await source.preview(
-                nameOrTarget,
-                ref,
-                sourceName,
-                (message) => displayStatus(message, context),
-            );
-            if (preview === undefined) {
-                displayResult(`No source would resolve '${target}'.`, context);
-                return;
-            }
-            const { winner, matches } = preview;
-            let message = `'${target}' would resolve via ${this.describeSource(
-                winner,
-            )} as ${this.describeMatch(
-                winner,
-            )} and install as '${winner.name}'.`;
-            const shadows = matches.slice(1);
-            if (shadows.length > 0) {
-                const list = shadows
-                    .map(
-                        (m) =>
-                            `${this.describeSource(m)} (${this.describeMatch(
-                                m,
-                            )})`,
-                    )
-                    .join(", ");
-                message += ` Also matched: ${list}.`;
-            }
-            displayResult(message, context);
-            return;
-        }
-
-        displayStatus(`Resolving '${target}'...`, context);
-        // The source resolves + writes the record + fans out to every connected
-        // session. Resolve/materialize errors are thrown here
-        // (it fails fast on the record commit); the apply then lands asynchronously
-        // on every session — including this one — through its idle-gated
-        // applicator, each honoring the agent's manifest default.
-        const result = await source.install(
+        const mcpResult = await this.tryRunMcpInstall(
+            context,
+            target,
+            name,
             nameOrTarget,
             ref,
             sourceName,
-            appAgentProviderSetController,
-            (message) => displayStatus(message, context),
-            context.abortSignal,
+            type,
+            flags["dry-run"],
         );
-        // Show any non-fatal source warnings once, for this command.
-        for (const warning of result.warnings ?? []) {
-            displayWarn(warning, context);
+        if (mcpResult.handled) {
+            return;
         }
-        const pkgPart =
-            result.packageName !== undefined
-                ? ` from package '${result.packageName}'`
-                : "";
-        const sourceLabel = this.describeSource(result);
-        // One-argument (inferred) installs clarify HOW the single ambiguous
-        // token matched, on a separate line shown before the install
-        // confirmation. A two-argument install typed the name explicitly, so
-        // there is nothing to clarify.
-        if (!explicit) {
-            const matchKind: InstallMatchKind = deriveMatchKind({
-                matchedByName: result.matchedByName,
-                path: result.path,
-            });
-            displayResult(
-                `Matched ${this.describeMatch({
-                    matchKind,
-                    name: result.name,
-                    packageName: result.packageName,
-                    path: result.path,
-                })}.`,
+
+        if (flags["dry-run"]) {
+            await this.runNativePreview(
                 context,
+                target,
+                nameOrTarget,
+                ref,
+                sourceName,
+                mcpResult.nativePreview,
             );
+            return;
         }
-        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
-        if (result.ref !== undefined && result.ref !== result.packageName) {
-            message += ` Durable ref: ${result.ref}.`;
-        }
-        displayResult(message, context);
+
+        await this.runNativeInstall(
+            context,
+            target,
+            nameOrTarget,
+            ref,
+            sourceName,
+            explicit,
+        );
     }
 
     public async getCompletion(
@@ -525,9 +991,14 @@ class InstallCommandHandler implements CommandHandler {
                 // Complete default agent names and package names. The second
                 // argument (explicit installed name) is not completed.
                 const sourceName = params.flags?.source as string | undefined;
-                const groups = await source.listAvailableAgents(
-                    sourceName !== undefined ? { sourceName } : undefined,
+                const type = parsePackageType(
+                    params.flags?.type as string | undefined,
+                    "all",
                 );
+                const groups = await source.listAvailableAgents({
+                    ...(sourceName === undefined ? {} : { sourceName }),
+                    ...(type === "all" ? {} : { type }),
+                });
                 const values = new Set<string>();
                 for (const group of groups) {
                     for (const agent of group.agents) {
@@ -545,19 +1016,624 @@ class InstallCommandHandler implements CommandHandler {
                     name,
                     completions: source.listSources(),
                 });
+            } else if (name === "--type") {
+                completions.push({
+                    name,
+                    completions: ["agent", "mcp", "all"],
+                });
             }
         }
         return { groups: completions };
     }
 }
 
+class GroupListCommandHandler implements CommandHandler {
+    public readonly description = "List available agent groups";
+    public readonly parameters = {} as const;
+    public async run(context: PackageActionContext) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groups = Object.entries(catalog.groups);
+        if (groups.length === 0) {
+            displayResult("No agent groups configured.", context);
+            return;
+        }
+        const table: string[][] = [
+            ["Group", "Display Name", "Description", "Agents"],
+        ];
+        for (const [key, group] of groups) {
+            table.push([
+                chalk.cyanBright(key),
+                group.displayName,
+                group.description,
+                chalk.gray(group.agents.join(", ")),
+            ]);
+        }
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: table,
+            },
+            "block",
+        );
+    }
+}
+
+class GroupShowCommandHandler implements CommandHandler {
+    public readonly description = "Show details and members of an agent group";
+    public readonly parameters = {
+        args: {
+            group: {
+                description: "Name of the group to show",
+                type: "string",
+            },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groupName = params.args.group;
+        const found = findAgentGroup(catalog, groupName);
+        if (found === undefined) {
+            const available = Object.keys(catalog.groups).join(", ") || "none";
+            throw new Error(
+                `Unknown agent group '${groupName}'. Available groups: ${available}. Use '@package group list' to see all groups.`,
+            );
+        }
+        const { key, group } = found;
+        const source = context.sessionContext.agentContext.source;
+
+        displayResult(
+            `Group: **${group.displayName}** (\`${key}\`)\n${group.description}\n`,
+            context,
+        );
+
+        const table: string[][] = [["Agent", "Status"]];
+        for (const agent of group.agents) {
+            const state = source.getAgentPackageState(agent);
+            let statusText = chalk.gray("not installed");
+            if (state === "bundled") {
+                statusText = chalk.green("bundled (built-in)");
+            } else if (state === "installed") {
+                statusText = chalk.cyanBright("installed");
+            } else if (state === "installed-unavailable") {
+                statusText = chalk.yellow(
+                    `installed but unavailable (repair or '@package uninstall ${agent}')`,
+                );
+            } else if (state === "transitioning") {
+                statusText = chalk.yellow("operation in progress");
+            }
+            table.push([agent, statusText]);
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: table,
+            },
+            "block",
+        );
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const catalog = context.agentContext.agentGroups;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "group") {
+                completions.push({
+                    name,
+                    completions: catalog ? Object.keys(catalog.groups) : [],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+class GroupInstallCommandHandler implements CommandHandler {
+    public readonly description =
+        "Install all missing agents in an agent group";
+    public readonly parameters = {
+        args: {
+            group: {
+                description: "Name of the group to install",
+                type: "string",
+            },
+        },
+        flags: {
+            source: {
+                description: "Resolve only against this named source",
+                char: "s",
+                type: "string",
+                optional: true,
+            },
+            "dry-run": {
+                description:
+                    "Preview how the group would resolve without installing",
+                char: "n",
+                type: "boolean",
+                default: false,
+            },
+            refresh: {
+                description:
+                    "Refresh cache-backed source metadata before resolving",
+                char: "r",
+                type: "boolean",
+                default: false,
+            },
+            yes: {
+                description: "Skip confirmation prompt",
+                char: "y",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    // code-complexity-allow: group install keeps preflight, confirmation, sequential execution, and state reporting in one command flow
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groupName = params.args.group;
+        const found = findAgentGroup(catalog, groupName);
+        if (found === undefined) {
+            const available = Object.keys(catalog.groups).join(", ") || "none";
+            throw new Error(
+                `Unknown agent group '${groupName}'. Available groups: ${available}. Use '@package group list' to see all groups.`,
+            );
+        }
+
+        const { key: groupKey, group } = found;
+        const source = context.sessionContext.agentContext.source;
+        const sourceName = params.flags.source ?? undefined;
+
+        if (params.flags.refresh) {
+            displayStatus("Refreshing source metadata...", context);
+            await source.refresh(sourceName);
+        }
+
+        // Preflight all members
+        displayStatus(`Preflighting group '${groupKey}'...`, context);
+        type MemberPlan =
+            | { name: string; state: "bundled" }
+            | { name: string; state: "installed" }
+            | { name: string; state: "installed-unavailable" }
+            | { name: string; state: "transitioning" }
+            | { name: string; state: "install"; preview: InstallPreview }
+            | { name: string; state: "unavailable" };
+
+        const plan: MemberPlan[] = [];
+        const unavailable: string[] = [];
+        const transitioning: string[] = [];
+        const mismatched: { requested: string; resolved: string }[] = [];
+
+        for (const agent of group.agents) {
+            const state = source.getAgentPackageState(agent);
+            if (state === "bundled") {
+                plan.push({ name: agent, state: "bundled" });
+            } else if (state === "installed") {
+                plan.push({ name: agent, state: "installed" });
+            } else if (state === "installed-unavailable") {
+                plan.push({ name: agent, state: "installed-unavailable" });
+            } else if (state === "transitioning") {
+                plan.push({ name: agent, state: "transitioning" });
+                transitioning.push(agent);
+            } else {
+                const preview = await source.preview(
+                    agent,
+                    undefined,
+                    sourceName,
+                    (msg) => displayStatus(msg, context),
+                );
+                if (preview === undefined) {
+                    plan.push({ name: agent, state: "unavailable" });
+                    unavailable.push(agent);
+                } else if (preview.winner.name !== agent) {
+                    plan.push({ name: agent, state: "unavailable" });
+                    mismatched.push({
+                        requested: agent,
+                        resolved: preview.winner.name,
+                    });
+                } else {
+                    plan.push({ name: agent, state: "install", preview });
+                }
+            }
+        }
+
+        if (transitioning.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed while these agent(s) have an operation in progress: ${transitioning.join(", ")}. Retry when the current operation completes.`,
+            );
+        }
+        if (mismatched.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed because these members resolve to different agent names: ${mismatched
+                    .map(
+                        ({ requested, resolved }) =>
+                            `${requested} -> ${resolved}`,
+                    )
+                    .join(", ")}.`,
+            );
+        }
+        if (unavailable.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed because the following agent(s) could not be resolved from configured sources: ${unavailable.join(", ")}.`,
+            );
+        }
+
+        // Render Preflight Plan Table
+        const preflightTable: string[][] = [
+            ["Agent", "State", "Source", "Match Details"],
+        ];
+        for (const item of plan) {
+            if (item.state === "bundled") {
+                preflightTable.push([
+                    item.name,
+                    chalk.green("bundled"),
+                    chalk.gray("—"),
+                    chalk.gray("built-in with current profile"),
+                ]);
+            } else if (item.state === "installed") {
+                preflightTable.push([
+                    item.name,
+                    chalk.cyanBright("installed"),
+                    chalk.gray("—"),
+                    chalk.gray("already installed"),
+                ]);
+            } else if (item.state === "installed-unavailable") {
+                preflightTable.push([
+                    item.name,
+                    chalk.yellow("installed but unavailable"),
+                    chalk.gray("—"),
+                    chalk.yellow("requires repair; duplicate install skipped"),
+                ]);
+            } else if (item.state === "install") {
+                const winner = item.preview.winner;
+                const sourceDesc = winner.sourceKind
+                    ? `${winner.source} (${winner.sourceKind})`
+                    : winner.source;
+                const matchDesc = `${winner.matchKind}: ${winner.packageName ?? winner.path ?? winner.name}`;
+                preflightTable.push([
+                    chalk.bold(item.name),
+                    chalk.yellow("to install"),
+                    sourceDesc,
+                    item.preview.matches.length > 1
+                        ? `${matchDesc}; shadows: ${item.preview.matches
+                              .slice(1)
+                              .map(
+                                  (match) =>
+                                      `${match.source} (${match.matchKind}: ${
+                                          match.packageName ??
+                                          match.path ??
+                                          match.name
+                                      })`,
+                              )
+                              .join(", ")}`
+                        : matchDesc,
+                ]);
+            }
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: preflightTable,
+            },
+            "block",
+        );
+
+        if (params.flags["dry-run"]) {
+            displayResult(
+                "Dry run complete. No agents were installed.",
+                context,
+            );
+            return;
+        }
+
+        const toInstall = plan.filter(
+            (
+                p,
+            ): p is {
+                name: string;
+                state: "install";
+                preview: InstallPreview;
+            } => p.state === "install",
+        );
+
+        if (toInstall.length === 0) {
+            const unresolved = plan.filter(
+                (item) => item.state === "installed-unavailable",
+            );
+            if (unresolved.length > 0) {
+                displayWarn(
+                    `No agents need installation, but group '${groupKey}' still has installed agent(s) that require repair: ${unresolved.map((item) => item.name).join(", ")}.`,
+                    context,
+                );
+            } else {
+                displayResult(
+                    `All agents in group '${groupKey}' are already present. Nothing to install.`,
+                    context,
+                );
+            }
+            return;
+        }
+
+        if (!params.flags.yes) {
+            const choice = await context.sessionContext.popupQuestion(
+                `Install ${toInstall.length} agent(s) for group '${groupKey}'?`,
+                ["Install", "Cancel"],
+                1,
+            );
+            if (choice !== 0) {
+                displayResult("Group installation cancelled.", context);
+                return;
+            }
+        }
+
+        // Sequential install
+        const { appAgentProviderSetController } =
+            context.sessionContext.agentContext;
+        const results: {
+            name: string;
+            status:
+                | "installed"
+                | "already_installed"
+                | "failed"
+                | "not_attempted";
+            detail?: string;
+        }[] = [];
+
+        let aborted = false;
+
+        for (const item of toInstall) {
+            if (context.abortSignal?.aborted || aborted) {
+                results.push({
+                    name: item.name,
+                    status: "not_attempted",
+                    detail: "cancelled by user",
+                });
+                aborted = true;
+                continue;
+            }
+
+            // Re-check presence right before install to catch concurrent installs
+            const currentState = source.getAgentPackageState(item.name);
+            if (currentState === "bundled" || currentState === "installed") {
+                results.push({
+                    name: item.name,
+                    status: "already_installed",
+                    detail:
+                        currentState === "bundled" ? "built-in" : "installed",
+                });
+                continue;
+            }
+            if (currentState === "installed-unavailable") {
+                results.push({
+                    name: item.name,
+                    status: "failed",
+                    detail: "installed record requires repair",
+                });
+                continue;
+            }
+            if (currentState === "transitioning") {
+                results.push({
+                    name: item.name,
+                    status: "failed",
+                    detail: "another package operation is in progress; retry",
+                });
+                continue;
+            }
+
+            displayStatus(`Installing '${item.name}'...`, context);
+            try {
+                const res = await source.installExpected(
+                    item.name,
+                    item.preview.winner,
+                    appAgentProviderSetController,
+                    (msg) => displayStatus(msg, context),
+                    context.abortSignal,
+                );
+                for (const warning of res.warnings ?? []) {
+                    displayWarn(warning, context);
+                }
+                const resolvedIdentity =
+                    res.packageName ?? res.path ?? res.ref ?? res.name;
+                results.push({
+                    name: item.name,
+                    status: "installed",
+                    detail: `committed via ${res.sourceKind ?? "source"} '${res.source}' (${resolvedIdentity})`,
+                });
+            } catch (err: unknown) {
+                if (context.abortSignal?.aborted) {
+                    results.push({
+                        name: item.name,
+                        status: "failed",
+                        detail: "cancelled after installation started",
+                    });
+                    aborted = true;
+                    continue;
+                }
+
+                // If collision, check if now present
+                const stateAfterError = source.getAgentPackageState(item.name);
+                if (
+                    stateAfterError === "bundled" ||
+                    stateAfterError === "installed"
+                ) {
+                    results.push({
+                        name: item.name,
+                        status: "already_installed",
+                        detail: "installed concurrently",
+                    });
+                } else {
+                    const message =
+                        err instanceof Error ? err.message : String(err);
+                    results.push({
+                        name: item.name,
+                        status: "failed",
+                        detail: message,
+                    });
+                }
+            }
+        }
+
+        // Summary table
+        const summaryTable: string[][] = [["Agent", "Status", "Details"]];
+        for (const item of plan) {
+            if (item.state === "bundled") {
+                summaryTable.push([
+                    item.name,
+                    chalk.green("bundled"),
+                    chalk.gray("already built-in"),
+                ]);
+            } else if (item.state === "installed") {
+                summaryTable.push([
+                    item.name,
+                    chalk.cyanBright("installed"),
+                    chalk.gray("already installed"),
+                ]);
+            } else if (item.state === "installed-unavailable") {
+                summaryTable.push([
+                    item.name,
+                    chalk.yellow("installed but unavailable"),
+                    chalk.yellow("requires repair"),
+                ]);
+            } else {
+                const res = results.find((r) => r.name === item.name);
+                if (res === undefined) {
+                    summaryTable.push([item.name, chalk.gray("skipped"), ""]);
+                } else if (res.status === "installed") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.green("installed"),
+                        res.detail ?? "",
+                    ]);
+                } else if (res.status === "already_installed") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.cyanBright("already installed"),
+                        res.detail ?? "",
+                    ]);
+                } else if (res.status === "not_attempted") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.yellow("not attempted"),
+                        res.detail ?? "",
+                    ]);
+                } else {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.red("failed"),
+                        chalk.red(res.detail ?? "error"),
+                    ]);
+                }
+            }
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: summaryTable,
+            },
+            "block",
+        );
+
+        const hasFailures = results.some((r) => r.status === "failed");
+        const newlyInstalled = results.filter((r) => r.status === "installed");
+        const unresolved = plan.some(
+            (item) => item.state === "installed-unavailable",
+        );
+
+        if (hasFailures || unresolved) {
+            displayWarn(
+                `Group '${groupKey}' installation completed but still requires attention. Re-running the command will resume missing agents; installed-unavailable agents require repair.`,
+                context,
+            );
+        } else if (aborted) {
+            displayWarn(
+                `Group '${groupKey}' installation was interrupted. Re-running the command will resume uninstalled agents.`,
+                context,
+            );
+        } else {
+            displayResult(
+                `Group '${groupKey}' installation complete (${newlyInstalled.length} agent(s) newly installed). Installed agents remain disabled until enabled with '@config agent <name>'; provider propagation to connected sessions is asynchronous.`,
+                context,
+            );
+        }
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const catalog = context.agentContext.agentGroups;
+        const source = context.agentContext.source;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "group") {
+                completions.push({
+                    name,
+                    completions: catalog ? Object.keys(catalog.groups) : [],
+                });
+            } else if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: source.listSources(),
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+function buildGroupCommandTable(): CommandHandlerTable {
+    return {
+        description: "Manage and install agent groups",
+        defaultSubCommand: "list",
+        commands: {
+            list: new GroupListCommandHandler(),
+            show: new GroupShowCommandHandler(),
+            install: new GroupInstallCommandHandler(),
+        },
+    };
+}
+
 class UninstallCommandHandler implements CommandHandler {
-    public readonly description = "Uninstall an agent";
+    public readonly description = "Uninstall an agent or MCP server";
     public readonly parameters = {
         args: {
             name: {
                 description: "Name of the agent",
                 type: "string",
+            },
+        },
+        flags: {
+            type: {
+                description: "Uninstall an 'agent', 'mcp', or infer with 'all'",
+                char: "t",
+                type: "string",
+                default: "all",
+            },
+            source: {
+                description: "Require the installed entry to use this source",
+                char: "s",
+                type: "string",
+                optional: true,
             },
         },
     } as const;
@@ -568,8 +1644,50 @@ class UninstallCommandHandler implements CommandHandler {
         const {
             appAgentProviderSetController: appAgentProviderSetController,
             source,
+            mcpSource,
         } = context.sessionContext.agentContext;
         const name = params.args.name;
+        const type = parsePackageType(params.flags?.type, "all");
+        const sourceName = params.flags?.source ?? undefined;
+        const agentMatch = source
+            .listInstalled()
+            .some(
+                (group) =>
+                    (sourceName === undefined || group.source === sourceName) &&
+                    group.agents.some((record) => record.name === name),
+            );
+        const mcpMatch =
+            mcpSource === undefined
+                ? undefined
+                : findMcpServer(mcpSource, name, sourceName);
+        if (type === "all" && agentMatch && mcpMatch !== undefined) {
+            throw new Error(
+                `'${name}' names both an installed agent and MCP server. Use --type agent|mcp or --source.`,
+            );
+        }
+        if (type === "mcp" || (type === "all" && mcpMatch !== undefined)) {
+            const api = requireMcpSource(context.sessionContext);
+            const config = mcpMatch ?? findMcpServer(api, name, sourceName);
+            if (config === undefined) {
+                throw new Error(`MCP server '${name}' not found`);
+            }
+            if (
+                !(await api.removeServer(
+                    config.id,
+                    appAgentProviderSetController,
+                ))
+            ) {
+                throw new Error(`MCP server '${name}' not found`);
+            }
+            cleanupMcp(source, config);
+            displayResult(`MCP server '${config.name}' uninstalled.`, context);
+            return;
+        }
+        if (sourceName !== undefined && !agentMatch) {
+            throw new Error(
+                `Agent '${name}' is not installed from source '${sourceName}'.`,
+            );
+        }
         // Start the coordinated teardown and fan out the removal to every
         // session — including this one — through its idle-gated applicator, each
         // notified with a system message ("Agent 'x' was removed."), exactly as
@@ -611,9 +1729,26 @@ class UninstallCommandHandler implements CommandHandler {
         const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "name") {
+                const type = parsePackageType(
+                    _params.flags?.type as string | undefined,
+                    "all",
+                );
                 completions.push({
                     name,
-                    completions: managedAgentNames(context),
+                    completions: [
+                        ...(type === "mcp" ? [] : managedAgentNames(context)),
+                        ...(type === "agent" ? [] : mcpServerNames(context)),
+                    ],
+                });
+            } else if (name === "--type") {
+                completions.push({
+                    name,
+                    completions: ["agent", "mcp", "all"],
+                });
+            } else if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: context.agentContext.source.listSources(),
                 });
             }
         }
@@ -622,7 +1757,7 @@ class UninstallCommandHandler implements CommandHandler {
 }
 
 class UpdateCommandHandler implements CommandHandler {
-    public readonly description = "Update an installed agent";
+    public readonly description = "Update an installed agent or MCP server";
     public readonly parameters = {
         args: {
             name: {
@@ -631,12 +1766,134 @@ class UpdateCommandHandler implements CommandHandler {
             },
             range: {
                 description:
-                    "Optional version range for feed agents (e.g. ^1.4, ~2.0, '>=3 <4'). Updates are supported only for feed-sourced agents.",
+                    "Optional version range for feed agents, or exact server version for registry MCP servers.",
                 type: "string",
                 optional: true,
             },
         },
+        flags: {
+            type: {
+                description: "Update an 'agent', 'mcp', or infer with 'all'",
+                char: "t",
+                type: "string",
+                default: "all",
+            },
+            source: {
+                description: "Require the installed entry to use this source",
+                char: "s",
+                type: "string",
+                optional: true,
+            },
+            "dry-run": {
+                description: "Preview the update without replacing the entry",
+                char: "n",
+                type: "boolean",
+                default: false,
+            },
+        },
     } as const;
+
+    private async runMcpUpdate(
+        context: PackageActionContext,
+        current: NormalizedMcpServerConfig,
+        range: string | undefined,
+        dryRun: boolean,
+    ): Promise<void> {
+        const { appAgentProviderSetController, source } =
+            context.sessionContext.agentContext;
+        const api = requireMcpSource(context.sessionContext);
+        const sourceKind = current.provenance.sourceKind;
+        if (
+            (sourceKind !== "mcp-config" && sourceKind !== "registry") ||
+            current.provenance.ref === undefined
+        ) {
+            throw new Error(
+                `MCP server '${current.name}' was installed from unsupported source kind '${sourceKind ?? "unknown"}'.`,
+            );
+        }
+        if (sourceKind === "mcp-config" && range !== undefined) {
+            throw new Error(
+                "A version is not supported for mcp-config updates.",
+            );
+        }
+        const updateRef =
+            sourceKind === "registry"
+                ? `${current.provenance.canonicalServerName ?? current.provenance.ref.split("@")[0]}@${range ?? "latest"}`
+                : current.provenance.ref;
+        const matches = await source.resolveMcp(
+            updateRef,
+            current.provenance.source,
+            (message) => displayStatus(message, context),
+        );
+        if (matches.length !== 1) {
+            throw new Error(
+                `MCP server '${current.name}' can no longer be resolved from source '${current.provenance.source}' using ref '${updateRef}'.`,
+            );
+        }
+        const previewNext: NormalizedMcpServerConfig = {
+            ...matches[0].config,
+            id: current.id,
+            name: current.name,
+            trust: current.trust,
+            enabled: current.enabled,
+            scope: current.scope,
+        };
+        const descriptorChanged =
+            current.provenance.digest !== undefined &&
+            previewNext.provenance.digest !== undefined &&
+            current.provenance.digest !== previewNext.provenance.digest;
+        const describedChanges = describeMcpChanges(current, previewNext);
+        const changes = descriptorChanged
+            ? describedChanges === "No configuration changes."
+                ? "registry descriptor"
+                : `${describedChanges}, registry descriptor`
+            : describedChanges;
+        displayResult(
+            `${describeMcpConfig(previewNext)}\nChanges: ${changes}`,
+            context,
+        );
+        if (changes === "No configuration changes.") {
+            displayResult(
+                `MCP server '${current.name}' is already up to date.`,
+                context,
+            );
+            return;
+        }
+        if (dryRun) {
+            return;
+        }
+        const choice = await context.sessionContext.popupQuestion(
+            `Replace MCP server '${current.name}' with the resolved config changes (${changes})?`,
+            ["Update", "Cancel"],
+            1,
+        );
+        if (choice !== 0) {
+            displayResult("MCP update cancelled.", context);
+            return;
+        }
+        const materialized = await materializeMcp(
+            source,
+            matches[0],
+            context.abortSignal,
+        );
+        const next: NormalizedMcpServerConfig = {
+            ...materialized,
+            id: current.id,
+            name: current.name,
+            trust: current.trust,
+            enabled: current.enabled,
+            scope: current.scope,
+        };
+        try {
+            await api.addServer(next, appAgentProviderSetController);
+        } catch (error) {
+            cleanupMcp(source, next);
+            throw error;
+        }
+        cleanupMcp(source, current);
+        displayResult(`MCP server '${current.name}' updated.`, context);
+    }
+
     public async run(
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
@@ -644,8 +1901,47 @@ class UpdateCommandHandler implements CommandHandler {
         const {
             appAgentProviderSetController: appAgentProviderSetController,
             source,
+            mcpSource,
         } = context.sessionContext.agentContext;
         const { name, range } = params.args;
+        const type = parsePackageType(params.flags?.type, "all");
+        const sourceName = params.flags?.source ?? undefined;
+        const agentMatch = source
+            .listInstalled()
+            .some(
+                (group) =>
+                    (sourceName === undefined || group.source === sourceName) &&
+                    group.agents.some((record) => record.name === name),
+            );
+        const mcpMatch =
+            mcpSource === undefined
+                ? undefined
+                : findMcpServer(mcpSource, name, sourceName);
+        if (type === "all" && agentMatch && mcpMatch !== undefined) {
+            throw new Error(
+                `'${name}' names both an installed agent and MCP server. Use --type agent|mcp or --source.`,
+            );
+        }
+
+        if (type === "mcp" || (type === "all" && mcpMatch !== undefined)) {
+            const api = requireMcpSource(context.sessionContext);
+            const current = mcpMatch ?? findMcpServer(api, name, sourceName);
+            if (current === undefined) {
+                throw new Error(`MCP server '${name}' not found`);
+            }
+            await this.runMcpUpdate(
+                context,
+                current,
+                range,
+                params.flags?.["dry-run"] ?? false,
+            );
+            return;
+        }
+        if (sourceName !== undefined && !agentMatch) {
+            throw new Error(
+                `Agent '${name}' is not installed from source '${sourceName}'.`,
+            );
+        }
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op and that
@@ -697,14 +1993,414 @@ class UpdateCommandHandler implements CommandHandler {
         const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "name") {
+                const type = parsePackageType(
+                    _params.flags?.type as string | undefined,
+                    "all",
+                );
                 completions.push({
                     name,
-                    completions: managedAgentNames(context),
+                    completions: [
+                        ...(type === "mcp" ? [] : managedAgentNames(context)),
+                        ...(type === "agent" ? [] : mcpServerNames(context)),
+                    ],
+                });
+            } else if (name === "--type") {
+                completions.push({
+                    name,
+                    completions: ["agent", "mcp", "all"],
+                });
+            } else if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: context.agentContext.source.listSources(),
                 });
             }
         }
         return { groups: completions };
     }
+}
+
+class McpStateCommandHandler implements CommandHandler {
+    public readonly parameters = {
+        args: {
+            name: { description: "MCP server name or id", type: "string" },
+        },
+    } as const;
+
+    public constructor(
+        public readonly description: string,
+        private readonly operation: "trust" | "untrust" | "enable" | "disable",
+    ) {}
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const source = requireMcpSource(context.sessionContext);
+        const config = findMcpServer(source, params.args.name);
+        if (config === undefined) {
+            throw new Error(`MCP server '${params.args.name}' not found`);
+        }
+        const controller =
+            context.sessionContext.agentContext.appAgentProviderSetController;
+        const updated =
+            this.operation === "trust" || this.operation === "untrust"
+                ? await source.setTrust(
+                      config.id,
+                      this.operation === "trust" ? "trusted" : "untrusted",
+                      controller,
+                  )
+                : await source.setEnabled(
+                      config.id,
+                      this.operation === "enable",
+                      controller,
+                  );
+        const state =
+            this.operation === "trust"
+                ? "trusted"
+                : this.operation === "untrust"
+                  ? "untrusted"
+                  : this.operation === "enable"
+                    ? "enabled"
+                    : "disabled";
+        displayResult(`MCP server '${updated.name}' is now ${state}.`, context);
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        return {
+            groups: names
+                .filter((name) => name === "name")
+                .map((name) => ({
+                    name,
+                    completions: mcpServerNames(context),
+                })),
+        };
+    }
+}
+
+class McpImportCommandHandler implements CommandHandler {
+    public readonly description =
+        "Discover and import MCP servers from Copilot configuration";
+    public readonly parameters = {
+        flags: {
+            from: {
+                description: "Configuration family to import (copilot)",
+                type: "string",
+                default: "copilot",
+            },
+            workspace: {
+                description: "Workspace path used for repository traversal",
+                type: "string",
+                optional: true,
+            },
+            "dry-run": {
+                description: "Preview discovered servers without importing",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        if (params.flags.from !== "copilot") {
+            throw new Error(
+                `Unsupported MCP import source '${params.flags.from}'. Expected 'copilot'.`,
+            );
+        }
+        const workspacePath = path.resolve(
+            params.flags.workspace ?? process.cwd(),
+        );
+        const trustChoice = await context.sessionContext.popupQuestion(
+            `Allow MCP config discovery from '${workspacePath}' through its repository root? Files are previewed only; imported servers remain disabled and untrusted.`,
+            ["Allow discovery", "Cancel"],
+            1,
+        );
+        if (trustChoice !== 0) {
+            displayResult("MCP config import cancelled.", context);
+            return;
+        }
+        const result = new McpConfigDiscovery().discover({
+            workspacePath,
+            isFolderTrusted: () => true,
+        });
+        for (const diagnostic of result.diagnostics) {
+            displayWarn(diagnostic.message, context);
+        }
+        if (result.configs.length === 0) {
+            displayResult("No MCP servers were discovered.", context);
+            return;
+        }
+        for (const discovered of result.configs) {
+            displayResult(describeMcpConfig(discovered.config), context);
+        }
+        if (params.flags["dry-run"]) {
+            displayResult(
+                `${result.configs.length} MCP server(s) discovered; no changes were made.`,
+                context,
+            );
+            return;
+        }
+        const importChoice = await context.sessionContext.popupQuestion(
+            `Import ${result.configs.length} discovered MCP server(s) disabled and untrusted?`,
+            ["Import", "Cancel"],
+            1,
+        );
+        if (importChoice !== 0) {
+            displayResult("MCP config import cancelled.", context);
+            return;
+        }
+        const source = requireMcpSource(context.sessionContext);
+        const controller =
+            context.sessionContext.agentContext.appAgentProviderSetController;
+        let imported = 0;
+        for (const discovered of result.configs) {
+            const existing = source
+                .listServers()
+                .find((config) => config.name === discovered.config.name);
+            if (
+                existing !== undefined &&
+                !existing.provenance.sourceKind?.startsWith("workspace-") &&
+                existing.provenance.sourceKind !== "copilot-user"
+            ) {
+                displayWarn(
+                    `Skipped '${discovered.config.name}': a managed MCP server with that name already exists.`,
+                    context,
+                );
+                continue;
+            }
+            await source.addServer(
+                existing === undefined
+                    ? discovered.config
+                    : {
+                          ...discovered.config,
+                          id: existing.id,
+                          trust: existing.trust,
+                          enabled: existing.enabled,
+                      },
+                controller,
+            );
+            imported++;
+        }
+        displayResult(
+            `Imported ${imported} MCP server(s); newly discovered servers are disabled and untrusted.`,
+            context,
+        );
+    }
+
+    public async getCompletion(
+        _context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        return {
+            groups: names
+                .filter((name) => name === "--from")
+                .map((name) => ({ name, completions: ["copilot"] })),
+        };
+    }
+}
+
+class McpInspectCommandHandler implements CommandHandler {
+    public readonly description: string = "Inspect an MCP server config";
+    public readonly parameters = {
+        args: {
+            name: { description: "MCP server name or id", type: "string" },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const source = requireMcpSource(context.sessionContext);
+        const config = findMcpServer(source, params.args.name);
+        if (config === undefined) {
+            throw new Error(`MCP server '${params.args.name}' not found`);
+        }
+        displayResult(describeMcpConfig(config), context);
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        return {
+            groups: names
+                .filter((name) => name === "name")
+                .map((name) => ({
+                    name,
+                    completions: mcpServerNames(context),
+                })),
+        };
+    }
+}
+
+class McpStatusCommandHandler extends McpInspectCommandHandler {
+    public readonly description: string =
+        "Show MCP trust, enablement, and authentication status";
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const source = requireMcpSource(context.sessionContext);
+        const config = findMcpServer(source, params.args.name);
+        if (config === undefined) {
+            throw new Error(`MCP server '${params.args.name}' not found`);
+        }
+        const auth = (await source.getAuthState?.(config.id)) ?? "unavailable";
+        displayResult(
+            `MCP server '${config.name}': ${config.enabled ? "enabled" : "disabled"}, ${config.trust}, auth=${auth}, transport=${config.transport.kind}.`,
+            context,
+        );
+    }
+}
+
+class McpCredentialSetCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set an MCP credential from an environment variable without echoing it";
+    public readonly parameters = {
+        args: {
+            server: { description: "MCP server name or id", type: "string" },
+            credential: {
+                description: "Credential reference name",
+                type: "string",
+            },
+            environment: {
+                description: "Environment variable containing the secret",
+                type: "string",
+            },
+        },
+        flags: {
+            persist: {
+                description: "Require durable host secure storage",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const source = requireMcpSource(context.sessionContext);
+        const config = findMcpServer(source, params.args.server);
+        if (config === undefined) {
+            throw new Error(`MCP server '${params.args.server}' not found`);
+        }
+        const value = process.env[params.args.environment];
+        if (value === undefined) {
+            throw new Error(
+                `Environment variable '${params.args.environment}' is not set.`,
+            );
+        }
+        if (source.setCredential === undefined) {
+            throw new Error(
+                "MCP credential storage is not available on this host.",
+            );
+        }
+        await source.setCredential(
+            config.id,
+            params.args.credential,
+            value,
+            params.flags.persist,
+        );
+        displayResult(
+            `Credential '${params.args.credential}' was stored for this host${params.flags.persist ? " durably" : " session"}.`,
+            context,
+        );
+    }
+}
+
+class McpPolicyCommandHandler implements CommandHandler {
+    public readonly description = "Show the host-enforced MCP policy";
+    public readonly parameters = {} as const;
+
+    public async run(context: PackageActionContext): Promise<void> {
+        const policy = requireMcpSource(context.sessionContext).getPolicy?.();
+        displayResult(
+            policy === undefined
+                ? "MCP policy details are unavailable on this host."
+                : JSON.stringify(policy, null, 2),
+            context,
+        );
+    }
+}
+
+class McpTestCommandHandler extends McpInspectCommandHandler {
+    public readonly description: string =
+        "Connect to an MCP server and list its tools";
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const source = requireMcpSource(context.sessionContext);
+        const config = findMcpServer(source, params.args.name);
+        if (config === undefined) {
+            throw new Error(`MCP server '${params.args.name}' not found`);
+        }
+        let allowUntrusted = false;
+        if (config.trust !== "trusted") {
+            const choice = await context.sessionContext.popupQuestion(
+                `MCP server '${config.name}' is untrusted. Connect once for this test without changing its trust state?`,
+                ["Test once", "Cancel"],
+                1,
+            );
+            if (choice !== 0) {
+                displayResult("MCP test cancelled.", context);
+                return;
+            }
+            allowUntrusted = true;
+        }
+        const result = await source.testServer(config.id, allowUntrusted);
+        displayResult(
+            `MCP server '${config.name}' connected${result.protocolVersion === undefined ? "" : ` using protocol ${result.protocolVersion}`}. Tools: ${result.tools.join(", ") || "none"}.`,
+            context,
+        );
+    }
+}
+
+function buildMcpCommandTable(): CommandHandlerTable {
+    return {
+        description: "Manage installed MCP servers",
+        defaultSubCommand: "inspect",
+        commands: {
+            import: new McpImportCommandHandler(),
+            inspect: new McpInspectCommandHandler(),
+            status: new McpStatusCommandHandler(),
+            test: new McpTestCommandHandler(),
+            auth: new McpTestCommandHandler(),
+            policy: new McpPolicyCommandHandler(),
+            credentials: {
+                description: "Manage MCP credentials",
+                defaultSubCommand: "set",
+                commands: { set: new McpCredentialSetCommandHandler() },
+            },
+            trust: new McpStateCommandHandler("Trust an MCP server", "trust"),
+            untrust: new McpStateCommandHandler(
+                "Mark an MCP server untrusted",
+                "untrust",
+            ),
+            enable: new McpStateCommandHandler(
+                "Enable an MCP server",
+                "enable",
+            ),
+            disable: new McpStateCommandHandler(
+                "Disable an MCP server",
+                "disable",
+            ),
+        },
+    };
 }
 
 /**
@@ -740,8 +2436,11 @@ export function buildPackageCommandTable(
             list: new ListInstalledCommandHandler(),
             available: new ListAvailableCommandHandler(),
             install: new InstallCommandHandler(),
+            group: buildGroupCommandTable(),
             update: new UpdateCommandHandler(),
             uninstall: new UninstallCommandHandler(),
+            mcp: buildMcpCommandTable(),
+            "memory-view": buildMemoryViewCommandTable(),
             source: sourceCommands,
         },
     };

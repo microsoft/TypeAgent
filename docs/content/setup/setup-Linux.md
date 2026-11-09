@@ -18,10 +18,11 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
     - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
+    - `nvm use --lts`
 - Clone and build:
   - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent` (Note: you can clone this to any location and does not have to be ~/src)
   - `cd ~/src/TypeAgent/ts`
-  - `corepack enable`
+  - `npm install --global pnpm`
   - `pnpm setup`
   - `pnpm i`
   - `pnpm run build`

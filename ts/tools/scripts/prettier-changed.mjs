@@ -151,7 +151,21 @@ function collectChangedFiles(repoRoot, base) {
             "--exclude-standard",
         ]) ?? [];
 
-    return new Set([...committed, ...unstaged, ...staged, ...untracked]);
+    const changed = new Set([
+        ...committed,
+        ...unstaged,
+        ...staged,
+        ...untracked,
+    ]);
+    const deleted =
+        gitLinesFrom(repoRoot, [
+            "diff",
+            "HEAD",
+            "--name-only",
+            "--diff-filter=D",
+        ]) ?? [];
+    for (const file of deleted) changed.delete(file);
+    return changed;
 }
 
 function splitIntoBatches(files, staticArgs) {

@@ -10,6 +10,7 @@ describe("provider configurations", () => {
         expect(Object.keys(config.agents)).toEqual([
             "chat",
             "list",
+            "memory",
             "timer",
             "player",
             "powershell",

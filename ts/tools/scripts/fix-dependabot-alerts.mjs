@@ -64,10 +64,12 @@ const KNOWN_FLAG_PREFIXES = [
     "--apply-overrides",
     "--update-parents",
     "--auto-fix",
+    "--package",
     "--show-chains",
     "--prune-overrides",
     "--skip-shell-check",
     "--skip-install",
+    "--alerts-file",
     "--json",
     "--verbose",
     "--min-release-age-days",
@@ -109,10 +111,31 @@ function parseFilterFlag(flagName) {
     );
 }
 
+/**
+ * Parse the package selection used to scope one invocation. Unlike the fix
+ * flags, this only limits which packages are analyzed and never grants
+ * permission to modify them.
+ */
+function parsePackageSelection({ argv = args } = {}) {
+    const arg = argv.find(
+        (a) => a === "--package" || a.startsWith("--package="),
+    );
+    if (!arg) return null;
+    if (arg === "--package") return new Set();
+    return new Set(
+        arg
+            .slice("--package=".length)
+            .split(",")
+            .map((pkg) => pkg.trim())
+            .filter(Boolean),
+    );
+}
+
 const DRY_RUN = args.includes("--dry-run");
 const AUTO_FIX = parseFilterFlag("--auto-fix");
 const _applyOverrides = parseFilterFlag("--apply-overrides");
 const _updateParents = parseFilterFlag("--update-parents");
+const PACKAGE_SELECTION = parsePackageSelection();
 
 // Merge --auto-fix into the two sub-flags
 const APPLY_OVERRIDES = mergeFilterFlags(AUTO_FIX, _applyOverrides);
@@ -143,8 +166,26 @@ const SHOW_CHAINS_FULL = args.includes("--show-chains=full");
 const PRUNE_OVERRIDES = args.includes("--prune-overrides");
 const SKIP_SHELL_CHECK = args.includes("--skip-shell-check");
 const SKIP_INSTALL = args.includes("--skip-install");
+const ALERTS_FILE = args
+    .find((a) => a.startsWith("--alerts-file="))
+    ?.slice("--alerts-file=".length);
 const JSON_OUTPUT = args.includes("--json");
 const VERBOSE = args.includes("--verbose");
+if (
+    IS_MAIN &&
+    (args.includes("--alerts-file") || args.some((a) => a === "--alerts-file="))
+) {
+    console.error(
+        "Error: --alerts-file requires a path.\nRun with --help to see available options.",
+    );
+    process.exit(1);
+}
+if (IS_MAIN && PACKAGE_SELECTION !== null && PACKAGE_SELECTION.size === 0) {
+    console.error(
+        "Error: --package requires at least one package name.\nRun with --help to see available options.",
+    );
+    process.exit(1);
+}
 
 // Minimum age (in days) a published version must have before it is eligible
 // to be adopted as a fix. When a security fix would require a version younger
@@ -216,6 +257,9 @@ Options:
   --auto-fix[=pkg1,pkg2,...]
                       Shorthand for --apply-overrides --update-parents.
                       Optionally specify package names to limit scope.
+  --package=pkg1,pkg2,...
+                      Limit alert analysis and remediation to these packages.
+                      This is selection only; combine it with a fix flag to make changes.
   --show-chains       Show full dependency chains (collapsed to 3 levels)
   --show-chains=full  Show fully expanded dependency chains
   --prune-overrides   Remove pnpm.overrides entries that are no longer needed.
@@ -227,6 +271,9 @@ Options:
                       electron-builder validates exact version matches.
   --skip-install      Skip the initial pnpm install --frozen-lockfile. Use when
                       dependencies are already installed (e.g. in CI).
+  --alerts-file=PATH  Read a cached JSON array of Dependabot alerts instead of
+                      calling the GitHub API. Useful for long-running CI jobs
+                      whose authentication token may expire.
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
@@ -2520,48 +2567,78 @@ async function classifyWithFixPlan(entry, whyData) {
 
 // ── Stage functions ──────────────────────────────────────────────────────────
 
-/** Stage 1: Fetch open Dependabot alerts from GitHub. */
+/** Read a cached array produced by the Dependabot alerts API. */
+function readAlertsSnapshot(filePath) {
+    let alerts;
+    try {
+        alerts = JSON.parse(readFileSync(resolve(filePath), "utf-8"));
+    } catch (e) {
+        throw new Error(
+            `Cannot read alerts snapshot "${filePath}": ${e.message}`,
+        );
+    }
+    if (!Array.isArray(alerts)) {
+        throw new Error(
+            `Dependabot alerts snapshot "${filePath}" must contain a JSON array`,
+        );
+    }
+    return alerts;
+}
+
 function fetchAlerts() {
-    header("Fetching open Dependabot alerts from GitHub");
+    header(
+        ALERTS_FILE
+            ? "Reading cached Dependabot alerts"
+            : "Fetching open Dependabot alerts from GitHub",
+    );
 
     let alerts;
     try {
-        const remoteUrl = runCmd("git", ["remote", "get-url", "origin"]);
-        const match = remoteUrl.match(
-            /github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?$/,
-        );
-        if (!match) {
-            throw new Error(
-                `Cannot parse GitHub owner/repo from remote: ${remoteUrl}`,
+        if (ALERTS_FILE) {
+            alerts = readAlertsSnapshot(ALERTS_FILE);
+            log(
+                `  Snapshot: ${clr.chrome(resolve(ALERTS_FILE))} (${alerts.length} alert(s))`,
             );
-        }
-        const [, owner, repo] = match;
-        if (
-            !/^[A-Za-z0-9._-]+$/.test(owner) ||
-            !/^[A-Za-z0-9._-]+$/.test(repo)
-        ) {
-            throw new Error(
-                `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
+        } else {
+            const remoteUrl = runCmd("git", ["remote", "get-url", "origin"]);
+            const match = remoteUrl.match(
+                /github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?$/,
             );
+            if (!match) {
+                throw new Error(
+                    `Cannot parse GitHub owner/repo from remote: ${remoteUrl}`,
+                );
+            }
+            const [, owner, repo] = match;
+            if (
+                !/^[A-Za-z0-9._-]+$/.test(owner) ||
+                !/^[A-Za-z0-9._-]+$/.test(repo)
+            ) {
+                throw new Error(
+                    `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
+                );
+            }
+            log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
+
+            const raw = runCmd(
+                "gh",
+                [
+                    "api",
+                    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
+                    "--paginate",
+                ],
+                { timeout: 120000 },
+            );
+
+            alerts = parsePaginatedJson(raw);
         }
-        log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
-
-        const raw = runCmd(
-            "gh",
-            [
-                "api",
-                `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
-                "--paginate",
-            ],
-            { timeout: 120000 },
-        );
-
-        alerts = parsePaginatedJson(raw);
     } catch (e) {
-        console.error("Failed to fetch alerts:", e.message);
-        console.error(
-            "Make sure `gh` is installed, authenticated, and has access to Dependabot alerts.",
-        );
+        console.error("Failed to load alerts:", e.message);
+        if (!ALERTS_FILE) {
+            console.error(
+                "Make sure `gh` is installed, authenticated, and has access to Dependabot alerts.",
+            );
+        }
         process.exit(1);
     }
 
@@ -2666,6 +2743,11 @@ function deduplicateAlerts(alerts) {
         `  Found ${clr.warn.bold(alerts.length)} alert(s) across ${clr.chrome.bold(sorted.size)} package(s)`,
     );
     return sorted;
+}
+
+function selectPackages(byPackage, packageSelection) {
+    if (packageSelection === null) return byPackage;
+    return new Map([...byPackage].filter(([pkg]) => packageSelection.has(pkg)));
 }
 
 /** Stage 3+4: Classify each vulnerable package and run fix planner. */
@@ -3317,7 +3399,7 @@ function formatActionTag(entry) {
     return `[${parts.join("+")}]`;
 }
 
-/** Stage 6: Print summary and set exit code. */
+/** Stage 6: Print the text summary. */
 function printSummary(results) {
     header("Summary");
 
@@ -3506,14 +3588,14 @@ function printSummary(results) {
     }
 
     log("");
+}
 
-    if (
-        results.blocked.length > 0 ||
+function getResultsExitCode(results) {
+    return results.blocked.length > 0 ||
         results.noPatch.length > 0 ||
         results.failed.length > 0
-    ) {
-        process.exit(1);
-    }
+        ? 1
+        : 0;
 }
 
 /**
@@ -3679,7 +3761,10 @@ async function main() {
     }
 
     const alerts = fetchAlerts();
-    const byPackage = deduplicateAlerts(alerts);
+    const byPackage = selectPackages(
+        deduplicateAlerts(alerts),
+        PACKAGE_SELECTION,
+    );
     const analyses = await analyzeVulnerabilities(byPackage);
     const results = await executeResolutions(analyses);
 
@@ -3688,9 +3773,16 @@ async function main() {
     } else {
         printSummary(results);
     }
+    process.exitCode = getResultsExitCode(results);
 }
 
-export { assessFixMaturity, getNpmInfo };
+export {
+    assessFixMaturity,
+    getNpmInfo,
+    parsePackageSelection,
+    readAlertsSnapshot,
+    selectPackages,
+};
 
 // Kick off a full run only when invoked directly (see IS_MAIN near the top),
 // so importing this module for unit tests never triggers a run.

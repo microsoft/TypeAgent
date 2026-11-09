@@ -208,6 +208,7 @@ export type BridgeToWebviewMessage =
               metrics?: any;
               tokenUsage?: any;
               actionTokenUsage?: any;
+              traceId?: string;
               // notify (persisted "explained")
               event?: string;
               data?: unknown;
@@ -289,7 +290,17 @@ export type BridgeToWebviewMessage =
       }
     // Another client answered / the server cancelled the interaction; the
     // webview should tear down its in-progress prompt (identified by id).
-    | { type: "interactionResolved"; interactionId: string }
+    // `response` is the authoritative value the server accepted (from any
+    // client's `interactionResponse`). The webview uses it to reconcile a
+    // locally-staged permission grant: a scope selection is only committed
+    // to the request's `Permissions:` metadata line if this response matches
+    // what we submitted, so a scope that lost a race to another client is
+    // never displayed as if it had been granted.
+    | {
+          type: "interactionResolved";
+          interactionId: string;
+          response: unknown;
+      }
     | { type: "interactionCancelled"; interactionId: string }
     | {
           // Response to a webview-issued `bridgeRpcRequest` (template editor
@@ -331,6 +342,8 @@ export type BridgeFromWebviewMessage =
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
+    // Open a local file in an editor tab (from a `typeagent-file:` link).
+    | { type: "openFile"; path: string }
     // Open a message's content in a new editor panel (a movable window).
     | { type: "openMessageWindow"; html: string; title?: string }
     // Request a fresh Azure Speech authorization token from the server
@@ -355,6 +368,16 @@ export type BridgeFromWebviewMessage =
     | { type: "pcDismiss"; input: string; direction: CompletionDirection }
     | { type: "pcHide" }
     | { type: "pcDispose" }
+    | {
+          type: "permissionDebug";
+          event:
+              | "menu-opened"
+              | "choice-pointerdown"
+              | "choice-selected"
+              | "choice-submitted";
+          interactionId: string;
+          choice?: string;
+      }
     | { type: "demoCommand"; action: "continue" | "cancel" }
     | { type: "demoLineCancelled"; requestId: string }
     // Reply to a `requestInteraction` prompt. Forwarded to the dispatcher

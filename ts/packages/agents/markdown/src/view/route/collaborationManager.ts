@@ -147,7 +147,7 @@ export class CollaborationManager {
     }
 
     /**
-     * Set document content from string
+     * Synchronize a snapshot while retaining unchanged Yjs text identities.
      */
     setDocumentContent(documentId: string, content: string): void {
         let ydoc = this.documents.get(documentId);
@@ -157,8 +157,52 @@ export class CollaborationManager {
         }
 
         const ytext = ydoc.getText("content");
-        ytext.delete(0, ytext.length);
-        ytext.insert(0, content);
+        const current = ytext.toString();
+        if (current === content) {
+            return;
+        }
+
+        // Diff against live Y.Text, not operations whose offsets refer to disk.
+        let start = 0;
+        while (
+            start < current.length &&
+            start < content.length &&
+            current[start] === content[start]
+        ) {
+            start++;
+        }
+        if (
+            splitsSurrogatePair(current, start) ||
+            splitsSurrogatePair(content, start)
+        ) {
+            start--;
+        }
+        let currentEnd = current.length;
+        let contentEnd = content.length;
+        while (
+            currentEnd > start &&
+            contentEnd > start &&
+            current[currentEnd - 1] === content[contentEnd - 1]
+        ) {
+            currentEnd--;
+            contentEnd--;
+        }
+        if (
+            splitsSurrogatePair(current, currentEnd) ||
+            splitsSurrogatePair(content, contentEnd)
+        ) {
+            currentEnd++;
+            contentEnd++;
+        }
+
+        ydoc.transact(() => {
+            if (currentEnd > start) {
+                ytext.delete(start, currentEnd - start);
+            }
+            if (contentEnd > start) {
+                ytext.insert(start, content.slice(start, contentEnd));
+            }
+        });
     }
 
     /**
@@ -230,4 +274,15 @@ export class CollaborationManager {
                     : "";
         }
     }
+}
+
+function splitsSurrogatePair(text: string, offset: number): boolean {
+    const before = text.charCodeAt(offset - 1);
+    const after = text.charCodeAt(offset);
+    return (
+        before >= 0xd800 &&
+        before <= 0xdbff &&
+        after >= 0xdc00 &&
+        after <= 0xdfff
+    );
 }

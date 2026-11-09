@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import * as os from "os";
+import * as path from "node:path";
 import {
     connectAgentServer,
     type AgentServerConnection,
@@ -25,6 +26,45 @@ import {
 } from "@typeagent/websocket-utils/backoff";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
+function isAllowedConfigPath(candidate: string): boolean {
+    if (
+        candidate.length === 0 ||
+        candidate.includes("\0") ||
+        !path.isAbsolute(candidate) ||
+        candidate.startsWith("\\\\") ||
+        candidate.startsWith("//") ||
+        candidate.split(/[\\/]/).some((segment) => segment === "..")
+    ) {
+        return false;
+    }
+    const normalize = (value: string) => {
+        const resolved = path.resolve(value);
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
+    const allowed = new Set<string>();
+    const add = (value: string | undefined) => {
+        if (value !== undefined) {
+            allowed.add(normalize(value));
+        }
+    };
+    add(process.env.TYPEAGENT_CONFIG_LOCAL);
+    if (process.env.TYPEAGENT_CONFIG_DIR !== undefined) {
+        add(path.join(process.env.TYPEAGENT_CONFIG_DIR, "config.local.yaml"));
+    }
+    add(
+        path.join(
+            process.env.TYPEAGENT_USER_DATA_DIR ??
+                path.join(os.homedir(), ".typeagent"),
+            "config.local.yaml",
+        ),
+    );
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        add(path.join(folder.uri.fsPath, "config.local.yaml"));
+        add(path.join(folder.uri.fsPath, "ts", "config.local.yaml"));
+    }
+    return allowed.has(normalize(candidate));
+}
+
 import {
     wrapLegacy,
     type LegacyAgentServerConnection,
@@ -45,6 +85,7 @@ import {
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 import type {
+    PendingInteractionRequest,
     ProcessCommandOptions,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
@@ -149,6 +190,7 @@ export class AgentServerBridge {
         vscode.Webview,
         BridgeToWebviewMessage[]
     >();
+    private pendingInteractions = new Map<string, PendingInteractionRequest>();
     private statusBarItem: vscode.StatusBarItem;
     private isConnected = false;
     private reconnectTimer: NodeJS.Timeout | undefined;
@@ -488,6 +530,7 @@ export class AgentServerBridge {
             }
 
             this.session = await connection.joinSession(clientIO, joinOpts);
+            this.setPendingInteractions(this.session.pendingInteractions);
 
             AgentServerBridge.registerForSession(this.session.sessionId, this);
 
@@ -512,6 +555,7 @@ export class AgentServerBridge {
                 this.lastReplayedSessionId = this.session.sessionId;
                 await this.replayHistory(this.session);
             }
+            this.replayPendingInteractions();
 
             // Resolve any requests marked "status unknown" when the previous
             // connection dropped: restore the ones still running / queued and
@@ -983,6 +1027,7 @@ export class AgentServerBridge {
                         });
                         this.onStatusChanged?.();
                         await this.replayHistory(newSession);
+                        this.replayPendingInteractions();
                         this.lastReplayedSessionId = newSession.sessionId;
                     }
                 },
@@ -1018,6 +1063,7 @@ export class AgentServerBridge {
             });
             this.onStatusChanged?.();
             await this.replayHistory(newSession);
+            this.replayPendingInteractions();
             this.lastReplayedSessionId = newSession.sessionId;
         }
         return true;
@@ -1048,6 +1094,7 @@ export class AgentServerBridge {
             dispatcher: SessionDispatcher["dispatcher"];
             conversationId: string;
             name: string;
+            pendingInteractions?: PendingInteractionRequest[];
         },
         oldSessionId: string | undefined,
     ): SessionDispatcher {
@@ -1055,8 +1102,10 @@ export class AgentServerBridge {
             dispatcher: joined.dispatcher,
             sessionId: joined.conversationId,
             name: joined.name,
+            pendingInteractions: joined.pendingInteractions ?? [],
         };
         this.session = newSession;
+        this.setPendingInteractions(joined.pendingInteractions ?? []);
         this.clearRequestIdMaps();
         this.nameOverride = undefined;
         if (oldSessionId) {
@@ -1105,19 +1154,32 @@ export class AgentServerBridge {
         // delete button) reflects a server started with `--dev` on connect
         // and session switches, without waiting for a `@config dev` toggle.
         await this.pushDeveloperMode();
+    }
 
-        // TODO(reconnect-mid-confirmation): re-render pending interactions on
-        // rejoin. When `@config dev on --confirm` is active, a request can be
-        // blocked on a `proposeAction`/`question` (SharedDispatcher deferred
-        // promise, 10-min timeout). If the webview reconnects or switches to a
-        // session while that prompt is outstanding, the interaction is NOT
-        // replayed here, so the user sees a "working" request with no way to
-        // answer it until the server times out. The agent-server already
-        // tracks these (DisplayLog.logPendingInteraction, included in the
-        // join/JoinSessionResult) — surface them (e.g. a getPendingInteractions
-        // RPC or a field on the join result) and re-broadcast each as a
-        // `requestInteraction` after the history replay so the confirmation UI
-        // reappears and `respondToInteraction` can complete the request.
+    private setPendingInteractions(
+        interactions: PendingInteractionRequest[],
+    ): void {
+        this.pendingInteractions.clear();
+        for (const interaction of interactions) {
+            this.pendingInteractions.set(
+                interaction.interactionId,
+                interaction,
+            );
+        }
+    }
+
+    private replayPendingInteractions(webview?: vscode.Webview): void {
+        for (const interaction of this.pendingInteractions.values()) {
+            const message: BridgeToWebviewMessage = {
+                type: "requestInteraction",
+                interaction,
+            };
+            if (webview) {
+                this.postToWebview(webview, message);
+            } else {
+                this.broadcastToWebviews(message);
+            }
+        }
     }
 
     /**
@@ -1258,6 +1320,7 @@ export class AgentServerBridge {
                 // Seed dev-mode state so the per-message delete button
                 // reflects a `--dev` server on webview re-attach.
                 await this.pushDeveloperMode(webview);
+                this.replayPendingInteractions(webview);
             } catch (e) {
                 console.warn(
                     "[agentServerBridge] hydrateWebview replay failed:",
@@ -1294,6 +1357,13 @@ export class AgentServerBridge {
         webview: vscode.Webview,
     ): Promise<void> {
         switch (msg.type) {
+            case "permissionDebug":
+                console.warn(
+                    `[vscode-shell permission] ${msg.event}`,
+                    msg.interactionId,
+                    msg.choice ?? "",
+                );
+                break;
             case "sendCommand":
                 await this.sendCommand(
                     msg.command,
@@ -1490,6 +1560,15 @@ export class AgentServerBridge {
                 // the extension host so VS Code applies its trust prompt.
                 if (msg.href) {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+                }
+                break;
+            case "openFile":
+                // `typeagent-file:` link — show it in an editor tab rather
+                // than handing it to the OS; the user is already in VS Code.
+                if (msg.path && isAllowedConfigPath(msg.path)) {
+                    void vscode.window.showTextDocument(
+                        vscode.Uri.file(msg.path),
+                    );
                 }
                 break;
             case "openMessageWindow":
@@ -1988,6 +2067,8 @@ export class AgentServerBridge {
             const userContext = gatherUserContext();
             const options: ProcessCommandOptions = {
                 userContext,
+                workingDirectory:
+                    userContext.editor?.workspaceFolders?.[0] ?? process.cwd(),
             };
             const result = await awaitCommand(
                 this.session.dispatcher,
@@ -2092,7 +2173,20 @@ export class AgentServerBridge {
      */
     private createClientIO(): ClientIO {
         return createBridgeClientIO({
-            broadcast: (msg) => this.broadcastToWebviews(msg),
+            broadcast: (msg) => {
+                if (msg.type === "requestInteraction") {
+                    this.pendingInteractions.set(
+                        msg.interaction.interactionId,
+                        msg.interaction,
+                    );
+                } else if (
+                    msg.type === "interactionResolved" ||
+                    msg.type === "interactionCancelled"
+                ) {
+                    this.pendingInteractions.delete(msg.interactionId);
+                }
+                this.broadcastToWebviews(msg);
+            },
             rememberServerRequestId: (clientId, serverId) => {
                 this.clientToServerRequestId.set(clientId, serverId);
                 this.serverToClientRequestId.set(serverId, clientId);
@@ -2316,6 +2410,7 @@ export class AgentServerBridge {
                 });
                 this.onStatusChanged?.();
                 await this.replayHistory(joinedSession);
+                this.replayPendingInteractions();
                 this.lastReplayedSessionId = joinedSession.sessionId;
             },
             // Helper rolls back the *server-side* join on rebind failure;

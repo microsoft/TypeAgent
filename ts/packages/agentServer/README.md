@@ -10,6 +10,118 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 
 ---
 
+Derived memory Views are enabled by default in the durable memory host.
+`TYPEAGENT_MEMORY_VIEW_DRAFTS=false` explicitly disables them; unset or `true`
+requires no user opt-in. Builds remain explicit, provider failures remain errors,
+and enablement does not grant publication, review or execution authority.
+
+## Automations page
+
+Both WebSocket and embedded hosts supply the browser agent with
+`automations: { instanceDir }`. The browser combines its WebFlows with the
+TaskFlow and PowerShell flow stores under that instance directory. This
+initialization is independent of Copilot recording and macro lifecycle RPCs.
+No Copilot macro manager or plugin catalog is exposed to the page; an absent
+macro source is not shown as an unavailable provider.
+
+## Runbook host capabilities
+
+Both WebSocket and embedded hosts inject the named, plain-object
+`RunbookHostCapabilities` (`@typeagent/agent-server-protocol`) into browser
+initialization as `runbookCapabilities`. Agent RPC proxies its callable
+functions; no manager instances, arbitrary server methods, execution methods,
+credentials or schema-validator functions are exposed.
+
+- `listSkills` is metadata-only, paginated (`limit` 1–200, default 100;
+  nonnegative `offset`). `getSkill` and `readSkillFile` read the existing catalog.
+- `getSkillLifecycle({identity, revision})` returns the exact entry and the
+  catalog's real `allowedTransitions`/`allowedActions`. `changeSkillLifecycle`
+  requires that immutable revision plus `expectedState` and `expectedActive`.
+  Conflicting concurrent reviews fail atomically; refresh rather than retrying
+  against a different revision. Validation checks manifest integrity and
+  compiles package grammars; it is not a security certification.
+- `listBindingTargets` returns bounded target metadata with explicit notices.
+  MCP identities are the real `JSON.stringify([serverConfigId, toolName])`,
+  with the current tool fingerprint as `version` and `fingerprint`.
+  `getCurrentMcpToolCatalogs` reads registered source-owned current catalogs,
+  without connecting/discovering servers. An unloaded/missing catalog is
+  explicitly unavailable. Tool annotations are hints, not permission grants.
+  Snapshots retain actual configured allow/deny/unset decisions and prompt
+  requirements without session grants; configured-denied tools are excluded
+  with notices. Live runtime permission checks still remain authoritative.
+  Public selection IDs remain the exact compound catalog IDs. The gateway
+  verifies/decodes that selected identity before storing canonical
+  `targetId = actual tool.name` and `serverId = serverConfigId`. No display
+  title is used. The host qualifies those components against their explicit
+  server and checks the current catalog; it never searches across servers by
+  a bare name. A defensive direct-compound callback path preserves only
+  canonical two-string JSON pairs with the exact server; this does not relax
+  the canonical store's component-identifier requirements.
+- Macro targets are unavailable: checked programs and recording/authoring
+  lifecycle operations belong to the Copilot plugin, not the agent server.
+  The server does not create a macro manager or read the plugin catalog.
+  Secret-input MCP schemas are excluded.
+  Flows are **not** binding targets: existing flow catalogs do not provide
+  immutable, approved version snapshots; visible/active does not mean approved.
+- `suggestBindings({inputSchema, commandText?})` ranks approved automation,
+  MCP, command text, then manual, with reasons. Schema-fit suggestions are
+  advisory, not complete JSON Schema validation. `checkBindingTargets` reports
+  missing targets/current-version/schema drift without executing anything.
+
+Binding checks retain `arguments?: Record<string, unknown>` on each
+`RunbookBindingReference`; omitted arguments mean `{}`, not an approval bypass.
+Concrete arguments are validated against the actual current catalog JSON
+Schema, including required fields, types and constraints, using the same
+compiler as the live MCP catalog. Shared canonical limits are 65,536 UTF-16
+units per string, 128 KiB UTF-8 encoded JSON, 10,000 nodes and depth 16. Non-finite/non-JSON
+values, unsafe keys, accessors, proxies and custom containers are rejected.
+The checker returns `code: "invalidArguments"` for invalid arguments.
+
+Symbolic templates use **exactly** `{ "$input": "edition-input-id" }`, including
+inside nested objects/arrays. Exact `{ "$literal": jsonValue }` argument values
+escape literal JSON that would otherwise look like a template; the parameter
+map itself always retains its parameter names. Supply the edition's declared
+`inputs` to `checkBindingTargets`; these are authoritative over the legacy
+`inputSchema` compatibility field. References must name non-secret required
+inputs and prove target-schema fit for every declared value. Defaults and
+examples are never substituted or used as proxy validation values.
+Bounded enums are checked exhaustively; unconstrained primitive types and
+fixed object/array structure can be proven statically. Actual concrete
+portions receive full schema validation. Conditional, composed/ref-based and
+other unprovable symbolic schemas return `"unavailable"`: use reviewed
+concrete values or retain a manual step. No synthetic witness or sample
+argument is used as proof, and templates are never executed or substituted
+into persisted bindings. Future runtime values still require live validation.
+The durable-memory
+validator receives `{ inputs: edition.inputs }` context from the canonical
+edition service; missing context makes symbolic bindings unavailable.
+
+Readiness includes indexed `argumentChecks` only after actual schema fit.
+Each proof echoes the exact reference/arguments and sets
+`argumentsValidated: true`. The canonical callback requires exactly one
+matching proof before returning an accepted result with that attestation;
+identity-only readiness cannot approve arguments. Catalog-bound editions
+reviewed before argument attestation require explicit re-review.
+
+Binding acceptance must explicitly confirm author intent and safety, then
+revalidate the target immediately. Both owned durable-memory services receive
+the real `RunbookBindingValidator`; absent providers fail closed. Embedded
+callers injecting their own memory service must configure its validator
+themselves. Persisted drift belongs in readiness/Inbox, not automatic execution
+or approval.
+
+### Configured derived View model
+
+Owned hosts use the shared durable-memory factory. Set
+`TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT` to an already configured model route
+to select the model for explicit View builds. The factory forwards
+`viewModelEndpoint`; an unconfigured explicit route fails at startup.
+Model construction remains lazy and source imports do not start View builds.
+Saved-procedure synthesis and its image-capability settings are removed.
+Source assets remain retained evidence, not safe previews or execution grants.
+
+---
+
 ## Architecture
 
 ```

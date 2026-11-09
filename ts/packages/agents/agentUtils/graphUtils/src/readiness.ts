@@ -3,14 +3,31 @@
 
 // Shared readiness/setup helpers for the calendar and email agents.
 // Both agents speak to Microsoft Graph (or Google) through the same provider
-// abstraction in this package, gated on the same env vars, and want the same
+// abstraction in this package, gated on the same settings, and want the same
 // "configured? signed-in?" state machine. This module factors that decision
 // out so both agents stay thin wrappers — see the desktop agent's readiness.ts
 // for the pattern this mirrors.
 
 import type { ReadinessReport } from "@typeagent/agent-sdk";
+import {
+    ConfigSetupError,
+    configSetupHint,
+    getConfigProblems,
+    tryReloadConfigKeysSync,
+} from "@typeagent/config";
 
 export type GraphAgentName = "calendar" | "email";
+export const GRAPH_CONFIG_KEYS = [
+    "MSGRAPH_APP_CLIENTID",
+    "MSGRAPH_APP_CLIENTSECRET",
+    "MSGRAPH_APP_TENANTID",
+    "MSGRAPH_APP_USERNAME",
+    "MSGRAPH_APP_PASSWD",
+    "MSGRAPH_APP_AUTH_MODE",
+    "MSGRAPH_APP_REDIRECT_PORT",
+    "GOOGLE_CALENDAR_CLIENT_ID",
+    "GOOGLE_CALENDAR_CLIENT_SECRET",
+] as const;
 
 // Inputs for the readiness decision. All three slots are independent so the
 // pure evaluator can be unit-tested without env or provider mocking.
@@ -32,6 +49,7 @@ export type GraphReadinessProbe = {
     // Used only for nicer messaging ("Microsoft 365" vs "Google"); the
     // decision logic doesn't depend on it.
     providerName: string | undefined;
+    configProblem?: string;
 };
 
 // Cheap env probe — pulls just the booleans the evaluator needs.
@@ -52,12 +70,72 @@ export function probeGraphConfig(env: NodeJS.ProcessEnv): {
     };
 }
 
+// The probe an agent should use at runtime: re-reads the config files
+// first, then probes `process.env`.
+//
+// Agent processes are forked with a snapshot of `process.env`, so without
+// the reload a user who adds MSGRAPH_APP_CLIENTID to config.local.yaml and
+// runs `@config agent refresh email` would keep being told the agent has
+// no provider configured. `probeGraphConfig` stays pure so the decision
+// logic remains testable without touching the filesystem.
+export function probeCurrentGraphConfig(): {
+    msGraphConfigured: boolean;
+    googleConfigured: boolean;
+    configProblem?: string;
+} {
+    tryReloadConfigKeysSync(GRAPH_CONFIG_KEYS);
+    const result = probeGraphConfig(process.env);
+    const problem = getConfigProblems().find(
+        ({ section }) => section === "msGraph" || section === "googleCalendar",
+    );
+    return problem === undefined
+        ? result
+        : { ...result, configProblem: problem.message };
+}
+
+// The "no provider configured" instructions, shared by the readiness
+// report and by the agents' own login/setup paths so both point at the
+// same YAML keys.
+export function graphProviderSetupHint(agentName: GraphAgentName): string {
+    return [
+        "Microsoft Graph (Outlook / Microsoft 365):",
+        "",
+        configSetupHint(["MSGRAPH_APP_CLIENTID", "MSGRAPH_APP_TENANTID"]),
+        "",
+        "OR Google:",
+        "",
+        configSetupHint([
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+        ]),
+        "",
+        `Then run \`@config agent refresh ${agentName}\`.`,
+    ].join("\n");
+}
+
+// The same hint as a throwable error.
+//
+// `configSetupError` can't be used here: it takes a single var list, while
+// this hint offers two alternative provider blocks. Throwing (rather than
+// returning a plain-string error result) is what gets the markdown rendered
+// — the dispatcher only attaches `errorDisplayContent` on the throw path.
+export function graphProviderSetupError(
+    agentName: GraphAgentName,
+): ConfigSetupError {
+    const Agent = agentName[0].toUpperCase() + agentName.slice(1);
+    const message = `${Agent} agent has no provider configured.`;
+    return new ConfigSetupError(
+        message,
+        `${message}\n\n${graphProviderSetupHint(agentName)}`,
+    );
+}
+
 // Pure decision: probe → ReadinessReport.
 //
 // Three states, in order of severity:
-//   - No provider configured at all → "setup-required" with env-var hint.
-//     This is a manual-config case (edit ts/.env, then refresh); the
-//     `setup` hook can't help.
+//   - No provider configured at all → "setup-required" with a config hint.
+//     This is a manual-config case (edit config.local.yaml, then refresh);
+//     the `setup` hook can't help.
 //   - Configured but not signed in → "setup-required" with sign-in hint.
 //     The `setup` hook CAN drive this — it kicks off the device-code or
 //     OAuth flow via the existing provider.login() path.
@@ -68,21 +146,19 @@ export function evaluateGraphReadiness(
 ): ReadinessReport {
     const Agent = agentName[0].toUpperCase() + agentName.slice(1);
 
+    if (probe.configProblem !== undefined) {
+        return {
+            state: "setup-required",
+            message: `${Agent} configuration is invalid: ${probe.configProblem}`,
+            details: graphProviderSetupHint(agentName),
+        };
+    }
+
     if (!probe.msGraphConfigured && !probe.googleConfigured) {
         return {
             state: "setup-required",
             message: `${Agent} agent has no provider configured.`,
-            details: [
-                `Set environment variables in \`ts/.env\` and run \`@config agent refresh ${agentName}\`:`,
-                "",
-                "Microsoft Graph (Outlook / Microsoft 365):",
-                "  - MSGRAPH_APP_CLIENTID",
-                "  - MSGRAPH_APP_TENANTID",
-                "",
-                "OR Google:",
-                "  - GOOGLE_CALENDAR_CLIENT_ID",
-                "  - GOOGLE_CALENDAR_CLIENT_SECRET",
-            ].join("\n"),
+            details: graphProviderSetupHint(agentName),
         };
     }
 

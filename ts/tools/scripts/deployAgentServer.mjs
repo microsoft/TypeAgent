@@ -5,8 +5,7 @@
 /**
  * Build a self-contained, repo-less-runnable agent-server artifact.
  *
- * Approach (see codeDocs .../2026-06-11_typeagent-plugin-agent-distribution):
- * the agent-server loads on-disk data assets (agent manifests, grammars) via
+ * The agent-server loads on-disk data assets (agent manifests, grammars) via
  * getPackageFilePath, so it CANNOT be a single-file esbuild bundle. Instead we
  * use `pnpm deploy` to produce a folder with a flat node_modules (workspace
  * packages copied in, so data-asset resolution keeps working), prune
@@ -21,13 +20,15 @@
  *
  * Usage (from ts/):
  *   node tools/scripts/deployAgentServer.mjs --out <dir> [--platform win32] [--arch x64]
- *        [--skip-deploy] [--skip-prune]
+ *        [--skip-deploy] [--skip-prune] [--pnpm-state-dir <dir>]
  */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeCopilotRuntimeManifest } from "./copilotRuntimeManifest.mjs";
+import { writeEmbeddingRuntimeManifest } from "./embeddingRuntimeManifest.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(scriptsDir, "..", ".."); // ts/
@@ -41,6 +42,8 @@ function parseArgs(argv) {
         else if (a === "--arch") args.arch = argv[++i];
         else if (a === "--skip-deploy") args.skipDeploy = true;
         else if (a === "--skip-prune") args.skipPrune = true;
+        else if (a === "--pnpm-state-dir")
+            args.pnpmStateDir = path.resolve(argv[++i]);
         else if (a === "--profile") args.profile = argv[++i];
         else if (a === "--external-cli") args.externalCli = true;
         else throw new Error(`Unknown argument: ${a}`);
@@ -80,18 +83,20 @@ function main() {
     //    and yields a copied, self-contained node_modules).
     if (!args.skipDeploy) {
         fs.rmSync(args.out, { recursive: true, force: true });
-        run(
-            "pnpm",
-            [
-                "--filter",
-                "agent-server",
-                "--config.node-linker=hoisted",
-                "deploy",
-                "--prod",
-                args.out,
-            ],
-            tsRoot,
-        );
+        const deployArgs = [
+            "--filter",
+            "agent-server",
+            "--config.node-linker=hoisted",
+        ];
+        if (args.pnpmStateDir) {
+            const modulesDir = path.join(args.pnpmStateDir, "node_modules");
+            deployArgs.push(
+                `--config.modules-dir=${modulesDir}`,
+                `--config.virtual-store-dir=${path.join(modulesDir, ".pnpm")}`,
+            );
+        }
+        deployArgs.push("deploy", "--prod", args.out);
+        run("pnpm", deployArgs, tsRoot);
     } else {
         console.log("Skipping pnpm deploy (--skip-deploy).");
     }
@@ -141,10 +146,9 @@ function main() {
         );
     }
 
-    // 2c. External-CLI variant: drop the bundled Claude/Copilot runtimes. Only
-    //     valid where `claude`/`copilot` are on PATH (managed machines / the
-    //     standalone installer); the runtime query() callers are wired to resolve
-    //     the PATH binary (claudeExecutableOption), so they don't need the bundle.
+    // 2c. External-runtime variant: drop the bundled Claude/Copilot runtimes.
+    //     Claude resolves from PATH. Copilot resolves from TypeAgent's managed
+    //     runtime cache or an explicit compatible path.
     if (args.externalCli) {
         run(
             "node",
@@ -153,7 +157,7 @@ function main() {
         );
         fs.writeFileSync(
             path.join(args.out, ".typeagent-external-cli"),
-            "claude,copilot must be on PATH\n",
+            "claude must be on PATH; copilot uses the TypeAgent managed runtime\n",
             "utf8",
         );
         console.log("  recorded external-cli mode (.typeagent-external-cli)");
@@ -173,6 +177,15 @@ function main() {
     //    closure (chalk, @azure/keyvault-secrets, @azure/identity, js-yaml,
     //    @typeagent/config), so it runs as `node tools/getKeys.mjs`.
     const toolsOut = path.join(args.out, "tools");
+    writeEmbeddingRuntimeManifest(args.out);
+    writeCopilotRuntimeManifest(path.join(args.out, "copilot-runtime.json"), {
+        platform: args.platform,
+        arch: args.arch,
+    });
+    copyInto(
+        path.join(scriptsDir, "copilotRuntime.mjs"),
+        path.join(toolsOut, "copilotRuntime.mjs"),
+    );
     copyInto(
         path.join(scriptsDir, "getKeys.mjs"),
         path.join(toolsOut, "getKeys.mjs"),
@@ -188,10 +201,22 @@ function main() {
         path.join(scriptsDir, "generate-selfhost-config.mjs"),
         path.join(toolsOut, "generate-selfhost-config.mjs"),
     );
+    copyInto(
+        path.join(scriptsDir, "localEmbeddingModels.mjs"),
+        path.join(toolsOut, "localEmbeddingModels.mjs"),
+    );
+    copyInto(
+        path.join(scriptsDir, "setModelProvider.mjs"),
+        path.join(toolsOut, "setModelProvider.mjs"),
+    );
     const sample = path.join(tsRoot, "config.sample.yaml");
     if (fs.existsSync(sample)) {
         copyInto(sample, path.join(toolsOut, "config.sample.yaml"));
     }
+    copyInto(
+        path.join(tsRoot, "config.defaults.yaml"),
+        path.join(toolsOut, "config.defaults.yaml"),
+    );
 
     // 4. Copy the bootstrap launcher to the artifact root, plus the dev-tunnel
     //    helpers (setup-devtunnel / list-tunnels) for optional remote access.

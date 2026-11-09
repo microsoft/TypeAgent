@@ -11,8 +11,7 @@ import {
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
-    openai,
-    isEmbeddingAvailable,
+    tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
 
 export interface TabTitleIndex {
@@ -30,11 +29,7 @@ export function createTabTitleIndex() {
     // Undefined when no embedding provider is configured; tab-title fuzzy
     // search is then disabled and returns no matches instead of failing.
     const embeddingModel: TextEmbeddingModel | undefined =
-        isEmbeddingAvailable()
-            ? openai.createEmbeddingModel(
-                  openai.apiSettingsFromEnv(openai.ModelType.Embedding),
-              )
-            : undefined;
+        tryCreateEmbeddingModel();
 
     return {
         addOrUpdate,

@@ -33,10 +33,22 @@ function extractThreadId(requestId: any): string | undefined {
 // Platform adapter: open links in a real Chrome tab
 const platformAdapter: PlatformAdapter = {
     handleLinkClick(href: string, _target: string | null) {
-        // Rewrite typeagent-browser:// URLs to the actual extension URL
+        // Local-file links only make sense in the desktop/VS Code hosts;
+        // the extension can't open a path on the user's machine.
+        if (href.startsWith("typeagent-file:")) {
+            return;
+        }
         if (href.startsWith("typeagent-browser://")) {
-            const path = href.replace("typeagent-browser://", "");
-            href = chrome.runtime.getURL(path);
+            rpc.invoke("createTab", { url: href, active: true }).catch(
+                (error) => {
+                    console.error("Failed to open browser view:", error);
+                    chatPanel.addAgentMessage(
+                        error instanceof Error ? error.message : String(error),
+                        "browser",
+                    );
+                },
+            );
+            return;
         }
         chrome.tabs.create({ url: href });
     },

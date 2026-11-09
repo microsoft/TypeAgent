@@ -1,0 +1,585 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { jest } from "@jest/globals";
+import {
+    StructuredActionClient,
+    StructuredActionClientError,
+    type AgentServerConnection,
+    type ConversationDispatcher,
+} from "../src/index.js";
+
+function fakeConnection() {
+    const dispatcher = {
+        searchActions: async () => ({
+            protocolVersion: 1,
+            scopeId: "scope",
+            actions: [],
+        }),
+    } as unknown as ConversationDispatcher["dispatcher"];
+    const joinConversation = jest.fn<AgentServerConnection["joinConversation"]>(
+        async (_io, options) => ({
+            conversationId: options!.conversationId!,
+            name: "Test",
+            connectionId: "connection",
+            structuredActions: { resumeToken: "private-test-capability" },
+            dispatcher,
+        }),
+    );
+    const createConversation = jest.fn<
+        AgentServerConnection["createConversation"]
+    >(
+        async (name) =>
+            ({ conversationId: name, name }) as Awaited<
+                ReturnType<AgentServerConnection["createConversation"]>
+            >,
+    );
+    const close = jest.fn(async () => {});
+    const connection = {
+        joinConversation,
+        createConversation,
+        close,
+        listConversations: async () => [],
+    } as unknown as AgentServerConnection;
+    return {
+        connection,
+        dispatcher,
+        joinConversation,
+        createConversation,
+        close,
+    };
+}
+
+describe("private structured connector binding lifecycle", () => {
+    it("validates context before every operation on reused and resumed bindings", async () => {
+        const fake = fakeConnection();
+        const search = jest.fn(fake.dispatcher.searchActions);
+        const execute =
+            jest.fn<ConversationDispatcher["dispatcher"]["executeAction"]>();
+        const continuation =
+            jest.fn<ConversationDispatcher["dispatcher"]["continueAction"]>();
+        const cancellation =
+            jest.fn<ConversationDispatcher["dispatcher"]["cancelAction"]>();
+        Object.assign(fake.dispatcher, {
+            searchActions: search,
+            executeAction: execute,
+            continueAction: continuation,
+            cancelAction: cancellation,
+        });
+        const validate = jest.fn(async (_id: string) => {});
+        let disconnect: (() => void) | undefined;
+        const client = new StructuredActionClient({
+            conversationId: "selected",
+            validateConversationId: validate,
+            connect: async (callback) => {
+                disconnect = callback;
+                return fake.connection;
+            },
+        });
+        try {
+            await client.searchActions({ query: "bind" });
+            validate.mockRejectedValue(
+                new StructuredActionClientError(false, "conversation_changed"),
+            );
+            const envelope = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                operationId: "pending",
+            };
+            const calls = [
+                () => client.searchActions({ query: "stale" }),
+                () =>
+                    client.executeAction({
+                        ...envelope,
+                        schemaName: "list",
+                        actionName: "listLists",
+                        parameters: {},
+                    }),
+                () =>
+                    client.continueAction({
+                        ...envelope,
+                        interactionId: "question",
+                        response: { type: "confirmation", approved: true },
+                    }),
+                () => client.cancelAction(envelope),
+            ];
+            for (const call of calls) {
+                await expect(call()).rejects.toMatchObject({
+                    dispatched: false,
+                    reason: "conversation_changed",
+                });
+            }
+            disconnect!();
+            await expect(
+                client.searchActions({ query: "resumed" }),
+            ).rejects.toMatchObject({
+                dispatched: false,
+                reason: "conversation_changed",
+            });
+            expect(validate).toHaveBeenCalledTimes(6);
+            expect(validate).toHaveBeenLastCalledWith("selected");
+            expect(search).toHaveBeenCalledTimes(1);
+            expect(execute).not.toHaveBeenCalled();
+            expect(continuation).not.toHaveBeenCalled();
+            expect(cancellation).not.toHaveBeenCalled();
+        } finally {
+            await client.close();
+        }
+    });
+
+    it.each(["close", "disconnect", "cancel"] as const)(
+        "does not dispatch if %s happens during asynchronous validation",
+        async (event) => {
+            const fake = fakeConnection();
+            const search = jest.fn(fake.dispatcher.searchActions);
+            fake.dispatcher.searchActions = search;
+            const abort = new AbortController();
+            let disconnect: (() => void) | undefined;
+            const client = new StructuredActionClient({
+                conversationId: "selected",
+                connect: async (callback) => {
+                    disconnect = callback;
+                    return fake.connection;
+                },
+                validateConversationId: async () => {
+                    if (event === "close") await client.close();
+                    else if (event === "disconnect") disconnect!();
+                    else abort.abort();
+                },
+            });
+            try {
+                await expect(
+                    client.searchActions({ query: "read" }, abort.signal),
+                ).rejects.toMatchObject({
+                    dispatched: false,
+                    reason:
+                        event === "close"
+                            ? "client_closed"
+                            : event === "disconnect"
+                              ? "connection_failed"
+                              : "caller_cancelled",
+                });
+                expect(search).not.toHaveBeenCalled();
+            } finally {
+                await client.close();
+            }
+        },
+    );
+
+    it("resolves context once and pins its explicit ID across concurrent calls and reconnects", async () => {
+        const fake = fakeConnection();
+        const resolveConversationId = jest.fn(async () => "nl-context");
+        let disconnect: (() => void) | undefined;
+        const client = new StructuredActionClient({
+            resolveConversationId,
+            connect: async (callback) => {
+                disconnect = callback;
+                return fake.connection;
+            },
+        });
+        try {
+            await Promise.all([
+                client.searchActions({ query: "first" }),
+                client.searchActions({ query: "second" }),
+            ]);
+            disconnect!();
+            await client.searchActions({ query: "reconnected" });
+            expect(resolveConversationId).toHaveBeenCalledTimes(1);
+            expect(resolveConversationId).toHaveBeenCalledWith(fake.connection);
+            expect(fake.createConversation).not.toHaveBeenCalled();
+            expect(
+                fake.joinConversation.mock.calls.map((call) => call[1]),
+            ).toEqual([
+                { conversationId: "nl-context", structuredActions: {} },
+                {
+                    conversationId: "nl-context",
+                    structuredActions: {
+                        resumeToken: "private-test-capability",
+                    },
+                },
+            ]);
+        } finally {
+            await client.close();
+        }
+    });
+
+    it("prefers explicit configuration over context resolution", async () => {
+        const fake = fakeConnection();
+        const resolveConversationId = jest.fn(async () => "ignored");
+        const client = new StructuredActionClient({
+            conversationId: "configured",
+            resolveConversationId,
+            connect: async () => fake.connection,
+        });
+        try {
+            await client.searchActions({ query: "read" });
+            expect(resolveConversationId).not.toHaveBeenCalled();
+            expect(client.binding.conversationId).toBe("configured");
+            expect(fake.createConversation).not.toHaveBeenCalled();
+        } finally {
+            await client.close();
+        }
+    });
+
+    it.each(["throws", "empty"] as const)(
+        "does not replace failed context resolution (%s) with an empty conversation",
+        async (failure) => {
+            const fake = fakeConnection();
+            const client = new StructuredActionClient({
+                connect: async () => fake.connection,
+                resolveConversationId: async () => {
+                    if (failure === "throws")
+                        throw new Error("Unavailable context");
+                    return "";
+                },
+            });
+            try {
+                await expect(
+                    client.searchActions({ query: "read" }),
+                ).rejects.toMatchObject({
+                    dispatched: false,
+                    reason: "connection_failed",
+                });
+                expect(fake.createConversation).not.toHaveBeenCalled();
+                expect(fake.joinConversation).not.toHaveBeenCalled();
+                expect(fake.close).toHaveBeenCalledTimes(1);
+            } finally {
+                await client.close();
+            }
+        },
+    );
+
+    it("uses a supplied name once and never defaults an out-of-band question", async () => {
+        const fake = fakeConnection();
+        const createConversationName = jest.fn(
+            () => "Dedicated embedded caller",
+        );
+        const client = new StructuredActionClient({
+            connect: async () => fake.connection,
+            createConversationName,
+        });
+        try {
+            await client.searchActions({ query: "read" });
+            await client.searchActions({ query: "read" });
+            expect(createConversationName).toHaveBeenCalledTimes(1);
+            expect(fake.createConversation).toHaveBeenCalledWith(
+                "Dedicated embedded caller",
+            );
+            const io = fake.joinConversation.mock.calls[0][0];
+            await expect(
+                io.question(undefined, "Allow?", ["yes", "no"], 0),
+            ).rejects.toThrow("explicit user response");
+        } finally {
+            await client.close();
+        }
+    });
+    it("forwards all four operations unchanged and never calls the NL command path", async () => {
+        const fake = fakeConnection();
+        const result = {
+            protocolVersion: 1 as const,
+            scopeId: "scope",
+            operationId: "operation",
+            status: "completed" as const,
+            output: [],
+            results: [],
+        };
+        const search = jest.fn(fake.dispatcher.searchActions);
+        const execute = jest.fn<
+            ConversationDispatcher["dispatcher"]["executeAction"]
+        >(async () => result);
+        const continuation = jest.fn<
+            ConversationDispatcher["dispatcher"]["continueAction"]
+        >(async () => result);
+        const cancellation = jest.fn<
+            ConversationDispatcher["dispatcher"]["cancelAction"]
+        >(async () => result);
+        Object.assign(fake.dispatcher, {
+            searchActions: search,
+            executeAction: execute,
+            continueAction: continuation,
+            cancelAction: cancellation,
+            submitCommand: () => {
+                throw new Error("NL must never be called");
+            },
+        });
+        const client = new StructuredActionClient({
+            connect: async () => fake.connection,
+        });
+        const identity = {
+            schemaName: "exact.schema",
+            actionName: "exactAction",
+        };
+        const envelope = { protocolVersion: 1 as const, scopeId: "scope" };
+        const request = {
+            ...identity,
+            ...envelope,
+            parameters: {
+                ids: ["007", '東京\n"quoted"'],
+                nested: { value: [null, true] },
+            },
+        };
+        const response = {
+            ...envelope,
+            operationId: "operation",
+            interactionId: "interaction",
+            response: { type: "confirmation" as const, approved: true },
+        };
+        try {
+            await client.searchActions({ query: "exact" });
+            expect(await client.executeAction(request)).toBe(result);
+            expect(await client.continueAction(response)).toBe(result);
+            expect(await client.cancelAction(response)).toBe(result);
+            expect(search).toHaveBeenCalledWith({ query: "exact" });
+            expect(execute).toHaveBeenCalledWith(request);
+            expect(continuation).toHaveBeenCalledWith(response);
+            expect(cancellation).toHaveBeenCalledWith(response);
+            expect(fake.joinConversation).toHaveBeenCalledTimes(1);
+            expect(client.binding.connected).toBe(true);
+        } finally {
+            await client.close();
+        }
+    });
+
+    it("retains the capability privately on same-id reconnect and rejects resume failure without fallback", async () => {
+        const fake = fakeConnection();
+        let disconnect: (() => void) | undefined;
+        const client = new StructuredActionClient({
+            conversationId: "public-id",
+            connect: async (callback) => {
+                disconnect = callback;
+                return fake.connection;
+            },
+        });
+        try {
+            await client.searchActions({ query: "read" });
+            disconnect!();
+            expect(client.binding).toEqual({
+                conversationId: "public-id",
+                connected: false,
+            });
+            await client.searchActions({ query: "read" });
+            expect(fake.joinConversation.mock.calls[1][1]).toEqual({
+                conversationId: "public-id",
+                structuredActions: { resumeToken: "private-test-capability" },
+            });
+            expect(JSON.stringify(client.binding)).not.toContain(
+                "private-test-capability",
+            );
+            disconnect!();
+            fake.joinConversation.mockRejectedValue(
+                new Error("Bad capability private-test-capability"),
+            );
+            const error: unknown = await client
+                .searchActions({ query: "read" })
+                .catch((failure: unknown) => failure);
+            expect(error).toBeInstanceOf(StructuredActionClientError);
+            expect((error as StructuredActionClientError).dispatched).toBe(
+                false,
+            );
+            expect((error as StructuredActionClientError).reason).toBe(
+                "resume_failed",
+            );
+            expect(String(error)).not.toContain("private-test-capability");
+            expect(fake.createConversation).not.toHaveBeenCalled();
+            expect(
+                fake.joinConversation.mock.calls[2][1]?.structuredActions,
+            ).toEqual({
+                resumeToken: "private-test-capability",
+            });
+        } finally {
+            await client.close();
+        }
+    });
+
+    it.each([
+        ["invalid", "Invalid structured action resume capability"],
+        [
+            "wrong-conversation",
+            "Structured action resume state is unavailable; do not replay an interrupted action",
+        ],
+        [
+            "expired",
+            "Structured action resume state is unavailable; do not replay an interrupted action",
+        ],
+        [
+            "restarted-host",
+            "Structured action resume state is unavailable; do not replay an interrupted action",
+        ],
+    ])(
+        "preserves a safe explicit reason for %s resume rejection",
+        async (_kind, serverMessage) => {
+            const fake = fakeConnection();
+            let disconnect: (() => void) | undefined;
+            const client = new StructuredActionClient({
+                conversationId: "public-id",
+                connect: async (callback) => {
+                    disconnect = callback;
+                    return fake.connection;
+                },
+            });
+            try {
+                await client.searchActions({ query: "read" });
+                disconnect!();
+                fake.joinConversation.mockRejectedValue(
+                    new Error(serverMessage),
+                );
+                const outcome = await client
+                    .searchActions({ query: "read" })
+                    .catch((error: unknown) => error);
+                expect(outcome).toMatchObject({
+                    dispatched: false,
+                    reason: "resume_rejected",
+                });
+                expect(String(outcome)).toContain(
+                    "No replacement owner was created",
+                );
+                expect(String(outcome)).not.toContain(
+                    "private-test-capability",
+                );
+                expect(fake.createConversation).not.toHaveBeenCalled();
+                expect(
+                    fake.joinConversation.mock.calls[1][1]?.structuredActions,
+                ).toEqual({
+                    resumeToken: "private-test-capability",
+                });
+            } finally {
+                await client.close();
+            }
+        },
+    );
+
+    it("does not connect or dispatch for an already-aborted call", async () => {
+        const connect = jest.fn(async () => fakeConnection().connection);
+        const client = new StructuredActionClient({ connect });
+        const abort = new AbortController();
+        abort.abort();
+        await expect(
+            client.searchActions({ query: "read" }, abort.signal),
+        ).rejects.toMatchObject({ dispatched: false });
+        expect(connect).not.toHaveBeenCalled();
+        await client.close();
+    });
+
+    it("reports uncertain delivery on cancellation after dispatch without retrying", async () => {
+        const fake = fakeConnection();
+        let entered: (() => void) | undefined;
+        let resolve: (() => void) | undefined;
+        const started = new Promise<void>((done) => {
+            entered = done;
+        });
+        const execute = jest.fn<
+            ConversationDispatcher["dispatcher"]["executeAction"]
+        >(async () => {
+            entered!();
+            await new Promise<void>((done) => {
+                resolve = done;
+            });
+            throw new Error("Lost result containing private-test-capability");
+        });
+        fake.dispatcher.executeAction = execute;
+        const client = new StructuredActionClient({
+            connect: async () => fake.connection,
+        });
+        const abort = new AbortController();
+        const pending = client.executeAction(
+            {
+                protocolVersion: 1,
+                scopeId: "scope",
+                schemaName: "schema",
+                actionName: "action",
+            },
+            abort.signal,
+        );
+        const outcome = pending.catch((error: unknown) => error);
+        await started;
+        abort.abort();
+        expect(await outcome).toMatchObject({ dispatched: true });
+        resolve!();
+        await new Promise<void>((done) => setImmediate(done));
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(fake.joinConversation).toHaveBeenCalledTimes(1);
+        await client.close();
+    });
+
+    it("singleflights concurrent connects and gives new processes different explicit named conversations", async () => {
+        const fake = fakeConnection();
+        const connect = jest.fn(async () => fake.connection);
+        const first = new StructuredActionClient({ connect });
+        const second = new StructuredActionClient({ connect });
+        try {
+            await Promise.all([
+                first.searchActions({ query: "read" }),
+                first.searchActions({ query: "read" }),
+                first.searchActions({ query: "read" }),
+            ]);
+            expect(connect).toHaveBeenCalledTimes(1);
+            expect(fake.joinConversation).toHaveBeenCalledTimes(1);
+            await second.searchActions({ query: "read" });
+            const firstOptions = fake.joinConversation.mock.calls[0][1]!;
+            const secondOptions = fake.joinConversation.mock.calls[1][1]!;
+            expect(firstOptions.conversationId).not.toBe(
+                secondOptions.conversationId,
+            );
+            expect(firstOptions.structuredActions).toEqual({});
+            expect(secondOptions.structuredActions).toEqual({});
+            expect(JSON.stringify(first)).not.toContain(
+                "private-test-capability",
+            );
+        } finally {
+            await first.close();
+            await second.close();
+        }
+    });
+
+    it("never creates a replacement owner after losing the initial join reply", async () => {
+        const fake = fakeConnection();
+        fake.joinConversation.mockRejectedValue(new Error("Reply lost"));
+        const connect = jest.fn(async () => fake.connection);
+        const client = new StructuredActionClient({
+            connect,
+            conversationId: "explicit",
+        });
+        await expect(client.searchActions({ query: "read" })).rejects.toThrow(
+            "not dispatched",
+        );
+        await expect(client.searchActions({ query: "read" })).rejects.toThrow(
+            "No replacement owner was created",
+        );
+        expect(connect).toHaveBeenCalledTimes(1);
+        expect(fake.createConversation).not.toHaveBeenCalled();
+        await client.close();
+    });
+
+    it("does not fallback an explicit id on missing conversation or transport errors", async () => {
+        const fake = fakeConnection();
+        fake.joinConversation.mockRejectedValue(
+            new Error("Conversation not found: configured"),
+        );
+        const client = new StructuredActionClient({
+            connect: async () => fake.connection,
+            conversationId: "configured",
+        });
+        await expect(
+            client.searchActions({ query: "read" }),
+        ).rejects.toMatchObject({
+            dispatched: false,
+            reason: "conversation_not_found",
+        });
+        expect(fake.createConversation).not.toHaveBeenCalled();
+        await client.close();
+    });
+
+    it("closes once and refuses new requests without asserting cancellation", async () => {
+        const fake = fakeConnection();
+        const client = new StructuredActionClient({
+            connect: async () => fake.connection,
+        });
+        await client.searchActions({ query: "read" });
+        await client.close();
+        await client.close();
+        await expect(
+            client.searchActions({ query: "read" }),
+        ).rejects.toBeInstanceOf(StructuredActionClientError);
+        expect(fake.close).toHaveBeenCalledTimes(1);
+    });
+});

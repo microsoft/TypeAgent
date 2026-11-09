@@ -29,6 +29,8 @@ import {
 } from "./matchCollision.js";
 import { resolveContextSelector } from "./matchContextSelector.js";
 import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
+import { parseRecordingDirective } from "@typeagent/dispatcher-types";
+import { getConversationEntityMemory } from "../context/conversationEntityMemory.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -83,7 +85,7 @@ async function validateEntityWildcardMatch(
         `Validating entity wildcards: [${match.entityWildcardPropertyNames.join(", ")}] ` +
             `for actions: [${match.match.actions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}]`,
     );
-    const conversationMemory = context.conversationMemory;
+    const conversationMemory = await getConversationEntityMemory(context);
     if (conversationMemory === undefined) {
         // Can't resolve entity without memory.
         debugConstValidation(
@@ -216,8 +218,19 @@ export function getActivityNamespaceSuffix(
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
 }
 
-// Prefixes that must always reach Claude reasoning — never matched by grammar.
-const REASONING_PREFIXES = ["learn:", "dev:", "remember how to ", "record "];
+export type MatchRequestBypassReason = "reasoning_request" | "cache_disabled";
+
+export function getMatchRequestBypassReason(
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+): MatchRequestBypassReason | undefined {
+    if (parseRecordingDirective(request) !== undefined) {
+        return "reasoning_request";
+    }
+    return context.sessionContext.agentContext.agentCache.isEnabled()
+        ? undefined
+        : "cache_disabled";
+}
 
 /**
  * Resolve a grammar-collision decision for a set of validated cache matches, all
@@ -310,20 +323,20 @@ export async function matchRequest(
     activeSchemas?: string[],
     signal?: AbortSignal,
 ): Promise<TranslationResult | undefined> {
-    // Bypass grammar cache for recording/reasoning-directed requests.
-    const lower = request.trimStart().toLowerCase();
-    if (REASONING_PREFIXES.some((p) => lower.startsWith(p))) {
+    const bypassReason = getMatchRequestBypassReason(context, request);
+    if (bypassReason === "reasoning_request") {
         return undefined;
     }
 
     // Check abort signal before expensive grammar matching
     signal?.throwIfAborted();
 
-    const systemContext = context.sessionContext.agentContext;
-    const agentCache = systemContext.agentCache;
-    if (!agentCache.isEnabled()) {
+    if (bypassReason === "cache_disabled") {
         return undefined;
     }
+
+    const systemContext = context.sessionContext.agentContext;
+    const agentCache = systemContext.agentCache;
     const startTime = performance.now();
     const config = systemContext.session.getConfig();
     const activityContext = history?.activityContext;

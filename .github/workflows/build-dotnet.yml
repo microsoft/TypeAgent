@@ -33,32 +33,37 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         continue-on-error: true
         with:
           filters: |
             dotnet:
               - "dotnet/**"
+              - "ts/packages/agents/visualStudio/**"
+              - "ts/packages/utils/webSocketUtils/**"
+              - "ts/packages/agentServer/protocol/**"
+              - "ts/packages/agents/powershell/**"
+              - "ts/packages/config/**"
               - "ts/packages/agents/desktop/src/**Schema.ts"
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
       - name: Setup NuGet
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: NuGet/setup-nuget@v2.0.0
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123 # v4.0
       - name: Install pnpm
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: ts/package.json
       - name: Setup Node.js
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "24.22.1"
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install TS dependencies and generate schemas
@@ -89,3 +94,36 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: msbuild.exe typeagent/TypeAgent.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
+      - name: Build Visual Studio solution, WebView, and VSIX
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: dotnet
+        run: msbuild.exe visualStudioTypeAgent/VisualStudioTypeAgent.sln /restore /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}" /p:DeployExtension=false
+      - name: Build Visual Studio bridge TypeScript
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        run: pnpm exec fluid-build "@typeagent/visualstudio-agent" -t tsc --dep
+      - name: Test Visual Studio bridge TypeScript authentication
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        run: pnpm --filter @typeagent/visualstudio-agent run test:local -- --runInBand
+      - name: Build Visual Studio bridge for .NET Framework
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        run: dotnet build dotnet/visualStudioTypeAgent.Tests/VisualStudioTypeAgent.BridgeCompile.csproj --configuration Release --nologo
+      - name: Test Visual Studio bridge authentication
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        run: dotnet run --project dotnet/visualStudioTypeAgent.Tests/VisualStudioTypeAgent.Tests.csproj --configuration Release
+      - name: Test Visual Studio bridge TypeScript/C# interoperability
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        shell: pwsh
+        run: ./dotnet/visualStudioTypeAgent.Tests/RunInterop.ps1 -Configuration Release
+      - name: Build PowerShell sandbox broker
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        run: dotnet build dotnet/powerShellSandboxBroker/PowerShellSandboxBroker.csproj --configuration ${{ matrix.configuration }} --runtime win-x64
+      - name: Test PowerShell sandbox broker
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        env:
+          TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS: "1"
+        run: |
+          pnpm exec fluid-build '@typeagent/powershell-typeagent' -t build --dep
+          pnpm --filter @typeagent/powershell-typeagent test

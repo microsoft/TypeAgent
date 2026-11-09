@@ -28,13 +28,13 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "node-pty": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^18.19.3",
+    "@types/node": "^22.20.5",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
     "typescript": "~5.4.5"

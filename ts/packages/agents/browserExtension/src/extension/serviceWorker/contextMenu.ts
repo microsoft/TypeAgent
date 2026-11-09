@@ -7,6 +7,10 @@ import {
     awaitConversationOps,
 } from "./dispatcherConnection";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import { indexPageContent } from "./messageHandlers";
+import { getViewHostUrl, openBrowserView } from "./browserViewNavigation";
+
+const lookupViewHost = () => getViewHostUrl(sendActionToAgent);
 
 // RPC send function — set after RPC server is created in index.ts
 let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
@@ -107,10 +111,65 @@ async function openChatAndStartMacroAuthoring(tabId: number): Promise<void> {
     }, 500);
 }
 
+async function savePage(tab: chrome.tabs.Tab): Promise<void> {
+    if (tab.id === undefined || !tab.url || !/^https?:\/\//i.test(tab.url)) {
+        console.error("Cannot save a tab without an HTTP(S) URL");
+        return;
+    }
+    const result = await indexPageContent(tab, true, {
+        activityType: "captured",
+        mode: "content",
+        reportHowToStatus: true,
+    });
+    if (
+        result.indexed &&
+        (result.warnings?.length || result.howTo === undefined)
+    ) {
+        await chrome.action.setBadgeText({ tabId: tab.id, text: "!" });
+        await chrome.action.setBadgeBackgroundColor({
+            tabId: tab.id,
+            color: "#d97706",
+        });
+    }
+    const status = !result.indexed
+        ? `Could not save page: ${result.error ?? "Unknown error"}`
+        : result.warnings?.length
+          ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory.`
+          : result.howTo === undefined
+            ? "Page saved, but how-to status is unavailable. See jobs in Memory."
+            : !result.howTo.enabled
+              ? "Page saved. How-to detection is disabled for the browser corpus."
+              : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory and select TypeAgent Browser Memory to review.`;
+    await chrome.action.setTitle({ tabId: tab.id, title: status });
+}
+
+async function openPdfReader(
+    info: chrome.contextMenus.OnClickData,
+): Promise<void> {
+    const reader = new URL(chrome.runtime.getURL("views/pdfView.html"));
+    if (info.menuItemId === "openPdfLink") {
+        if (!info.linkUrl) return;
+        let target: URL;
+        try {
+            target = new URL(info.linkUrl);
+        } catch {
+            return;
+        }
+        if (
+            !["http:", "https:"].includes(target.protocol) ||
+            !/\.pdf$/i.test(target.pathname)
+        )
+            return;
+        reader.searchParams.set("url", target.href);
+    }
+    await chrome.tabs.create({ url: reader.href, active: true });
+}
+
 /**
  * Initializes the context menu items
  */
-export function initializeContextMenu(): void {
+export async function initializeContextMenu(): Promise<void> {
+    await chrome.contextMenus.removeAll();
     chrome.contextMenus.create({
         title: "Open TypeAgent Chat",
         id: "openChatPanel",
@@ -123,8 +182,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Ask about this page",
-        id: "askAboutPage",
+        title: "Save this page",
+        id: "saveThisPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -157,15 +216,40 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Action Library",
-        id: "manageMacros",
+        title: "Automations",
+        id: "showAutomations",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
-        title: "Knowledge Library",
-        id: "showWebsiteLibrary",
+        title: "Memory",
+        id: "showMemoryHub",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Annotations Library",
+        id: "showAnnotationsLibrary",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Open TypeAgent Reader",
+        id: "openPdfReader",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Open target in TypeAgent Reader",
+        id: "openPdfLink",
+        contexts: ["link"],
+        targetUrlPatterns: [
+            "http://*/*.pdf*",
+            "https://*/*.pdf*",
+            "http://*/*.PDF*",
+            "https://*/*.PDF*",
+        ],
     });
 }
 
@@ -183,6 +267,11 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
+        case "openPdfReader":
+        case "openPdfLink": {
+            await openPdfReader(info);
+            break;
+        }
         case "matchKnownActions": {
             await openChatAndInjectCommand(tab.id!, "@browser actions match");
             break;
@@ -195,25 +284,8 @@ export async function handleContextMenuClick(
             await openChatAndInjectCommand(tab.id!, "@browser actions infer");
             break;
         }
-        case "manageMacros": {
-            // Check if macrosLibrary tab already exists
-            const existingTabs = await chrome.tabs.query({
-                url: chrome.runtime.getURL("views/macrosLibrary.html"),
-            });
-
-            if (existingTabs.length > 0) {
-                // Switch to existing tab
-                await chrome.tabs.update(existingTabs[0].id!, { active: true });
-                await chrome.windows.update(existingTabs[0].windowId!, {
-                    focused: true,
-                });
-            } else {
-                // Create new tab
-                await chrome.tabs.create({
-                    url: chrome.runtime.getURL("views/macrosLibrary.html"),
-                    active: true,
-                });
-            }
+        case "showAutomations": {
+            await openBrowserView("automationsLibrary", lookupViewHost);
             break;
         }
         case "extractKnowledgeFromPage": {
@@ -224,71 +296,18 @@ export async function handleContextMenuClick(
             break;
         }
 
-        case "askAboutPage": {
-            await openChatAndInjectCommand(
-                tab.id!,
-                "@browser ask What is this page about?",
-            );
+        case "saveThisPage": {
+            await savePage(tab);
             break;
         }
 
-        case "showWebsiteLibrary": {
-            const knowledgeLibraryUrl = chrome.runtime.getURL(
-                "views/knowledgeLibrary.html",
-            );
-
-            // Check if knowledge library tab is already open
-            const existingTabs = await chrome.tabs.query({
-                url: knowledgeLibraryUrl,
-            });
-
-            if (existingTabs.length > 0) {
-                // Switch to existing tab
-                await chrome.tabs.update(existingTabs[0].id!, { active: true });
-                // Focus the window containing the tab
-                if (existingTabs[0].windowId) {
-                    await chrome.windows.update(existingTabs[0].windowId, {
-                        focused: true,
-                    });
-                }
-            } else {
-                // Create new tab
-                await chrome.tabs.create({
-                    url: knowledgeLibraryUrl,
-                    active: true,
-                });
-            }
-
+        case "showMemoryHub": {
+            await openBrowserView("memoryHub", lookupViewHost);
             break;
         }
 
         case "showAnnotationsLibrary": {
-            const annotationsLibraryUrl = chrome.runtime.getURL(
-                "views/annotationsLibrary.html",
-            );
-
-            // Check if knowledge library tab is already open
-            const existingTabs = await chrome.tabs.query({
-                url: annotationsLibraryUrl,
-            });
-
-            if (existingTabs.length > 0) {
-                // Switch to existing tab
-                await chrome.tabs.update(existingTabs[0].id!, { active: true });
-                // Focus the window containing the tab
-                if (existingTabs[0].windowId) {
-                    await chrome.windows.update(existingTabs[0].windowId, {
-                        focused: true,
-                    });
-                }
-            } else {
-                // Create new tab
-                await chrome.tabs.create({
-                    url: annotationsLibraryUrl,
-                    active: true,
-                });
-            }
-
+            await openBrowserView("annotationsLibrary", lookupViewHost);
             break;
         }
 

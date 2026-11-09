@@ -717,6 +717,7 @@ async function handleGetWebFlowsForDomain(
                 script: f.script,
                 source: f.source,
                 scope: f.scope,
+                grammarPatterns: f.grammarPatterns,
             })),
         },
     };

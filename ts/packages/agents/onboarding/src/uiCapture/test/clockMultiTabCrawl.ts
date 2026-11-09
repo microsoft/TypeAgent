@@ -23,7 +23,7 @@ try {
     process.stderr.write(`[mtab] could not load env: ${e}\n`);
 }
 
-process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_5 = "300000";
+process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_6_1_TERRA = "300000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_v = "180000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT = "300000";
 process.env.OPENAI_MAX_TIMEOUT = "300000";

@@ -13,6 +13,7 @@ import {
     SYSTEM_SESSION_CONTEXT_ID,
 } from "agent-dispatcher";
 import registerDebug from "debug";
+import { protectVisualStudioDiscoveryResponse } from "@typeagent/websocket-utils/visualStudioBridgeAuth";
 
 const debug = registerDebug("typeagent:shell:discovery");
 const debugError = registerDebug("typeagent:shell:discovery:error");
@@ -52,8 +53,10 @@ export async function startStandaloneDiscoveryServer(
             createRpc(
                 "shell:discovery",
                 channelProvider.createChannel(DiscoveryChannelName),
-                createDiscoveryHandlers((agentName, role) =>
-                    portRegistrar.lookup(agentName, role),
+                createDiscoveryHandlers(
+                    (agentName, role) => portRegistrar.lookup(agentName, role),
+                    undefined,
+                    protectVisualStudioDiscoveryResponse,
                 ),
             );
         },
