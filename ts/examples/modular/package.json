@@ -1,0 +1,19 @@
+{
+  "name": "modular",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc -p platform && node task.ts lint && tsc -p .",
+    "adversaries": "node adversaries.ts",
+    "bench": "node bench.ts",
+    "catalog": "node catalog.ts",
+    "summary": "node summary.ts",
+    "task": "node task.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "fast-check": "4.10.2",
+    "typescript": "7.0.2"
+  }
+}

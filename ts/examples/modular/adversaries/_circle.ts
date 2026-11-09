@@ -1,0 +1,55 @@
+// A Circle for adversaries: correct unless a bug is switched on. helpers.check.ts
+// runs the Circle contract against it with no bug, so a caught adversary means
+// the bug was caught, not that the helper was wrong.
+
+import type { Point, Rectangle } from "../geometry.ts";
+import type { Color } from "../color.ts";
+import type { Circle } from "../shape.ts";
+import type { CircleFields } from "../circle.contract.ts";
+import { allFinite, extents, inflate, isEmpty, rectContains, rectIntersects } from "../shape.vocab.ts";
+
+export type CircleBug =
+  | "none"
+  | "box-uses-diameter"     // the bounding box is grown by the diameter, not the radius
+  | "contains-strict"       // contains leaves out points at exactly the radius
+  | "contains-closed"       // contains ignores the half-open rule at the maximum x and y
+  | "intersects-by-box"     // intersects answers from the bounding box alone
+  | "touch-is-true"         // intersects is distance <= radius, so a disk that only touches r intersects it
+  | "accepts-zero-radius"   // makeCircle accepts a radius of 0
+  | "keeps-center-object";  // makeCircle keeps the caller's center object
+
+const validColor = (c: Color) =>
+  [c.r, c.g, c.b].every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && c.a >= 0 && c.a <= 1;
+
+export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) => Circle {
+  return (f) => {
+    const radiusOk = bug === "accepts-zero-radius" ? f.radius >= 0 : f.radius > 0;
+    if (!allFinite([f.center.x, f.center.y, f.radius, f.color]) || !radiusOk || !validColor(f.color)) {
+      throw new RangeError("invalid circle");
+    }
+    const center: Point = bug === "keeps-center-object" ? f.center : { x: f.center.x, y: f.center.y };
+    const color: Color = { r: f.color.r, g: f.color.g, b: f.color.b, a: f.color.a };
+    const radius = f.radius;
+    const box = inflate(extents([center]), bug === "box-uses-diameter" ? 2 * radius : radius);
+    const dist = (p: Point) => Math.hypot(p.x - center.x, p.y - center.y);
+    const contains = (p: Point) =>
+      bug === "contains-closed" ? dist(p) <= radius
+      : bug === "contains-strict" ? rectContains(box, p) && dist(p) < radius
+      : rectContains(box, p) && dist(p) <= radius;
+    const intersects = (r: Rectangle) => {
+      if (isEmpty(r)) return false;
+      if (bug !== "touch-is-true" && !rectIntersects(box, r)) return false;
+      if (bug === "intersects-by-box") return true;
+      // The point of r (edges included) nearest the center.
+      const q = {
+        x: Math.min(Math.max(center.x, r.x), r.x + r.width),
+        y: Math.min(Math.max(center.y, r.y), r.y + r.height),
+      };
+      const d = dist(q);
+      if (bug === "touch-is-true") return d <= radius;
+      if (d !== radius) return d < radius;
+      return rectContains(r, q) && contains(q);
+    };
+    return { kind: "circle", center, radius, color, boundingBox: () => box, contains, intersects };
+  };
+}

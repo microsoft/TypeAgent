@@ -1,0 +1,280 @@
+// Contract tests for ShapeView (shapeView.ts) and the View rules it can be
+// checked against (view.ts). Every ShapeView implementation runs this suite,
+// whatever surface it draws on: its fixture reports what each point shows.
+// Test names are rule IDs.
+//
+// The suite builds a scene of one to three ListLayers (viewkit.ts), and a
+// view of it driven by a ManualScheduler. Random sequences add and remove
+// circles, run frames and read the view; some sequences dispose of the view
+// partway, and some tap the surface, with the view interactive or not.
+// After every step the rules are checked at every half-integer point of a
+// 12 x 12 surface. Centers and radii are integers, so no sample
+// point is ever on a circle's edge or at its maximum x or y.
+
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import fc from "fast-check";
+import type { Point } from "./geometry.ts";
+import type { Color } from "./color.ts";
+import type { Circle, Shape } from "./shape.ts";
+import type { ShapeView } from "./shapeView.ts";
+import type { ItemId, Scene } from "./view.ts";
+import type { FrameScheduler, TapSource } from "./window.ts";
+import { circles, deepEqual, over } from "./shapeView.vocab.ts";
+import { coverage } from "./testkit.ts";
+import { ListLayer, ManualScheduler, ManualTaps, testCircle } from "./viewkit.ts";
+
+/** A view, and what its surface shows at each point. */
+export interface ShapeViewFixture {
+  view: ShapeView;
+  painted(p: Point): Color;
+}
+
+export type MakeShapeView = (scene: Scene<Shape>, scheduler: FrameScheduler, taps: TapSource, width: number, height: number) => ShapeViewFixture;
+
+const width = 12;
+const height = 12;
+const samples: Point[] = Array.from({ length: width * height }, (_, i) => ({ x: (i % width) + 0.5, y: Math.floor(i / width) + 0.5 }));
+
+const color: fc.Arbitrary<Color> = fc.constantFrom(
+  { r: 255, g: 0, b: 0, a: 1 }, { r: 0, g: 128, b: 255, a: 1 }, { r: 20, g: 200, b: 60, a: 1 },
+  { r: 0, g: 0, b: 0, a: 0.5 }, { r: 255, g: 255, b: 0, a: 0.25 }, { r: 90, g: 30, b: 200, a: 0.75 },
+);
+
+type Op =
+  | { op: "add"; layer: number; center: Point; radius: number; color: Color }
+  | { op: "remove"; layer: number; pick: number }
+  | { op: "frame" }
+  | { op: "read" }
+  | { op: "tap"; p: Point }
+  | { op: "interactive"; value: boolean }
+  | { op: "dispose" };
+
+const opArb: fc.Arbitrary<Op> = fc.oneof(
+  {
+    weight: 4,
+    arbitrary: fc.record({
+      layer: fc.nat(),
+      center: fc.record({ x: fc.integer({ min: -2, max: width + 2 }), y: fc.integer({ min: -2, max: height + 2 }) }),
+      radius: fc.integer({ min: 1, max: 5 }),
+      color,
+    }).map((a): Op => ({ op: "add", ...a })),
+  },
+  { weight: 2, arbitrary: fc.record({ layer: fc.nat(), pick: fc.nat() }).map((a): Op => ({ op: "remove", ...a })) },
+  { weight: 3, arbitrary: fc.constant<Op>({ op: "frame" }) },
+  { weight: 1, arbitrary: fc.constant<Op>({ op: "read" }) },
+  {
+    weight: 2,
+    arbitrary: fc.record({ x: fc.integer({ min: 0, max: width - 1 }), y: fc.integer({ min: 0, max: height - 1 }) })
+      .map((p): Op => ({ op: "tap", p: { x: p.x + 0.25, y: p.y + 0.75 } })),
+  },
+  { weight: 1, arbitrary: fc.boolean().map((value): Op => ({ op: "interactive", value })) },
+);
+
+/** A layer count, and ops; a third of sequences dispose of the view partway. */
+const sequence = fc.record({
+  layers: fc.integer({ min: 1, max: 3 }),
+  ops: fc.array(opArb, { minLength: 1, maxLength: 30, size: "max" }),
+  disposeAt: fc.option(fc.nat({ max: 29 }), { freq: 2 }),
+}).map(({ layers, ops, disposeAt }) => ({
+  layers,
+  ops: disposeAt === null ? ops : [...ops.slice(0, disposeAt), { op: "dispose" } as Op, ...ops.slice(disposeAt)],
+}));
+type Sequence = { layers: number; ops: Op[] };
+
+interface Step {
+  op: Op;
+  view: ShapeView;
+  scene: Scene<Shape>;
+  layers: ListLayer[];
+  /** Whether dispose was called before this step. */
+  disposed: boolean;
+  /** Whether an edit changed a layer during this step. */
+  changing: boolean;
+  /** Whether a change is still to be drawn after this step: true from creation, or a change, until a frame. */
+  dirty: boolean;
+  /** Whether the view had asked for a frame before and after the step. */
+  requestedBefore: boolean;
+  requestedAfter: boolean;
+  /** What each sample point showed before and after the step. */
+  before: Color[];
+  after: Color[];
+  /** Each layer's listener count, and then the tap source's, before and after the step. */
+  listenersBefore: number[];
+  listenersAfter: number[];
+  /** Whether the view was interactive before the step. */
+  interactive: boolean;
+  /** The points the view emitted as tap during the step. */
+  tapped: Point[];
+}
+
+/** What each sample point should show for the scene as it is now. */
+function expected(scene: Scene<Shape>): Color[] {
+  const all = circles(scene);
+  return samples.map((p) => over(all.filter((c) => c.contains(p)).map((c) => c.color)));
+}
+
+const sameColors = (a: Color[], b: Color[]) => a.every((c, i) => deepEqual(c, b[i]));
+const sameCounts = (a: number[], b: number[]) => a.every((n, i) => n === b[i]);
+
+/** Runs a sequence against a fresh view, calling check after each step. */
+function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void {
+  const layers = Array.from({ length: seq.layers }, () => new ListLayer());
+  const scene: Scene<Shape> = { layers };
+  const scheduler = new ManualScheduler();
+  const taps = new ManualTaps();
+  const { view, painted } = make(scene, scheduler, taps, width, height);
+  const look = () => samples.map(painted);
+  const counts = () => [...layers.map((l) => l.listenerCount()), taps.listenerCount("tap")];
+  let tapped: Point[] = [];
+  view.on("tap", (p) => tapped.push(p));
+  const returned: ItemId[][] = layers.map(() => []);
+  let disposed = false;
+  let dirty = true;
+  let shown = look();
+  for (const op of seq.ops) {
+    const before = shown;
+    const requestedBefore = scheduler.isRequested(view);
+    const listenersBefore = counts();
+    const interactive = view.interactive;
+    tapped = [];
+    let changing = false;
+    switch (op.op) {
+      case "add": {
+        const i = op.layer % layers.length;
+        returned[i].push(layers[i].add(testCircle(op)));
+        changing = true;
+        break;
+      }
+      case "remove": {
+        const i = op.layer % layers.length;
+        const ids = returned[i];
+        // ids.length stands for an ID the layer never returned.
+        const n = op.pick % (ids.length + 1);
+        changing = layers[i].remove(n < ids.length ? ids[n] : (1e9 as ItemId));
+        break;
+      }
+      case "frame":
+        scheduler.runFrame();
+        dirty = false;
+        break;
+      case "read":
+        void view.scene;
+        void view.viewport;
+        void view.interactive;
+        break;
+      case "tap":
+        taps.emit("tap", op.p);
+        break;
+      case "interactive":
+        view.interactive = op.value;
+        break;
+      case "dispose":
+        view.dispose();
+        break;
+    }
+    if (changing) dirty = true;
+    shown = look();
+    check({
+      op, view, scene, layers, disposed, changing, dirty, requestedBefore,
+      requestedAfter: scheduler.isRequested(view), before, after: shown,
+      listenersBefore, listenersAfter: counts(), interactive, tapped,
+    });
+    if (op.op === "dispose") disposed = true;
+  }
+}
+
+/** The input classes one sequence reaches, for the coverage test. */
+function labelsOf(make: MakeShapeView, seq: Sequence): Set<string> {
+  const seen = new Set<string>();
+  let changedLayers = new Set<number>();
+  run(make, seq, (s) => {
+    if (s.op.op === "add" && (s.op.center.x - s.op.radius < 0 || s.op.center.x + s.op.radius > width)) {
+      seen.add("circle partly off the surface");
+    }
+    if (s.op.op === "dispose" && s.requestedBefore) seen.add("dispose with a frame pending");
+    if (s.disposed && s.changing) seen.add("edit after dispose");
+    if (s.disposed && s.op.op === "frame") seen.add("frame after dispose");
+    if (s.op.op === "tap" && s.disposed && s.interactive) seen.add("tap after dispose, interactive");
+    if (s.op.op === "tap" && !s.disposed) seen.add(s.interactive ? "tap while interactive" : "tap while not interactive");
+    if (s.disposed) return;
+    if (s.changing && (s.op.op === "add" || s.op.op === "remove")) changedLayers.add(s.op.layer % s.layers.length);
+    if (s.op.op === "remove" && s.changing) seen.add("removal");
+    if (s.op.op !== "frame") return;
+    if (!s.requestedBefore) seen.add("frame with nothing changed");
+    if (changedLayers.size >= 2) seen.add("two layers changed before a frame");
+    changedLayers = new Set();
+    const all = circles(s.scene);
+    const owner = new Map<Circle, number>();
+    s.layers.forEach((layer, i) => layer.forEach((_, c) => owner.set(c as Circle, i)));
+    for (const p of samples) {
+      const here = all.filter((c) => c.contains(p));
+      if (here.length < 2) continue;
+      if (here.at(-1)!.color.a < 1) seen.add("translucent circle over another");
+      if (new Set(here.map((c) => owner.get(c))).size >= 2) seen.add("circles overlap across layers");
+      if (here.some((c, i) => i > 0 && owner.get(c) === owner.get(here[i - 1]) && !deepEqual(c.color, here[i - 1].color))) {
+        seen.add("circles of different colors overlap within a layer");
+      }
+    }
+  });
+  return seen;
+}
+
+export function shapeViewContract(make: MakeShapeView): void {
+  const rule = (id: string, check: (s: Step) => boolean) =>
+    test(id, () => {
+      fc.assert(fc.property(sequence, (seq) => {
+        run(make, seq, (s) => assert.ok(check(s), id));
+      }));
+    });
+
+  describe("ShapeView", () => {
+    test("ShapeView.first-frame", () => {
+      fc.assert(fc.property(fc.integer({ min: 1, max: 3 }), (n) => {
+        const scheduler = new ManualScheduler();
+        const { view } = make({ layers: Array.from({ length: n }, () => new ListLayer()) }, scheduler, new ManualTaps(), width, height);
+        return scheduler.isRequested(view);
+      }));
+    });
+
+    test("View.interactive.starts-false", () => {
+      const { view } = make({ layers: [new ListLayer()] }, new ManualScheduler(), new ManualTaps(), width, height);
+      assert.equal(view.interactive, false);
+    });
+
+    rule("View.taps", (s) => s.op.op !== "tap" || !s.interactive || s.disposed || deepEqual(s.tapped, [s.op.p]));
+
+    rule("View.interactive.ignores-input", (s) => s.op.op !== "tap" || s.interactive || s.disposed || s.tapped.length === 0);
+
+    rule("ShapeView.frame.paints", (s) => s.op.op !== "frame" || s.disposed || sameColors(s.after, expected(s.scene)));
+
+    rule("View.layer-change", (s) => !s.changing || s.disposed || (s.requestedAfter && sameColors(s.after, s.before)));
+
+    rule("View.idle", (s) => s.disposed || s.dirty || !s.requestedAfter);
+
+    rule("View.one-listener", (s) => s.disposed || s.op.op === "dispose" || s.listenersAfter.every((n) => n === 1));
+
+    rule("View.read-only", (s) => s.op.op !== "read" ||
+      (sameColors(s.after, s.before) && s.requestedAfter === s.requestedBefore && sameCounts(s.listenersAfter, s.listenersBefore)));
+
+    rule("View.dispose.detaches", (s) => {
+      if (!s.disposed && s.op.op !== "dispose") return true;
+      return s.listenersAfter.every((n) => n === 0) && (!s.changing || s.requestedAfter === s.requestedBefore);
+    });
+
+    rule("View.dispose.inert", (s) => !s.disposed || (sameColors(s.after, s.before) && s.tapped.length === 0));
+
+    test("ShapeView input coverage", () => {
+      // Minimums are about half the shares measured on seeds 1-3.
+      coverage("sequence", sequence, (seq) => labelsOf(make, seq), MINIMUMS);
+    });
+  });
+}
+
+const MINIMUMS: Record<string, number> = {
+  "circle partly off the surface": 0.39, "circles of different colors overlap within a layer": 0.09,
+  "circles overlap across layers": 0.07, "dispose with a frame pending": 0.16, "edit after dispose": 0.09,
+  "frame after dispose": 0.09, "frame with nothing changed": 0.22, "removal": 0.19,
+  "translucent circle over another": 0.08, "two layers changed before a frame": 0.11,
+  "tap while interactive": 0.1, "tap while not interactive": 0.29, "tap after dispose, interactive": 0.025,
+};

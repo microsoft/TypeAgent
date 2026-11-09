@@ -1,0 +1,520 @@
+<title>Interface Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a drafting sheet. The dependency map fills the left; the selected interface's card sits on the right; summary counts above both. */
+:root {
+  --paper: #f3f5f8;
+  --surface: #ffffff;
+  --surface-alt: #e9edf3;
+  --ink: #17202e;
+  --muted: #586374;
+  --line: #d3dae4;
+  --edge: #9aa5b5;
+  --accent: #2b57a8;
+  --accent-soft: #dce6f7;
+  --app-soft: #e6f0e4;
+  --tag-requires: #9a6414;
+  --tag-ensures: #2b57a8;
+  --tag-invariant: #6f45b5;
+  --tag-unchecked: #687181;
+  --ok: #2c7f50;
+  --gap: #bd3b28;
+  --quiet: #8b94a3;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #10151d;
+    --surface: #18202c;
+    --surface-alt: #1f2938;
+    --ink: #e4e9f0;
+    --muted: #9ba6b6;
+    --line: #2c3748;
+    --edge: #5c6879;
+    --accent: #84a9f0;
+    --accent-soft: #23344f;
+  --app-soft: #22362a;
+    --app-soft: #22362a;
+    --tag-requires: #e0a64a;
+    --tag-ensures: #84a9f0;
+    --tag-invariant: #b897ef;
+    --tag-unchecked: #9ba3b1;
+    --ok: #5cbf86;
+    --gap: #f07a64;
+    --quiet: #6f7a8a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #10151d;
+  --surface: #18202c;
+  --surface-alt: #1f2938;
+  --ink: #e4e9f0;
+  --muted: #9ba6b6;
+  --line: #2c3748;
+  --edge: #5c6879;
+  --accent: #84a9f0;
+  --accent-soft: #23344f;
+  --tag-requires: #e0a64a;
+  --tag-ensures: #84a9f0;
+  --tag-invariant: #b897ef;
+  --tag-unchecked: #9ba3b1;
+  --ok: #5cbf86;
+  --gap: #f07a64;
+  --quiet: #6f7a8a;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.5;
+}
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 20px;
+}
+header { display: grid; gap: 6px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--step-3);
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--muted); max-width: 70ch; }
+.mono { font-family: var(--font-mono); }
+
+.summary { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; }
+.stat { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.stat b { font-family: var(--font-display); font-weight: 600; font-size: var(--step-2); }
+.stat span { color: var(--muted); font-size: var(--step--1); }
+.stat.ok b { color: var(--ok); }
+.stat.gap b { color: var(--gap); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { width: 34px; height: 20px; appearance: none; border-radius: 10px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background 0.15s; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); transition: transform 0.15s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(14px); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: var(--step--1); align-items: center; }
+.legend svg { vertical-align: middle; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+@media (max-width: 960px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
+
+.map {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.map svg { display: block; margin: 0 auto; }
+.node { cursor: pointer; }
+.node rect.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+.node.window rect.box, .node.pointer rect.box { fill: var(--surface-alt); }
+.node.view rect.box, .node.shapeView rect.box { fill: var(--accent-soft); }
+.node.ui rect.box, .node.chrome rect.box, .node.app rect.box { fill: var(--app-soft); }
+.node:hover rect.box { stroke: var(--edge); }
+.node.selected rect.box { stroke: var(--accent); stroke-width: 2; }
+.node.related rect.box { stroke: var(--accent); }
+.node.dim { opacity: 0.38; }
+.node:focus { outline: none; }
+.node:focus-visible rect.box { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 4 3; }
+.node text.name { font-family: var(--font-display); font-weight: 600; font-size: 15px; fill: var(--ink); }
+.node text.sub { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.25; }
+.edge.uses { stroke-dasharray: 5 4; }
+.edge.hl { stroke: var(--accent); stroke-width: 2; }
+.edge.dim { opacity: 0.25; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px 20px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.card h2 { font-family: var(--font-display); font-weight: 600; font-size: var(--step-2); margin: 0; line-height: 1.15; }
+.card .where { color: var(--muted); font-size: var(--step--1); }
+.card p { margin: 0; max-width: 65ch; }
+.doc { display: grid; gap: 8px; }
+.section { display: grid; gap: 8px; }
+.section h3 {
+  margin: 0;
+  font-size: var(--step--1);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.links { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: baseline; font-size: var(--step--1); }
+.links dt { color: var(--muted); }
+.links dd { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 4px;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip:focus-visible, .filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.none { color: var(--quiet); }
+
+.members { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.members code { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.members small { display: block; color: var(--muted); font-size: var(--step--1); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter {
+  font: inherit;
+  font-size: var(--step--1);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.filter[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.rules { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.rule { display: grid; gap: 3px; padding-block: 8px 2px; border-top: 1px solid var(--line); }
+.rule-head { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+.tag { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; }
+.tag.requires { color: var(--tag-requires); }
+.tag.ensures { color: var(--tag-ensures); }
+.tag.invariant { color: var(--tag-invariant); }
+.tag.unchecked { color: var(--tag-unchecked); }
+.rule-id { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.rule-id b { font-weight: 500; }
+.rule-id span { color: var(--muted); }
+.rule p { font-size: var(--step--1); }
+.status { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; font-size: 12px; white-space: nowrap; }
+.pill { border-radius: 999px; padding: 0 8px; border: 1px solid currentColor; }
+.pill.tested { color: var(--ok); }
+.pill.untested { color: var(--gap); }
+.pill.unchecked { color: var(--tag-unchecked); border-style: dashed; }
+.pill.caller { color: var(--muted); }
+.adversaries { color: var(--muted); font-variant-numeric: tabular-nums; }
+footer { color: var(--muted); font-size: var(--step--1); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header>
+    <h1>Interface Atlas</h1>
+    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">window.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Select an interface to see its card.</p>
+  </header>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="controls">
+    <label class="switch" for="show-rules"><input type="checkbox" id="show-rules" checked> Show rules</label>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="workspace">
+    <div class="map" id="map" aria-label="Interface dependency map"></div>
+    <article class="card" id="card" aria-live="polite"></article>
+  </div>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*CATALOG_DATA*/null;
+
+const STATUS = {
+  tested: { label: "Tested", long: "tested", color: "var(--ok)" },
+  untested: { label: "No test by ID", long: "no test by this ID", color: "var(--gap)" },
+  unchecked: { label: "@unchecked", long: "@unchecked", color: "var(--tag-unchecked)" },
+  caller: { label: "Caller's", long: "caller's obligation", color: "var(--quiet)" },
+};
+const ORDER = ["tested", "untested", "unchecked", "caller"];
+
+const ifs = DATA.interfaces;
+const byName = new Map(ifs.map((i) => [i.name, i]));
+const edges = ifs.flatMap((i) => [
+  ...i.extends.map((to) => ({ from: i.name, to, kind: "extends" })),
+  ...i.uses.map((to) => ({ from: i.name, to, kind: "uses" })),
+]);
+const fileClass = (f) => f.replace(/\.ts$/, "");
+const countBy = (rules) => Object.fromEntries(ORDER.map((s) => [s, rules.filter((r) => r.status === s).length]));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k);
+  return e;
+};
+const SVG = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs = {}) => {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+};
+
+let showRules = true;
+try { showRules = localStorage.getItem("atlas.rules") !== "off"; } catch {}
+let selected = decodeURIComponent(location.hash.slice(1));
+if (!byName.has(selected)) selected = byName.has("Layer") ? "Layer" : ifs[0].name;
+let ruleFilter = "all";
+
+// ---- Summary and legend ----
+function summary() {
+  const all = ifs.flatMap((i) => i.rules);
+  const c = countBy(all);
+  const adversaries = all.reduce((n, r) => n + r.adversaries, 0);
+  const stat = (n, label, cls = "") => el("div", { class: `stat ${cls}` }, el("b", {}, String(n)), el("span", {}, label));
+  document.getElementById("summary").replaceChildren(
+    stat(ifs.length, "interfaces"),
+    stat(edges.length, "relationships"),
+    stat(all.length, "rules"),
+    stat(c.tested, "tested", "ok"),
+    stat(c.untested, "with no test by ID", c.untested ? "gap" : ""),
+    stat(c.unchecked, "@unchecked"),
+    stat(c.caller, "caller's obligations"),
+    stat(adversaries, "kept adversaries"),
+  );
+  const line = (dash) => {
+    const s = svgEl("svg", { width: 34, height: 10, "aria-hidden": "true" });
+    s.append(svgEl("line", { x1: 1, y1: 5, x2: 33, y2: 5, class: `edge ${dash ? "uses" : ""}` }));
+    return s;
+  };
+  const keys = [
+    el("span", { class: "key" }, line(false), "extends"),
+    el("span", { class: "key" }, line(true), "uses"),
+    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface); border: 1px solid var(--line)" }), "geometry.ts, color.ts, shape.ts"),
+    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface-alt); border: 1px solid var(--line)" }), "window.ts, pointer.ts"),
+    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--accent-soft); border: 1px solid var(--line)" }), "view.ts, shapeView.ts"),
+    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--app-soft); border: 1px solid var(--line)" }), "ui.ts, chrome.ts, app.ts"),
+  ];
+  if (showRules) for (const s of ORDER) keys.push(el("span", { class: "key" }, el("span", { class: "swatch", style: `background: ${STATUS[s].color}` }), STATUS[s].long));
+  document.getElementById("legend").replaceChildren(...keys);
+  document.getElementById("footer").textContent =
+    `Generated ${DATA.generated} by npm run catalog. "No test by ID" means no test is named after the rule; it may still be covered under another name.`;
+}
+
+// ---- Layout: layered by dependency depth, the most dependent interfaces on top ----
+function layout() {
+  const rank = new Map();
+  const visiting = new Set();
+  const rankOf = (n) => {
+    if (rank.has(n)) return rank.get(n);
+    if (visiting.has(n)) return 0;
+    visiting.add(n);
+    const outs = edges.filter((e) => e.from === n).map((e) => rankOf(e.to) + 1);
+    const r = Math.max(0, ...outs);
+    visiting.delete(n);
+    rank.set(n, r);
+    return r;
+  };
+  ifs.forEach((i) => rankOf(i.name));
+  const top = Math.max(...rank.values());
+  const rows = Array.from({ length: top + 1 }, () => []);
+  for (const i of ifs) rows[top - rank.get(i.name)].push(i.name);
+  rows.forEach((row) => row.sort((a, b) => byName.get(a).file.localeCompare(byName.get(b).file) || a.localeCompare(b)));
+  const neighbors = (n) => edges.filter((e) => e.from === n || e.to === n).map((e) => (e.from === n ? e.to : e.from));
+  for (let sweep = 0; sweep < 6; sweep++) {
+    const pos = new Map();
+    rows.forEach((row) => row.forEach((n, i) => pos.set(n, (i + 0.5) / row.length)));
+    const order = sweep % 2 ? [...rows].reverse() : rows;
+    for (const row of order) {
+      const key = new Map(row.map((n) => {
+        const ns = neighbors(n).filter((m) => pos.has(m));
+        return [n, ns.length ? ns.reduce((s, m) => s + pos.get(m), 0) / ns.length : pos.get(n)];
+      }));
+      row.sort((a, b) => key.get(a) - key.get(b));
+      row.forEach((n, i) => pos.set(n, (i + 0.5) / row.length));
+    }
+  }
+  return rows;
+}
+const ROWS = layout();
+
+function map() {
+  const W = 176, H = showRules ? 60 : 48, GX = 22, GY = showRules ? 64 : 58, PAD = 24;
+  const widest = Math.max(...ROWS.map((r) => r.length));
+  const width = PAD * 2 + widest * W + (widest - 1) * GX;
+  const height = PAD * 2 + ROWS.length * H + (ROWS.length - 1) * GY;
+  const pos = new Map();
+  ROWS.forEach((row, y) => {
+    const rowWidth = row.length * W + (row.length - 1) * GX;
+    const x0 = (width - rowWidth) / 2;
+    row.forEach((n, i) => pos.set(n, { x: x0 + i * (W + GX), y: PAD + y * (H + GY) }));
+  });
+  const svg = svgEl("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "group" });
+  const defs = svgEl("defs");
+  for (const [id, cls] of [["ext", ""], ["ext-hl", "hl"]]) {
+    const m = svgEl("marker", { id, viewBox: "0 0 12 12", refX: 11, refY: 6, markerWidth: 12, markerHeight: 12, orient: "auto-start-reverse", markerUnits: "userSpaceOnUse" });
+    m.append(svgEl("path", { d: "M1,1 L11,6 L1,11 Z", style: `fill: var(--surface); stroke: ${cls ? "var(--accent)" : "var(--edge)"}; stroke-width: 1.25` }));
+    defs.append(m);
+  }
+  for (const [id, cls] of [["use", ""], ["use-hl", "hl"]]) {
+    const m = svgEl("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 9, markerHeight: 9, orient: "auto-start-reverse", markerUnits: "userSpaceOnUse" });
+    m.append(svgEl("path", { d: "M1,1 L9,5 L1,9", style: `fill: none; stroke: ${cls ? "var(--accent)" : "var(--edge)"}; stroke-width: 1.5` }));
+    defs.append(m);
+  }
+  svg.append(defs);
+
+  const related = new Set(edges.filter((e) => e.from === selected || e.to === selected).flatMap((e) => [e.from, e.to]));
+  for (const e of edges) {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    const hl = e.from === selected || e.to === selected;
+    const down = b.y > a.y;
+    const x1 = a.x + W / 2, y1 = down ? a.y + H : a.y;
+    const x2 = b.x + W / 2, y2 = down ? b.y - 2 : b.y + H + 2;
+    const dy = Math.max(30, Math.abs(y2 - y1) * 0.45) * (down ? 1 : -1);
+    const path = svgEl("path", {
+      d: `M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`,
+      class: `edge ${e.kind} ${hl ? "hl" : "dim"}`,
+      "marker-end": `url(#${e.kind === "extends" ? "ext" : "use"}${hl ? "-hl" : ""})`,
+    });
+    const title = svgEl("title");
+    title.textContent = `${e.from} ${e.kind} ${e.to}`;
+    path.append(title);
+    svg.append(path);
+  }
+
+  for (const i of ifs) {
+    const p = pos.get(i.name);
+    const cls = ["node", fileClass(i.file)];
+    if (i.name === selected) cls.push("selected");
+    else if (related.has(i.name)) cls.push("related");
+    else cls.push("dim");
+    const g = svgEl("g", { class: cls.join(" "), transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button", "aria-label": `${i.name}, ${i.rules.length} rules` });
+    g.append(svgEl("rect", { class: "box", width: W, height: H, rx: 6 }));
+    const name = svgEl("text", { class: "name", x: 12, y: 21 });
+    name.textContent = i.name;
+    const sub = svgEl("text", { class: "sub", x: 12, y: 37 });
+    const m = i.rules.reduce((n, r) => n + r.adversaries, 0);
+    sub.textContent = showRules
+      ? `${i.rules.length} rule${i.rules.length === 1 ? "" : "s"}${m ? ` · ${m} ${m === 1 ? "adversary" : "adversaries"}` : ""}`
+      : `${i.file} · ${i.members.length} member${i.members.length === 1 ? "" : "s"}`;
+    g.append(name, sub);
+    if (showRules && i.rules.length) {
+      const c = countBy(i.rules);
+      let x = 12;
+      const bw = W - 24;
+      for (const s of ORDER) {
+        if (!c[s]) continue;
+        const w = (c[s] / i.rules.length) * bw;
+        g.append(svgEl("rect", { x, y: H - 14, width: Math.max(w - 1.5, 1), height: 5, rx: 1, style: `fill: ${STATUS[s].color}` }));
+        x += w;
+      }
+    }
+    const pick = () => select(i.name);
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+    svg.append(g);
+  }
+  document.getElementById("map").replaceChildren(svg);
+}
+
+// ---- The selected interface's card ----
+function card() {
+  const i = byName.get(selected);
+  const chips = (names) => names.length
+    ? names.map((n) => el("button", { class: "chip", type: "button", onclick: () => select(n) }, n))
+    : [el("span", { class: "none" }, "none")];
+  const extendedBy = ifs.filter((o) => o.extends.includes(i.name)).map((o) => o.name);
+  const usedBy = ifs.filter((o) => o.uses.includes(i.name)).map((o) => o.name);
+  const parts = [
+    el("div", {}, el("h2", {}, i.name), el("div", { class: "where mono" }, i.file)),
+    el("div", { class: "doc" }, ...(i.doc ? i.doc.split("\n\n").map((p) => el("p", {}, p)) : [el("p", { class: "none" }, "No doc comment.")])),
+    el("div", { class: "section" }, el("h3", {}, "Relationships"),
+      el("dl", { class: "links" },
+        el("dt", {}, "Extends"), el("dd", {}, chips(i.extends)),
+        el("dt", {}, "Extended by"), el("dd", {}, chips(extendedBy)),
+        el("dt", {}, "Uses"), el("dd", {}, chips(i.uses)),
+        el("dt", {}, "Used by"), el("dd", {}, chips(usedBy)),
+      )),
+    el("div", { class: "section" }, el("h3", {}, `Members (${i.members.length})`),
+      i.members.length
+        ? el("ul", { class: "members" }, i.members.map((m) => el("li", {}, el("code", {}, m.signature), m.doc ? el("small", {}, m.doc.split("\n\n")[0]) : null)))
+        : el("p", { class: "none" }, "No members of its own.")),
+  ];
+  if (showRules) {
+    const c = countBy(i.rules);
+    const shown = i.rules.filter((r) => ruleFilter === "all" || r.status === ruleFilter);
+    const filter = (key, label, n) => el("button", {
+      class: "filter", type: "button", "aria-pressed": String(ruleFilter === key),
+      onclick: () => { ruleFilter = key; card(); },
+    }, `${label} ${n}`);
+    parts.push(el("div", { class: "section" }, el("h3", {}, `Rules (${i.rules.length})`),
+      i.rules.length ? el("div", { class: "filters" }, filter("all", "All", i.rules.length),
+        ...ORDER.filter((s) => c[s]).map((s) => filter(s, STATUS[s].label, c[s]))) : null,
+      i.rules.length
+        ? (shown.length ? el("ul", { class: "rules" }, shown.map((r) => {
+          const prefix = r.id.slice(0, r.id.length - r.slug.length);
+          return el("li", { class: "rule" },
+            el("div", { class: "rule-head" },
+              el("span", { class: `tag ${r.tag}` }, `@${r.tag}`),
+              el("span", { class: "rule-id" }, el("span", {}, prefix), el("b", {}, r.slug)),
+              el("span", { class: "status" },
+                r.adversaries ? el("span", { class: "adversaries" }, `${r.adversaries} ${r.adversaries === 1 ? "adversary" : "adversaries"}`) : null,
+                el("span", { class: `pill ${r.status}` }, STATUS[r.status].long))),
+            el("p", {}, r.headline));
+        })) : el("p", { class: "none" }, "No rules with this status."))
+        : el("p", { class: "none" }, "No rules of its own; see the interfaces it extends.")));
+  }
+  document.getElementById("card").replaceChildren(...parts);
+}
+
+function select(name) {
+  selected = name;
+  ruleFilter = "all";
+  if (location.hash.slice(1) !== name) history.replaceState(null, "", `#${encodeURIComponent(name)}`);
+  map();
+  card();
+}
+
+const toggle = document.getElementById("show-rules");
+toggle.checked = showRules;
+toggle.addEventListener("change", () => {
+  showRules = toggle.checked;
+  try { localStorage.setItem("atlas.rules", showRules ? "on" : "off"); } catch {}
+  summary();
+  map();
+  card();
+});
+window.addEventListener("hashchange", () => {
+  const n = decodeURIComponent(location.hash.slice(1));
+  if (byName.has(n) && n !== selected) select(n);
+});
+
+summary();
+map();
+card();
+</script>
