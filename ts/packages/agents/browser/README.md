@@ -225,6 +225,11 @@ under `/memory/hub/`. The extension's Memory menu and the browser agent's
 gateway, typed domain allowlist and parent-process RPC; it does not create a
 separate memory store.
 
+Views browsing includes current unpublished drafts through the inventory's
+explicit `includeDrafts: true` option. Opening a current draft or its exact
+revision does not publish or index it; default inventory discovery and published
+search eligibility are unchanged.
+
 The migration includes Inbox, Library, Runbooks for existing human how-tos,
 Activity and corpus how-to Settings. Phase 2 adds corpus-neutral Search and
 Ask, Explore, browser imports and durable Changes history. Standalone Memory

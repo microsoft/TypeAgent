@@ -43,7 +43,7 @@ export function registerInventoryTools(
         inventoryToolNames.listViewSummaries,
         {
             description:
-                "Read a bounded page of view titles, type, state and batched publication status; no document bodies or build inputs.",
+                "Read a bounded page of view titles, type, state and batched publication status; includeDrafts optionally includes current unpublished drafts without publishing them. No document bodies or build inputs.",
             inputSchema: viewSummaryRequestSchema,
             outputSchema: z.object({ result: viewSummaryPageSchema }),
         },

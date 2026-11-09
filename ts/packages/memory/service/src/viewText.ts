@@ -60,6 +60,10 @@ export function projectBriefDetailsText(details: ProjectBriefDetails): string {
     }
 }
 
+export function projectBriefSectionHeading(heading: string): string {
+    return heading === "goalsScope" ? "Goals and Scope" : heading;
+}
+
 export function viewContentToText(content: ViewVersion["content"]): string {
     return [
         content.title,
@@ -77,7 +81,7 @@ export function viewContentToText(content: ViewVersion["content"]): string {
             : []),
         ...content.sections.map((section) =>
             [
-                `## ${section.heading}`,
+                `## ${content.kind === "projectBrief" ? projectBriefSectionHeading(section.heading) : section.heading}`,
                 section.details
                     ? section.details.kind === "event"
                         ? timelineRecordText(section.details)
