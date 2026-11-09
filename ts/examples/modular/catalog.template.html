@@ -85,7 +85,7 @@ body {
   line-height: 1.5;
 }
 .page {
-  max-width: 1440px;
+  max-width: 1680px;
   margin: 0 auto;
   padding-block: 28px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -123,16 +123,15 @@ h1 {
 .key { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 
-.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
-@media (max-width: 960px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
 
 .map {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  overflow-x: auto;
+  padding: 6px;
 }
-.map svg { display: block; margin: 0 auto; }
+/* The svg keeps its viewBox and never exceeds the page, so the whole map is visible without scrolling. */
+.map svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 .node { cursor: pointer; }
 .node rect.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
 .node.window rect.box, .node.pointer rect.box { fill: var(--surface-alt); }
@@ -226,6 +225,61 @@ h1 {
 .pill.unchecked { color: var(--tag-unchecked); border-style: dashed; }
 .pill.caller { color: var(--muted); }
 .adversaries { color: var(--muted); font-variant-numeric: tabular-nums; }
+dialog.sheet {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(86vh, 920px);
+  margin: 0;
+  top: 50%;
+  bottom: auto;
+  left: auto;
+  right: 16px;
+  transform: translateY(-50%);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 18px 48px rgb(8 12 20 / 0.28);
+  position: relative;
+  overflow: hidden;
+}
+/* Scoped to [open] so the author rule does not override the user agent display: none when closed. */
+dialog.sheet[open] { display: grid; }
+dialog.sheet.left { left: 16px; right: auto; }
+dialog.sheet.right { left: auto; right: 16px; }
+/* Faint, because the point of the card is to read it against the map. */
+dialog.sheet::backdrop { background: rgb(8 12 20 / 0.18); }
+/* The dialog clips; the card scrolls inside it, so the close button stays put. */
+.sheet .card { border: 0; border-radius: 0; background: transparent; overflow-y: auto; padding: 18px 20px 20px; padding-right: 52px; }
+.sheet-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.sheet-close:hover { border-color: var(--accent); color: var(--accent); }
+.sheet-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
 footer { color: var(--muted); font-size: var(--step--1); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -233,7 +287,7 @@ footer { color: var(--muted); font-size: var(--step--1); }
 <div class="page">
   <header>
     <h1>Interface Atlas</h1>
-    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">window.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Select an interface to see its card.</p>
+    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">window.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Click an interface to highlight its relationships. The <kbd>arrow</kbd> keys walk the rows; <kbd>Shift</kbd> follows the diagram instead, down to what it extends or uses, up to what extends or uses it, and sideways to a node sharing one of those; <kbd>Ctrl</kbd> goes to the nearest node on screen. Press <kbd>c</kbd> for the card and <kbd>Escape</kbd> to close it.</p>
   </header>
 
   <div class="summary" id="summary"></div>
@@ -243,10 +297,12 @@ footer { color: var(--muted); font-size: var(--step--1); }
     <div class="legend" id="legend"></div>
   </div>
 
-  <div class="workspace">
-    <div class="map" id="map" aria-label="Interface dependency map"></div>
-    <article class="card" id="card" aria-live="polite"></article>
-  </div>
+  <div class="map" id="map" aria-label="Interface dependency map" aria-keyshortcuts="c"></div>
+
+  <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+    <button class="sheet-close" type="button" id="sheet-close" aria-label="Close">✕</button>
+    <article class="card" id="card"></article>
+  </dialog>
 
   <footer id="footer"></footer>
 </div>
@@ -287,8 +343,9 @@ const svgEl = (tag, attrs = {}) => {
 
 let showRules = true;
 try { showRules = localStorage.getItem("atlas.rules") !== "off"; } catch {}
+// Null until the reader picks one. A deep link such as #Layer selects it and opens its card.
 let selected = decodeURIComponent(location.hash.slice(1));
-if (!byName.has(selected)) selected = byName.has("Layer") ? "Layer" : ifs[0].name;
+if (!byName.has(selected)) selected = null;
 let ruleFilter = "all";
 
 // ---- Summary and legend ----
@@ -362,6 +419,11 @@ function layout() {
   return rows;
 }
 const ROWS = layout();
+/* Which row a node is in, and where in that row, so the arrow keys can walk the map. */
+const ROW_OF = new Map();
+ROWS.forEach((row, r) => row.forEach((n, i) => ROW_OF.set(n, [r, i])));
+/* The laid-out position of each node, filled in by map(), so navigation and the drawing agree. */
+let POS = new Map();
 
 function map() {
   const W = 176, H = showRules ? 60 : 48, GX = 22, GY = showRules ? 64 : 58, PAD = 24;
@@ -374,6 +436,7 @@ function map() {
     const x0 = (width - rowWidth) / 2;
     row.forEach((n, i) => pos.set(n, { x: x0 + i * (W + GX), y: PAD + y * (H + GY) }));
   });
+  POS = pos;
   const svg = svgEl("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "group" });
   const defs = svgEl("defs");
   for (const [id, cls] of [["ext", ""], ["ext-hl", "hl"]]) {
@@ -398,7 +461,7 @@ function map() {
     const dy = Math.max(30, Math.abs(y2 - y1) * 0.45) * (down ? 1 : -1);
     const path = svgEl("path", {
       d: `M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`,
-      class: `edge ${e.kind} ${hl ? "hl" : "dim"}`,
+      class: `edge ${e.kind} ${selected ? (hl ? "hl" : "dim") : ""}`,
       "marker-end": `url(#${e.kind === "extends" ? "ext" : "use"}${hl ? "-hl" : ""})`,
     });
     const title = svgEl("title");
@@ -410,10 +473,12 @@ function map() {
   for (const i of ifs) {
     const p = pos.get(i.name);
     const cls = ["node", fileClass(i.file)];
-    if (i.name === selected) cls.push("selected");
-    else if (related.has(i.name)) cls.push("related");
-    else cls.push("dim");
-    const g = svgEl("g", { class: cls.join(" "), transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button", "aria-label": `${i.name}, ${i.rules.length} rules` });
+    if (selected) {
+      if (i.name === selected) cls.push("selected");
+      else if (related.has(i.name)) cls.push("related");
+      else cls.push("dim");
+    }
+    const g = svgEl("g", { class: cls.join(" "), transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button", "data-name": i.name, "aria-label": `${i.name}, ${i.rules.length} rules` });
     g.append(svgEl("rect", { class: "box", width: W, height: H, rx: 6 }));
     const name = svgEl("text", { class: "name", x: 12, y: 21 });
     name.textContent = i.name;
@@ -445,13 +510,14 @@ function map() {
 // ---- The selected interface's card ----
 function card() {
   const i = byName.get(selected);
+  if (!i) return;
   const chips = (names) => names.length
     ? names.map((n) => el("button", { class: "chip", type: "button", onclick: () => select(n) }, n))
     : [el("span", { class: "none" }, "none")];
   const extendedBy = ifs.filter((o) => o.extends.includes(i.name)).map((o) => o.name);
   const usedBy = ifs.filter((o) => o.uses.includes(i.name)).map((o) => o.name);
   const parts = [
-    el("div", {}, el("h2", {}, i.name), el("div", { class: "where mono" }, i.file)),
+    el("div", {}, el("h2", { id: "sheet-title" }, i.name), el("div", { class: "where mono" }, i.file)),
     el("div", { class: "doc" }, ...(i.doc ? i.doc.split("\n\n").map((p) => el("p", {}, p)) : [el("p", { class: "none" }, "No doc comment.")])),
     el("div", { class: "section" }, el("h3", {}, "Relationships"),
       el("dl", { class: "links" },
@@ -492,13 +558,151 @@ function card() {
   document.getElementById("card").replaceChildren(...parts);
 }
 
+const sheet = document.getElementById("sheet");
+
+/*
+ * The card covers part of the map, so it takes whichever side hides less of the
+ * selected interface and the nodes it links to. Measured in viewport coordinates,
+ * since the map scales to fit. Ties go right, where the card used to live.
+ */
+function placeSheet() {
+  sheet.classList.remove("left", "right");
+  const svg = document.querySelector("#map svg");
+  const names = new Set([selected, ...edges.filter((e) => e.from === selected || e.to === selected).flatMap((e) => [e.from, e.to])]);
+  const rects = [...names]
+    .map((n) => svg && svg.querySelector(`g.node[data-name="${n}"]`))
+    .filter(Boolean)
+    .map((g) => g.getBoundingClientRect());
+  const strip = sheet.getBoundingClientRect().width + 32;
+  const vw = window.innerWidth;
+  const covered = (lo, hi) => rects.reduce((sum, r) => sum + Math.max(0, Math.min(r.right, hi) - Math.max(r.left, lo)), 0);
+  sheet.classList.add(covered(vw - strip, vw) <= covered(0, strip) ? "right" : "left");
+}
+
+/* showModal throws if the dialog is already open, which it is when a chip in the card picks another interface. */
+function openSheet() {
+  if (!sheet.open) sheet.showModal();
+  placeSheet();
+}
+
+/* Selecting shows relationships in the map. The card opens on c, and follows the selection once open. */
 function select(name) {
   selected = name;
   ruleFilter = "all";
   if (location.hash.slice(1) !== name) history.replaceState(null, "", `#${encodeURIComponent(name)}`);
   map();
   card();
+  if (sheet.open) placeSheet();
 }
+
+const ARROWS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+
+/*
+ * Left and right move along a row and stop at its ends. Up and down go to the
+ * node nearest in x in the next row, which is rarely the one at the same index,
+ * since rows differ in length and are centred.
+ */
+function step(key) {
+  if (!selected) return ROWS[0][0];
+  const [r, i] = ROW_OF.get(selected);
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const row = ROWS[r];
+    return row[Math.min(row.length - 1, Math.max(0, i + (key === "ArrowRight" ? 1 : -1)))];
+  }
+  const next = r + (key === "ArrowDown" ? 1 : -1);
+  if (next < 0 || next >= ROWS.length) return selected;
+  const x = POS.get(selected).x;
+  const near = (a, b) => (Math.abs(POS.get(a).x - x) < Math.abs(POS.get(b).x - x) ? a : b);
+  return ROWS[next].reduce(near);
+}
+
+/*
+ * Shift and an arrow follow the drawn graph rather than the grid. Down goes to
+ * something this interface extends or uses, up to something that extends or uses
+ * it, and sideways to a node that shares one of those. Edges point from a node to
+ * what it depends on, and the layout puts those below it, so the directions agree
+ * with the arrows on screen. More than one candidate: the nearest in x, as for the
+ * plain arrows. None: the selection stays put.
+ */
+function stepGraph(key) {
+  if (!selected) return selected;
+  const x = POS.get(selected).x;
+  const parents = edges.filter((e) => e.from === selected).map((e) => e.to);
+  let candidates;
+  if (key === "ArrowDown") {
+    candidates = parents;
+  } else if (key === "ArrowUp") {
+    candidates = edges.filter((e) => e.to === selected).map((e) => e.from);
+  } else {
+    const kin = new Set(edges.filter((e) => parents.includes(e.to)).map((e) => e.from));
+    kin.delete(selected);
+    candidates = [...kin].filter((n) => (key === "ArrowRight" ? POS.get(n).x > x : POS.get(n).x < x));
+  }
+  if (!candidates.length) return selected;
+  return candidates.reduce((a, b) => (Math.abs(POS.get(a).x - x) <= Math.abs(POS.get(b).x - x) ? a : b));
+}
+
+/*
+ * Control and an arrow ignore the rows and the graph alike: the nearest node on
+ * screen in that direction. Distance off the axis counts double, so a node roughly
+ * in line beats a closer one well off to the side. At the edge of the map there is
+ * nothing in that direction and the selection stays put.
+ */
+function stepNear(key) {
+  if (!selected) return ROWS[0][0];
+  const from = POS.get(selected);
+  const vertical = key === "ArrowUp" || key === "ArrowDown";
+  const sign = key === "ArrowUp" || key === "ArrowLeft" ? -1 : 1;
+  let best = selected;
+  let bestScore = Infinity;
+  for (const [name, p] of POS) {
+    if (name === selected) continue;
+    const along = (vertical ? p.y - from.y : p.x - from.x) * sign;
+    if (along <= 0) continue;
+    const across = Math.abs(vertical ? p.x - from.x : p.y - from.y);
+    const score = along + 2 * across;
+    if (score < bestScore) {
+      bestScore = score;
+      best = name;
+    }
+  }
+  return best;
+}
+
+/* map() replaces the nodes on every selection, so the focus ring has to be put back. */
+function focusNode(name) {
+  const svg = document.querySelector("#map svg");
+  const g = svg && svg.querySelector(`g.node[data-name="${name}"]`);
+  if (g) g.focus();
+}
+
+/*
+ * Arrows move the selection: plain along the rows, Shift along the graph, Control
+ * to the nearest node on screen. The card follows when it is open. c opens and
+ * closes it, and Escape is the dialog doing its own work. Meta and Alt are left
+ * alone, since the browser uses them with the arrows.
+ */
+document.addEventListener("keydown", (ev) => {
+  if (ev.metaKey || ev.altKey) return;
+  if (ARROWS.has(ev.key)) {
+    ev.preventDefault();
+    const next = ev.ctrlKey ? stepNear(ev.key) : ev.shiftKey ? stepGraph(ev.key) : step(ev.key);
+    if (next && next !== selected) {
+      select(next);
+      // Focus cannot leave an open modal dialog, so only chase it while the card is closed.
+      if (!sheet.open) focusNode(next);
+    }
+    return;
+  }
+  // Control is left to the browser here, so Control-c still copies.
+  if (ev.ctrlKey || ev.repeat || ev.key.toLowerCase() !== "c") return;
+  if (sheet.open) sheet.close();
+  else if (selected) openSheet();
+});
+window.addEventListener("resize", () => { if (sheet.open) placeSheet(); });
+document.getElementById("sheet-close").addEventListener("click", () => sheet.close());
+// A click on the backdrop lands on the dialog itself, never on the card inside it.
+sheet.addEventListener("click", (ev) => { if (ev.target === sheet) sheet.close(); });
 
 const toggle = document.getElementById("show-rules");
 toggle.checked = showRules;
@@ -516,5 +720,8 @@ window.addEventListener("hashchange", () => {
 
 summary();
 map();
-card();
+if (selected) {
+  card();
+  openSheet();
+}
 </script>
