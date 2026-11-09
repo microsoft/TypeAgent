@@ -54,7 +54,7 @@ export function getRetiredBrowserViewHash(
     hash = "",
 ): string {
     if (
-        /^#\/(inbox|search|library|views|explore|activity|settings)(\/|$)/.test(
+        /^#\/(inbox|search|library|views|questions|explore|activity|settings)(\/|$)/.test(
             hash,
         )
     ) {

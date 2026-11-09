@@ -21,6 +21,16 @@
 # It is NOT a sandbox. Missing or rejected authorization prevents execution.
 # Remembered approvals last only for the current session and exact invocation.
 
+# Native decision provider, independent of chat. "inherit" follows the active
+# provider override, then modelProvider, then Azure; OpenAI/Ollama are unsupported.
+decision:
+  provider: inherit
+  azure:
+    deploymentKey: decision_1 # existing azureOpenAI.deployments pool key
+    deploymentName: decision-1 # exact wire model; not inferred from the key
+  copilot:
+    model: gpt-6-luna-decisions
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure OpenAI                                                    ║
 # ╚═══════════════════════════════════════════════════════════════════╝
@@ -42,6 +52,10 @@ azureOpenAI:
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
   deployments:
+    decision_1:
+      endpoints:
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/providers/microsoft/v1/systemone
+          region: eastus
     gpt_6_luna:
       # Per-deployment defaultCapacity overrides the section-level value.
       # defaultCapacity: 200
@@ -76,6 +90,10 @@ azureOpenAI:
           capacity: 115
         - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/ada-002/embeddings?api-version=2023-05-15
 
+    embedding_3_large:
+      endpoints:
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2024-10-21
+
     gpt_image_1_5:
       defaultCapacity: 30
       endpoints:
@@ -92,6 +110,19 @@ azureOpenAI:
     # shape TypeAgent has always spoken — existing configs are unchanged.
     # Supported values: chat_completions (default) | responses |
     # messages.
+    # Generic v1 URLs require the exact wire model/deployment name in `model`.
+    # This deployment appears as GPT_6_1_TERRA in model selection/completions.
+    gpt_6_1_terra:
+      endpoints:
+        - endpoint: https://my-resource-sweden.services.ai.azure.com/openai/v1/responses
+          capacity: 850
+          model: gpt-6.1-terra
+          wireApi: responses
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/openai/v1/responses
+          capacity: 150
+          model: gpt-6.1-terra
+          wireApi: responses
+
     gpt_5_codex:
       endpoints:
         - endpoint: https://my-resource.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
@@ -164,6 +195,9 @@ openAI:
 #     - gpt-5.4-mini
 #     - gpt-5-mini
 #     - gpt-5.4
+#   # GPT-6/6.1 Luna, Sol, and Terra requests first try the matching GPT-5.6
+#   # tier when unavailable. This is Copilot model-availability fallback,
+#   # not retry-on-any-error. Azure routing pools do not switch model families.
 #   # Optional: connect to an already-running Copilot CLI server over TCP
 #   # instead of spawning a CLI child per host. Eliminates the one-time
 #   # (multi-second) CLI startup latency. Format: "host:port" / "port".
@@ -366,6 +400,7 @@ reasoning:
 # defaultEmbeddingModel: local-minilm
 # defaultEmbeddingModel: local-embeddinggemma
 # defaultEmbeddingModel: azure-ada
+# defaultEmbeddingModel: azure-large-1536
 # defaultEmbeddingModel: none
 # No selector preserves existing embedding endpoint/provider inference.
 embeddingModels:
@@ -375,6 +410,14 @@ embeddingModels:
     model: text-embedding-ada-002 # must match the actual deployment
     size: 1536
     modalities: [text]
+  azure-large-1536:
+    provider: azure
+    deployment: embedding_3_large # configure this Azure deployment pool first
+    model: text-embedding-3-large # must match every deployment in the pool
+    size: 1536 # sent as dimensions; requires an API supporting embedding-3
+    modalities: [text]
+  # Equal dimensions do not make Ada and embedding-3 vectors compatible.
+  # Rebuild existing indexes explicitly; never reuse or truncate old vectors.
   local-minilm:
     provider: local
     runtime: minilm

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { getRuntimeConfig, setRuntimeConfig } from "@typeagent/aiclient";
@@ -10,7 +11,9 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import {
     generateSourceSynopsis,
     configuredSourceSynopsisModel,
+    sourceSynopsisRecipe,
     synopsisInputHash,
+    sourceSynopsisSchema,
     type SourceSynopsisModel,
 } from "../src/sourceSynopsis.js";
 import type {
@@ -21,6 +24,80 @@ import type {
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
+
+interface PromptEvidence {
+    id: string;
+    start: number;
+    end: number;
+    excerpt: string;
+}
+
+test("synopsis structured output binds exact evidence IDs and host text bounds", () => {
+    const output = sourceSynopsisSchema([
+        "first-supplied-id",
+        "second-supplied-id",
+    ]);
+    expect(output.strict).toBe(true);
+    expect(output.schema).toMatchObject({
+        properties: {
+            preview: { minLength: 1, maxLength: 320 },
+            overview: { minLength: 1, maxLength: 6000 },
+            evidence: {
+                minItems: 1,
+                maxItems: 32,
+                items: {
+                    additionalProperties: false,
+                    properties: {
+                        id: {
+                            enum: ["first-supplied-id", "second-supplied-id"],
+                        },
+                    },
+                    required: ["id"],
+                },
+            },
+        },
+    });
+    expect(() => sourceSynopsisSchema([])).toThrow(
+        "requires supplied evidence",
+    );
+    const ids = Array.from({ length: 251 }, (_, index) =>
+        createHash("sha256").update(String(index)).digest("hex"),
+    );
+    expect(() => sourceSynopsisSchema(ids.slice(0, 250))).not.toThrow();
+    expect(() => sourceSynopsisSchema(ids)).toThrow(
+        "provider evidence enum capacity",
+    );
+    expect(() => sourceSynopsisSchema(Array(251).fill(ids[0]))).not.toThrow();
+});
+
+interface SynopsisPrompt {
+    text: string;
+    start: number;
+    end: number;
+    evidence: PromptEvidence[];
+    summaries?: {
+        overview: string;
+        evidence: PromptEvidence[];
+        qualifications: string[];
+        contrasts: string[];
+    }[];
+}
+
+function readPrompt(prompt: string): SynopsisPrompt {
+    return JSON.parse(prompt.slice(prompt.lastIndexOf("\n") + 1));
+}
+
+function selection(evidence: unknown): string {
+    return JSON.stringify({
+        preview: "Synthetic source navigation.",
+        overview: "Synthetic source navigation, not independent evidence.",
+        qualifications: [],
+        contrasts: [],
+        limitations: [],
+        evidence,
+    });
+}
 
 class DeterministicModel implements SourceSynopsisModel {
     identity = "offline-source-synopsis";
@@ -31,18 +108,22 @@ class DeterministicModel implements SourceSynopsisModel {
     }
     async complete(prompt: string): Promise<string> {
         this.calls.push(prompt);
-        const input = JSON.parse(
-            prompt.slice(prompt.lastIndexOf("\n") + 1),
-        ) as {
-            text?: string;
-            start: number;
-            end: number;
-            summaries?: {
+        if (prompt.includes('"distinctions":')) {
+            const input = JSON.parse(
+                prompt.slice(prompt.lastIndexOf("\n") + 1),
+            ) as {
+                distinctions: string[];
                 overview: string;
-                evidence: SourceSynopsis["evidence"];
-                qualifications: string[];
-            }[];
-        };
+            };
+            const safe = input.distinctions.every((text) =>
+                input.overview.includes(text),
+            );
+            return JSON.stringify({
+                safe,
+                failures: safe ? [] : ["scope-state"],
+            });
+        }
+        const input = readPrompt(prompt);
         if (input.summaries) {
             const selected =
                 input.summaries.find((item) => item.qualifications.length) ??
@@ -50,13 +131,13 @@ class DeterministicModel implements SourceSynopsisModel {
             return JSON.stringify({
                 preview: selected.overview.slice(0, 300),
                 overview: selected.overview,
-                evidence: selected.evidence,
+                evidence: selected.evidence.map(({ id }) => ({ id })),
                 qualifications: selected.qualifications,
                 contrasts: [],
                 limitations: [],
             });
         }
-        const text = input.text!;
+        const text = input.text;
         const marker = text.indexOf("Governing tail exception:");
         const from = marker >= 0 ? marker : 0;
         const excerpt = text.slice(
@@ -68,9 +149,13 @@ class DeterministicModel implements SourceSynopsisModel {
             overview: excerpt,
             evidence: [
                 {
-                    start: input.start + from,
-                    end: input.start + from + excerpt.length,
-                    excerpt,
+                    id: (
+                        input.evidence.find(
+                            (item) =>
+                                item.start <= input.start + from &&
+                                item.end > input.start + from,
+                        ) ?? input.evidence[0]
+                    ).id,
                 },
             ],
             qualifications: marker >= 0 ? [excerpt] : [],
@@ -98,18 +183,151 @@ const revision: SourceRevision = {
 };
 
 describe("source synopsis orchestration", () => {
+    test.each(["ollama", "copilot"])(
+        "configured synopsis rejects schema-unsupported native %s providers before inference",
+        (provider) => {
+            const originalConfig = getRuntimeConfig();
+            const originalCompatibility = process.env.OLLAMA_USE_OAI_ENDPOINT;
+            try {
+                if (provider === "ollama")
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = "0";
+                setRuntimeConfig(
+                    buildConfig(flatten({ modelProvider: provider })),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel(`${provider}:synthetic`),
+                ).toThrow(`${provider} provider does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+                if (originalCompatibility === undefined)
+                    delete process.env.OLLAMA_USE_OAI_ENDPOINT;
+                else
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = originalCompatibility;
+            }
+        },
+    );
+
+    test.each(["messages", "responses"])(
+        "configured synopsis rejects %s providers before inference instead of silently ignoring schemas",
+        (wireApi) => {
+            const originalConfig = getRuntimeConfig();
+            try {
+                setRuntimeConfig(
+                    buildConfig(
+                        flatten({
+                            modelProvider: "azure",
+                            azureOpenAI: {
+                                deployments: {
+                                    synopsis_test: [
+                                        {
+                                            endpoint:
+                                                "https://synthetic.invalid/synopsis",
+                                            region: "eastus",
+                                            auth: "synthetic-key",
+                                            wireApi,
+                                        },
+                                    ],
+                                },
+                            },
+                            modelRequestConstraints: {
+                                "azure:chat:synopsis_test": {
+                                    contextTokens: 10000,
+                                    outputTokens: 4000,
+                                },
+                            },
+                        }),
+                    ),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel("azure:synopsis_test"),
+                ).toThrow(`${wireApi} wire API does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+            }
+        },
+    );
+
+    test("assessment identity fingerprints effective endpoint configuration but not credentials", () => {
+        const originalConfig = getRuntimeConfig();
+        const identity = (endpoint: string, auth: string) => {
+            setRuntimeConfig(
+                buildConfig(
+                    flatten({
+                        modelProvider: "azure",
+                        azureOpenAI: {
+                            deployments: {
+                                identity_test: [
+                                    {
+                                        endpoint,
+                                        region: "eastus",
+                                        auth,
+                                    },
+                                ],
+                            },
+                        },
+                    }),
+                ),
+            );
+            return createConfiguredViewSynthesisAdapter("azure:identity_test")
+                .identity;
+        };
+        try {
+            const first = identity(
+                "https://synthetic.invalid/first",
+                "synthetic-key-one",
+            );
+            expect(
+                identity(
+                    "https://synthetic.invalid/first",
+                    "synthetic-key-two",
+                ),
+            ).toBe(first);
+            expect(
+                identity(
+                    "https://synthetic.invalid/second",
+                    "synthetic-key-two",
+                ),
+            ).not.toBe(first);
+        } finally {
+            setRuntimeConfig(originalConfig);
+        }
+    });
+
+    test("selection and composition split evidence before provider enum capacity is exceeded", async () => {
+        const content = Array.from(
+            { length: 320 },
+            (_, index) => `Observation ${index} remains limited.\n`,
+        ).join("");
+        const model = new DeterministicModel();
+        const compositions: number[] = [];
+        model.fits = (prompt) => {
+            const input = readPrompt(prompt);
+            return !!input.summaries || input.evidence.length <= 32;
+        };
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            const supplied = input.summaries
+                ? input.summaries.flatMap((summary) => summary.evidence)
+                : input.evidence;
+            const count = new Set(supplied.map(({ id }) => id)).size;
+            expect(count).toBeLessThanOrEqual(250);
+            if (input.summaries) compositions.push(count);
+            return selection(supplied.slice(0, 32).map(({ id }) => ({ id })));
+        };
+        await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(compositions.some((count) => count >= 200)).toBe(true);
+    });
+
     test("configured synopsis guides final response length without capping reasoning or returned content", async () => {
         const originalConfig = getRuntimeConfig();
         const originalFetch = globalThis.fetch;
         const content = "A retained governing qualification.";
-        const output = {
-            preview: content,
-            overview: content,
-            evidence: [{ start: 0, end: content.length, excerpt: content }],
-            qualifications: [],
-            contrasts: [],
-            limitations: [],
-        };
         let calls = 0;
         try {
             setRuntimeConfig(
@@ -149,6 +367,22 @@ describe("source synopsis orchestration", () => {
                 expect(body.messages[0].content).toContain(
                     "approximately 2000 tokens in the final JSON response, excluding reasoning",
                 );
+                expect(body.messages[0].content).toContain(
+                    "Use shorter complete sentences rather than unfinished clauses or whitespace padding",
+                );
+                const output = {
+                    preview: content,
+                    overview: content,
+                    evidence: [
+                        {
+                            id: readPrompt(body.messages[0].content).evidence[0]
+                                .id,
+                        },
+                    ],
+                    qualifications: [],
+                    contrasts: [],
+                    limitations: [],
+                };
                 return new Response(
                     JSON.stringify({
                         choices: [
@@ -231,6 +465,14 @@ describe("source synopsis orchestration", () => {
     test("configured capacity permits direct synthesis; CRLF/Unicode coordinates stay original", async () => {
         const content = "# Context\r\n\r\nA 😀 qualification and contrast.\r\n";
         const model = new DeterministicModel();
+        const complete = model.complete.bind(model);
+        model.complete = async (prompt) => {
+            const output = JSON.parse(await complete(prompt));
+            output.evidence = readPrompt(prompt).evidence.map(({ id }) => ({
+                id,
+            }));
+            return JSON.stringify(output);
+        };
         const output = await generateSourceSynopsis(
             source,
             revision,
@@ -240,8 +482,353 @@ describe("source synopsis orchestration", () => {
         );
         expect(output.coverage.method).toBe("direct");
         expect(model.calls).toHaveLength(1);
-        expect(output.evidence[0].excerpt).toBe(content);
+        expect(output.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+            content,
+        );
     });
+
+    test.each(["\n", "\r\n"])(
+        "host selects repeated text by ID and preserves whitespace and UTF-16 for %j",
+        async (newline) => {
+            const repeated = `  A\t😀  scoped statement. ${newline}`;
+            const content = `# Synthetic 🧪${newline}${repeated}${repeated}\t  ${newline}`;
+            const model = new DeterministicModel();
+            let selected!: PromptEvidence;
+            model.complete = async (prompt) => {
+                const input = readPrompt(prompt);
+                expect(
+                    input.evidence.map(({ excerpt }) => excerpt).join(""),
+                ).toBe(content);
+                const matches = input.evidence.filter(
+                    ({ excerpt }) => excerpt === repeated,
+                );
+                expect(matches).toHaveLength(2);
+                expect(matches[0].id).not.toBe(matches[1].id);
+                selected = matches[1];
+                return selection([{ id: selected.id }]);
+            };
+            const output = await generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            );
+            expect(output.evidence).toEqual([
+                {
+                    coordinateSpace: "retained-utf16",
+                    start: content.lastIndexOf(repeated),
+                    end: content.lastIndexOf(repeated) + repeated.length,
+                    excerpt: repeated,
+                },
+            ]);
+            expect(output.evidence[0]).not.toHaveProperty("id");
+            expect(selected.start).toBe(content.lastIndexOf(repeated));
+            model.complete = async () => selection([{ excerpt: repeated }]);
+            await expect(
+                generateSourceSynopsis(
+                    source,
+                    revision,
+                    content,
+                    model,
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("exact supplied retained evidence ID");
+        },
+    );
+
+    test.each([
+        "unknown",
+        "shortened",
+        "whitespace",
+        "number",
+        "null",
+        "array",
+        "quote-only",
+        "offsets-only",
+        "normalized-quote",
+        "exact-quote",
+        "extra-offsets",
+    ])("rejects invalid evidence selection: %s", async (kind) => {
+        const content = "Synthetic\t  evidence 😀.\r\n";
+        const model = new DeterministicModel();
+        model.complete = async (prompt) => {
+            const item = readPrompt(prompt).evidence[0];
+            const entries: Record<string, unknown> = {
+                unknown: { id: "forged" },
+                shortened: { id: item.id.slice(0, 20) },
+                whitespace: { id: ` ${item.id}` },
+                number: { id: 0 },
+                null: null,
+                array: [item.id],
+                "quote-only": { excerpt: content },
+                "offsets-only": { start: item.start, end: item.end },
+                "normalized-quote": {
+                    id: item.id,
+                    excerpt: content.replace(/\s+/g, " "),
+                },
+                "exact-quote": { id: item.id, excerpt: content },
+                "extra-offsets": {
+                    id: item.id,
+                    start: item.start,
+                    end: item.end,
+                },
+            };
+            return selection([entries[kind]]);
+        };
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow(/synopsis evidence/i);
+    });
+
+    test.each(["source", "corpus", "revision", "hash", "content"])(
+        "rejects a valid ID reused for a different %s",
+        async (kind) => {
+            const content = "Same synthetic text 😀.\r\n";
+            const model = new DeterministicModel();
+            let previousId!: string;
+            model.complete = async (prompt) => {
+                previousId = readPrompt(prompt).evidence[0].id;
+                return selection([{ id: previousId }]);
+            };
+            await generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            );
+            model.complete = async () => selection([{ id: previousId }]);
+            await expect(
+                generateSourceSynopsis(
+                    {
+                        ...source,
+                        ...(kind === "source" ? { sourceId: "other" } : {}),
+                        ...(kind === "corpus" ? { corpusId: "other" } : {}),
+                    },
+                    {
+                        ...revision,
+                        ...(kind === "source" ? { sourceId: "other" } : {}),
+                        ...(kind === "revision" ? { revisionId: "r2" } : {}),
+                        ...(kind === "hash" ? { contentHash: "other" } : {}),
+                    },
+                    kind === "content" ? content + "changed" : content,
+                    model,
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("exact supplied retained evidence ID");
+        },
+    );
+
+    test("rejects mismatched source/revision identity before requesting synthesis", async () => {
+        const model = new DeterministicModel();
+        await expect(
+            generateSourceSynopsis(
+                source,
+                { ...revision, sourceId: "other" },
+                "text",
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("different source");
+        expect(model.calls).toHaveLength(0);
+    });
+
+    test("an ID elsewhere in the source is not evidence for an unsupplied section", async () => {
+        const content = `${"Earlier synthetic context. ".repeat(600)}\n\nFinal evidence only.`;
+        const model = new DeterministicModel(7000);
+        await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        const sections = model.calls.filter(
+            (prompt) => !readPrompt(prompt).summaries,
+        );
+        const lastId = readPrompt(sections.at(-1)!).evidence.at(-1)!.id;
+        model.complete = async () => selection([{ id: lastId }]);
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("exact supplied retained evidence ID");
+    });
+
+    test("composition cannot introduce a valid original ID absent from supplied summary evidence", async () => {
+        const content =
+            "First synthetic line.\nNot selected in any summary.\n" +
+            "Other context.\n".repeat(1000);
+        const model = new DeterministicModel(7000);
+        const complete = model.complete.bind(model);
+        let unselectedId: string | undefined;
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            if (!input.summaries && !unselectedId)
+                unselectedId = input.evidence[1].id;
+            const output = JSON.parse(await complete(prompt));
+            if (input.summaries) output.evidence = [{ id: unselectedId }];
+            return JSON.stringify(output);
+        };
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("exact supplied retained evidence ID");
+    });
+
+    test("fresh long synthetic source traverses every original span and preserves distant governing details", async () => {
+        const qualification =
+            "Governing tail exception: the 43-slot number is withdrawn; only local review is complete, not rollout. Hold time is not command execution time.";
+        const content =
+            "# Synthetic capacity\r\nProvisional value: 43 slots.\r\n\r\n" +
+            "## Observations\r\nMetric | Value\r\n--- | ---\r\nSample | 😀\t  pending\r\n\r\n".repeat(
+                600,
+            ) +
+            qualification +
+            "\r\n";
+        const model = new DeterministicModel(7000);
+        const coverage: SourceSynopsis["coverage"][] = [];
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+            (read) => coverage.push(read),
+        );
+        expect(output.coverage.method).toBe("source-order-sections");
+        expect(output.coverage.scannedChars).toBe(content.length);
+        expect(output.overview).toContain(qualification);
+        expect(coverage.at(-1)?.scannedChars).toBe(content.length);
+        const sections = model.calls
+            .filter((prompt) => !readPrompt(prompt).summaries)
+            .map(readPrompt);
+        expect(sections.map(({ text }) => text).join("")).toBe(content);
+        expect(sections.at(-1)?.end).toBe(content.length);
+        expect(model.calls.every((prompt) => model.fits(prompt))).toBe(true);
+        for (const section of sections) {
+            expect(
+                section.evidence.map(({ excerpt }) => excerpt).join(""),
+            ).toBe(section.text);
+            for (const evidence of section.evidence) {
+                expect(content.slice(evidence.start, evidence.end)).toBe(
+                    evidence.excerpt,
+                );
+                expect(/^[\uDC00-\uDFFF]/.test(evidence.excerpt)).toBe(false);
+                expect(/[\uD800-\uDBFF]$/.test(evidence.excerpt)).toBe(false);
+                expect(
+                    content.slice(evidence.end - 1, evidence.end + 1),
+                ).not.toBe("\r\n");
+            }
+        }
+        for (const evidence of output.evidence)
+            expect(content.slice(evidence.start, evidence.end)).toBe(
+                evidence.excerpt,
+            );
+    });
+
+    test("host inventory bounds long lines without splitting surrogate pairs or CRLF", async () => {
+        const content =
+            "x".repeat(999) +
+            "😀" +
+            " y".repeat(1000) +
+            "\r\n" +
+            "x".repeat(999) +
+            "\r\n";
+        const model = new DeterministicModel();
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            expect(input.evidence.length).toBeGreaterThan(3);
+            expect(input.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+                content,
+            );
+            for (const item of input.evidence) {
+                expect(item.end - item.start).toBeLessThanOrEqual(1000);
+                expect(/^[\uDC00-\uDFFF]/.test(item.excerpt)).toBe(false);
+                expect(/[\uD800-\uDBFF]$/.test(item.excerpt)).toBe(false);
+                expect(content.slice(item.end - 1, item.end + 1)).not.toBe(
+                    "\r\n",
+                );
+            }
+            return selection(input.evidence.map(({ id }) => ({ id })));
+        };
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(output.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+            content,
+        );
+    });
+
+    test.each(["qualifications", "contrasts"] as const)(
+        "synthetic composition rejects dropped governing %s in arrays or overview",
+        async (key) => {
+            const detail =
+                "Only the amber cohort is approved; the violet cohort is excluded.";
+            const content =
+                "# Provisional claim\n" +
+                "Neutral observation.\n".repeat(900) +
+                "\n" +
+                detail;
+            for (const drop of ["array", "overview"]) {
+                const model = new DeterministicModel(7000);
+                const complete = model.complete.bind(model);
+                model.complete = async (prompt) => {
+                    const input = readPrompt(prompt);
+                    const output = JSON.parse(await complete(prompt));
+                    if (!input.summaries && input.text?.includes(detail)) {
+                        output[key] = [detail];
+                        output.overview = detail;
+                    } else if (input.summaries) {
+                        const distinctions = input.summaries.flatMap(
+                            (summary) => summary[key],
+                        );
+                        output[key] = [...new Set(distinctions)];
+                        output.overview =
+                            output[key].join(" ") || "Synthetic overview.";
+                        if (output[key].length) {
+                            if (drop === "array") output[key] = [];
+                            else output.overview = "All cohorts approved.";
+                        }
+                    }
+                    return JSON.stringify(output);
+                };
+                await expect(
+                    generateSourceSynopsis(
+                        source,
+                        revision,
+                        content,
+                        model,
+                        new AbortController().signal,
+                    ),
+                ).rejects.toThrow(
+                    drop === "array"
+                        ? "dropped a supplied governing qualification or contrast"
+                        : "Editorial rejection",
+                );
+            }
+        },
+    );
 
     test("non-leading-pipe tables retain repeated structural headers separately from original CRLF/Unicode ranges", async () => {
         const content =
@@ -302,9 +889,53 @@ describe("source synopsis orchestration", () => {
                 model,
                 new AbortController().signal,
             ),
-        ).rejects.toThrow(
-            "dropped a supplied governing qualification or contrast",
+        ).rejects.toThrow("Editorial rejection");
+    });
+
+    test("composition delegates paraphrase fidelity to a semantic editorial verdict rather than word overlap", async () => {
+        const detail =
+            "Only the amber cohort is approved; the violet cohort is excluded.";
+        const paraphrase =
+            "Clearance applies exclusively to the first group. The second group remains outside the authorization.";
+        const content =
+            "# Scope\n" + "Neutral observation.\n".repeat(900) + "\n" + detail;
+        const model = new DeterministicModel(7000);
+        const complete = model.complete.bind(model);
+        let checked = 0;
+        model.complete = async (prompt) => {
+            if (prompt.includes('"distinctions":')) {
+                checked++;
+                expect(prompt).toContain(detail);
+                expect(prompt).toContain(paraphrase);
+                return JSON.stringify({ safe: true, failures: [] });
+            }
+            const input = readPrompt(prompt);
+            const output = JSON.parse(await complete(prompt));
+            if (input.text?.includes(detail)) {
+                output.qualifications = [detail];
+                output.overview = detail;
+            }
+            if (input.summaries) {
+                output.qualifications = [
+                    ...new Set(
+                        input.summaries.flatMap(
+                            (summary) => summary.qualifications,
+                        ),
+                    ),
+                ];
+                if (output.qualifications.length) output.overview = paraphrase;
+            }
+            return JSON.stringify(output);
+        };
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
         );
+        expect(output.overview).toBe(paraphrase);
+        expect(checked).toBeGreaterThan(0);
     });
 
     test("rejects fabricated indexed locators, out-of-section evidence and uncomposable output", async () => {
@@ -340,7 +971,29 @@ describe("source synopsis orchestration", () => {
     });
 
     test("one semantic fingerprint ignores index timestamps/generations but includes recipe, role, title and eligibility", () => {
+        expect(sourceSynopsisRecipe).toBe("source-synopsis-v7");
         const hash = synopsisInputHash(source, revision, "model", true);
+        const legacyV3Hash = createHash("sha256")
+            .update(
+                JSON.stringify([
+                    "source-synopsis-v3",
+                    "model",
+                    true,
+                    source.sourceId,
+                    revision.revisionId,
+                    revision.contentHash,
+                    source.sourceType,
+                    source.title,
+                    source.canonicalUri,
+                    source.tags,
+                    revision.mimeType,
+                    revision.capturedAt,
+                    revision.sourceModifiedAt,
+                    revision.pipelineVersion,
+                ]),
+            )
+            .digest("hex");
+        expect(hash).not.toBe(legacyV3Hash);
         expect(
             synopsisInputHash(
                 source,
@@ -358,6 +1011,24 @@ describe("source synopsis orchestration", () => {
             ),
             synopsisInputHash(source, revision, "different-model", true),
             synopsisInputHash(source, revision, "model", false),
+            synopsisInputHash(
+                { ...source, corpusId: "other" },
+                revision,
+                "model",
+                true,
+            ),
+            synopsisInputHash(
+                source,
+                { ...revision, revisionId: "r2" },
+                "model",
+                true,
+            ),
+            synopsisInputHash(
+                source,
+                { ...revision, contentHash: "changed" },
+                "model",
+                true,
+            ),
         ])
             expect(changed).not.toBe(hash);
     });
@@ -367,8 +1038,14 @@ describe("inline synopsis production lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
     let model: DeterministicModel;
-    function open() {
+    function open(parallel: boolean | string = false) {
         return new FileMemoryService(root, {
+            performanceExperiments:
+                typeof parallel === "string"
+                    ? parallel
+                    : parallel
+                      ? "indexing-parallel"
+                      : "",
             viewDrafts: false,
             informationalViews: false,
             sourceSynopses: true,
@@ -390,11 +1067,12 @@ describe("inline synopsis production lifecycle", () => {
         corpusId: string,
         content: string,
         expected?: string,
+        sourceId = "worksheet",
     ) {
         const result = await service.ingestDocument({
             corpusId,
             source: {
-                sourceId: "worksheet",
+                sourceId,
                 sourceType: "markdown",
                 title: "Worksheet",
                 markdown: content,
@@ -415,17 +1093,129 @@ describe("inline synopsis production lifecycle", () => {
     async function synopsis(
         corpusId: string,
         status: SourceSynopsis["status"] = "ready",
+        sourceId = "worksheet",
     ) {
         for (let i = 0; i < 1000; i++) {
             const result = await service.getSourceSynopsis({
                 corpusId,
-                sourceId: "worksheet",
+                sourceId,
             });
             if (result.status === status) return result;
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         throw new Error(`Synopsis did not reach ${status}`);
     }
+    test.each([false, true, "synopsis-parallel"])(
+        "independent synopsis generation is bounded and opt-in: %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const defer = service.deferMaintenance();
+            const corpus = await service.createCorpus("Independent synopses");
+            const gates = Array.from({ length: 3 }, () => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const entered = gates.map(() => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const complete = model.complete.bind(model);
+            const starts: number[] = [];
+            model.complete = async (prompt) => {
+                const index = Number(
+                    /Source (\d)/.exec(readPrompt(prompt).text)![1],
+                );
+                starts.push(index);
+                entered[index].resolve();
+                await gates[index].promise;
+                return complete(prompt);
+            };
+            try {
+                for (let index = 0; index < 3; index++)
+                    await ingest(
+                        corpus.corpusId,
+                        `Source ${index} records independent evidence.`,
+                        undefined,
+                        `source-${index}`,
+                    );
+                defer();
+                await entered[0].promise;
+                if (parallel) await entered[1].promise;
+                expect(starts).toEqual(parallel ? [0, 1] : [0]);
+                gates[0].resolve();
+                if (parallel) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                    expect(starts).toEqual([0, 1]);
+                } else await entered[1].promise;
+                gates[1].resolve();
+                await entered[2].promise;
+                gates[2].resolve();
+                for (let index = 0; index < 3; index++)
+                    await synopsis(corpus.corpusId, "ready", `source-${index}`);
+                await service.close();
+                service = open(parallel);
+                await service.initialize();
+                for (let index = 0; index < 3; index++)
+                    expect(
+                        (
+                            await service.getSourceSynopsis({
+                                corpusId: corpus.corpusId,
+                                sourceId: `source-${index}`,
+                            })
+                        ).status,
+                    ).toBe("ready");
+            } finally {
+                defer();
+                for (const gate of gates) gate.resolve();
+            }
+        },
+    );
+
+    test("nested foreground scopes defer synopses across corpora and drain the latest revisions", async () => {
+        const release = service.deferMaintenance();
+        const nested = service.deferMaintenance();
+        try {
+            const first = await service.createCorpus("Earlier conversation");
+            const second = await service.createCorpus("Later conversation");
+            await ingest(
+                first.corpusId,
+                "# Preferences\n\nMira prefers tea before meetings.",
+            );
+            await ingest(
+                second.corpusId,
+                "# Deployment\n\nThe worker restarts after reconciliation.",
+            );
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            expect(model.calls).toEqual([]);
+            expect(
+                service
+                    .getMaintenanceStatus()
+                    .pending.filter((key) => key.endsWith(":synopsis")),
+            ).toHaveLength(2);
+            release();
+            expect((await service.drainMaintenance()).reason).toBe("paused");
+            nested();
+            const settled = await service.drainMaintenance(5000);
+            expect(settled.settled).toBe(true);
+            expect((await synopsis(first.corpusId)).status).toBe("ready");
+            expect((await synopsis(second.corpusId)).status).toBe("ready");
+            expect(model.calls.length).toBeGreaterThanOrEqual(2);
+        } finally {
+            release();
+            nested();
+        }
+    });
     test("actual temporal revisions persist inline with exact current identity, public previews and restart/reindex no-op", async () => {
         const corpus = await service.createCorpus("temporal");
         let previous: string | undefined;
@@ -518,47 +1308,55 @@ describe("inline synopsis production lifecycle", () => {
         expect(model.calls).toHaveLength(2);
     });
 
-    test("replacement rejects a late old-revision synopsis and restarts only the new semantic input", async () => {
-        const originalComplete = model.complete.bind(model);
-        let finish: (() => void) | undefined;
-        let start: (() => void) | undefined;
-        const started = new Promise<void>((resolve) => {
-            start = resolve;
-        });
-        model.complete = async (prompt) => {
-            const output = await originalComplete(prompt);
-            start?.();
-            return new Promise<string>((resolve) => {
-                finish = () => resolve(output);
+    test.each([false, true, "synopsis-parallel"])(
+        "replacement rejects a late old-revision synopsis with parallelism %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const originalComplete = model.complete.bind(model);
+            let finish: (() => void) | undefined;
+            let start: (() => void) | undefined;
+            const started = new Promise<void>((resolve) => {
+                start = resolve;
             });
-        };
-        const corpus = await service.createCorpus("replace");
-        const old = await ingest(
-            corpus.corpusId,
-            "Obsolete local median 38 ms.",
-        );
-        await started;
-        await ingest(
-            corpus.corpusId,
-            "Current sample withdrawn after duplicated tracing.",
-            old.revisionId,
-        );
-        model.complete = originalComplete;
-        finish?.();
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const current = await service.getSource(corpus.corpusId, "worksheet");
-        expect(
-            current?.revisions.find((r) => r.revisionId === old.revisionId)
-                ?.synopsis?.status,
-        ).not.toBe("ready");
-        await service.close();
-        service = open();
-        await service.initialize();
-        const output = await synopsis(corpus.corpusId);
-        expect(output.overview).toContain("withdrawn");
-        expect(output.overview).not.toContain("38 ms");
-        expect(output.revisionId).not.toBe(old.revisionId);
-    });
+            model.complete = async (prompt) => {
+                const output = await originalComplete(prompt);
+                start?.();
+                return new Promise<string>((resolve) => {
+                    finish = () => resolve(output);
+                });
+            };
+            const corpus = await service.createCorpus("replace");
+            const old = await ingest(
+                corpus.corpusId,
+                "Obsolete local median 38 ms.",
+            );
+            await started;
+            await ingest(
+                corpus.corpusId,
+                "Current sample withdrawn after duplicated tracing.",
+                old.revisionId,
+            );
+            model.complete = originalComplete;
+            finish?.();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const current = await service.getSource(
+                corpus.corpusId,
+                "worksheet",
+            );
+            expect(
+                current?.revisions.find((r) => r.revisionId === old.revisionId)
+                    ?.synopsis?.status,
+            ).not.toBe("ready");
+            await service.close();
+            service = open(parallel);
+            await service.initialize();
+            const output = await synopsis(corpus.corpusId);
+            expect(output.overview).toContain("withdrawn");
+            expect(output.overview).not.toContain("38 ms");
+            expect(output.revisionId).not.toBe(old.revisionId);
+        },
+    );
 
     test("authorized purge recovery discards an in-flight synopsis without failing shutdown", async () => {
         const complete = model.complete.bind(model);

@@ -422,7 +422,7 @@ function prepare(fixture, options = {}) {
             RUNNER_TEMP: runnerTemp,
             TEST_SECRET: "sentinel-test-secret",
         },
-        workDirectory: join(fixture.root, "prepare"),
+        workDirectory: options.workDirectory ?? join(fixture.root, "prepare"),
         now: () => new Date("2026-10-20T20:00:00.000Z"),
     });
     return { summary, outputDirectory, auditPath, pnpmCommand };
@@ -622,6 +622,37 @@ test("trusted healer prepares a candidate without exposing credentials or runnin
         assert.equal(audit.env.GH_TOKEN, undefined);
         assert.equal(audit.env.GITHUB_TOKEN, undefined);
         assert.equal(audit.env.TEST_SECRET, undefined);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("generated files remain contained when the work directory has a filesystem alias", () => {
+    const fixture = createFixture();
+    try {
+        const canonical = join(fixture.root, "canonical-work");
+        const alias = join(fixture.root, "aliased-work");
+        mkdirSync(canonical);
+        symlinkSync(
+            canonical,
+            alias,
+            process.platform === "win32" ? "junction" : "dir",
+        );
+        const prepared = prepare(fixture, {
+            workDirectory: join(alias, "prepare"),
+        });
+        assert.deepEqual(prepared.summary.skipped, []);
+        assert.equal(prepared.summary.candidates.length, 1);
+        const { plan } = verify(fixture, prepared);
+        assert.equal(plan.candidates.length, 1);
+        assert.equal(
+            git(
+                plan.repositoryPath,
+                "show",
+                `${plan.candidates[0].candidateSha}:ts/packages/app/README.AUTOGEN.md`,
+            ),
+            "pull request readme",
+        );
     } finally {
         fixture.cleanup();
     }

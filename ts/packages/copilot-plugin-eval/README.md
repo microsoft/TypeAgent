@@ -1359,7 +1359,11 @@ a new run. Do not silently replace targets during a frozen run.
 
 ## Explicit model and admission
 
-`scripts/ghcp-eval-config.mjs` pins **Luna 5.6, `gpt-5.6-luna`**. The measured
+`scripts/ghcp-eval-config.mjs` now pins **Luna 6, `gpt-6-luna`** for new runs.
+Historical Luna 5.6/Sol results, ledgers, and model identities remain unchanged.
+Old ledgers are rejected; a new model-specific ledger and admission review are
+required. This default change is not a new measurement or authorization.
+The new
 outer conversation, same-binding contract preparation, and TypeAgent nested
 Copilot reasoning use this identity. Preflight and the optional credit probe
 also enforce it. Main trials keep high reasoning effort; the small accounting
@@ -1372,7 +1376,8 @@ work. Do not relabel a historical Sol ledger or assume its per-request bounds
 apply to Luna. Verify current model availability, credit rates, context/output
 bounds and nested-request accounting; reconcile cumulative prior charges in a
 new run specification. An unavailable model is a blocker, not permission to
-substitute one. No live availability/pricing probe is part of this migration.
+substitute one. This migration does not authorize evaluation trials or establish
+new pricing; synthetic model-availability checks are separate from measured runs.
 
 The historical authorization was **50,000 cumulative Copilot AI credits**,
 superseding the original 20,000 and interim 40,000 limits. A new round requires

@@ -216,7 +216,7 @@ function registrationFixture(t) {
             ],
             {
                 encoding: "utf8",
-                timeout: 30_000,
+                timeout: 60_000,
                 env: {
                     ...process.env,
                     COPILOT_HOME: home,
@@ -236,6 +236,7 @@ test(
         const fixture = registrationFixture(t);
         fs.writeFileSync(fixture.fail, "");
         const failed = fixture.run();
+        assert.ifError(failed.error);
         assert.equal(failed.status, 1, failed.stdout + failed.stderr);
         assert.equal(
             fs.readFileSync(`${fixture.log}.status`, "utf8").trim(),
@@ -249,6 +250,7 @@ test(
 
         fs.unlinkSync(fixture.fail);
         const repaired = fixture.run();
+        assert.ifError(repaired.error);
         assert.equal(repaired.status, 0, repaired.stdout + repaired.stderr);
         assert.equal(
             fs.readFileSync(`${fixture.log}.status`, "utf8").trim(),

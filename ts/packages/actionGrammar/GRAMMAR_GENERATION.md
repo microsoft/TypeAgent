@@ -146,7 +146,7 @@ Options:
 - `-o, --output <path>`: Output path for .agr file
 - `-e, --examples <number>`: Number of examples per action (default: 3)
 - `--provider <provider>`: `copilot` (default) or `claude`
-- `-m, --model <model>`: Model to use (default: `gpt-5.6-sol`)
+- `-m, --model <model>`: Model to use (default: `gpt-6.1-sol`)
 - `-i, --input <path>`: Existing grammar to extend
 - `--improve <instructions>`: Improvement instructions
 

@@ -4,7 +4,9 @@
 import { dialog, globalShortcut, ipcMain } from "electron";
 import { CONFIG_LOCAL_FILE } from "@typeagent/config";
 import { AzureSpeech } from "./azureSpeech.js";
-import { isLocalWhisperEnabled } from "./localWhisperCommandHandler.js";
+import { ensureLocalWhisper } from "./localWhisperCommandHandler.js";
+import { getSpeechProvider } from "./speechProvider.js";
+import { localAsrHost } from "./localAsrHost.js";
 
 import registerDebug from "debug";
 import {
@@ -65,9 +67,7 @@ export async function triggerRecognitionOnce() {
         return;
     }
     const chatView = shellWindow.chatView;
-    const speechToken = await getSpeechToken(false);
-    const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
+    chatView.webContents.send("listen-event", undefined, false);
 }
 
 export async function toggleWakeWordRecognition() {
@@ -76,9 +76,7 @@ export async function toggleWakeWordRecognition() {
         return;
     }
     const chatView = shellWindow.chatView;
-    const speechToken = await getSpeechToken(false);
-    const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send("wake-listen", speechToken, useLocalWhisper);
+    chatView.webContents.send("wake-listen");
 }
 
 export async function toggleContinuousRecognition() {
@@ -87,9 +85,7 @@ export async function toggleContinuousRecognition() {
         return;
     }
     const chatView = shellWindow.chatView;
-    const speechToken = await getSpeechToken(false);
-    const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send("listen-always", speechToken, useLocalWhisper);
+    chatView.webContents.send("listen-always");
 }
 
 export function initializeSpeech() {
@@ -119,7 +115,40 @@ export function initializeSpeech() {
         if (getShellWindowForChatViewIpcEvent(event) === undefined) {
             return undefined;
         }
-        return isLocalWhisperEnabled();
+        const selected = getSpeechProvider() === "whisper";
+        if (selected) await ensureLocalWhisper();
+        return selected;
+    });
+
+    ipcMain.handle("get-speech-provider", async (event) => {
+        if (!getShellWindowForChatViewIpcEvent(event))
+            throw new Error("Untrusted speech caller.");
+        const provider = getSpeechProvider();
+        return provider;
+    });
+    ipcMain.handle("local-asr-start", (event) => {
+        if (!getShellWindowForChatViewIpcEvent(event))
+            throw new Error("Untrusted speech caller.");
+        if (getSpeechProvider() !== "nemotron")
+            throw new Error("Nemotron is not the selected speech provider.");
+        return localAsrHost.start(event.sender);
+    });
+    ipcMain.handle("local-asr-append", (event, id: string, pcm: Uint8Array) => {
+        if (!getShellWindowForChatViewIpcEvent(event))
+            throw new Error("Untrusted speech caller.");
+        return localAsrHost.append(event.sender, id, pcm);
+    });
+    ipcMain.handle("local-asr-end", (event, id: string, cancel: boolean) => {
+        if (!getShellWindowForChatViewIpcEvent(event))
+            throw new Error("Untrusted speech caller.");
+        return localAsrHost.end(event.sender, id, cancel);
+    });
+    ipcMain.handle("speech-error", (event, message: string) => {
+        if (!getShellWindowForChatViewIpcEvent(event))
+            throw new Error("Untrusted speech caller.");
+        if (typeof message !== "string")
+            throw new Error("Invalid speech error.");
+        localAsrHost.reportError(message);
     });
 
     ipcMain.handle(

@@ -35,13 +35,42 @@ import {
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
 import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
 
+async function verifyDraftInventory(invoke, request, kind, revisionId) {
+    if (kind === "wiki" || kind === "projectBrief") {
+        const hidden = await invoke("memoryListViewSummaries", request);
+        assert.equal(hidden.status, 200);
+        assert.equal(hidden.body.data.total, 0);
+        const browsable = await invoke("memoryListViewSummaries", {
+            ...request,
+            includeDrafts: true,
+        });
+        assert.equal(browsable.status, 200);
+        assert.equal(browsable.body.data.total, 1);
+        assert.equal(browsable.body.data.items[0].state, "draft");
+        assert.equal(browsable.body.data.items[0].revisionId, revisionId);
+        const unpublished = await invoke("memoryGetViewPublication", request);
+        assert.equal(unpublished.status, 200);
+        assert.equal(unpublished.body.data.indexState, "absent");
+        assert.equal(unpublished.body.data.publishedRevisionId, undefined);
+    }
+    assert.equal(
+        (
+            await invoke("memoryListViewSummaries", {
+                ...request,
+                includeDrafts: "true",
+            })
+        ).status,
+        400,
+    );
+}
+
 for (const kind of [
     "troubleshootingGuide",
     "projectBrief",
     "timeline",
     "wiki",
 ]) {
-    test(`default Browser Views capability admits real ${kind} builds through HTTP/parent IPC without enablement`, async (t) => {
+    test(`default Browser Views capability admits real ${kind} draft-only builds through HTTP/parent IPC without enablement`, async (t) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "view-draft-gateway-"),
         );
@@ -67,6 +96,7 @@ for (const kind of [
             "context",
         ];
         const service = new FileMemoryService(root, {
+            discoveryPolicy: "off",
             informationalViews: kind === "projectBrief" || kind === "wiki",
             ...(kind === "projectBrief"
                 ? {
@@ -122,6 +152,9 @@ for (const kind of [
                         assert.equal(inventory, undefined);
                         return hydrateInformational(input, {
                             title: "Read only wiki",
+                            summary:
+                                "Read-only operation has no confirmed recovery and requires fresh approval.",
+                            status: "partial",
                             prose: input.inputs
                                 .map((source) => source.content)
                                 .join("\n\n"),
@@ -435,6 +468,12 @@ for (const kind of [
         }
         assert.equal(job.state, "complete", JSON.stringify(job.results));
         assert.equal(job.results[0].state, "draft");
+        await verifyDraftInventory(
+            invoke,
+            { corpusId: corpus.corpusId, viewId },
+            kind,
+            job.results[0].revisionId,
+        );
         const original = await invoke("memoryHubSourceOriginal", {
             corpusId: corpus.corpusId,
             sourceId: source.sourceId,
@@ -570,14 +609,38 @@ for (const kind of [
             ).status,
             400,
         );
-        const visible = (
+        let visible = (
             await invoke("memorySearchViews", {
                 corpusId: corpus.corpusId,
                 query: kind === "projectBrief" ? "Payments" : "Read only",
                 freshness: "current",
             })
         ).body.data;
+        assert.deepEqual(visible, []);
+        if (kind === "wiki" || kind === "projectBrief") {
+            assert.equal(
+                views.body.data.views[0].generation.input.publicationPolicy
+                    .buildOverride,
+                false,
+            );
+        }
         if (kind === "wiki") {
+            const draft = views.body.data.views[0];
+            const published = await invoke("memoryPublishView", {
+                corpusId: corpus.corpusId,
+                viewId,
+                revisionId: draft.revisionId,
+                expectedVersion: draft.version,
+                expectedHead: (await service.listViews(corpus.corpusId)).head,
+            });
+            assert.equal(published.status, 200, JSON.stringify(published.body));
+            visible = (
+                await invoke("memorySearchViews", {
+                    corpusId: corpus.corpusId,
+                    query: "Read only",
+                    freshness: "current",
+                })
+            ).body.data;
             assert.equal(visible.length, 1);
             assert.equal(
                 visible[0].view.content.construction,
@@ -611,12 +674,11 @@ for (const kind of [
             return;
         }
         if (kind === "projectBrief") {
-            assert.equal(visible.length, 1);
             assert.equal(
-                visible[0].view.content.construction,
+                views.body.data.views[0].content.construction,
                 "informational-project-summary-v1",
             );
-        } else assert.deepEqual(visible, []);
+        }
         assert.match(html, /hubDraftViews/);
         if (kind === "projectBrief") {
             const view = views.body.data.views[0];

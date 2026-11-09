@@ -2,7 +2,21 @@
 // Licensed under the MIT License.
 
 export * from "./memoryClient.js";
+export * from "./frameProtocol.js";
+export type {
+    FrameSchema,
+    FrameQueryRequest,
+    FrameQueryResult,
+    FrameProjectionStatus,
+} from "@typeagent/memory-service";
 export * from "./protocol.js";
 export * from "./viewProtocol.js";
+export * from "./viewDetailProtocol.js";
 export * from "./topicProtocol.js";
 export * from "./agentSessionProtocol.js";
+export * from "./schemaViewProtocol.js";
+export * from "./acquisitionProtocol.js";
+export * from "./inventoryProtocol.js";
+export * from "./graphProtocol.js";
+export * from "./knowledgeProtocol.js";
+export * from "./understandingProtocol.js";

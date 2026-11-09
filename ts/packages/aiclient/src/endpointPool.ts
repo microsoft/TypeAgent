@@ -105,6 +105,10 @@ export function getEndpointRootEnvVar(
     provider: ModelProviders,
     modelType: ModelType,
 ): string {
+    if (modelType === ModelType.Decision)
+        throw new Error(
+            "Native decisions require typed deployment configuration",
+        );
     if (provider === "openai") {
         return modelType === ModelType.Chat
             ? EnvVars.OPENAI_ENDPOINT

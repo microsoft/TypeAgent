@@ -14,6 +14,7 @@ import type { ConnectionStatus } from "@typeagent/chat-ui";
 import type { DisplayContent } from "@typeagent/agent-sdk";
 
 export type { ShellUserSettings };
+import type { LocalAsrEvent, SpeechProvider } from "./localAsrTypes.js";
 
 export type SpeechToken = {
     token: string;
@@ -67,6 +68,13 @@ export interface ClientAPI {
     registerClient: (client: Client) => void;
     getSpeechToken: (silent: boolean) => Promise<SpeechToken | undefined>;
     getLocalWhisperStatus: () => Promise<boolean>;
+    getSpeechProvider: () => Promise<SpeechProvider>;
+    startLocalAsr: () => Promise<string>;
+    appendLocalAsr: (sessionId: string, pcm: Uint8Array) => Promise<void>;
+    endLocalAsr: (sessionId: string, cancel: boolean) => Promise<void>;
+    onLocalAsrEvent: (callback: (event: LocalAsrEvent) => void) => () => void;
+    onSpeechProviderChanged: (callback: () => void) => () => void;
+    reportSpeechError: (message: string) => Promise<void>;
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;

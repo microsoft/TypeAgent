@@ -68,6 +68,8 @@ export function wireApiFromString(s: string | undefined): WireApi | undefined {
 export interface DeploymentEndpoint {
     /** Full chat/completions/embeddings/images URL. */
     readonly endpoint: string;
+    /** Wire model/deployment name for URLs that do not identify a deployment. */
+    readonly model?: string | undefined;
     /** Authentication for this endpoint; falls back to `defaultAuth`. */
     readonly auth: AuthMode;
     /**
@@ -331,7 +333,8 @@ export interface EmbeddingConfig {
     readonly cacheDir?: string | undefined;
     /**
      * Embedding vector size (dimensions). Used to size embedding indexes and,
-     * for hosted providers that support it, requested from the endpoint.
+     * for named OpenAI/Azure text-embedding-3 profiles, requested from the
+     * endpoint. Named Ada and unknown hosted models only validate output size.
      */
     readonly size?: number | undefined;
     /** Maximum number of inputs per embedding batch. */
@@ -345,6 +348,17 @@ export interface EmbeddingModelDefinition extends EmbeddingConfig {
     readonly model: string;
     readonly size: number;
     readonly modalities: readonly EmbeddingModality[];
+}
+
+export interface DecisionConfig {
+    readonly provider?: "inherit" | "azure" | "copilot" | undefined;
+    readonly azure?:
+        | {
+              readonly deploymentKey?: string | undefined;
+              readonly deploymentName?: string | undefined;
+          }
+        | undefined;
+    readonly copilot?: { readonly model?: string | undefined } | undefined;
 }
 
 export interface ReasoningConfig {
@@ -410,6 +424,7 @@ export interface Config {
     readonly azureFoundry?: AzureFoundryConfig | undefined;
     readonly azureAISearch?: AzureAISearchConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
+    readonly decision?: DecisionConfig | undefined;
     readonly copilot?: CopilotConfig | undefined;
     /**
      * Embedding provider selection, independent of `modelProvider`. When

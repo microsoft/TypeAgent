@@ -60,6 +60,11 @@ export type ScopeFilter = {
     entitySearchTerms?: EntityTerm[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
+    // Message time is when something was said, not when the described event happened.
+    // If the event date is unknown and is being asked for, retrieve its evidence without a date constraint.
+    timeDimension?: "message" | "event";
+    // Calendar compares source-local dates without assuming UTC. Default: calendar.
+    timeDomain: "calendar" | "instant";
 };
 
 //

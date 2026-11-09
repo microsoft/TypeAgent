@@ -11,7 +11,11 @@ import type {
 } from "./viewTypes.js";
 import type { IndexedSubjectIdentity } from "./types.js";
 import { compatibleSubjectIdentity, symbolicIdentity } from "./wikiGrouping.js";
-import { sameViewBuildEvidence } from "./viewMerge.js";
+import {
+    sameViewBuildEvidence,
+    viewBuildEvidenceFingerprint,
+    viewHash,
+} from "./viewMerge.js";
 import { viewSourceKey } from "./viewContent.js";
 import type { ViewCitation } from "./viewTypes.js";
 import {
@@ -34,7 +38,51 @@ export class WikiAssessmentRejection extends Error {
     }
 }
 
+export function wikiAssessmentKey(
+    input: ViewBuildSnapshot,
+    pages: WikiPagePurposeContext[],
+    policy: string,
+): string {
+    return viewHash({
+        recipe: "wiki-assessment-dependencies-v1",
+        evidence: viewBuildEvidenceFingerprint(input),
+        policy,
+        pages,
+    });
+}
+
+export function wikiUtilityDeferralKey(
+    input: ViewBuildSnapshot,
+    policy: string,
+): string {
+    return viewHash({
+        recipe: "wiki-utility-deferral-v1",
+        evidence: viewBuildEvidenceFingerprint(input),
+        policy,
+    });
+}
+
+export function evidenceOnlyWikiDeferral(
+    assessment: WikiSubjectAssessment,
+): boolean {
+    return (
+        assessment.disposition === "defer" &&
+        assessment.deferBasis === "evidence"
+    );
+}
+
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.
+The retrieval query and aliases define the candidate subject. Judge that subject only; do not admit an unrelated
+retrieved topic under this candidate to bypass an existing page's coverage of the queried subject.
+FIRST assess independent standalone utility: consumer value, substantive supported content and durable reference or decision value.
+Return defer when evidence is only a passing mention, generic chatter, an unsupported shell or too sparse
+for a useful explanation; zero new pages is a successful outcome. Give a concrete reason.
+This utility decision takes precedence over canonical coverage and ambiguity. A sparse candidate still returns
+defer when two or more supplied pages repeat its incidental fact; do not select a canonical page or return ambiguous.
+Only after the candidate passes independent utility should canonical coverage, contribution or ambiguity be considered.
+Judge utility from original indexed evidence, not from whether existing pages already cover it.
+Existing coverage does not make an otherwise substantive candidate sparse; assess marginal novelty during canonical comparison.
+Do not require multiple sources or user authorship: a coherent assistant explanation or single-source reference can be valuable.
 A sentence-shaped state, warning, open gate or owner-signoff mention usually contributes evidence to its existing concept.
 Admit broader/narrower pages separately only when the selected evidence supports independently useful content:
 a platform overview is distinct from application readiness only if it actually explains the platform beyond readiness.
@@ -49,10 +97,13 @@ For covered suppression, identify essential distinctions from every selected fra
 For an ordinary contribution, identify the relevant missing distinctions; irrelevant or redundant context need not acquire an invented assertion.
 Shared citations alone are not prose coverage. Empty canonicalExcerpt means a missing explanation, not coverage.
 Return contribute when the same scoped purpose belongs in a supplied canonical page but essential explanation/qualification is missing.
+If the relevant evidence adds nothing to the current page and unrelated retrieval context prevents an all-fragment
+covered proof, defer the redundant candidate with a concrete reason; do not invent a new purpose or missing distinction.
 Contribution adds that missing explanation from indexed evidence; never use model page prose as source evidence.
 Keep resource definitions and failure explanations together only if that makes an independently useful same-scope page.
 Different project/episode/statistics/cohort/units or independently useful purposes remain distinct even with identical sources.
-If multiple supplied existing pages serve this purpose, return ambiguous with their IDs; never merge/delete historical pages or choose silently.
+If an independently useful candidate has multiple supplied existing pages serving its same scoped purpose,
+return ambiguous with their IDs; never merge/delete historical pages or choose silently.
 Return distinct when it has an independently useful purpose, covers a different scope, or equivalence is unsupported.`;
 
 export function contributingSources(
@@ -139,7 +190,11 @@ export function nominateWikiPages(
             ...wikiPageContext(input, view, identities.get(view.viewId)),
             ...(identity ? { candidateIdentity: identity } : {}),
         }))
-        .filter((page) => page.sourceOverlap.shared > 0)
+        .filter(
+            (page) =>
+                page.sourceOverlap.shared > 0 ||
+                subjectOverlap(input, page) > 0,
+        )
         .sort((a, b) => {
             return (
                 Number(b.sourceOverlap.subset) -
@@ -147,15 +202,45 @@ export function nominateWikiPages(
                 b.sourceOverlap.shared / b.sourceOverlap.union -
                     a.sourceOverlap.shared / a.sourceOverlap.union ||
                 b.sharedFragmentIds.length - a.sharedFragmentIds.length ||
+                subjectOverlap(input, b) - subjectOverlap(input, a) ||
                 a.viewId.localeCompare(b.viewId)
             );
         })
         .slice(0, 8);
 }
 
+function subjectOverlap(
+    input: ViewBuildSnapshot,
+    page: WikiPagePurposeContext,
+): number {
+    const words = (text: string) =>
+        new Set(text.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+    const candidate = words(
+        [
+            input.definition.wiki?.query,
+            ...(input.definition.wiki?.aliases ?? []),
+        ].join(" "),
+    );
+    const current = words([page.query, ...page.aliases, page.title].join(" "));
+    const intersection = [...candidate].filter((word) =>
+        current.has(word),
+    ).length;
+    return intersection / Math.max(1, new Set([...candidate, ...current]).size);
+}
+
 export function wikiAssessmentSchema(
     pages: WikiPagePurposeContext[],
 ): StructuredOutputJsonSchema {
+    const fragmentIds = [
+        ...new Set(pages.flatMap((page) => page.candidateFragmentIds)),
+    ];
+    const witnessIds = [
+        ...new Set(
+            pages.flatMap((page) =>
+                wikiProseWitnesses(page.prose).map((witness) => witness.id),
+            ),
+        ),
+    ];
     return {
         name: "wiki_subject_purpose",
         strict: true,
@@ -165,7 +250,17 @@ export function wikiAssessmentSchema(
             properties: {
                 disposition: {
                     type: "string",
-                    enum: ["distinct", "covered", "contribute", "ambiguous"],
+                    enum: [
+                        "distinct",
+                        "covered",
+                        "contribute",
+                        "ambiguous",
+                        "defer",
+                    ],
+                },
+                deferBasis: {
+                    type: "string",
+                    enum: ["", "evidence", "canonical-context"],
                 },
                 purpose: { type: "string" },
                 reason: { type: "string" },
@@ -187,20 +282,38 @@ export function wikiAssessmentSchema(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                            fragmentId: { type: "string" },
+                            fragmentId: {
+                                type: "string",
+                                ...(fragmentIds.length
+                                    ? { enum: fragmentIds }
+                                    : {}),
+                            },
                             statement: { type: "string" },
-                            canonicalExcerpt: { type: "string" },
+                            canonicalExcerpt: {
+                                type: "string",
+                                enum: [""],
+                                description:
+                                    "Always empty in native output. The host resolves canonicalWitnessId to exact current page prose.",
+                            },
+                            canonicalWitnessId: {
+                                type: "string",
+                                enum: ["", ...witnessIds],
+                                description:
+                                    'Select a proseWitnesses ID from the selected canonical page. Use "" only for missing explanation.',
+                            },
                         },
                         required: [
                             "fragmentId",
                             "statement",
                             "canonicalExcerpt",
+                            "canonicalWitnessId",
                         ],
                     },
                 },
             },
             required: [
                 "disposition",
+                "deferBasis",
                 "purpose",
                 "reason",
                 "canonicalViewId",
@@ -209,6 +322,54 @@ export function wikiAssessmentSchema(
                 "ambiguousViewIds",
             ],
         },
+    };
+}
+
+export function wikiProseWitnesses(
+    prose: string,
+): Array<{ id: string; text: string }> {
+    return (prose.match(/[\s\S]{1,1000}/gu) ?? []).map((text, index) => ({
+        id: `w${index}`,
+        text,
+    }));
+}
+
+export function resolveWikiAssessmentWitnesses(
+    value: unknown,
+    pages: WikiPagePurposeContext[],
+): unknown {
+    const raw = evidenceRecord(value);
+    const canonical = pages.find((page) => page.viewId === raw.canonicalViewId);
+    const witnesses = canonical ? wikiProseWitnesses(canonical.prose) : [];
+    return {
+        ...raw,
+        essentialDistinctions: evidenceArray(raw.essentialDistinctions, 96).map(
+            (value) => {
+                const { canonicalWitnessId, ...distinction } =
+                    evidenceRecord(value);
+                if (canonicalWitnessId === undefined) return distinction;
+                if (
+                    typeof canonicalWitnessId !== "string" ||
+                    distinction.canonicalExcerpt !== ""
+                )
+                    throw new WikiAssessmentRejection(
+                        "invalid-canonical-witness-binding",
+                        {},
+                    );
+                if (canonicalWitnessId === "") return distinction;
+                const witness = witnesses.find(
+                    (entry) => entry.id === canonicalWitnessId,
+                );
+                if (!witness)
+                    throw new WikiAssessmentRejection(
+                        "canonical-witness-not-supplied",
+                        {
+                            suppliedCount: witnesses.length,
+                        },
+                    );
+                return { ...distinction, canonicalExcerpt: witness.text };
+            },
+        ),
     };
 }
 
@@ -223,6 +384,7 @@ export function parseWikiAssessment(
             (key) =>
                 ![
                     "disposition",
+                    "deferBasis",
                     "purpose",
                     "reason",
                     "canonicalViewId",
@@ -241,6 +403,7 @@ export function parseWikiAssessment(
             "covered",
             "contribute",
             "ambiguous",
+            "defer",
         ]),
         purpose: assessmentText(raw.purpose, 2000),
         reason: assessmentText(raw.reason, 4000),
@@ -251,12 +414,26 @@ export function parseWikiAssessment(
         ),
         ambiguousViewIds: assessmentIds(raw.ambiguousViewIds, 8),
     };
+    if (raw.deferBasis !== undefined && raw.deferBasis !== "") {
+        assessment.deferBasis = evidenceChoice(raw.deferBasis, [
+            "evidence",
+            "canonical-context",
+        ]);
+        if (assessment.disposition !== "defer")
+            throw new WikiAssessmentRejection(
+                "deferral-basis-without-defer",
+                {},
+            );
+    }
     validateAmbiguity(assessment, pages);
     if (assessment.disposition === "ambiguous") return assessment;
     const canonical = pages.find(
         (page) => page.viewId === assessment.canonicalViewId,
     );
-    if (assessment.disposition === "distinct") {
+    if (
+        assessment.disposition === "distinct" ||
+        assessment.disposition === "defer"
+    ) {
         if (
             assessment.canonicalViewId !== "" ||
             assessment.sharedFragmentIds.length !== 0 ||
@@ -272,10 +449,6 @@ export function parseWikiAssessment(
             throw new WikiAssessmentRejection("canonical-not-supplied", {
                 suppliedCount: pages.length,
             });
-        if (!canonical.sourceOverlap.shared)
-            throw new WikiAssessmentRejection("canonical-no-source-overlap", {
-                sharedSourceCount: canonical.sourceOverlap.shared,
-            });
         const invalid = assessment.sharedFragmentIds.filter(
             (id) => !canonical.sharedFragmentIds.includes(id),
         );
@@ -289,7 +462,7 @@ export function parseWikiAssessment(
                     .map((id) => Number(id.slice(1))),
             });
     }
-    if (canonical) validateDistinctions(assessment, canonical);
+    if (canonical) validateDistinctions(assessment, canonical, requirements);
     if (
         assessment.disposition === "covered" &&
         requirements.some(
@@ -384,12 +557,16 @@ function parseDistinctions(
 function validateDistinctions(
     assessment: WikiSubjectAssessment,
     canonical: WikiPagePurposeContext,
+    requirements: WikiSubjectAssessment["essentialDistinctions"],
 ): void {
     const distinctions = assessment.essentialDistinctions;
+    const requiredFragments = requirements.length
+        ? [...new Set(requirements.map((required) => required.fragmentId))]
+        : canonical.candidateFragmentIds;
     if (
         !canonical.candidateFragmentIds.length ||
         (assessment.disposition === "covered" &&
-            canonical.candidateFragmentIds.some(
+            requiredFragments.some(
                 (id) => !distinctions.some((item) => item.fragmentId === id),
             )) ||
         distinctions.some(
@@ -401,7 +578,7 @@ function validateDistinctions(
         )
     )
         throw new WikiAssessmentRejection("invalid-distinction-evidence", {
-            missingFragmentCount: canonical.candidateFragmentIds.filter(
+            missingFragmentCount: requiredFragments.filter(
                 (id) => !distinctions.some((item) => item.fragmentId === id),
             ).length,
             invalidFragmentCount: distinctions.filter(
@@ -414,6 +591,20 @@ function validateDistinctions(
                     (!item.canonicalExcerpt.trim() ||
                         !canonical.prose.includes(item.canonicalExcerpt)),
             ).length,
+            missingFragmentOrdinals: requiredFragments
+                .filter(
+                    (id) =>
+                        /^f\d{1,5}$/.test(id) &&
+                        !distinctions.some((item) => item.fragmentId === id),
+                )
+                .map((id) => Number(id.slice(1))),
+            invalidWitnessOrdinals: distinctions.flatMap((item, index) =>
+                item.canonicalExcerpt !== "" &&
+                (!item.canonicalExcerpt.trim() ||
+                    !canonical.prose.includes(item.canonicalExcerpt))
+                    ? [index]
+                    : [],
+            ),
         });
     const missing = distinctions.some((item) => item.canonicalExcerpt === "");
     if (

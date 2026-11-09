@@ -3,6 +3,25 @@
 
 import { CorpusAccess } from "../src/corpusAccess.js";
 
+test("background reads detach writer identity without releasing the writer", async () => {
+    let committedReads = 0;
+    const access = new CorpusAccess(undefined, {
+        read: async (operation) => {
+            committedReads++;
+            return operation();
+        },
+        publish: async () => {},
+    });
+    await access.write(async () => {
+        expect(access.isWriting).toBe(true);
+        await access.backgroundRead(async () => {
+            expect(access.isWriting).toBe(false);
+        });
+        expect(access.isWriting).toBe(true);
+    });
+    expect(committedReads).toBe(1);
+});
+
 function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>((finish) => {
@@ -90,4 +109,95 @@ test("reads queued before authorization recheck denial after the writer commits"
     await expect(access.read(async () => "eligible survivors")).resolves.toBe(
         "eligible survivors",
     );
+});
+
+test("committed reads overtake held and queued writers without exposing pending state", async () => {
+    let live = "original";
+    let committed = live;
+    const entered = deferred();
+    const release = deferred();
+    const access = new CorpusAccess(undefined, {
+        read: async (operation) => operation(),
+        publish: async () => {
+            committed = live;
+        },
+    });
+    const first = access.write(async () => {
+        live = "first";
+        entered.resolve();
+        await release.promise;
+    });
+    await entered.promise;
+    const second = access.write(async () => {
+        live = "second";
+    });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+        const value = await Promise.race([
+            access.read(async () => committed),
+            new Promise<never>((_, reject) => {
+                timeout = setTimeout(
+                    () => reject(new Error("Read waited behind a writer")),
+                    1000,
+                );
+            }),
+        ]);
+        expect(value).toBe("original");
+        expect(live).toBe("first");
+    } finally {
+        clearTimeout(timeout);
+        release.resolve();
+        await Promise.all([first, second]);
+        await access.idle();
+    }
+    expect(await access.read(async () => committed)).toBe("second");
+});
+
+test("failed writers do not publish their mutable state", async () => {
+    let committed = "original";
+    const access = new CorpusAccess(undefined, {
+        read: async (operation) => operation(),
+        publish: async () => {
+            committed = "pending";
+        },
+    });
+    await expect(
+        access.write(async () => {
+            throw new Error("Write failed");
+        }),
+    ).rejects.toThrow("Write failed");
+    expect(await access.read(async () => committed)).toBe("original");
+    await access.idle();
+});
+
+test("writers do not await committed readers and shutdown still drains them", async () => {
+    const entered = deferred();
+    const release = deferred();
+    const access = new CorpusAccess(undefined, {
+        read: async (operation) => operation(),
+        publish: async () => {},
+    });
+    const read = access.read(async () => {
+        entered.resolve();
+        await release.promise;
+    });
+    await entered.promise;
+    let published = false;
+    try {
+        await access.write(async () => {
+            published = true;
+        });
+        expect(published).toBe(true);
+        let idle = false;
+        const draining = access.idle().then(() => {
+            idle = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(idle).toBe(false);
+        release.resolve();
+        await Promise.all([read, draining]);
+    } finally {
+        release.resolve();
+        await access.idle();
+    }
 });

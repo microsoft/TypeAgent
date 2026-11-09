@@ -43,16 +43,7 @@
       "world": "MAIN"
     },
     {
-      "matches": [
-        "https://*.wsj.com/puzzles/crossword*",
-        "https://embed.universaluclick.com/*",
-        "https://data.puzzlexperts.com/puzzleapp*",
-        "https://nytsyn.pzzl.com/cwd_seattle*",
-        "https://*.seattletimes.com/games-nytimes-crossword*",
-        "https://*.denverpost.com/games/daily-crossword*",
-        "https://*.denverpost.com/puzzles/*",
-        "https://*.bestcrosswords.com/bestcrosswords/guestconstructor*"
-      ],
+      "matches": ["https://*/*", "http://localhost:9000/"],
       "js": ["sites/crossword.js"],
       "run_at": "document_start",
       "world": "MAIN"

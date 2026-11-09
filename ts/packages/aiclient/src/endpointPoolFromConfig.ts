@@ -152,6 +152,8 @@ export function discoverEndpointPoolFromConfig(
     modelType: ModelType,
     deploymentName?: string,
 ): EndpointPool {
+    if (modelType === ModelType.Decision && provider !== "azure")
+        throw new Error("Native decision pools require Azure");
     if (provider === "ollama") {
         throw new Error(
             "discoverEndpointPoolFromConfig is not applicable to ollama provider",
@@ -195,6 +197,7 @@ export function discoverEndpointPoolFromConfig(
                         modelType,
                         deploymentName,
                         endpoint.region,
+                        endpoint,
                     );
                 } catch (e: any) {
                     debugPool(

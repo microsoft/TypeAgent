@@ -81,6 +81,11 @@ interface SessionHost {
         sources: SourceReference[],
         operation: () => Promise<void>,
     ): Promise<void>;
+    withEligibleRead?(
+        corpusId: string,
+        sources: SourceReference[],
+        operation: () => Promise<void>,
+    ): Promise<void>;
 }
 
 function digest(value: unknown): string {
@@ -185,6 +190,7 @@ export class AgentSessionStore {
         { controller: AbortController; work: Promise<void> }
     >();
     private readonly writes = new Map<string, Promise<void>>();
+    private readonly checkpointWork = new Map<string, Promise<void>>();
     private readonly removed = new Set<string>();
     private readonly failures = new Map<string, Error>();
     private readonly purging = new Set<string>();
@@ -249,23 +255,41 @@ export class AgentSessionStore {
             receipt: structuredClone(stored.receipt),
             sources: structuredClone(stored.sources),
         };
-        const work = (this.writes.get(key) ?? Promise.resolve())
-            .catch(() => undefined)
-            .then(async () => {
-                await writeRunbookJson(
-                    path.join(directory, "session.json"),
-                    content,
-                    () => !this.removed.has(key),
-                );
-                if (!this.removed.has(key))
-                    this.receipts.set(key, {
-                        ...snapshot,
-                        stamp: await this.receiptStamp(directory),
-                    });
-                if (this.receipts.size > 256)
-                    this.receipts.delete(this.receipts.keys().next().value!);
-            });
+        const work = this.enqueueCheckpoint(key, async () => {
+            await writeRunbookJson(
+                path.join(directory, "session.json"),
+                content,
+                () => !this.removed.has(key),
+            );
+            if (!this.removed.has(key))
+                this.receipts.set(key, {
+                    ...snapshot,
+                    stamp: await this.receiptStamp(directory),
+                });
+            if (this.receipts.size > 256)
+                this.receipts.delete(this.receipts.keys().next().value!);
+        });
         this.writes.set(key, work);
+        return work;
+    }
+
+    private enqueueCheckpoint<T>(
+        key: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const work = (this.checkpointWork.get(key) ?? Promise.resolve()).then(
+            operation,
+        );
+        // Queue tails settle independently; callers still receive the original error.
+        const settled = work.then(
+            () => undefined,
+            () => undefined,
+        );
+        this.checkpointWork.set(key, settled);
+        void settled.then(() => {
+            if (this.checkpointWork.get(key) === settled)
+                this.checkpointWork.delete(key);
+        });
         return work;
     }
 
@@ -556,6 +580,12 @@ export class AgentSessionStore {
                             sessionId: stored.receipt.sessionId,
                             episodeId: episode.episodeId,
                             ...stored.scope,
+                            events: episode.events.map((event) => ({
+                                ...event,
+                                span: episode.spans.find(
+                                    (span) => span.eventId === event.id,
+                                ),
+                            })),
                         },
                     },
                 },
@@ -593,9 +623,40 @@ export class AgentSessionStore {
         );
     }
 
+    private withEligibleRead(
+        corpusId: string,
+        sources: SourceReference[],
+        operation: () => Promise<void>,
+    ): Promise<void> {
+        return this.host.withEligibleRead
+            ? this.host.withEligibleRead(corpusId, sources, operation)
+            : this.host.withEligible(corpusId, sources, operation);
+    }
+
     public async get(
         request: AgentSessionReadRequest,
     ): Promise<AgentSessionImportReceipt | undefined> {
+        const { key } = this.location(request);
+        const failure = this.failures.get(key);
+        if (failure) throw failure;
+        const cached = this.checkpointWork.has(key)
+            ? this.receipts.get(key)
+            : undefined;
+        const stored =
+            cached ??
+            (await this.enqueueCheckpoint(key, () =>
+                this.readReceipt(request),
+            ));
+        if (!stored) return undefined;
+        await this.withEligibleRead(
+            request.corpusId,
+            stored.sources,
+            async () => {},
+        );
+        return structuredClone(stored.receipt);
+    }
+
+    private async readReceipt(request: AgentSessionReadRequest) {
         const { key, directory } = this.location(request);
         const failure = this.failures.get(key);
         if (failure) throw failure;
@@ -619,12 +680,7 @@ export class AgentSessionStore {
             });
         if (this.receipts.size > 256)
             this.receipts.delete(this.receipts.keys().next().value!);
-        await this.host.withEligible(
-            request.corpusId,
-            stored.sources,
-            async () => {},
-        );
-        return structuredClone(stored.receipt);
+        return stored;
     }
 
     private async receiptStamp(directory: string): Promise<string> {
@@ -705,7 +761,7 @@ export class AgentSessionStore {
                 )
             )
                 continue;
-            await this.host.withEligible(
+            await this.withEligibleRead(
                 request.corpusId,
                 stored.sources,
                 async () => {
@@ -775,6 +831,7 @@ export class AgentSessionStore {
                 ?.controller.abort(
                     new Error("Agent session evidence was removed"),
                 );
+            await this.checkpointWork.get(key);
             await this.writes.get(key);
             await writeRunbookJson(
                 tombstone,
@@ -791,6 +848,7 @@ export class AgentSessionStore {
                 new Error("Agent session importer is closing"),
             );
         await Promise.all([...this.active.values()].map((entry) => entry.work));
+        await Promise.all(this.checkpointWork.values());
         await Promise.all(this.writes.values());
     }
 }

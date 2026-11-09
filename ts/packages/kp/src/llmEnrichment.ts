@@ -19,7 +19,7 @@ import { ExtractedKeyword } from "./keywordExtractor.js";
 import registerDebug from "debug";
 const debug = registerDebug("kp:enrich");
 
-const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
+const DEFAULT_MODEL = "copilot:gpt-6.1-sol";
 const DEFAULT_BATCH_SIZE = 150;
 
 export interface EnrichmentConfig {

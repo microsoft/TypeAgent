@@ -25,6 +25,45 @@ Live Azure Key Vault fetch, encrypted on-disk caching, and the
 4. `ts/config.local.yaml`
 5. `process.env` (caller-provided overrides)
 
+## Dependency installation settings
+
+`config.local.yaml` is application runtime configuration. It is loaded by
+TypeAgent entry points, not by pnpm or dependency install scripts. In particular,
+adding `FOUNDRY_LOCAL_NUGET_*` keys under `env:` can configure a running
+TypeAgent process, but cannot configure an earlier dependency installation.
+
+For source checkouts, run `node tools/scripts/setupWorktree.mjs` from `ts/`
+(or `pnpm run setup` when pnpm is already provisioned). Before installing,
+setup derives Foundry's NuGet v3 endpoint from the Azure Artifacts npm registry
+in the provisioned `.npmrc` and defaults to credential-aware `dotnet` mode.
+This requires a .NET SDK and a configured NuGet credential provider. The feed
+must have the required native package versions locally or available upstream;
+the first upstream restore requires Collaborator or higher permissions.
+npm's token helper does not authenticate NuGet.
+
+Explicit `FOUNDRY_LOCAL_NUGET_FEEDS` and `FOUNDRY_LOCAL_NUGET_MODE`
+environment variables take precedence. Setup passes the derived settings only
+to its install process; it does not persist machine configuration or credentials.
+Setup logs do not include the derived feed URL or environment-provided mode.
+Non-Azure npm registries retain the native installer's defaults.
+
+For a direct `pnpm install`, global package installation, or a standalone
+native-runtime repair, set these variables in the parent terminal first:
+
+```powershell
+$env:FOUNDRY_LOCAL_NUGET_FEEDS = 'https://pkgs.dev.azure.com/ORG/PROJECT/_packaging/FEED/nuget/v3/index.json'
+$env:FOUNDRY_LOCAL_NUGET_MODE = 'dotnet'
+pnpm install
+```
+
+`FOUNDRY_LOCAL_NUGET_FEEDS` replaces the installer's default sources, including
+public NuGet. Multiple sources use a semicolon-separated string. If using
+`FOUNDRY_LOCAL_NUGET_CONFIG` with `dotnet` mode, that NuGet config file's sources
+take precedence over the feed list; it must also use approved sources.
+Complete an interactive NuGet restore against the feed if its credential
+provider cannot authenticate silently. Azure CLI or npm sign-in alone does
+not guarantee that the NuGet provider has credentials.
+
 ## Flattening rules
 
 YAML maps are flattened into the `EnvVars` flat-key shape used by
@@ -99,6 +138,35 @@ values are nonsecret; credentials remain in the hosted provider sections.
 
 ## Usage
 
+### Native decision configuration
+
+```yaml
+decision:
+  provider: inherit # inherit | azure | copilot
+  azure:
+    deploymentKey: decision_1
+    deploymentName: decision-1
+  copilot:
+    model: gpt-6-luna-decisions
+```
+
+These fields round-trip through `buildConfig`, `configToEnv`, and YAML serialization.
+Flat names are `TYPEAGENT_DECISION_PROVIDER`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME`, and
+`TYPEAGENT_DECISION_COPILOT_MODEL`. Unsupported decision providers and empty names
+are rejected. The Azure deployment key references the existing
+`azureOpenAI.deployments` endpoint/auth pool; it is not the wire model name.
+Use HTTPS native systemone endpoints serving the configured wire deployment name.
+
+`inherit` follows the active in-memory provider override, then the explicitly
+supplied config's `modelProvider`, then Azure. Explicit factory or decision provider
+selection takes precedence. Inherited OpenAI/Ollama reports unavailable.
+Request constraints may use `azure:decision:<deploymentKey>` or
+`copilot:decision:<model>` keys, independently of chat constraints.
+
+### Chat model defaults
+
 Implicit chat selection (`createChatModel()`, `DEFAULT`, or
 `apiSettingsFromEnv()`) uses the named Azure `gpt_6_luna` deployment and its
 regional pool, even when the legacy bare endpoint points to an older model.
@@ -172,7 +240,10 @@ including unused profiles. Selection never inherits another alias's fields.
 `TYPEAGENT_DEFAULT_EMBEDDING_MODEL` overrides selection and
 `TYPEAGENT_EMBEDDING_MODELS` supplies a JSON catalog layer. YAML, flat env, typed
 config, shim and importer preserve the full catalog, not just the selected entry.
-Do not combine a selector with legacy `embedding:` fields or
-`TYPEAGENT_EMBEDDING_*` single-model overrides: migrate those fields into a named
-definition and remove the old overrides. Provider connection settings may coexist.
+When a selector is set, legacy `embedding:` fields and
+`TYPEAGENT_EMBEDDING_*` single-model overrides produce a warning and do not affect
+the selected definition, including `none`. Migrate those fields into a named
+definition and remove the old overrides. Without a selector, legacy behavior is
+unchanged. Invalid catalogs and unknown selectors still fail explicitly.
+Provider connection settings may coexist.
 Switching the selected model requires a server restart.

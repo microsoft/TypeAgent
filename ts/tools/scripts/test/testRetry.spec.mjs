@@ -17,9 +17,167 @@ import {
     buildGithubAnnotations,
     buildStepSummaryMarkdown,
     MAX_TEST_RETRIES,
+    runLocalTestPhases,
+    planPackageRetry,
+    windowsPnpmCommand,
 } from "../lib/testRetry.mjs";
 
 const cwd = "/repo/ts";
+
+const jestEsm =
+    "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js";
+
+for (const script of [
+    "pnpm run jest-esm",
+    'pnpm run jest-esm --testPathPattern=".*[.]spec[.]js"',
+    'pnpm run jest-esm --testMatch="**/dist/test/**/*.spec.js"',
+    "pnpm run jest-esm --testMatch='**/dist/test/**/*.spec.js'",
+]) {
+    test(`narrows single Jest invocation: ${script}`, () => {
+        const dir = path.resolve("packages", "a space");
+        const file = path.join(dir, "test", "a file.spec.js");
+        const plan = planPackageRetry(
+            {
+                scripts: { "test:local": script, "jest-esm": jestEsm },
+            },
+            [file, file],
+            dir,
+        );
+        assert.equal(plan.narrowed, true);
+        assert.equal(plan.cwd, dir);
+        assert.deepEqual(plan.args, [
+            "run",
+            "jest-esm",
+            "--runInBand",
+            "--no-cache",
+            "--passWithNoTests=false",
+            "--runTestsByPath",
+            file,
+        ]);
+    });
+}
+
+for (const manager of ["npm", "pnpm"]) {
+    test(`recognizes exact ${manager} Jest script alias`, () => {
+        const plan = planPackageRetry(
+            {
+                scripts: {
+                    "test:local": `${manager} run jest`,
+                    jest: "pnpm run jest-esm",
+                    "jest-esm": jestEsm,
+                },
+            },
+            ["test/a.spec.js"],
+            path.resolve("package"),
+        );
+        assert.equal(plan.narrowed, true);
+    });
+}
+
+for (const script of [
+    undefined,
+    "jest",
+    "node --test test/*.spec.mjs",
+    "jest && npm run test:views:gateway && npm run test:views:client",
+    "pnpm run build && pnpm run jest-esm",
+    "pnpm run jest-esm && node check.mjs",
+    "pnpm run jest-esm --config custom.js",
+    "pnpm run jest-esm --passWithNoTests",
+    'pnpm run jest-esm --testMatch="$PATTERN"',
+    "pnpm run jest-esm\nnode check.mjs",
+]) {
+    test(`whole-package fallback for unsupported script: ${script}`, () => {
+        const plan = planPackageRetry(
+            {
+                scripts: {
+                    "test:local": script,
+                    "jest-esm": jestEsm,
+                },
+            },
+            ["test/a.spec.js"],
+            cwd,
+        );
+        assert.equal(plan.narrowed, false);
+        assert.match(plan.reason, /not a recognized single/);
+        assert.deepEqual(plan.args, ["run", "test:local"]);
+    });
+}
+
+test("does not bypass modified wrappers or package lifecycle hooks", () => {
+    for (const overrides of [
+        { "jest-esm": `${jestEsm} && node check.mjs` },
+        { "pretest:local": "node setup.mjs" },
+        { "posttest:local": "node check.mjs" },
+        { "prejest-esm": "node setup.mjs" },
+        { postjest: "node check.mjs" },
+    ]) {
+        assert.equal(
+            planPackageRetry(
+                {
+                    scripts: {
+                        "test:local": "pnpm run jest-esm",
+                        "jest-esm": jestEsm,
+                        ...overrides,
+                    },
+                },
+                ["test/a.spec.js"],
+                cwd,
+            ).narrowed,
+            false,
+        );
+    }
+});
+
+test("does not narrow files outside the owning package", () => {
+    const packageDir = path.resolve("packages", "a");
+    const plan = planPackageRetry(
+        {
+            scripts: {
+                "test:local": "pnpm run jest-esm",
+                "jest-esm": jestEsm,
+            },
+        },
+        [path.resolve("packages", "b", "test.spec.js")],
+        packageDir,
+    );
+    assert.equal(plan.narrowed, false);
+    assert.match(plan.reason, /outside the owning package/);
+});
+
+test("quotes Windows argument boundaries, spaces and shell metacharacters", () => {
+    assert.equal(
+        windowsPnpmCommand([
+            "run",
+            "jest-esm",
+            "--runTestsByPath",
+            "D:\\repo space & files\\test\\a file.spec.js",
+        ]),
+        '"pnpm "run" "jest-esm" "--runTestsByPath" "D:\\repo space & files\\test\\a file.spec.js""',
+    );
+    for (const value of ['a"b', "%PATH%", "a\nb", "a\0b"]) {
+        assert.throws(() => windowsPnpmCommand([value]), /Unsafe argument/);
+    }
+});
+
+for (const workspaceStatus of [0, 1]) {
+    for (const scriptStatus of [0, 1]) {
+        test(`both phases run: workspace=${workspaceStatus}, scripts=${scriptStatus}`, () => {
+            const calls = [];
+            const status = runLocalTestPhases(
+                () => {
+                    calls.push("workspace including retries");
+                    return workspaceStatus;
+                },
+                () => {
+                    calls.push("scripts");
+                    return scriptStatus;
+                },
+            );
+            assert.deepEqual(calls, ["workspace including retries", "scripts"]);
+            assert.equal(status, workspaceStatus || scriptStatus);
+        });
+    }
+}
 
 test("allows two retries for three total attempts", () => {
     assert.equal(MAX_TEST_RETRIES, 2);

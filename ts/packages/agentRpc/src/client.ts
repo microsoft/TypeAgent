@@ -262,6 +262,8 @@ export async function createAgentRpcClient(
 
     const actionContextMap = createObjectMap<ActionContext<ShimContext>>();
     let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
+    const optionsReferences = new Map<unknown, number>();
+    const contextOptions = new Map<number, unknown>();
     function getOptionsCallBack(initOptions?: any) {
         const functions = getOptionsFunctions(initOptions);
         if (functions === undefined) {
@@ -270,10 +272,27 @@ export async function createAgentRpcClient(
         if (optionsRpc === undefined) {
             optionsRpc = createOptionsRpc(channelProvider, name, options);
         }
+        optionsReferences.set(
+            initOptions,
+            (optionsReferences.get(initOptions) ?? 0) + 1,
+        );
         return {
             id: optionsRpc.optionsMap.getId(initOptions),
             functions,
         };
+    }
+    function releaseOptions(initOptions: unknown) {
+        const remaining = (optionsReferences.get(initOptions) ?? 0) - 1;
+        if (remaining > 0) {
+            optionsReferences.set(initOptions, remaining);
+            return;
+        }
+        optionsReferences.delete(initOptions);
+        optionsRpc?.optionsMap.close(initOptions);
+        if (!optionsReferences.size && optionsRpc) {
+            channelProvider.deleteChannel(getOptionsChannelName(name, options));
+            optionsRpc = undefined;
+        }
     }
     function withActionContext<T>(
         actionContext: ActionContext<ShimContext>,
@@ -674,11 +693,30 @@ export async function createAgentRpcClient(
     }
 
     const agent: Required<AppAgent> = {
-        initializeAgentContext(settings?: AppAgentInitSettings) {
-            return rpc.invoke("initializeAgentContext", {
-                settings,
-                optionsCallBack: getOptionsCallBack(settings?.options),
-            });
+        async initializeAgentContext(settings?: AppAgentInitSettings) {
+            const optionsCallBack = getOptionsCallBack(settings?.options);
+            try {
+                const context = await rpc.invoke("initializeAgentContext", {
+                    settings,
+                    optionsCallBack,
+                });
+                if (optionsCallBack) {
+                    if (
+                        typeof context !== "object" ||
+                        context === null ||
+                        !("contextId" in context) ||
+                        typeof context.contextId !== "number"
+                    )
+                        throw new Error(
+                            "Agent initialization did not return a context ID",
+                        );
+                    contextOptions.set(context.contextId, settings?.options);
+                }
+                return context;
+            } catch (error) {
+                if (optionsCallBack) releaseOptions(settings?.options);
+                throw error;
+            }
         },
         updateAgentContext(
             enable,
@@ -915,12 +953,14 @@ export async function createAgentRpcClient(
             regIdsByContext.delete(contextId);
         }
         contextMap.close(context);
-        // Clean up the options RPC channel once this agent context is closed.
-        // Options are agent-scoped (created once per initializeAgentContext call)
-        // so they can be released when the context is torn down.
-        if (optionsRpc !== undefined) {
-            channelProvider.deleteChannel(getOptionsChannelName(name, options));
-            optionsRpc = undefined;
+        const agentContextId = context.agentContext?.contextId;
+        if (
+            agentContextId !== undefined &&
+            contextOptions.has(agentContextId)
+        ) {
+            const initOptions = contextOptions.get(agentContextId);
+            contextOptions.delete(agentContextId);
+            releaseOptions(initOptions);
         }
         return result;
     };

@@ -4,7 +4,10 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { FileMemoryService } from "../src/fileMemoryService.js";
+import {
+    FileMemoryService,
+    type FileMemoryServiceOptions,
+} from "../src/fileMemoryService.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
@@ -13,6 +16,7 @@ import {
     indexedLocator,
     parseIndexedLocator,
     selectIndexedFragments,
+    type IndexedBlock,
 } from "../src/indexedFragments.js";
 import { validateViewDraft } from "../src/viewValidation.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
@@ -31,6 +35,7 @@ import { wikiIndex } from "../src/viewContent.js";
 import { reserveSerializedRequest, type ChatModel } from "@typeagent/aiclient";
 import { TypedViewStore } from "../src/viewStore.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
+import { parseTemporalValue } from "@typeagent/knowpro";
 
 test("wiki and project summaries preserve semantic warnings and source dates across host clocks", () => {
     const input: ViewBuildSnapshot = {
@@ -69,12 +74,20 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
     };
     const value = {
         title: "Dated original",
+        summary: "Source recorded 2026-10-12.",
+        status: "partial",
         prose: "Source recorded 2026-10-12.",
         limits: "Owner approval unknown. Updated source note: 2026-10-12",
         citationIds: ["f0"],
     };
     const project = {
         ...value,
+        completeness: "partial",
+        assignments: [],
+        milestoneItems: [],
+        decisionItems: [],
+        openQuestions: [],
+        riskItems: [],
         goalsScope: value.prose,
         owners: "Unknown",
         status: "Pending",
@@ -96,11 +109,28 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         clock.setSystemTime(new Date("2026-10-14T00:00:00Z"));
         expect(hydrateInformational(input, value)).toEqual(wiki);
         expect(hydrateProjectSummary(input, project)).toEqual(brief);
-        expect(wiki.content.summary).toBe(
-            `Limited summary: selected indexed fragments only; ${value.limits}. Search sources or retry a deeper bounded refresh.`,
-        );
+        expect(wiki.content.summary).toBe(value.summary);
+        expect(wiki.content.coverageNote).toBe(value.limits);
+        expect(wiki.content.status).toBe("partial");
+        expect(
+            hydrateInformational(input, { ...value, status: "sufficient" })
+                .content.status,
+        ).toBe("sufficient");
+        expect(() =>
+            hydrateInformational(input, { ...value, status: undefined }),
+        ).toThrow("summary and completeness");
+        expect(() =>
+            hydrateInformational(input, { ...value, summary: undefined }),
+        ).toThrow();
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
+        expect(brief.content.status).toBe("partial");
+        expect(() =>
+            hydrateProjectSummary(input, {
+                ...project,
+                assignments: undefined,
+            }),
+        ).toThrow();
     } finally {
         clock.useRealTimers();
     }
@@ -125,7 +155,11 @@ async function waitForViewBuild(
 }
 
 class MockIndexedCorpus extends FakeSemanticCorpusIndex {
+    public static messageTime: string | undefined;
+    public static fragmentRequests: IndexedFragmentRequest[] = [];
     public static subjects = ["acquisition"];
+    public static subjectOffsets: number[] = [];
+    public static graphSubjects = false;
     public static initiatives: string[] = [];
     public static subjectDetails: Record<string, Partial<IndexedSubject>> = {};
     public static languageSearches = 0;
@@ -138,6 +172,7 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
         return super.search(query, limit, tags);
     }
     public async listSubjects(offset = 0, limit = 48) {
+        MockIndexedCorpus.subjectOffsets.push(offset);
         const next = offset + limit;
         return {
             total: MockIndexedCorpus.subjects.length,
@@ -157,7 +192,22 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
                 : {}),
         };
     }
+    public override async getKnowledgeGraph() {
+        if (!MockIndexedCorpus.graphSubjects) return super.getKnowledgeGraph();
+        return {
+            entities: [],
+            relationships: [],
+            topics: MockIndexedCorpus.subjects.map((name) => ({
+                name,
+                sourceIds: this.documents.map(
+                    (document) => document.source.sourceId,
+                ),
+                mentionCount: 1,
+            })),
+        };
+    }
     public async readFragments(request: IndexedFragmentRequest) {
+        MockIndexedCorpus.fragmentRequests.push(structuredClone(request));
         const terms = request.terms
             .flatMap(
                 (term) =>
@@ -171,13 +221,34 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
                         document.content.toLocaleLowerCase().includes(term),
                     ),
                 )
-                .map((document) => ({
-                    sourceId: document.source.sourceId,
-                    revisionId: document.revision.revisionId,
-                    blockOrdinal: 0,
-                    text: document.content,
-                    score: 1,
-                })),
+                .map(
+                    (document): IndexedBlock => ({
+                        sourceId: document.source.sourceId,
+                        revisionId: document.revision.revisionId,
+                        blockOrdinal: 0,
+                        text: document.content,
+                        score: 1,
+                        ...(MockIndexedCorpus.messageTime
+                            ? {
+                                  temporalContext: {
+                                      version: 1,
+                                      sourceRevisionId:
+                                          document.revision.revisionId,
+                                      contextHash: "mock-source-owned-context",
+                                      ownerId: "source-message",
+                                      sourceSpan: {
+                                          start: 0,
+                                          end: document.content.length,
+                                      },
+                                      messageTime: parseTemporalValue(
+                                          MockIndexedCorpus.messageTime,
+                                      ),
+                                      inheritedDateEvidence: [],
+                                  },
+                              }
+                            : {}),
+                    }),
+                ),
             request,
         );
     }
@@ -217,11 +288,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     let service: FileMemoryService;
     let generated = 0;
     let failNext = false;
-    let beforeGeneration: (() => Promise<void>) | undefined;
+    let beforeGeneration:
+        | ((input: ViewBuildSnapshot) => Promise<void>)
+        | undefined;
     let indexedAnswerModel: ChatModel | undefined;
     let rehearsalBudget = true;
+    let maintenanceMode: "automatic" | "manual" = "automatic";
+    let maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     let summaryLimits =
         "Only selected indexed evidence; owner approval unknown";
+    let generatedSummary = "Acquisition has a scoped approval process.";
     const adapter: ViewSynthesisAdapter = {
         identity: "mock-informational",
         checkEditorial: async () => ({ safe: true, failures: [] }),
@@ -237,9 +313,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 failNext = false;
                 throw new Error("Injected synthesis failure");
             }
-            await beforeGeneration?.();
+            await beforeGeneration?.(input);
             if (input.pipeline === "informational-project-summary-v1") {
                 return hydrateProjectSummary(input, {
+                    summary: "Grounded project summary.",
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     title:
                         input.editorial?.generatedBase.content.title ??
                         input.definition.projectSummary?.query ??
@@ -263,6 +346,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 });
             }
             return hydrateInformational(input, {
+                summary: generatedSummary,
+                status: "partial",
                 title: "Acquisition",
                 prose: input.inputs
                     .map((source) => source.content)
@@ -279,6 +364,9 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     };
     const open = () =>
         new FileMemoryService(root, {
+            maintenanceMode,
+            ...(maintenanceLimits ? { maintenanceLimits } : {}),
+            discoveryPolicy: "off",
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
@@ -301,16 +389,24 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 : {}),
         });
     beforeEach(async () => {
+        delete adapter.assessWikiSubject;
+        MockIndexedCorpus.messageTime = undefined;
+        MockIndexedCorpus.fragmentRequests = [];
         MockIndexedCorpus.subjects = ["acquisition"];
+        MockIndexedCorpus.subjectOffsets = [];
+        MockIndexedCorpus.graphSubjects = false;
         MockIndexedCorpus.initiatives = [];
         MockIndexedCorpus.subjectDetails = {};
         generated = 0;
         summaryLimits =
             "Only selected indexed evidence; owner approval unknown";
+        generatedSummary = "Acquisition has a scoped approval process.";
         failNext = false;
         beforeGeneration = undefined;
         indexedAnswerModel = undefined;
         rehearsalBudget = true;
+        maintenanceMode = "automatic";
+        maintenanceLimits = undefined;
         root = path.resolve(".wiki-unit-owned", randomUUID());
         await mkdir(root, { recursive: true });
         service = open();
@@ -357,10 +453,289 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             corpusId,
             source: { sourceId, sourceType: "text", title: sourceId, text },
         });
-        expect((await waitForMemoryJob(service, receipt.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, receipt.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
     }
+
+    test("exact native wiki reads can disable corpus-wide contextual expansion without changing the default", async () => {
+        maintenanceMode = "manual";
+        await service.close();
+        service = open();
+        const { corpusId } = await service.createCorpus("Scoped native reader");
+        await add(
+            corpusId,
+            "original",
+            "acquisition owner approval withheld; cutover remains unauthorized.",
+        );
+        const source = (await service.getSource(corpusId, "original"))!;
+        const snapshot = await service.listViews(corpusId);
+        const job = await service.buildViews({
+            corpusId,
+            expectedHead: snapshot.head,
+            publication: false,
+            targets: [
+                {
+                    expectedVersion: 0,
+                    definition: {
+                        viewId: "scoped-wiki",
+                        kind: "wiki",
+                        selector: {
+                            kind: "sources",
+                            sources: [
+                                {
+                                    sourceId: "original",
+                                    revisionId: source.activeRevisionId!,
+                                },
+                            ],
+                        },
+                        wiki: {
+                            construction: "informational-wiki-v1",
+                            query: "acquisition",
+                            aliases: [],
+                            excludedSourceIds: [],
+                        },
+                    },
+                },
+            ],
+        });
+        expect((await waitForViewBuild(service, job)).state).toBe("complete");
+        const current = (await service.listViews(corpusId)).views[0];
+        const store = service["viewStore"];
+        const originalList = store.listViews;
+        let contextualReads = 0;
+        store.listViews = (...args: Parameters<typeof originalList>) => {
+            contextualReads++;
+            return originalList.apply(store, args);
+        };
+        const exact = await service.getView({
+            corpusId,
+            viewId: current.viewId,
+            revisionId: current.revisionId,
+            includeContext: false,
+        });
+        expect(exact?.revisionId).toBe(current.revisionId);
+        expect(exact?.content).toEqual(current.content);
+        expect(exact).not.toHaveProperty("relatedArticles");
+        expect(contextualReads).toBe(0);
+        await service.getView({
+            corpusId,
+            viewId: current.viewId,
+            revisionId: current.revisionId,
+        });
+        expect(contextualReads).toBeGreaterThan(0);
+        store.listViews = originalList;
+    });
+
+    test.each(["wiki", "project"] as const)(
+        "explicit unpublished %s build remains unindexed through inspection/edit/restart until manual publication",
+        async (kind) => {
+            maintenanceMode = "manual";
+            rehearsalBudget = false;
+            await service.close();
+            service = open();
+            const { corpusId } = await service.createCorpus("Draft governance");
+            await add(
+                corpusId,
+                "original",
+                "Acquisition owner approval is withheld.",
+            );
+            const source = (await service.getSource(corpusId, "original"))!;
+            const definition = (viewId: string) => ({
+                viewId,
+                kind:
+                    kind === "wiki"
+                        ? ("wiki" as const)
+                        : ("projectBrief" as const),
+                selector: {
+                    kind: "sources" as const,
+                    sources: [
+                        {
+                            sourceId: "original",
+                            revisionId: source.activeRevisionId!,
+                        },
+                    ],
+                },
+                ...(kind === "wiki"
+                    ? {
+                          wiki: {
+                              construction: "informational-wiki-v1" as const,
+                              query: "Acquisition",
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }
+                    : {
+                          projectSummary: {
+                              construction:
+                                  "informational-project-summary-v1" as const,
+                              query: "Acquisition",
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }),
+            });
+            const admitted = await service.buildViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                publication: false,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: definition("unpublished"),
+                    },
+                ],
+            });
+            const complete = await waitForViewBuild(service, admitted);
+            expect(complete.state).toBe("complete");
+            expect(
+                complete.results[0].snapshot.publicationPolicy,
+            ).toMatchObject({
+                buildOverride: false,
+                origin: "build",
+                autoPublish: false,
+            });
+            const assertUnpublished = async () => {
+                const current = (await service.getView({
+                    corpusId,
+                    viewId: "unpublished",
+                    includeContext: false,
+                }))!;
+                expect(current.state).toBe("draft");
+                const summaryRequest = {
+                    corpusId,
+                    viewId: current.viewId,
+                };
+                expect(
+                    (await service.listViewSummaries(summaryRequest)).items,
+                ).toEqual([]);
+                expect(
+                    (
+                        await service.listViewSummaries({
+                            ...summaryRequest,
+                            includeDrafts: false,
+                        })
+                    ).items,
+                ).toEqual([]);
+                const draftSummaries = await service.listViewSummaries({
+                    ...summaryRequest,
+                    includeDrafts: true,
+                });
+                expect(draftSummaries.total).toBe(1);
+                expect(draftSummaries.items).toHaveLength(1);
+                expect(draftSummaries.items[0]).toMatchObject({
+                    viewId: current.viewId,
+                    revisionId: current.revisionId,
+                    state: "draft",
+                    publication: { indexState: "absent" },
+                });
+                const publication = await service.getViewPublication({
+                    corpusId,
+                    viewId: current.viewId,
+                });
+                expect(publication.publishedRevisionId).toBeUndefined();
+                expect(publication.indexedRevisionId).toBeUndefined();
+                expect(publication.indexState).toBe("absent");
+                expect(
+                    await service.searchViews({
+                        corpusId,
+                        query: "Acquisition",
+                        freshness: "current",
+                    }),
+                ).toEqual([]);
+                await expect(
+                    service["viewStore"].makeInformationalVisible(current),
+                ).rejects.toThrow("explicit draft-only build override");
+                return current;
+            };
+            let current = await assertUnpublished();
+            await service.listViews(corpusId);
+            await service.getView({ corpusId, viewId: current.viewId });
+            const edited = await service.saveViewDraft({
+                corpusId,
+                viewId: current.viewId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                expectedVersion: current.version,
+                definition: derivedDefinitionInput(current),
+                content: current.content,
+                relationships: authoredRelationships(current),
+            });
+            expect(
+                edited.version.generation?.input?.publicationPolicy
+                    ?.buildOverride,
+            ).toBe(false);
+            await assertUnpublished();
+            await service.close();
+            service = open();
+            current = await assertUnpublished();
+            const normal = await service.buildViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                targets: [
+                    { expectedVersion: 0, definition: definition("normal") },
+                ],
+            });
+            expect((await waitForViewBuild(service, normal)).state).toBe(
+                "complete",
+            );
+            const normalPublication = await service.getViewPublication({
+                corpusId,
+                viewId: "normal",
+            });
+            expect(normalPublication.publishedRevisionId).toBeDefined();
+            expect(normalPublication.indexState).toBe("ready");
+            const normalView = (await service.getView({
+                corpusId,
+                viewId: "normal",
+            }))!;
+            expect(
+                normalView.relatedArticles?.some(
+                    (article) => article.viewId === "unpublished",
+                ),
+            ).toBe(false);
+            const manual = await service.publishView({
+                corpusId,
+                viewId: current.viewId,
+                revisionId: current.revisionId,
+                expectedHead: (await service.listViews(corpusId)).head!,
+                expectedVersion: current.version,
+            });
+            expect(manual.publishedRevisionId).toBe(current.revisionId);
+            expect(manual.indexedRevisionId).toBe(current.revisionId);
+            expect(manual.indexState).toBe("ready");
+            expect(
+                (
+                    await service.searchViews({
+                        corpusId,
+                        query: "Acquisition",
+                        freshness: "current",
+                    })
+                ).some((match) => match.view.viewId === current.viewId),
+            ).toBe(true);
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "original",
+            );
+            await service.forgetSource({
+                corpusId,
+                sourceId: "original",
+                confirmationToken: preview.confirmationToken,
+            });
+            expect(
+                (
+                    await service.listViewSummaries({
+                        corpusId,
+                        viewId: current.viewId,
+                        includeDrafts: true,
+                    })
+                ).items,
+            ).toEqual([]);
+        },
+    );
 
     test("public draft summary authorship is protected against a substantive new generated proposal", async () => {
         const { corpusId } = await service.createCorpus("Human summary");
@@ -394,6 +769,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(humanEdit.newValue).toBe(content.summary);
         summaryLimits =
             "Owner approval withheld; production cutover is not authorized";
+        generatedSummary =
+            "Acquisition production cutover is not authorized pending owner review.";
         await add(
             corpusId,
             "qualification",
@@ -817,8 +1194,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const admitted = await admitFreshBuild(request);
             expect(admitted.results[0].snapshot.model).toBe(
                 family === "wiki"
-                    ? "mock-informational:wiki-source-contribution-v4:editorial-v1:indexed-evidence-v2"
-                    : "mock-informational:project-attribution-v4:editorial-v1:indexed-evidence-v2",
+                    ? "mock-informational:wiki-source-contribution-v6:editorial-v1:indexed-evidence-v2"
+                    : "mock-informational:project-attribution-v6:editorial-v1:indexed-evidence-v2",
             );
             expect((await service.buildViews(request)).jobId).toBe(
                 admitted.jobId,
@@ -877,6 +1254,104 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             failed?.viewId,
         );
         await waitForViewBuild(service, next.job!);
+    });
+
+    test("automatic partial builds retain their errors while independent targets and retries settle", async () => {
+        const release = service.deferMaintenance();
+        const corpusId = (await service.createCorpus("Automatic fair backlog"))
+            .corpusId;
+        try {
+            MockIndexedCorpus.subjects = Array.from(
+                { length: 13 },
+                (_, i) => `acquisition candidate ${i}`,
+            );
+            await add(
+                corpusId,
+                "source",
+                MockIndexedCorpus.subjects
+                    .map(
+                        (subject) =>
+                            `${subject} is a distinct acquisition condition and awaits its own review.`,
+                    )
+                    .join("\n\n"),
+            );
+            failNext = true;
+        } finally {
+            release();
+        }
+        expect((await service.drainMaintenance(15_000)).settled).toBe(true);
+        const jobs = await service.listViewBuilds(corpusId);
+        const partial = jobs.find((job) => job.state === "partial");
+        expect(partial).toBeDefined();
+        expect(
+            partial?.results.find((result) => result.state === "failed")
+                ?.reason,
+        ).toContain("Injected synthesis failure");
+        expect(
+            jobs.some(
+                (job) =>
+                    job.state === "complete" &&
+                    job.results[0]?.snapshot.definition.wiki?.query ===
+                        "acquisition candidate 12",
+            ),
+        ).toBe(true);
+        expect((await service.listViews(corpusId)).views).toHaveLength(13);
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId)).dirty,
+        ).toBe(false);
+        expect(generated).toBe(14);
+    });
+
+    test("automatic target failures remain visible after bounded retries without starving independent targets", async () => {
+        const release = service.deferMaintenance();
+        const corpusId = (await service.createCorpus("Bounded failed backlog"))
+            .corpusId;
+        try {
+            MockIndexedCorpus.subjects = Array.from(
+                { length: 13 },
+                (_, i) => `acquisition candidate ${i}`,
+            );
+            beforeGeneration = async (input) => {
+                if (
+                    input.definition.wiki?.query ===
+                    MockIndexedCorpus.subjects[0]
+                )
+                    throw new Error("Persistent synthesis failure");
+            };
+            await add(
+                corpusId,
+                "source",
+                MockIndexedCorpus.subjects
+                    .map(
+                        (subject) =>
+                            `${subject} is a distinct acquisition condition and awaits its own review.`,
+                    )
+                    .join("\n\n"),
+            );
+        } finally {
+            release();
+        }
+        const status = await service.drainMaintenance(15_000);
+        expect(status.settled).toBe(false);
+        expect(status.reason).toBeUndefined();
+        expect(status.pending).toEqual([]);
+        expect(status.running).toEqual([]);
+        expect(status.failures).toHaveLength(1);
+        const jobs = await service.listViewBuilds(corpusId);
+        expect(
+            jobs
+                .flatMap((job) => job.results)
+                .filter((result) =>
+                    result.reason.includes("Persistent synthesis failure"),
+                ),
+        ).toHaveLength(2);
+        expect((await service.listViews(corpusId)).views).toHaveLength(12);
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId)).dirty,
+        ).toBe(false);
+        expect(generated).toBe(14);
+        expect((await service.drainMaintenance(2_000)).reason).toBeUndefined();
+        expect(generated).toBe(14);
     });
 
     test("published informational search uses one current snapshot and indexed postings without per-page language inference", async () => {
@@ -1018,13 +1493,11 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             view.content.sections.map((section) => section.body).join(" "),
         ).not.toContain("gardening");
         expect(
-            (
-                await service.getViewPublication({
-                    corpusId,
-                    viewId: view.viewId,
-                })
-            )?.indexState,
-        ).toBe("ready");
+            await service.getViewPublication({
+                corpusId,
+                viewId: view.viewId,
+            }),
+        ).toEqual(expect.objectContaining({ indexState: "ready" }));
         const editedContent = structuredClone(view.content);
         editedContent.title = "Human project title";
         const status = editedContent.sections.find(
@@ -1068,22 +1541,313 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(edited.edits?.length).toBeGreaterThan(0);
     });
 
-    test.each([false, true])(
-        "normal source answer consumes exact expanded fragments with rehearsal envelope=%s (mock model)",
-        async (budgetEnabled) => {
+    test("bounded automatic reads advance past scoped deferrals without repeating or exceeding the read budget", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            assessed.push(input.definition.wiki!.query);
+            return {
+                disposition: "defer",
+                purpose: "Only limited evidence",
+                reason: "Insufficient evidence for an article",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        service = open();
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        const { corpusId } = await service.createCorpus(
+            "Bounded scoped deferrals",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition review is pending. capacity approval is withheld.",
+        );
+        const status = await service.drainMaintenance(10_000);
+        expect(status.settled).toBe(true);
+        expect(assessed).toEqual(["acquisition", "capacity"]);
+        expect(generated).toBe(0);
+        const family = await new TypedViewStore(root).getWikiFamily(corpusId);
+        expect(family.automaticPasses?.count).toBe(2);
+        expect(family.candidateReadCursor).toBeUndefined();
+        await service.close();
+        service = open();
+        expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+        expect(assessed).toHaveLength(2);
+        const preview = await service.previewForgetSource(corpusId, "source");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "source",
+            confirmationToken: preview.confirmationToken,
+        });
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId))
+                .candidateReadCursor,
+        ).toBeUndefined();
+    });
+
+    test.each(["paged discovery", "canonical publication"])(
+        "bounded reads reach every candidate across %s",
+        async (change) => {
+            await service.close();
+            maintenanceMode = "manual";
+            maintenanceLimits = {
+                maxCandidatesPerPass: 1,
+                maxTargetsPerPass: 2,
+                maxPassesPerGeneration: 3,
+            };
+            rehearsalBudget = false;
+            const assessed: string[] = [];
+            adapter.assessWikiSubject = async (input) => {
+                const query = input.definition.wiki!.query;
+                assessed.push(query);
+                return {
+                    disposition:
+                        change === "canonical publication" &&
+                        query === "acquisition"
+                            ? "distinct"
+                            : "defer",
+                    purpose: "Independent selected subject",
+                    reason: "Only selected indexed evidence",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
+            };
+            MockIndexedCorpus.subjects = [
+                "acquisition",
+                "capacity",
+                "incident",
+            ];
+            MockIndexedCorpus.graphSubjects = true;
+            const clock = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const list = MockIndexedCorpus.prototype.listSubjects;
+            const paging =
+                change === "paged discovery"
+                    ? clock
+                          .spyOn(MockIndexedCorpus.prototype, "listSubjects")
+                          .mockImplementation(function (
+                              this: MockIndexedCorpus,
+                              offset = 0,
+                          ) {
+                              return list.call(this, offset, 1);
+                          })
+                    : undefined;
+            service = open();
+            try {
+                const { corpusId } = await service.createCorpus(
+                    "Changing bounded scan",
+                );
+                await add(
+                    corpusId,
+                    "source",
+                    "acquisition review is pending. capacity approval is withheld. incident follow-up is pending.",
+                );
+                expect((await service.drainMaintenance(10_000)).settled).toBe(
+                    true,
+                );
+                expect(assessed).toEqual([
+                    "acquisition",
+                    "capacity",
+                    "incident",
+                ]);
+                expect(generated).toBe(
+                    change === "canonical publication" ? 1 : 0,
+                );
+                expect(
+                    (await new TypedViewStore(root).getWikiFamily(corpusId))
+                        .automaticPasses?.count,
+                ).toBe(3);
+            } finally {
+                paging?.mockRestore();
+            }
+        },
+    );
+
+    test("a bounded scan revisits a deferral when a later candidate publishes nominated context", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            const query = input.definition.wiki!.query;
+            assessed.push(query);
+            return {
+                disposition: query === "capacity" ? "distinct" : "defer",
+                purpose: "Independent selected subject",
+                reason: "Only selected indexed evidence",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        service = open();
+        const { corpusId } = await service.createCorpus(
+            "Changed nominated context",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition review is pending. capacity approval is withheld.",
+        );
+        expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+        expect(assessed).toEqual(["acquisition", "capacity", "acquisition"]);
+        expect(generated).toBe(1);
+        const family = await new TypedViewStore(root).getWikiFamily(corpusId);
+        expect(family.dirty).toBe(false);
+        expect(family.candidateReadCursor).toBeUndefined();
+    });
+
+    test("an admission failure leaves its bounded candidate retryable across reopen", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            assessed.push(input.definition.wiki!.query);
+            return {
+                disposition: "defer",
+                purpose: "Only limited evidence",
+                reason: "Insufficient evidence for an article",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const original = TypedViewStore.prototype.admitViewBuild;
+        let admissions = 0;
+        const admission = clock
+            .spyOn(TypedViewStore.prototype, "admitViewBuild")
+            .mockImplementation(async function (
+                this: TypedViewStore,
+                ...args: Parameters<typeof original>
+            ) {
+                if (++admissions === 2)
+                    throw new Error("Controlled admission failure");
+                return original.apply(this, args);
+            });
+        service = open();
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Retry bounded admission",
+            );
+            await add(
+                corpusId,
+                "source",
+                "acquisition review is pending. capacity approval is withheld.",
+            );
+            const status = await service.drainMaintenance(10_000);
+            expect(status.failures.map((entry) => entry.error)).toContain(
+                "Controlled admission failure",
+            );
+            expect(assessed).toEqual(["acquisition"]);
+            const family = await new TypedViewStore(root).getWikiFamily(
+                corpusId,
+            );
+            expect(family.candidateReadCursor?.visitedViewIds).toEqual([
+                family.descriptors.find(
+                    (entry) => entry.query === "acquisition",
+                )!.viewId,
+            ]);
+            admission.mockRestore();
+            await service.close();
+            service = open();
+            expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+            expect(assessed).toEqual(["acquisition", "capacity"]);
+        } finally {
+            admission.mockRestore();
+        }
+    });
+
+    test("automatic candidate budgets retain deferred work across restart without hiding source facts", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxTargetsPerPass: 1,
+            maxCandidatesPerPass: 1,
+            maxPassesPerGeneration: 1,
+        };
+        rehearsalBudget = false;
+        service = open();
+        MockIndexedCorpus.subjects = ["acquisition", "capacity", "incident"];
+        const { corpusId } = await service.createCorpus(
+            "Bounded autonomous work",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition owner approval is withheld. capacity remains limited. incident review is pending.",
+        );
+        const status = await service.drainMaintenance(10_000);
+        expect(status.settled).toBe(false);
+        expect(status.reason).toBe("budget");
+        expect(
+            status.deferred.some((entry) => entry.key === `${corpusId}:wiki`),
+        ).toBe(true);
+        expect(generated).toBe(1);
+        expect((await service.listViews(corpusId)).views).toHaveLength(1);
+        expect(
+            (await service.getSourceContent({ corpusId, sourceId: "source" }))
+                .content,
+        ).toContain("incident review is pending");
+        await service.close();
+        service = open();
+        const resumed = await service.drainMaintenance(10_000);
+        expect(resumed.reason).toBe("budget");
+        expect(generated).toBe(1);
+    });
+
+    test.each([
+        [false, "automatic"],
+        [true, "automatic"],
+        [false, "manual"],
+        [true, "manual"],
+    ] as const)(
+        "normal source answer consumes exact expanded fragments with rehearsal envelope=%s and maintenance=%s (mock model)",
+        async (budgetEnabled, mode) => {
             await service.close();
             rehearsalBudget = budgetEnabled;
+            maintenanceMode = mode;
             let prompt = "";
+            let answerCalls = 0;
             indexedAnswerModel = {
                 completionSettings: {},
                 complete: async (input) => {
+                    answerCalls++;
                     prompt = JSON.stringify(input);
                     return {
                         success: true,
                         data: JSON.stringify({
                             status: "answered",
                             answer: "Mock source-only answer",
-                            citationIds: ["f0"],
+                            evidenceIds: ["s0"],
                         }),
                     };
                 },
@@ -1091,6 +1855,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             service = open();
             const corpusId = (await service.createCorpus("Source answer mocks"))
                 .corpusId;
+            MockIndexedCorpus.messageTime = "2024/01/07 12:00";
             await update(corpusId, "pause");
             await add(
                 corpusId,
@@ -1100,10 +1865,46 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const result = await service.answer({
                 corpusId,
                 question: "Acquisition",
-                answerMode: "synthesized",
+                temporalContext: {
+                    referenceTime: "2024/02/01 12:00",
+                    availabilityPolicy: "supplied-history",
+                },
+                includeDiagnostics: true,
             });
 
             expect(prompt).toContain("governing qualification");
+            expect(prompt).toContain("2024/02/01 12:00");
+            expect(prompt).toContain("2024/01/07 12:00");
+            expect(result.citations[0].temporalContext?.messageTime).toEqual(
+                parseTemporalValue("2024/01/07 12:00"),
+            );
+            expect(
+                MockIndexedCorpus.fragmentRequests.find(
+                    (request) => request.query === "Acquisition",
+                )?.temporalContext,
+            ).toEqual({
+                referenceTime: parseTemporalValue("2024/02/01 12:00"),
+                availabilityPolicy: "supplied-history",
+            });
+            expect(result.readerContext?.answerPath).toBe("sources-and-views");
+            const suppliedSources =
+                result.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
+            expect(suppliedSources[0].snippet).toContain(
+                "governing qualification",
+            );
+            expect(
+                result.readerContext?.integratedAnswer?.selectedEvidenceIds,
+            ).toEqual(["s0"]);
+            await expect(
+                service.answer({
+                    corpusId,
+                    question: "Acquisition",
+                    temporalContext: { availabilityPolicy: "as-of" },
+                }),
+            ).rejects.toThrow("Strict as-of");
+            expect(answerCalls).toBe(1);
             expect(result.mode).toBe("synthesized");
             expect(result.citations[0].locator).toMatch(/^indexed:/);
             expect(
@@ -1119,6 +1920,321 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
+    test.each(["answered", "noAnswer"] as const)(
+        "default answer performs only one scoped evidence refinement and preserves final status %s",
+        async (finalStatus) => {
+            let calls = 0;
+            indexedAnswerModel = {
+                completionSettings: {},
+                complete: async (input) => {
+                    calls++;
+                    const prompt = JSON.stringify(input);
+                    if (typeof input === "string")
+                        throw new Error("Expected typed answer messages");
+                    const content = input[input.length - 1].content;
+                    if (typeof content !== "string")
+                        throw new Error("Expected serialized answer evidence");
+                    const envelope: {
+                        evidence: { kind: string; id: string }[];
+                    } = JSON.parse(content);
+                    if (calls === 2) {
+                        expect(prompt).toContain("Property price 200000");
+                        expect(prompt).toContain("Renovation cost 20000");
+                        expect(prompt).not.toContain("Foreign price 999999");
+                    }
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            status: calls === 1 ? "noAnswer" : finalStatus,
+                            answer:
+                                calls === 1
+                                    ? "Missing price"
+                                    : "Final response",
+                            evidenceIds:
+                                calls === 2 && finalStatus === "answered"
+                                    ? envelope.evidence
+                                          .filter(
+                                              (item) => item.kind === "source",
+                                          )
+                                          .map((item) => item.id)
+                                    : [],
+                            retrievalQueries:
+                                calls === 1 || finalStatus === "noAnswer"
+                                    ? ["property price"]
+                                    : [],
+                        }),
+                    };
+                },
+            };
+            await service.close();
+            service = open();
+            const corpusId = (await service.createCorpus("Refinement"))
+                .corpusId;
+            await update(corpusId, "pause");
+            await add(corpusId, "cost", "Renovation cost 20000");
+            await add(corpusId, "price", "Property price 200000");
+            await add(corpusId, "foreign", "Foreign price 999999");
+            const result = await service.answer({
+                corpusId,
+                question: "Renovation cost",
+                sourceIds: ["cost", "price"],
+                includeDiagnostics: true,
+                limit: 4,
+                temporalContext: {
+                    referenceTime: "2024/02/01 12:00",
+                    availabilityPolicy: "supplied-history",
+                },
+            });
+            expect(calls).toBe(2);
+            expect(
+                result.readerContext?.integratedAnswer?.refinement?.queries,
+            ).toEqual(["property price"]);
+            expect(
+                result.readerContext?.integratedAnswer?.refinement
+                    ?.initialEvidence,
+            ).toHaveLength(1);
+            expect(
+                result.readerContext?.integratedAnswer?.suppliedEvidence,
+            ).toHaveLength(2);
+            const followup = MockIndexedCorpus.fragmentRequests.find(
+                (request) => request.query === "property price",
+            )!;
+            expect(followup.sourceIds).toEqual(["cost", "price"]);
+            expect(followup.temporalContext?.availabilityPolicy).toBe(
+                "supplied-history",
+            );
+            expect(result.citations).toHaveLength(
+                finalStatus === "answered" ? 2 : 0,
+            );
+            expect(result).not.toHaveProperty("retrievalQueries");
+        },
+    );
+
+    test.each([false, true])(
+        "default answer nominates early operands across 40 sources, independently of import order reversed=%s (mock models)",
+        async (reversed) => {
+            await service.close();
+            rehearsalBudget = false;
+            const prompts: string[] = [];
+            indexedAnswerModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            status: "noAnswer",
+                            answer: "Mock reader does not calculate.",
+                            evidenceIds: [],
+                        }),
+                    };
+                },
+            };
+            service = open();
+            const { corpusId } = await service.createCorpus("Forty sources");
+            await update(corpusId, "pause");
+            const sources = Array.from({ length: 40 }, (_, i) => ({
+                id: `source-${i}`,
+                text:
+                    i === 1
+                        ? "Sakura trip corrected price $2,800."
+                        : i === 34
+                          ? "Sakura trip initial quote $2,500."
+                          : `Unrelated gardening advice ${i}.`,
+            }));
+            for (const source of reversed ? sources.reverse() : sources)
+                await add(corpusId, source.id, source.text);
+            await service.close();
+            service = open();
+            const question =
+                "How much more did I have to pay for the trip after the initial quote?";
+            const answer = await service.answer({
+                corpusId,
+                question,
+                includeDiagnostics: true,
+            });
+            const supplied =
+                answer.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
+            expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
+                expect.arrayContaining(["source-1", "source-34"]),
+            );
+            expect(prompts[0]).toContain("$2,800");
+            expect(prompts[0]).toContain("$2,500");
+            expect(
+                answer.readerContext?.integratedAnswer?.sourceSelection
+                    ?.eligibleSourceIds,
+            ).toHaveLength(40);
+            const scoped = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: ["source-34"],
+                includeDiagnostics: true,
+            });
+            expect(scoped.matches.map((item) => item.sourceId)).toEqual([
+                "source-34",
+            ]);
+            expect(scoped.indexedSelection?.eligibleSourceIds).toEqual([
+                "source-34",
+            ]);
+            const excluded = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: [],
+                includeDiagnostics: true,
+            });
+            expect(excluded.matches).toEqual([]);
+        },
+        30000,
+    );
+
+    test.each([false, true])(
+        "maintenance retrieval admits graph reads and rejects changed evidence: %s",
+        async (suppress) => {
+            const { corpusId } =
+                await service.createCorpus("Detached retrieval");
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            let entered!: () => void;
+            let release!: () => void;
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            const started = new Promise<void>((resolve) => {
+                entered = resolve;
+            });
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            const read = MockIndexedCorpus.prototype.readFragments;
+            const clock = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const blocked = clock
+                .spyOn(MockIndexedCorpus.prototype, "readFragments")
+                .mockImplementationOnce(async function (
+                    this: MockIndexedCorpus,
+                    request,
+                ) {
+                    entered();
+                    await gate;
+                    return read.call(this, request);
+                });
+            const head = (await service.listViews(corpusId)).head;
+            const maintaining = service
+                .maintainViews({
+                    corpusId,
+                    expectedHead: head,
+                    family: "wiki",
+                    operation: "resume",
+                })
+                .then(
+                    (result) => ({ result, error: undefined }),
+                    (error: unknown) => ({ result: undefined, error }),
+                );
+            try {
+                await started;
+                await Promise.race([
+                    Promise.all([
+                        service.queryKnowledgeGraph({
+                            corpusId,
+                            kind: "entities",
+                        }),
+                        service.listViews(corpusId),
+                    ]),
+                    new Promise<never>((_resolve, reject) => {
+                        timeout = setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        "Reads blocked behind wiki fragment retrieval",
+                                    ),
+                                ),
+                            1500,
+                        );
+                    }),
+                ]);
+                if (suppress)
+                    await service.suppressSourceKnowledge({
+                        corpusId,
+                        sourceId: "source",
+                        kind: "entity",
+                        name: "Acquisition",
+                    });
+                release();
+                const outcome = await maintaining;
+                if (suppress) {
+                    expect(outcome.error).toBeInstanceOf(ViewBuildStaleError);
+                    expect(outcome.result).toBeUndefined();
+                } else {
+                    expect(outcome.error).toBeUndefined();
+                    expect(outcome.result?.job).toBeDefined();
+                    expect(
+                        (await waitForViewBuild(service, outcome.result!.job!))
+                            .state,
+                    ).toBe("complete");
+                }
+            } finally {
+                clearTimeout(timeout);
+                release();
+                await maintaining;
+                blocked.mockRestore();
+            }
+        },
+    );
+    test("pausing automatic maintenance during detached retrieval preserves the paused head", async () => {
+        await service.close();
+        rehearsalBudget = false;
+        service = open();
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const read = MockIndexedCorpus.prototype.readFragments;
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const blocked = clock
+            .spyOn(MockIndexedCorpus.prototype, "readFragments")
+            .mockImplementationOnce(async function (
+                this: MockIndexedCorpus,
+                request,
+            ) {
+                entered();
+                await gate;
+                return read.call(this, request);
+            });
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Paused detached retrieval",
+            );
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            await started;
+            await update(corpusId, "pause");
+            const head = (await service.listViews(corpusId)).head;
+            release();
+            await service.close();
+            const store = new TypedViewStore(root);
+            const snapshot = await store.listViews(corpusId);
+            const family = await store.getWikiFamily(corpusId);
+            expect(snapshot.head).toBe(head);
+            expect(family.enabled).toBe(false);
+            expect(family.error).toBeUndefined();
+        } finally {
+            release();
+            blocked.mockRestore();
+        }
+    });
     test("automatic wiki builds without rehearsal variables and family pause survives reopen", async () => {
         await service.close();
         rehearsalBudget = false;
@@ -1280,6 +2396,63 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(generated).toBe(calls);
     });
 
+    test("descriptor removal preserves out-of-page subjects and advances the 48-subject cursor", async () => {
+        adapter.assessWikiSubject = async () => ({
+            disposition: "defer",
+            purpose: "Descriptor paging subject",
+            reason: "Subject is only a passing mention",
+            canonicalViewId: "",
+            sharedFragmentIds: [],
+            essentialDistinctions: [],
+            ambiguousViewIds: [],
+        });
+        maintenanceMode = "manual";
+        await service.close();
+        service = open();
+        MockIndexedCorpus.subjects = Array.from(
+            { length: 97 },
+            (_, index) => `subject${index}`,
+        );
+        MockIndexedCorpus.graphSubjects = true;
+        const { corpusId } = await service.createCorpus("Descriptor paging");
+        await update(corpusId, "pause");
+        await add(corpusId, "source", MockIndexedCorpus.subjects.join(" "));
+        await service.close();
+        const store = new TypedViewStore(root);
+        const family = await store.getWikiFamily(corpusId);
+        family.descriptors = [
+            {
+                viewId: "obsolete",
+                query: "removedsubject",
+                sourceIds: ["source"],
+            },
+            { viewId: "last-valid", query: "subject96", sourceIds: ["source"] },
+        ];
+        await store.saveWikiFamily(corpusId, family);
+        service = open();
+        for (const [index, operation] of [
+            "resume",
+            "update",
+            "update",
+        ].entries()) {
+            await update(corpusId, operation as "resume" | "update");
+            const retained = await store.getWikiFamily(corpusId);
+            expect(
+                retained.descriptors.some(
+                    (descriptor) => descriptor.viewId === "obsolete",
+                ),
+            ).toBe(false);
+            expect(
+                retained.descriptors.some(
+                    (descriptor) => descriptor.viewId === "last-valid",
+                ),
+            ).toBe(true);
+            expect(retained.cursor).toBe([48, 96, 0][index]);
+        }
+        expect(MockIndexedCorpus.subjectOffsets).toEqual([0, 48, 96]);
+        expect(generated).toBe(0);
+    });
+
     test("lexical descriptors reconcile before builds and survive alias edits and cold restart without duplicate IDs", async () => {
         MockIndexedCorpus.subjects = ["accountable_role", "Accountable  role"];
         const corpusId = (await service.createCorpus("Lexical identities"))
@@ -1291,6 +2464,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             "role",
             "The accountable_role is the service role responsible for approval; accountable role does not mean review owner.",
         );
+        await service.close();
         const store = new TypedViewStore(root);
         const family = await store.getWikiFamily(corpusId);
         family.descriptors = [
@@ -1306,6 +2480,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             },
         ];
         await store.saveWikiFamily(corpusId, family);
+        service = open();
         const resumed = await update(corpusId, "resume");
         expect(resumed.job?.request.targets).toHaveLength(1);
         await update(corpusId, "pause");
@@ -1369,9 +2544,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(afterEdit.views[0].content.citations).toEqual(
             page.content.citations,
         );
-        expect(afterEdit.views[0].content.sections[0].body).toContain(
+        expect(afterEdit.views[0].content.sections[0].body).not.toContain(
             "Coverage limits:",
         );
+        expect(
+            afterEdit.views[0].content.kind === "wiki" &&
+                afterEdit.views[0].content.coverageNote,
+        ).toBe(summaryLimits);
         expect(generated - before).toBe(1);
         const calls = generated;
         expect((await update(corpusId)).job).toBeUndefined();
@@ -1702,7 +2881,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             .jest;
         const historyRead = jestApi.spyOn(ViewHistory.prototype, "read");
         const accepted = await service.listViews(corpusId);
-        expect(historyRead).toHaveBeenCalledTimes(1);
+        expect(historyRead).not.toHaveBeenCalled();
         historyRead.mockRestore();
         expect(accepted.wikiFamily).toEqual({
             enabled: true,
@@ -2088,7 +3267,9 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 text: "Synthetic admission probe",
             },
         });
-        const job = await waitForMemoryJob(service, result.jobId);
+        const job = await waitForMemoryJob(service, result.jobId, {
+            pollIntervalMs: 10,
+        });
         MockIndexedCorpus.prototype.rebuild = original;
         expect(job.state).toBe("failed");
         expect(job.error).toContain("exceeds configured");

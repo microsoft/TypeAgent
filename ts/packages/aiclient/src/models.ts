@@ -8,6 +8,12 @@ import {
     EmbeddingPart,
     EmbeddingRole,
 } from "./embeddingIdentity.js";
+import type { RequestConstraintReceipt } from "./requestConstraints.js";
+import { otel } from "@typeagent/telemetry";
+
+export function isRetryableModelFailure(value: unknown): boolean {
+    return otel.readTelemetryErrorClassification(value)?.retryable === true;
+}
 
 /**
  * Translation settings for Chat models
@@ -77,11 +83,24 @@ export type FunctionCallingResult = {
 
 export type CompleteUsageStatsCallback = (usage: CompletionUsageStats) => void;
 
+/** Offline inspection of the non-streaming wire request. Contains prompt/schema; do not log it. */
+export interface ChatRequestInspection {
+    serializedRequest: string;
+    estimatedInputTokens: number;
+    tokenizer: "o200k_base";
+    constraints: RequestConstraintReceipt;
+}
+
 /**
  * A TypeChat language model with greater control on settings
  */
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
+    /** Available on supported providers; throws when configured request constraints fail. */
+    inspectRequest?(
+        prompt: string | PromptSection[],
+        jsonSchema?: CompletionJsonSchema,
+    ): ChatRequestInspection;
     completionCallback?: ((request: any, response: any) => void) | undefined;
     /**
      * Complete the prompt

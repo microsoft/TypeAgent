@@ -11,9 +11,9 @@ export function viewSynthesisIdentity(
     consolidation = false,
 ): string {
     if (definition.projectSummary)
-        return `${model}:project-attribution-v4:editorial-v1${indexedEvidenceRecipe}`;
+        return `${model}:project-attribution-v6:editorial-v1${indexedEvidenceRecipe}`;
     if (definition.wiki)
-        return `${model}:wiki-source-contribution-v4:editorial-v1${consolidation ? ":consolidation-v1" : ""}${indexedEvidenceRecipe}`;
+        return `${model}:wiki-source-contribution-v6:editorial-v1${consolidation ? ":consolidation-v1" : ""}${indexedEvidenceRecipe}`;
     return model;
 }
 

@@ -11,6 +11,11 @@ import type {
 } from "./topicTypes.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
+import { TopicEvidenceIndex, topicSourceKey } from "./topicLookup.js";
+import {
+    validateTopicCuration,
+    validateTopicCurationProgress,
+} from "./topicCuration.js";
 
 export function topicId(corpusId: string, identity: string): string {
     return `topic:${createHash("sha256")
@@ -24,6 +29,7 @@ export function occurrenceIdentity(occurrence: TopicOccurrence): string {
         occurrence.citations[0].locator,
     ).blockOrdinal;
     return JSON.stringify([
+        ...(occurrence.evidence ? ["event", occurrence.evidence.eventId] : []),
         occurrence.sourceId,
         occurrence.scope,
         blockOrdinal,
@@ -65,8 +71,17 @@ export function initialTopicNodes(
 
 function validateOccurrence(
     occurrence: TopicOccurrence,
-    snapshot: TopicSnapshot,
+    eventIds: ReadonlySet<string>,
+    sourceRevisions: ReadonlySet<string>,
 ): void {
+    if (
+        occurrence.evidence &&
+        (occurrence.sourceId !== occurrence.evidence.eventId ||
+            occurrence.revisionId !== occurrence.evidence.eventId)
+    )
+        throw new Error(
+            "Event topic incidence must retain canonical event identity",
+        );
     if (
         !occurrence.label.trim() ||
         !occurrence.scope ||
@@ -82,7 +97,8 @@ function validateOccurrence(
                 citation.revisionId !== occurrence.revisionId ||
                 !citation.locator ||
                 !citation.excerpt ||
-                citation.evidence !== undefined,
+                JSON.stringify(citation.evidence) !==
+                    JSON.stringify(occurrence.evidence),
         )
     )
         throw new Error(
@@ -96,11 +112,9 @@ function validateOccurrence(
             );
     }
     if (
-        !snapshot.influenceSources.some(
-            (source) =>
-                source.sourceId === occurrence.sourceId &&
-                source.revisionId === occurrence.revisionId,
-        )
+        occurrence.evidence
+            ? !eventIds.has(occurrence.evidence.eventId)
+            : !sourceRevisions.has(topicSourceKey(occurrence))
     )
         throw new Error(
             "Topic occurrence absent from captured source influence",
@@ -125,6 +139,7 @@ function validateNode(
     snapshot: TopicSnapshot,
     occurrences: Map<string, TopicOccurrence>,
     represented: Set<string>,
+    evidenceIndex: TopicEvidenceIndex,
 ): void {
     validateNodeMetadata(node);
     if (
@@ -146,29 +161,13 @@ function validateNode(
     });
     if (!selected.length || (node.summary && !node.citations.length))
         throw new Error("Topic summary requires original incidence evidence");
-    const sourceRevisions = new Set(
-        selected.map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const evidence = new Set(
-        snapshot.occurrences
-            .filter((entry) =>
-                sourceRevisions.has(`${entry.sourceId}\n${entry.revisionId}`),
-            )
-            .flatMap((entry) =>
-                entry.citations.map((citation) => JSON.stringify(citation)),
-            ),
-    );
-    if (
-        node.citations.some(
-            (citation) => !evidence.has(JSON.stringify(citation)),
-        )
-    )
+    if (!evidenceIndex.ownsExactEvidence([node.id], node.citations))
         throw new Error("Topic summary cites unsupplied original evidence");
 }
 
 function validateEdges(
     snapshot: TopicSnapshot,
-    nodes: Map<string, TopicNode>,
+    nodes: ReadonlySet<string>,
 ): void {
     const children = new Map<string, string[]>();
     for (const edge of snapshot.parents) {
@@ -210,6 +209,16 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
         throw new Error("Unsupported topic snapshot schema");
     assertViewIdentifier("corpus ID", snapshot.corpusId);
     assertViewIdentifier("topic generation", snapshot.generation);
+    const eventIds = new Set<string>();
+    for (const event of snapshot.influenceEvents ?? []) {
+        assertViewIdentifier("topic event ID", event.eventId);
+        if (
+            eventIds.has(event.eventId) ||
+            !/^[0-9a-f]{64}$/.test(event.fingerprint)
+        )
+            throw new Error("Invalid or duplicate topic event influence");
+        eventIds.add(event.eventId);
+    }
     const occurrences = new Map(
         snapshot.occurrences.map((entry) => [entry.id, entry]),
     );
@@ -220,15 +229,27 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
     )
         throw new Error("Duplicate topic or occurrence identity");
     const represented = new Set<string>();
+    const sourceRevisions = new Set(
+        snapshot.influenceSources.map(topicSourceKey),
+    );
     for (const occurrence of occurrences.values())
-        validateOccurrence(occurrence, snapshot);
+        validateOccurrence(occurrence, eventIds, sourceRevisions);
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
     for (const node of nodes.values())
-        validateNode(node, snapshot, occurrences, represented);
+        validateNode(node, snapshot, occurrences, represented, evidenceIndex);
     if (represented.size !== occurrences.size)
         throw new Error(
             "Topic snapshot truncated maintained occurrence membership",
         );
-    validateEdges(snapshot, nodes);
+    validateTopicCuration(snapshot, evidenceIndex);
+    validateTopicCurationProgress(snapshot, evidenceIndex);
+    validateEdges(
+        snapshot,
+        new Set([
+            ...nodes.keys(),
+            ...(snapshot.curation?.concepts.map((concept) => concept.id) ?? []),
+        ]),
+    );
 }
 
 export function validateTopicQuery(request: TopicQueryRequest): void {
@@ -243,10 +264,26 @@ export function validateTopicQuery(request: TopicQueryRequest): void {
                     "depth",
                     "pageSize",
                     "continuationToken",
+                    "curated",
+                    "summarize",
                 ].includes(key),
         )
     )
         throw new Error("Unsupported topic query");
+    if (request.curated !== undefined && typeof request.curated !== "boolean")
+        throw new Error("Invalid curated topic selection");
+    if (
+        request.summarize !== undefined &&
+        (typeof request.summarize !== "boolean" ||
+            (request.summarize &&
+                (!request.curated ||
+                    !request.topicId ||
+                    request.continuationToken ||
+                    request.search)))
+    )
+        throw new Error(
+            "Summary generation requires one explicit curated topic",
+        );
     assertViewIdentifier("corpus ID", request.corpusId);
     if (request.topicId !== undefined)
         assertViewIdentifier("topic ID", request.topicId);
@@ -375,6 +412,97 @@ function topicNeighborhoods(
         );
 }
 
+function queryCuratedTopics(
+    snapshot: TopicSnapshot,
+    request: TopicQueryRequest,
+    empty: TopicQueryPage,
+    offset: number,
+    selection: unknown[],
+): TopicQueryPage {
+    const concepts = (snapshot.curation?.concepts ?? [])
+        .filter((concept) => !request.topicId || concept.id === request.topicId)
+        .filter(
+            (concept) =>
+                !request.search ||
+                `${concept.label} ${concept.scope} ${concept.purpose}`
+                    .toLocaleLowerCase()
+                    .includes(request.search.toLocaleLowerCase()),
+        )
+        .sort((a, b) => b.salience - a.salience || a.id.localeCompare(b.id));
+    if (offset > concepts.length)
+        throw new Error("Curated topic continuation exceeds query");
+    const page = concepts.slice(offset, offset + (request.pageSize ?? 50));
+    const pending = pendingTopicAssignments(snapshot, request);
+    return {
+        ...empty,
+        concepts: page.map((concept) => ({
+            ...concept,
+            memberIds: concept.memberIds.slice(0, 20),
+            citations: concept.citations.slice(0, 8),
+            memberCount: concept.memberIds.length,
+            omittedMembers: Math.max(0, concept.memberIds.length - 20),
+            citationCount: concept.citations.length,
+            omittedCitations: Math.max(0, concept.citations.length - 8),
+        })),
+        totalConcepts: snapshot.curation?.concepts.length ?? 0,
+        ...(snapshot.curation?.pending
+            ? {
+                  pendingAssignments: pending.slice(0, request.pageSize ?? 50),
+                  pendingCount: snapshot.curation.pending.length,
+                  omittedPendingAssignments: Math.max(
+                      0,
+                      pending.length - (request.pageSize ?? 50),
+                  ),
+              }
+            : {}),
+        matchingNodes: concepts.length,
+        omittedNodes: snapshot.nodes.length,
+        limits: [
+            ...empty.limits,
+            ...(snapshot.curation?.pending?.length
+                ? [
+                      `${snapshot.curation.pending.length} topic assignments remain pending; raw evidence is available but these assignments are not validated concepts.`,
+                  ]
+                : []),
+            ...(snapshot.curation
+                ? []
+                : [
+                      "Curated concepts have not been generated; raw occurrences remain available.",
+                  ]),
+        ],
+        ...(offset + page.length < concepts.length
+            ? {
+                  nextContinuationToken: Buffer.from(
+                      JSON.stringify([
+                          snapshot.generation,
+                          selection,
+                          offset + page.length,
+                      ]),
+                  ).toString("base64url"),
+              }
+            : {}),
+    };
+}
+
+function pendingTopicAssignments(
+    snapshot: TopicSnapshot,
+    request: TopicQueryRequest,
+) {
+    if (!snapshot.curation?.pending?.length) return [];
+    const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+    return (snapshot.curation?.pending ?? []).filter((entry) => {
+        if (request.topicId && request.topicId !== entry.nodeId) return false;
+        const node = nodes.get(entry.nodeId);
+        return (
+            !request.search ||
+            (node !== undefined &&
+                `${node.label} ${node.scope}`
+                    .toLocaleLowerCase()
+                    .includes(request.search.toLocaleLowerCase()))
+        );
+    });
+}
+
 export function queryTopicSnapshot(
     snapshot: TopicSnapshot | undefined,
     request: TopicQueryRequest,
@@ -395,6 +523,9 @@ export function queryTopicSnapshot(
         omittedNeighborhoods: 0,
         limits,
         io: { stateBytes: 0, snapshotBytes: 0, elapsedMs: 0 },
+        ...(snapshot?.curation
+            ? { totalConcepts: snapshot.curation.concepts.length }
+            : {}),
     };
     if (!snapshot) {
         if (request.continuationToken)
@@ -408,8 +539,11 @@ export function queryTopicSnapshot(
         request.search ?? null,
         request.depth ?? 1,
         request.pageSize ?? 50,
+        ...(request.curated ? ["curated-v1"] : []),
     ];
     const offset = continuationOffset(request, snapshot, selection);
+    if (request.curated)
+        return queryCuratedTopics(snapshot, request, empty, offset, selection);
     const nodes = selectTopicNodes(snapshot, request);
     if (request.topicId) {
         const neighborhoods = topicNeighborhoods(snapshot, request.topicId);

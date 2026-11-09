@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       auto-fix-args:
-        description: "Extra flags for the script (e.g. --apply-overrides=pkg1,pkg2)"
+        description: "Extra script flags (e.g. --show-chains=full); package scope is selected by the workflow"
         type: string
         default: "--auto-fix"
 
@@ -132,9 +132,10 @@ jobs:
           # pnpm-workspace.yaml (e.g. docs/) would fall back to 0 (disabled)
           # and could still pin versions published fewer than 7 days ago.
           DEPENDABOT_MIN_RELEASE_AGE_DAYS: "7"
+          REMEDIATION_EXTRA_ARGS: ${{ inputs.auto-fix-args || '--auto-fix' }}
         run: |
           SCRIPT="$GITHUB_WORKSPACE/ts/tools/scripts/fix-dependabot-alerts.mjs"
-          FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
+          FLAGS=$(node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationWorkflowArgs.mjs")
           ALL_APPLIED=""
           ALL_ROLLED_BACK=""
           ALL_SKIPPED_RECENT_ROLLBACK=""

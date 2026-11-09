@@ -7,8 +7,63 @@ import {
     configToEnv,
     type FlatEnv,
 } from "../src/index.js";
+import { configToTree, typedSectionToFlat } from "../src/runtime/tree.js";
 
 describe("configToEnv: shim projection", () => {
+    test.each(["responses", "chat_completions"])(
+        "round-trips an explicit wire model for %s without other overrides",
+        (wireApi) => {
+            const tree = {
+                azureOpenAI: {
+                    deployments: {
+                        gpt_6_1_terra: {
+                            endpoints: [
+                                {
+                                    endpoint:
+                                        "https://example-eastus.services.ai.azure.com/openai/v1/responses",
+                                    model: "gpt-6.1-terra",
+                                    wireApi,
+                                },
+                            ],
+                        },
+                    },
+                },
+            };
+            const config = buildConfig(
+                typedSectionToFlat("azureOpenAI", tree.azureOpenAI),
+            );
+            const endpoints =
+                config.azureOpenAI.deployments.get("gpt_6_1_terra")!.endpoints;
+            expect(endpoints[0].model).toBe("gpt-6.1-terra");
+            const fromEnv = buildConfig(configToEnv(config));
+            const projectedTree = configToTree(config);
+            const fromTree = buildConfig(
+                typedSectionToFlat("azureOpenAI", projectedTree.azureOpenAI),
+            );
+            for (const roundTrip of [fromEnv, fromTree]) {
+                expect(
+                    roundTrip.azureOpenAI.deployments.get("gpt_6_1_terra")!
+                        .endpoints,
+                ).toEqual(endpoints);
+            }
+        },
+    );
+
+    test("rejects a non-string endpoint model", () => {
+        expect(() =>
+            typedSectionToFlat("azureOpenAI", {
+                deployments: {
+                    terra: [
+                        {
+                            endpoint: "https://example-eastus.test",
+                            model: 61,
+                        },
+                    ],
+                },
+            }),
+        ).toThrow(/model/);
+    });
+
     test("round-trips Azure OpenAI deployment endpoints", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_API_KEY: "identity",

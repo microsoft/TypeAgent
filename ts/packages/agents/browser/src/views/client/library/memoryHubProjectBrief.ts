@@ -7,9 +7,10 @@ import type {
     ViewDefinitionInput,
 } from "@typeagent/memory-service";
 import { rbNode, rbButton } from "./memoryHubDocumentUi";
+import { projectBriefSectionHeading } from "@typeagent/memory-service/view-text";
 
 const headings: Record<ProjectBriefDetails["kind"], string> = {
-    goalsScope: "Goals and scope",
+    goalsScope: projectBriefSectionHeading("goalsScope"),
     owners: "Owners and responsibilities",
     status: "Project, incident and capacity status",
     milestones: "Milestones and provisional commitments",
@@ -172,14 +173,32 @@ export function createProjectBriefEditor(
                     ),
                 );
             case "risks":
-                return details.items.map((entry, index) =>
-                    choice(
-                        `Risk ${index + 1} state`,
-                        entry.status,
-                        ["open", "blocked", "resolved", "unknown"],
-                        (value) => (entry.status = value),
+                return [
+                    ...details.items.map((entry, index) =>
+                        choice(
+                            `Risk ${index + 1} state`,
+                            entry.status,
+                            ["open", "blocked", "resolved", "unknown"],
+                            (value) => (entry.status = value),
+                        ),
                     ),
-                );
+                    ...(details.openQuestions
+                        ? [
+                              text(
+                                  "Open questions (one per line)",
+                                  details.openQuestions.join("\n"),
+                                  (value) => {
+                                      const questions = value
+                                          .split("\n")
+                                          .map((item) => item.trim())
+                                          .filter(Boolean);
+                                      details.openQuestions = questions;
+                                  },
+                                  true,
+                              ),
+                          ]
+                        : []),
+                ];
             case "context":
                 return [
                     rbNode(

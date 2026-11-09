@@ -8,6 +8,7 @@ import {
 import {
     answerIndexedEvidence,
     createIndexedAnswerModel,
+    mergeIndexedAnswerEvidence,
 } from "../src/indexedAnswer.js";
 import {
     setRuntimeConfig,
@@ -16,6 +17,7 @@ import {
 } from "@typeagent/aiclient";
 import type { ChatModel } from "@typeagent/aiclient";
 import type { MemoryEvidence } from "../src/types.js";
+import { parseTemporalValue } from "@typeagent/knowpro";
 
 test("wiki budgets reserve selected model capacity and reject incompatible strict overrides", () => {
     const previous = getRuntimeConfig();
@@ -153,7 +155,12 @@ test("indexed answer serializes the strict citation schema on Azure chat complet
                     strict: true,
                     schema: {
                         additionalProperties: false,
-                        required: ["status", "answer", "citationIds"],
+                        required: [
+                            "status",
+                            "answer",
+                            "citationIds",
+                            "retrievalQueries",
+                        ],
                         properties: {
                             citationIds: { items: { enum: ["f0"] } },
                         },
@@ -266,3 +273,192 @@ test("empty indexed evidence returns an explicit no-answer without resolving a m
         citations: [],
     });
 });
+
+test("indexed answers separate source calendars from question time and diagnostics do not change model input", async () => {
+    const evidence: MemoryEvidence[] = [
+        {
+            evidenceId: "source:revision:indexed",
+            corpusId: "corpus",
+            sourceId: "source",
+            revisionId: "revision",
+            title: "Original dated source",
+            locator: "indexed:0:anchor:0-30",
+            snippet: "Yesterday I visited the museum.",
+            score: 1,
+            sourceType: "text",
+            indexedAt: "2026-10-22T00:00:00Z",
+            temporalContext: {
+                version: 1,
+                sourceRevisionId: "revision",
+                contextHash: "source-context",
+                ownerId: "original-message",
+                sourceSpan: { start: 0, end: 30 },
+                messageTime: parseTemporalValue("2024-01-07T00:30:00+14:00"),
+                inheritedDateEvidence: [],
+            },
+        },
+    ];
+    const prompts: string[] = [];
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async (prompt) => {
+            prompts.push(JSON.stringify(prompt));
+            return {
+                success: true,
+                data: JSON.stringify({
+                    status: "answered",
+                    answer: "The museum visit was on January 6.",
+                    citationIds: ["f0"],
+                }),
+            };
+        },
+    };
+    const temporalContext = {
+        referenceTime: "2024/02/01 12:00",
+        availabilityPolicy: "supplied-history" as const,
+    };
+    const ordinary = await answerIndexedEvidence(
+        "When did I visit the museum?",
+        evidence,
+        4000,
+        undefined,
+        model,
+        { temporalContext },
+    );
+    const observed = await answerIndexedEvidence(
+        "When did I visit the museum?",
+        evidence,
+        4000,
+        undefined,
+        model,
+        { temporalContext, includeDiagnostics: true },
+    );
+    expect(prompts[0]).toBe(prompts[1]);
+    expect(prompts[0]).toContain("recorded preferences");
+    expect(prompts[0]).toContain("never invent named offerings");
+    expect(prompts[0]).toContain("not retrieval order");
+    expect(prompts[0]).toContain("Still abstain when identity");
+    expect(ordinary.readerContext).toBeUndefined();
+    expect(observed.answer).toBe(ordinary.answer);
+    expect(observed.citations).toEqual(ordinary.citations);
+    expect(observed.readerContext?.answerPath).toBe("indexed-fragments");
+    expect(observed.readerContext?.indexedAnswer).toEqual({
+        temporalContext: {
+            referenceTime: parseTemporalValue(temporalContext.referenceTime),
+            availabilityPolicy: "supplied-history",
+        },
+        fragments: evidence,
+        response: {
+            status: "answered",
+            answer: observed.answer,
+            citationIds: ["f0"],
+        },
+    });
+    const prompt: { role: string; content: string }[] = JSON.parse(prompts[0]);
+    const user = prompt.find((item) => item.role === "user")!;
+    expect(user.content).toContain("2024-01-07T00:30:00+14:00");
+    expect(user.content).toContain("2024-01-06T10:30:00.000Z");
+    expect(user.content).toContain("2024/02/01 12:00");
+    expect(prompt[0].content).toContain(
+        "not the question, capture or index clock",
+    );
+    expect(prompt[0].content).toContain(
+        "Require the name or a supported alias/identity link",
+    );
+    expect(prompt[0].content).toContain("otherwise return noAnswer");
+    expect(prompt[0].content).toContain("not an explicit same-day date");
+    expect(observed.readerContext?.serializedContextChars).toBe(
+        user.content.length,
+    );
+    expect(observed.readerContext?.messageSourceIds).toEqual(["source"]);
+});
+
+test("refined indexed context is round-robin, bounded and nonoverlapping", () => {
+    const evidence = (sourceId: string, start: number): MemoryEvidence => ({
+        evidenceId: `${sourceId}:${start}`,
+        corpusId: "corpus",
+        sourceId,
+        revisionId: "r",
+        title: sourceId,
+        locator: `indexed:0:${"a".repeat(64)}:${start}-${start + 10}`,
+        snippet: "0123456789",
+        score: 1,
+        sourceType: "text",
+        indexedAt: "2026-10-23T00:00:00Z",
+    });
+    const result = mergeIndexedAnswerEvidence(
+        [
+            [evidence("price", 0), evidence("price", 5), evidence("price", 20)],
+            [evidence("renovation", 0), evidence("other", 0)],
+        ],
+        3,
+        30,
+    );
+    expect(result.map((item) => item.evidenceId)).toEqual([
+        "price:0",
+        "renovation:0",
+        "other:0",
+    ]);
+    expect(mergeIndexedAnswerEvidence([result], 12, 19)).toHaveLength(1);
+});
+
+test.each([null, ["one", "two", "three"], [""], ["x".repeat(241)], [4]])(
+    "indexed reader rejects invalid follow-up searches %j",
+    async (retrievalQueries) => {
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: JSON.stringify({
+                    status: "noAnswer",
+                    answer: "Missing evidence",
+                    citationIds: [],
+                    retrievalQueries,
+                }),
+            }),
+        };
+        const evidence: MemoryEvidence = {
+            evidenceId: "e",
+            corpusId: "c",
+            sourceId: "s",
+            revisionId: "r",
+            title: "Evidence",
+            locator: "indexed:0:anchor:0-4",
+            snippet: "Fact",
+            score: 1,
+            sourceType: "text",
+            indexedAt: "2026-10-23T00:00:00Z",
+        };
+        await expect(
+            answerIndexedEvidence(
+                "Question",
+                [evidence],
+                4000,
+                undefined,
+                model,
+            ),
+        ).rejects.toThrow("Invalid indexed answer retrieval queries");
+    },
+);
+
+test.each([
+    [{ availabilityPolicy: "as-of" as const }, /Strict as-of/],
+    [
+        { referenceTime: "not a supplied date" },
+        /Unsupported or invalid source date format/,
+    ],
+] as const)(
+    "invalid indexed-answer temporal context fails before empty-evidence fallback: %j",
+    async (temporalContext, error) => {
+        await expect(
+            answerIndexedEvidence(
+                "question",
+                [],
+                4000,
+                "azure:unconfigured",
+                undefined,
+                { temporalContext },
+            ),
+        ).rejects.toThrow(error);
+    },
+);

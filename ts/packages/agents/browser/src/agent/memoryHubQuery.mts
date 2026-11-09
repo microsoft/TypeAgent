@@ -33,6 +33,7 @@ import {
 import { loadMemoryHubCorpora, mapMemoryHubCorpora } from "./memoryHub.mjs";
 import { timed } from "./memoryHubQuerySupport.mjs";
 import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
+import { tryMemoryHubIntegratedAnswer } from "./memoryHubIntegratedAnswer.mjs";
 export { timed } from "./memoryHubQuerySupport.mjs";
 
 export type MemoryHubReadService = MemoryService & Partial<MemoryViewService>;
@@ -40,6 +41,9 @@ export type MemoryHubSynthesizer = (
     question: string,
     evidence: MemoryHubEvidence[],
 ) => Promise<MemoryHubAnswer>;
+export type MemoryHubIntentResolver = (
+    query: string,
+) => Promise<"find" | "ask">;
 
 function message(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -63,6 +67,20 @@ function validateRequest(request: MemoryHubSearchRequest): void {
     if (!request.query.trim())
         throw new Error("Memory search query cannot be empty.");
     if (
+        request.intent !== undefined &&
+        !["auto", "find", "ask"].includes(request.intent)
+    )
+        throw new Error("Unknown memory search intent.");
+    if (
+        request.intent &&
+        request.generateAnswer !== undefined &&
+        (request.intent === "auto" ||
+            request.generateAnswer !== (request.intent === "ask"))
+    )
+        throw new Error(
+            "Search intent conflicts with the explicit answer setting.",
+        );
+    if (
         request.limit !== undefined &&
         (!Number.isInteger(request.limit) ||
             request.limit < 1 ||
@@ -82,6 +100,27 @@ function validateRequest(request: MemoryHubSearchRequest): void {
         Date.parse(request.dateFrom) > Date.parse(request.dateTo)
     )
         throw new Error("Memory search date range is reversed.");
+}
+
+async function resolveSearchIntent(
+    request: MemoryHubSearchRequest,
+    resolver?: MemoryHubIntentResolver,
+): Promise<MemoryHubSearchRequest> {
+    if (!request.intent) return request;
+    if (request.intent !== "auto")
+        return { ...request, generateAnswer: request.intent === "ask" };
+    if (!resolver)
+        throw new Error(
+            "Automatic search intent is unavailable. Choose a response mode in Filters.",
+        );
+    const intent = await timeSearchStage("hub.intent", () =>
+        resolver(request.query),
+    );
+    if (intent !== "find" && intent !== "ask")
+        throw new Error(
+            "The decision model returned an invalid search intent.",
+        );
+    return { ...request, generateAnswer: intent === "ask" };
 }
 
 function inDateRange(
@@ -224,6 +263,7 @@ async function viewResults(
     corpus: MemoryCenterCorpus,
     request: MemoryHubSearchRequest,
 ): Promise<MemoryHubEvidence[]> {
+    if (request.retrievalPolicy === "sourcesOnly") return [];
     const capabilities = await timed(service.getCapabilities());
     if (!capabilities.derivedViews?.search) return [];
     if (!service.searchViews)
@@ -662,6 +702,7 @@ export function createMemoryHubQueryFunctions(
     getService: () => MemoryHubReadService,
     getConversationId: () => string | undefined,
     synthesize: MemoryHubSynthesizer,
+    resolveIntent?: MemoryHubIntentResolver,
 ): Pick<MemoryHubFunctions, "memoryHubSearch" | "memoryHubEvidence"> {
     return {
         async memoryHubSearch(request) {
@@ -672,18 +713,59 @@ export function createMemoryHubQueryFunctions(
                     () =>
                         timeSearchStage("hub.total", async () => {
                             validateRequest(request);
+                            request = await resolveSearchIntent(
+                                request,
+                                resolveIntent,
+                            );
                             const service = getService();
                             const corpora = await queryCorpora(
                                 service,
                                 request.corpusId,
                             );
                             const result: MemoryHubSearchResult = {
+                                ...(request.intent
+                                    ? {
+                                          resolvedIntent: request.generateAnswer
+                                              ? ("ask" as const)
+                                              : ("find" as const),
+                                      }
+                                    : {}),
                                 query: request.query.trim(),
                                 matches: [],
                                 ranking: "reciprocal-rank-fusion",
                                 warnings: [],
                                 errors: [],
                             };
+                            try {
+                                if (
+                                    await tryMemoryHubIntegratedAnswer(
+                                        service,
+                                        corpora,
+                                        request,
+                                        result,
+                                    )
+                                ) {
+                                    result.insights = {
+                                        provider: "canonical",
+                                        status: "unsupported",
+                                        ...(request.corpusId === undefined
+                                            ? {}
+                                            : { corpusId: request.corpusId }),
+                                        topTopics: [],
+                                        relatedEntities: [],
+                                        message:
+                                            "Integrated answering returns exact evidence and maintained-knowledge references; separate query insights are not generated for this answer path.",
+                                    };
+                                    return result;
+                                }
+                            } catch (error) {
+                                result.errors.push({
+                                    corpusId: request.corpusId ?? "*",
+                                    operation: "answer",
+                                    message: message(error),
+                                });
+                                return result;
+                            }
                             const lists = await timeSearchStage(
                                 "hub.retrieval",
                                 () =>
@@ -796,13 +878,16 @@ export function createMemoryHubQueryFunctions(
                         }),
                     { generateAnswer: request.generateAnswer ?? false },
                 );
-            const reviewed = request.generateAnswer
-                ? resolveReviewedWikiBudget(
-                      process.env,
-                      process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ||
-                          undefined,
-                  )
-                : undefined;
+            const reviewed =
+                request.generateAnswer ||
+                request.intent === "auto" ||
+                request.intent === "ask"
+                    ? resolveReviewedWikiBudget(
+                          process.env,
+                          process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ||
+                              undefined,
+                      )
+                    : undefined;
             return reviewed
                 ? runWithRequestBudget(new RequestBudget(reviewed), work)
                 : work();

@@ -16,6 +16,15 @@ export function icon(name: string): HTMLElement {
     return glyph;
 }
 
+export function setTabLabel(
+    target: HTMLButtonElement,
+    glyph: string,
+    label: string,
+): HTMLButtonElement {
+    target.replaceChildren(icon(glyph), document.createTextNode(label));
+    return target;
+}
+
 export function setIconButton(
     target: HTMLButtonElement,
     glyph: string,
@@ -120,6 +129,7 @@ export function menuButton(
             entry.append(icon(item.icon), item.label);
             entry.addEventListener("click", () => {
                 close();
+                trigger.focus();
                 item.action();
             });
             menu.append(entry);

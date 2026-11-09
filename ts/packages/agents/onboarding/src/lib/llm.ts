@@ -125,10 +125,10 @@ export function getKeywordGenModel(endpoint?: string): ChatModel {
 }
 
 export function getExploreModel(endpoint?: string): ChatModel {
-    // Default to GPT-5 — exploration benefits from reasoning when picking
+    // Default to Terra: exploration benefits from reasoning when picking
     // the next frontier action and recognizing modal vs. neutral states.
     return instrumentModel(
-        openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        openai.createChatModel(endpoint ?? "GPT_6_1_TERRA", undefined, undefined, [
             "onboarding:explore",
         ]),
     );
@@ -139,7 +139,7 @@ export function getSynthesisModel(endpoint?: string): ChatModel {
     // action emission, validation) is structural reasoning over a large
     // graph — a reasoning model produces dramatically better aggregation.
     return instrumentModel(
-        openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        openai.createChatModel(endpoint ?? "GPT_6_1_TERRA", undefined, undefined, [
             "onboarding:synthesis",
         ]),
     );

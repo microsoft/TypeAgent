@@ -13,7 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { FileMemoryService } from "../src/fileMemoryService.js";
+import {
+    FileMemoryService,
+    type FileMemoryServiceOptions,
+} from "../src/fileMemoryService.js";
+import { CorpusAccess } from "../src/corpusAccess.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { validateBuildRequest } from "../src/viewBuildValidation.js";
@@ -131,6 +135,7 @@ describe("human-added edge merge regressions", () => {
         added = undefined;
         service = new FileMemoryService(root, {
             informationalViews: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
@@ -182,9 +187,13 @@ describe("human-added edge merge regressions", () => {
                     text: "Inspect pressure. Preserve approval boundaries. No verified resolution.",
                 },
             });
-            expect((await waitForMemoryJob(service, source.jobId)).state).toBe(
-                "complete",
-            );
+            expect(
+                (
+                    await waitForMemoryJob(service, source.jobId, {
+                        pollIntervalMs: 10,
+                    })
+                ).state,
+            ).toBe("complete");
             sources.push({
                 sourceId: source.sourceId,
                 revisionId: source.revisionId,
@@ -300,7 +309,11 @@ describe("human-added edge merge regressions", () => {
                 },
             });
             expect(
-                (await waitForMemoryJob(service, replacement.jobId)).state,
+                (
+                    await waitForMemoryJob(service, replacement.jobId, {
+                        pollIntervalMs: 10,
+                    })
+                ).state,
             ).toBe("complete");
             request.targets[0].definition.selector.sources[0] = {
                 sourceId: replacement.sourceId,
@@ -368,9 +381,13 @@ describe("durable draft builds and explicit edit merge", () => {
         Promise<ViewSupportReport>,
         [ViewBuildSnapshot, ViewSynthesisOutput, AbortSignal]
     >;
-    const open = () =>
+    const open = (
+        sourceAuthorization?: FileMemoryServiceOptions["sourceAuthorization"],
+    ) =>
         new FileMemoryService(root, {
+            ...(sourceAuthorization ? { sourceAuthorization } : {}),
             informationalViews: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
@@ -442,7 +459,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 sourceModifiedAt: "2026-10-01T00:00:00Z",
             },
         });
-        await waitForMemoryJob(service, source.jobId);
+        await waitForMemoryJob(service, source.jobId, { pollIntervalMs: 10 });
         return {
             corpusId: corpus.corpusId,
             publication: false,
@@ -503,6 +520,63 @@ describe("durable draft builds and explicit edit merge", () => {
             }),
         );
     }
+    test("replacement rebuild ignores unrelated inaccessible receipts but authorizes a deduplicated receipt", async () => {
+        const request = await fixture();
+        await service.close();
+        let authorized = true;
+        service = open(async () => authorized);
+        const prior = await wait(await service.buildViews(request));
+        const replacement = await service.ingestDocument({
+            corpusId: request.corpusId,
+            source: {
+                sourceId: "evidence",
+                sourceType: "text",
+                title: "Current synthetic diagnostic record",
+                text: "Inspect pressure. Preserve approval boundaries. No verified resolution. This record replaces the earlier diagnostic record.",
+            },
+        });
+        expect(
+            (
+                await waitForMemoryJob(service, replacement.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
+        await expect(service.getViewBuild(prior)).rejects.toThrow(
+            "Retained build receipt source bodies are not authorized",
+        );
+        const snapshot = await service.listViews(request.corpusId);
+        const next: ViewBuildRequest = {
+            ...request,
+            expectedHead: snapshot.head,
+            targets: [
+                {
+                    expectedVersion: snapshot.views[0].version,
+                    definition: {
+                        ...request.targets[0].definition,
+                        selector: {
+                            kind: "sources",
+                            sources: [
+                                {
+                                    sourceId: replacement.sourceId,
+                                    revisionId: replacement.revisionId,
+                                },
+                            ],
+                        },
+                    },
+                },
+            ],
+        };
+        const rebuilt = await wait(await service.buildViews(next));
+        expect(rebuilt.state).toBe("complete");
+        expect((await service.buildViews(next)).jobId).toBe(rebuilt.jobId);
+        expect(generate).toHaveBeenCalledTimes(2);
+        authorized = false;
+        await expect(service.buildViews(next)).rejects.toThrow(
+            "Retained build receipt source bodies are not authorized",
+        );
+        expect(generate).toHaveBeenCalledTimes(2);
+    });
     async function edit(view: ViewVersion, body: string): Promise<ViewVersion> {
         const content = structuredClone(
             view.content,
@@ -536,7 +610,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 capturedAt: "2026-10-04T00:00:00Z",
             },
         });
-        await waitForMemoryJob(service, extra.jobId);
+        await waitForMemoryJob(service, extra.jobId, { pollIntervalMs: 10 });
         const early = {
             ...request,
             bounds: { learnedBefore: "2026-10-03T00:00:00Z" },
@@ -1388,9 +1462,13 @@ describe("durable draft builds and explicit edit merge", () => {
                 expectedActiveRevisionId: captured.inputs[0].revisionId,
             },
         });
-        expect((await waitForMemoryJob(service, replaced.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, replaced.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
         finish(output(captured));
         const job = await wait(admitted);
         expect(job.results[0].state).toBe("stale");
@@ -1411,6 +1489,43 @@ describe("durable draft builds and explicit edit merge", () => {
             "New headroom warning",
         );
     });
+    test("retry selects its internal head under the same exclusive writer used for admission", async () => {
+        const request = await fixture();
+        generate.mockRejectedValueOnce(new Error("Synthetic provider failure"));
+        const failed = await wait(await service.buildViews(request));
+        expect(failed.state).toBe("failed");
+        const read = CorpusAccess.prototype.read;
+        const listViews = TypedViewStore.prototype.listViews;
+        const leases: boolean[] = [];
+        let corpusAccess: CorpusAccess | undefined;
+        const mocks = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const access = mocks
+            .spyOn(CorpusAccess.prototype, "read")
+            .mockImplementation(function <T>(
+                this: CorpusAccess,
+                operation: () => Promise<T>,
+            ): Promise<T> {
+                corpusAccess = this;
+                return (read<T>).call(this, operation);
+            });
+        await service.listViews(request.corpusId);
+        const snapshots = mocks
+            .spyOn(TypedViewStore.prototype, "listViews")
+            .mockImplementation(function (this: TypedViewStore, corpusId) {
+                leases.push(corpusAccess?.isWriting ?? false);
+                return listViews.call(this, corpusId);
+            });
+        try {
+            const retried = await wait(await service.retryViewBuild(failed));
+            expect(retried.state).toBe("complete");
+            expect(leases.length).toBeGreaterThan(0);
+            expect(leases.every(Boolean)).toBe(true);
+        } finally {
+            snapshots.mockRestore();
+            access.mockRestore();
+        }
+    });
+
     test.each(["generating", "inventorying", "checkingInventory"] as const)(
         "restart reconciles durable %s as interrupted and retry admits a new guarded build",
         async (stage) => {

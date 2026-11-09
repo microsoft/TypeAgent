@@ -43,7 +43,7 @@ test("relocated live entry points reject historical models before creating run s
             assert.equal(result.status, 1, result.stderr);
             assert.match(
                 result.stderr,
-                /Evaluation requires a ledger for gpt-5.6-luna/,
+                /Evaluation requires a ledger for gpt-6-luna/,
             );
             assert.equal(fs.existsSync(output), false);
         }

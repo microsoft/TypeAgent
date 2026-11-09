@@ -11,6 +11,8 @@ test("project summary schema has indexed citations and typed states without inve
     const properties = evidenceRecord(schema.properties);
     expect(Object.keys(properties)).toEqual([
         "title",
+        "summary",
+        "completeness",
         "goalsScope",
         "owners",
         "status",
@@ -23,7 +25,13 @@ test("project summary schema has indexed citations and typed states without inve
         "projectState",
         "incidentState",
         "capacityState",
+        "assignments",
+        "milestoneItems",
+        "decisionItems",
+        "openQuestions",
+        "riskItems",
     ]);
+    expect(Object.keys(properties).length).toBeLessThanOrEqual(20);
     expect(
         evidenceRecord(evidenceRecord(properties.citationIds).items).enum,
     ).toEqual(["f0"]);

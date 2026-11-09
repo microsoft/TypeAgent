@@ -13,6 +13,7 @@ import {
     setRuntimeConfig,
 } from "@typeagent/aiclient";
 import * as kp from "@typeagent/knowpro";
+import * as ms from "@typeagent/memory-storage";
 import * as kpLib from "@typeagent/knowledge-processor";
 import { success } from "typechat";
 import {
@@ -149,6 +150,123 @@ describe("document embedding persistence (deterministic, offline)", () => {
         };
     }
 
+    test.each([false, true])(
+        "SQLite email prepared receipt recovers %s external snapshot after a later durable commit",
+        async (saveOlderSnapshot) => {
+            const fileSettings = {
+                dirPath: root,
+                baseFileName: "prepared-email",
+            };
+            const config = settings();
+            config.conversationSettings.preparedIndexing = {
+                workers: 2,
+                window: 2,
+            };
+            const memory = new EmailMemory(
+                ms.sqlite.createSqlStorageProvider(
+                    root,
+                    fileSettings.baseFileName,
+                    true,
+                ),
+                config,
+            );
+            let reopened: EmailMemory | undefined;
+            try {
+                await memory.addMessages(
+                    new EmailMessage(
+                        new EmailMeta({ address: "fixture@example.test" }),
+                        "ocean",
+                        ["old-tag"],
+                    ),
+                    false,
+                );
+                if (saveOlderSnapshot) {
+                    await memory.buildIndex(undefined, false);
+                    await memory.writeToFile(fileSettings);
+                    await memory.addMessages(
+                        new EmailMessage(
+                            new EmailMeta({ address: "fixture@example.test" }),
+                            "stars",
+                            ["new-tag"],
+                        ),
+                        false,
+                    );
+                }
+                await expect(memory.buildIndex()).rejects.toThrow(
+                    "No file save settings",
+                );
+                const expected = memory.semanticRefIndex.serialize();
+                const before = calls.length;
+                memory.close();
+                const fresh = settings();
+                fresh.conversationSettings.preparedIndexing = {
+                    workers: 2,
+                    window: 2,
+                };
+                reopened = await EmailMemory.readFromFile(
+                    fileSettings,
+                    true,
+                    fresh,
+                );
+                expect(reopened).toBeDefined();
+                expect(reopened!.indexingState.lastMessageOrdinal).toBe(
+                    saveOlderSnapshot ? 1 : 0,
+                );
+                expect(reopened!.semanticRefIndex.serialize()).toEqual(
+                    expected,
+                );
+                expect(
+                    (await reopened!.buildIndex(undefined, false)).success,
+                ).toBe(true);
+                expect(reopened!.semanticRefIndex.serialize()).toEqual(
+                    expected,
+                );
+                expect(calls).toHaveLength(before);
+            } finally {
+                reopened?.close();
+                memory.close();
+            }
+        },
+    );
+
+    test("scoped queries use their own model and are decorated after customization", async () => {
+        let queryCalls = 0;
+        let wrappedCalls = 0;
+        const translated = {
+            searchExpressions: [
+                {
+                    rewrittenQuery: "form fields",
+                    filters: [{ searchTerms: ["form", "fields"] }],
+                },
+            ],
+        };
+        const configured = settings();
+        configured.queryLanguageModel = {
+            async complete() {
+                queryCalls++;
+                return success(JSON.stringify(translated));
+            },
+        };
+        configured.wrapQueryTranslator = (translator) => {
+            const translate = translator.translate2;
+            if (!translate) throw new Error("Scoped translation is missing");
+            return {
+                ...translator,
+                translate2: async (...args) => {
+                    wrappedCalls++;
+                    return translate(...args);
+                },
+            };
+        };
+        const memory = new DocMemory("query-role", [], configured);
+        const result =
+            await memory.settings.queryTranslator!.translate2!("form fields");
+        expect(result).toEqual(success(translated));
+        expect(queryCalls).toBe(1);
+        expect(wrappedCalls).toBe(1);
+        expect(extractionCalls).toBe(0);
+    });
+
     function part(text: string, topic: string): DocPart {
         return new DocPart(
             text,
@@ -248,6 +366,39 @@ describe("document embedding persistence (deterministic, offline)", () => {
         expect(restarted.indexingState.lastMessageOrdinal).toBe(4);
         expect(calls.some((call) => call.includes(":query:marine"))).toBe(true);
         expect(calls.some((call) => call.includes(":document:"))).toBe(true);
+    });
+
+    test("source temporal context survives a cold document-memory reopen", async () => {
+        const original = await createSaved();
+        const message = original.messages.get(0);
+        message.metadata.temporalContext = kp.temporalSegments(
+            message.textChunks.join("\n"),
+            {
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: "session",
+                        start: 0,
+                        end: message.textChunks.join("\n").length,
+                        messageTime: "2023/05/27 (Sat) 22:00",
+                    },
+                ],
+            },
+            "revision",
+        )[0].context;
+        message.metadata.temporalContext!.rejectedDateAnchors = [
+            { anchorOrdinal: 0, chunkOrdinal: 0, reason: "ambiguous-quote" },
+        ];
+        await original.writeToFile(root, "temporal");
+        const reopened = (await DocMemory.readFromFile(
+            root,
+            "temporal",
+            settings(),
+        ))!;
+        expect(reopened.messages.get(0).metadata.temporalContext).toEqual(
+            message.metadata.temporalContext,
+        );
+        expect(reopened.messages.get(0).timestamp).toBeUndefined();
     });
 
     test.each([

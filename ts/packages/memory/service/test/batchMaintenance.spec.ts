@@ -46,6 +46,7 @@ describe("durable batch maintenance coalescing", () => {
     let captures: string[][];
     let discoveries: string[][];
     let generations: number;
+    let synopsisCalls: number;
     let captureHold: ReturnType<typeof gate> | undefined;
     const gates = new Map<string, ReturnType<typeof gate>>();
 
@@ -107,9 +108,19 @@ describe("durable batch maintenance coalescing", () => {
         }
     }
 
-    function open() {
+    function open(sourceSynopses = false) {
         return new GatedService(root, {
-            sourceSynopses: false,
+            sourceSynopses,
+            sourceSynopsisModel: {
+                identity: "unexpected-active-import-synopsis",
+                fits: () => true,
+                complete: async () => {
+                    synopsisCalls++;
+                    throw new Error(
+                        "Source synopsis started during the gated import",
+                    );
+                },
+            },
             indexFactory: (_corpusId, directory) => new BatchIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-batch-topics",
@@ -386,13 +397,34 @@ describe("durable batch maintenance coalescing", () => {
             await writeFile(file, JSON.stringify(stored));
             service = open();
             const recovered = await service.getBatchImport(batch.batchId);
-            expect(recovered.state).toBe("interrupted");
+            expect(recovered.state).toBe(
+                memberState === "complete" ? "complete" : "interrupted",
+            );
             expect(recovered.members[2].state).toBe(memberState);
             await maintained(corpusId, memberState === "complete" ? 3 : 2);
             expect(captures).toHaveLength(1);
             expect(generations).toBe(1);
         },
     );
+
+    test("source synopses do not start while their own corpus still imports", async () => {
+        await service.close();
+        synopsisCalls = 0;
+        service = open(true);
+        const { corpusId } = await service.createCorpus(
+            "Synopsis import guard",
+        );
+        const held = gate();
+        gates.set("guarded-2", held);
+        await service.startBatchImport(request(corpusId, "guarded"));
+        await held.entered;
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        expect(synopsisCalls).toBe(0);
+        const closing = service.close();
+        held.release();
+        await closing;
+        expect(synopsisCalls).toBe(0);
+    });
 
     test("an ordinary single-source ingestion still schedules maintenance", async () => {
         const { corpusId } = await service.createCorpus("single");

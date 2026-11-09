@@ -8,6 +8,14 @@ TypeAgent Shell is a **personal agent** that takes user request and use an exten
 
 ## Prerequisites
 
+The shell uses Electron 45.1.0 with embedded Node.js 24.22.1, including the
+[October 2026 Brotli decoder security fix](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+Updating system Node.js does not update the shell's embedded runtime.
+
+SQLite uses better-sqlite3 13's N-API binaries, shared by Node.js and Electron
+without separate ABI-specific downloads or restores. On macOS, Electron 45
+requires macOS 13 or later.
+
 ### Linux/WSL Build Prerequisites
 
 TypeAgent shell is built using [Electron](https://www.electronjs.org). Follow these [instructions](https://www.electronjs.org/docs/latest/development/build-instructions-linux) to install the libraries needed to build and use in the Linux/WSL environment.
@@ -105,7 +113,7 @@ To read the chat view from another device, such as a phone on a trusted home net
 
 ### Azure Speech to Text service (Optional)
 
-Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.
+Voice input supports Azure (default), Python [Whisper](../../../python/stt/whisperService/), and Windows x64 Nemotron. Select with `@shell speechProvider azure|whisper|nemotron`; Nemotron downloads on first selection.
 
 To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in `config.local.yaml` (under `speech`) or the legacy `.env` are needed:
 

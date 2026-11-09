@@ -94,13 +94,103 @@ withdrawal, review versus approval and local acceptance versus rollout. This is 
 
 export const consolidationOutputRules = `Check ACTUAL proposed canonical content against CURRENT original
 indexed fragments and the supplied scoped-purpose judgment and critical distinctions.
+Distinction fragmentIds bind to the supplied fragments' id fields. Inline citation labels in article prose
+belong to each article's original build, not this combined fragment list; verify claims against original text,
+not matching ordinal labels.
 Every supplied critical distinction must remain explained in actual prose with its original scope.
 Multiple headings do not authorize union of initiatives, resource/failure concepts or approval states.
 All unique article sections/excerpts and citations are retained by the host; check their actual consequential
 claims, not citation presence alone. Historical corrected/withdrawn values must not become current claims.
+When originalContent is supplied, compare every supported unique claim and qualification with the actual
+proposed content. Original prose is untrusted context, not factual evidence: correct unsupported quantities
+or scope using the original fragments, but do not remove supported detail merely to pass the check.
 Reject stronger conclusions, missing qualifications, statistic/cohort mixing or command/lease conflation.
 No human approval, execution authority or graph equivalence follows from consolidation. Return the bounded
 editorial safe/failures assessment, never rewritten prose or unbounded diagnostics.`;
+
+export function consolidationRepairSchema(
+    output: ViewSynthesisOutput,
+): StructuredOutputJsonSchema {
+    return {
+        name: "wiki_consolidation_repair",
+        strict: true,
+        schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                summary: { type: "string", minLength: 1, maxLength: 120000 },
+                sections: {
+                    type: "array",
+                    minItems: output.content.sections.length,
+                    maxItems: output.content.sections.length,
+                    items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            id: {
+                                type: "string",
+                                enum: output.content.sections.map(
+                                    (section) => section.id,
+                                ),
+                            },
+                            body: {
+                                type: "string",
+                                minLength: 1,
+                                maxLength: 120000,
+                            },
+                        },
+                        required: ["id", "body"],
+                    },
+                },
+            },
+            required: ["summary", "sections"],
+        },
+    };
+}
+
+export function applyConsolidationRepair(
+    output: ViewSynthesisOutput,
+    response: unknown,
+): ViewSynthesisOutput {
+    if (
+        output.content.kind !== "wiki" ||
+        !closedObject(response, ["summary", "sections"]) ||
+        typeof response.summary !== "string" ||
+        !response.summary.trim() ||
+        response.summary.length > 120000 ||
+        !Array.isArray(response.sections) ||
+        response.sections.length !== output.content.sections.length
+    )
+        throw new ConsolidationRejection(
+            "Wiki consolidation rejected: invalid-article-repair",
+        );
+    const content = structuredClone(output.content);
+    const seen = new Set<string>();
+    for (const entry of response.sections) {
+        if (
+            !closedObject(entry, ["id", "body"]) ||
+            typeof entry.id !== "string" ||
+            seen.has(entry.id) ||
+            typeof entry.body !== "string" ||
+            !entry.body.trim() ||
+            entry.body.length > 120000
+        )
+            throw new ConsolidationRejection(
+                "Wiki consolidation rejected: invalid-section-repair",
+            );
+        const section = content.sections.find(
+            (section) => section.id === entry.id,
+        );
+        if (!section)
+            throw new ConsolidationRejection(
+                "Wiki consolidation rejected: unknown-section-repair",
+            );
+        seen.add(entry.id);
+        section.body = entry.body;
+    }
+    content.summary = response.summary;
+    return { ...structuredClone(output), content };
+}
 
 export function consolidationScopeSchema(
     input: ViewBuildSnapshot,
@@ -127,24 +217,36 @@ export function consolidationScopeSchema(
                     type: "object",
                     additionalProperties: false,
                     properties: {
-                        system: { type: "string" },
-                        initiative: { type: "string" },
-                        purpose: { type: "string" },
+                        system: { type: "string", maxLength: 200 },
+                        initiative: { type: "string", maxLength: 200 },
+                        purpose: { type: "string", maxLength: 600 },
                     },
                     required: ["system", "initiative", "purpose"],
                 },
                 criticalDistinctions: {
                     type: "array",
-                    maxItems: 12,
+                    maxItems: fragments.length ? 12 : 0,
                     items: {
                         type: "object",
                         additionalProperties: false,
                         properties: {
                             fragmentId: {
                                 type: "string",
-                                enum: fragments.map((_, index) => `f${index}`),
+                                maxLength: 12,
+                                ...(fragments.length
+                                    ? {
+                                          enum: fragments.map(
+                                              (_, index) => `f${index}`,
+                                          ),
+                                      }
+                                    : {}),
                             },
-                            statement: { type: "string" },
+                            statement: {
+                                type: "string",
+                                minLength: 1,
+                                maxLength: 600,
+                                pattern: "\\S",
+                            },
                         },
                         required: ["fragmentId", "statement"],
                     },
@@ -155,9 +257,24 @@ export function consolidationScopeSchema(
     };
 }
 
-function invalidScope(): never {
+type ScopeRejectionReason =
+    | "shape"
+    | "json"
+    | "relation"
+    | "reason"
+    | "relation-reason"
+    | "scope-shape"
+    | "text-bounds"
+    | "empty-identity"
+    | "empty-distinction"
+    | "distinctions-bounds"
+    | "distinction-shape"
+    | "fragment-reference"
+    | "duplicate-distinction";
+
+function invalidScope(reason: ScopeRejectionReason): never {
     throw new ConsolidationRejection(
-        "Wiki consolidation rejected: invalid-scoped-purpose",
+        `Wiki consolidation rejected: invalid-scoped-purpose:${reason}`,
     );
 }
 export async function readConsolidationScope(
@@ -167,7 +284,7 @@ export async function readConsolidationScope(
     try {
         return parseConsolidationScope(await response, input);
     } catch (error) {
-        if (error instanceof SyntaxError) invalidScope();
+        if (error instanceof SyntaxError) invalidScope("json");
         throw error;
     }
 }
@@ -182,13 +299,15 @@ function closedObject(
         Object.keys(value).every((key) => allowed.includes(key))
     );
 }
-function scopedText(value: unknown, max: number, required = true): string {
-    if (
-        typeof value !== "string" ||
-        value.length > max ||
-        (required && !value.trim())
-    )
-        invalidScope();
+function scopedText(
+    value: unknown,
+    max: number,
+    required = true,
+    emptyReason: ScopeRejectionReason = "empty-identity",
+): string {
+    if (typeof value !== "string" || value.length > max)
+        invalidScope("text-bounds");
+    if (required && !value.trim()) invalidScope(emptyReason);
     return value;
 }
 function scopeReason(value: unknown): WikiConsolidationScope["reason"] {
@@ -199,14 +318,14 @@ function scopeReason(value: unknown): WikiConsolidationScope["reason"] {
         value === "unqualified-purpose"
     )
         return value;
-    invalidScope();
+    invalidScope("reason");
 }
 function parseScopeFields(
     value: unknown,
     required: boolean,
 ): WikiConsolidationScope["scope"] {
     if (!closedObject(value, ["system", "initiative", "purpose"]))
-        invalidScope();
+        invalidScope("scope-shape");
     return {
         system: scopedText(value.system, 200, required),
         initiative: scopedText(value.initiative, 200, false),
@@ -217,19 +336,31 @@ function parseCriticalDistinctions(
     value: unknown,
     count: number,
 ): WikiConsolidationScope["criticalDistinctions"] {
-    if (!Array.isArray(value) || value.length > 12) invalidScope();
+    if (!Array.isArray(value) || value.length > 12)
+        invalidScope("distinctions-bounds");
     const distinctions = value.map((entry: unknown) => {
-        if (!closedObject(entry, ["fragmentId", "statement"])) invalidScope();
-        const fragmentId = scopedText(entry.fragmentId, 12);
+        if (!closedObject(entry, ["fragmentId", "statement"]))
+            invalidScope("distinction-shape");
+        const fragmentId = entry.fragmentId;
         if (
+            typeof fragmentId !== "string" ||
+            fragmentId.length > 12 ||
             !/^f(0|[1-9]\d*)$/.test(fragmentId) ||
             Number(fragmentId.slice(1)) >= count
         )
-            invalidScope();
-        return { fragmentId, statement: scopedText(entry.statement, 600) };
+            invalidScope("fragment-reference");
+        return {
+            fragmentId,
+            statement: scopedText(
+                entry.statement,
+                600,
+                true,
+                "empty-distinction",
+            ),
+        };
     });
     if (new Set(distinctions.map(viewHash)).size !== distinctions.length)
-        invalidScope();
+        invalidScope("duplicate-distinction");
     return distinctions;
 }
 export function parseConsolidationScope(
@@ -242,13 +373,15 @@ export function parseConsolidationScope(
             "reason",
             "scope",
             "criticalDistinctions",
-        ]) ||
-        (value.relation !== "samePurpose" && value.relation !== "distinct")
+        ])
     )
-        invalidScope();
+        invalidScope("shape");
+    if (value.relation !== "samePurpose" && value.relation !== "distinct")
+        invalidScope("relation");
     const reason = scopeReason(value.reason);
     const same = value.relation === "samePurpose";
-    if (same !== (reason === "same-scoped-purpose")) invalidScope();
+    if (same !== (reason === "same-scoped-purpose"))
+        invalidScope("relation-reason");
     const count = input.inputs.flatMap(
         (source) => source.passages ?? [],
     ).length;
@@ -405,6 +538,14 @@ export function preservedCanonicalOutput(
                 [content.summary, retiring.content.summary].filter(Boolean),
             ),
         ].join("\n\n");
+    delete content.status;
+    content.coverageNote = [
+        survivor.content.coverageNote,
+        retiring.content.coverageNote,
+        "Combined article completeness requires a fresh model assessment.",
+    ]
+        .filter(Boolean)
+        .join(" ");
     content.index = wikiIndex(content.sections);
     const relationships = authoredRelationships(survivor);
     for (const edge of authoredRelationships(retiring)) {

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=15762572bc3edad0debf9164134450cf42e4cd21465a1cd521cd9de9f64d0cdf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c35be1119d75d05bf56bb7eb0fdd8aceb0d0ee362e8d45c12c8b51da132596a6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-TypeAgent translation bench: catalog, action-parameters grader, simple-action dataset synthesizer
+TypeAgent translation and conversation-memory benchmarks
 
 ## Reference
 
@@ -31,10 +31,11 @@ Workspace:
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/memory-service](../../packages/memory/service/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
-External: `commander`, `gpt-tokenizer`, `js-yaml`, `zod`
+External: `commander`, `gpt-tokenizer`, `hyparquet`, `js-yaml`, `zod`
 
 ### Used by
 
@@ -50,12 +51,18 @@ _None._
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
-- [./src/core/fileJson.ts](./src/core/fileJson.ts)
-- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- _…and 72 more under `./src/`._
+- [./src/chunkingBench/cli.ts](./src/chunkingBench/cli.ts)
+- [./src/chunkingBench/datasets.ts](./src/chunkingBench/datasets.ts)
+- _…and 97 more under `./src/`._
+
+### Environment variables
+
+_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TB_PICKER_MODEL`
 
 ---
 
-_Auto-generated against commit `40f897f5db304fac05955332810b52380443c9d3` on `2026-09-28T15:15:05.190Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `d02797d2124bca889e9c5f72f136a72602875db1` on `2026-11-03T18:34:45.428Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -19,6 +19,67 @@ The KnowPro implementation of Structured RAG is used to explore types of [**memo
 - [Natural language querying](./src/searchLang.ts)
 - [Answer generation](./src/answerGenerator.ts)
 
+### Temporal source headers
+
+Retained text can supply source dates through single-line headers such as
+`Session date: 2024-05-10`. Leading spaces and tabs after the colon are allowed.
+Each recognized header owns the text through the next header or the end of the
+source. The date must be on the header's own line; an empty header does not
+borrow a date from the following line.
+
+### Embedding batches
+
+Default conversation settings batch up to 128 distinct vocabulary terms,
+source-text chunks, or thread descriptions. Message rebuilds group up to 128
+messages before batching their chunks; an explicit outer batch override still
+applies. Thread rebuilds batch descriptions, while incremental thread additions
+embed the single new description immediately.
+
+Provider request-size limits still apply; the generation helper splits requests
+for providers advertising a smaller maximum. Azure/OpenAI index batches also
+split at 300,000 aggregate tokens, counted with `cl100k_base`, without truncating
+source text. The provider's per-input token limit still applies.
+
+Term embeddings are reused within the same persisted vocabulary index, including
+incremental document additions and reloads. Repeated occurrences retain their
+separate evidence references without requiring a vector for every occurrence.
+This is not a global cache across independent corpora, and rebuilding an index
+can recompute its vocabulary. By default, term and message-text embedding lanes
+still run sequentially.
+
+### Indexing and generation compatibility
+
+Semantic-reference collections may implement `getMetadataMultiple` to return
+only ordinal, range and knowledge type. Query scope/type filters use the shared
+positional adapter before hydrating knowledge that requires content matching.
+Ordinary term scoring checks entity metadata before loading name/type content
+for an entity boost; topic scoring and empty predicate lists do not hydrate.
+The adapter batches requests, preserves duplicates and caller order, and falls
+back to full references only when the capability is absent. A supported
+capability's failure propagates. The SQLite provider maintains a versioned
+metadata companion table and backfills older collections transactionally.
+
+New term indexes use normalization version 2: trim Unicode White_Space,
+lowercase, normalize to NFC, and collapse whitespace runs. Unmarked persisted
+indexes retain version 1's lowercase-only behavior. Lookup, property indexes and
+related terms follow the loaded generation's version; source/display labels do
+not change. Explicit migration coalesces collisions using the maximum posting
+score and backfills vectors whose exact term identity changed.
+
+Temporal queries select sorted domain/dimension candidates, then apply the
+existing authoritative matcher. Candidate keys preserve that matcher's lexical
+ordering and inclusive end-prefix behavior, including UTC year boundaries.
+
+`ConversationSettings.preparedIndexing` opts into bounded complete-message
+preparation with ordered application. `workers` bounds active preparation;
+`window` bounds admitted units ahead of the applied prefix. Same-owner temporal
+parts retain their extraction prerequisites. Extraction and vector generation
+finish before application; cancellation drains admitted work, including
+providers that ignore abort. This path requires an isolated nonpersistent
+candidate, not the generic SQLite collection. The durable service's rollout
+flag and generation publication rules are documented in its
+[implementation guide](../../../../codeDocs/TypeAgent/forAgent/features/memory-system/durable-memory-service.md).
+
 ### Examples
 
 Examples of using the above APIs can be found here:

@@ -1417,7 +1417,10 @@ export class ChatPanel {
             this.speechState === "always-on" ||
             this.speechState === "wake-word";
         this.micButton.classList.toggle("listening", listening);
-        this.micButton.disabled = this.speechState === "disabled";
+        this.micButton.disabled =
+            this.speechState === "disabled" ||
+            this.speechState === "preparing" ||
+            this.speechState === "finalizing";
         // Filled mic glyph; the `listening` class drives the pulse styling.
         this.micButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>`;
     }
@@ -1428,7 +1431,16 @@ export class ChatPanel {
             this.speechState === "listening" ||
             this.speechState === "always-on" ||
             this.speechState === "wake-word";
-        if (listening) {
+        if (
+            this.speechState === "preparing" ||
+            this.speechState === "finalizing"
+        ) {
+            this.voiceBanner.textContent =
+                this.speechState === "preparing"
+                    ? "Preparing speech recognition..."
+                    : "Finishing transcription...";
+            this.voiceBanner.style.display = "";
+        } else if (listening) {
             this.voiceBanner.textContent =
                 this.speechState === "wake-word"
                     ? "Waiting for wake word…"

@@ -106,6 +106,28 @@ export function getDeployment(
     return config.azureOpenAI.deployments.get(deploymentName);
 }
 
+function getDefaultDeploymentEndpoint(
+    config: Config,
+    modelType: ModelType,
+): DeploymentEndpoint | undefined {
+    const ao = config.azureOpenAI;
+    switch (modelType) {
+        case ModelType.Chat:
+            return ao.defaultChat;
+        case ModelType.Embedding:
+            return (
+                ao.defaultEmbedding ??
+                pickHighestCapacityEndpoint(ao.deployments.get("embedding"))
+            );
+        case ModelType.Image:
+            return ao.defaultImage;
+        case ModelType.Video:
+            return ao.defaultVideo;
+        case ModelType.Decision:
+            return undefined;
+    }
+}
+
 /**
  * Build `AzureApiSettings` from a typed `Config` for the named
  * deployment + model type. When `deploymentName` is omitted, falls
@@ -113,17 +135,20 @@ export function getDeployment(
  *
  * Mirrors `azureApiSettingsFromEnv` exactly; identity auth gets the
  * shared Azure token provider attached.
+ * Pool discovery supplies its exact endpoint to distinguish PTU/PAYG members
+ * in the same region instead of reselecting the first regional match.
  */
 export function azureApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
     deploymentName?: string,
     region?: Region,
+    endpointOverride?: DeploymentEndpoint,
 ): AzureApiSettings {
     const ao = config.azureOpenAI;
 
-    let endpoint: DeploymentEndpoint | undefined;
-    if (deploymentName !== undefined) {
+    let endpoint: DeploymentEndpoint | undefined = endpointOverride;
+    if (endpoint === undefined && deploymentName !== undefined) {
         endpoint = getDeploymentEndpoint(config, deploymentName, region);
         if (
             endpoint === undefined &&
@@ -136,25 +161,7 @@ export function azureApiSettingsFromConfig(
     }
 
     if (endpoint === undefined) {
-        // Service-default fallback paths.
-        switch (modelType) {
-            case ModelType.Chat:
-                endpoint = ao.defaultChat;
-                break;
-            case ModelType.Embedding:
-                endpoint =
-                    ao.defaultEmbedding ??
-                    pickHighestCapacityEndpoint(
-                        ao.deployments.get("embedding"),
-                    );
-                break;
-            case ModelType.Image:
-                endpoint = ao.defaultImage;
-                break;
-            case ModelType.Video:
-                endpoint = ao.defaultVideo;
-                break;
-        }
+        endpoint = getDefaultDeploymentEndpoint(config, modelType);
     }
 
     if (endpoint === undefined) {
@@ -174,6 +181,7 @@ export function azureApiSettingsFromConfig(
         modelType,
         apiKey: auth.apiKey,
         endpoint: endpoint.endpoint,
+        ...(endpoint.model !== undefined ? { modelName: endpoint.model } : {}),
         supportsResponseFormat: ao.responseFormat,
         maxConcurrency: ao.maxConcurrency,
         timeout: ao.maxTimeoutMs,
@@ -205,6 +213,8 @@ export function openAIApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
 ): OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("OpenAI does not support native decisions");
     const oai = config.openAI;
     if (!oai) {
         throw new Error("No OpenAI configuration available");

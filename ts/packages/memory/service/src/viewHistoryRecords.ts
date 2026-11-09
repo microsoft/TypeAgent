@@ -3,6 +3,8 @@
 
 import git, { type FsClient, type TreeEntry } from "isomorphic-git";
 import { createHash } from "node:crypto";
+import { recordSearchTiming } from "@typeagent/knowpro";
+import { unchangedViewRecord } from "./viewHistoryPayloads.js";
 
 export const viewRecordsPath = "view-records";
 
@@ -18,25 +20,64 @@ function recordPath(id: string): string {
 export async function writeViewRecords(
     options: ViewRecordGitOptions,
     records: Record<string, unknown>,
+    previous?: TreeEntry,
 ): Promise<TreeEntry> {
+    const started = performance.now();
+    const previousTree = previous
+        ? (await git.readTree({ ...options, oid: previous.oid })).tree
+        : [];
+    const previousByPath = new Map(
+        previousTree.map((entry) => [entry.path, entry]),
+    );
     const tree: TreeEntry[] = [];
+    let serializedBytes = 0;
+    let reusedRecords = 0;
     for (const [id, record] of Object.entries(records)) {
+        const previousEntry = previousByPath.get(recordPath(id));
+        if (previousEntry) {
+            const { blob } = await git.readBlob({
+                ...options,
+                oid: previousEntry.oid,
+            });
+            if (
+                unchangedViewRecord(
+                    record,
+                    JSON.parse(Buffer.from(blob).toString("utf8")),
+                )
+            ) {
+                tree.push(previousEntry);
+                reusedRecords++;
+                continue;
+            }
+        }
+        const blob = Buffer.from(JSON.stringify(record), "utf8");
+        serializedBytes += blob.byteLength;
         tree.push({
             mode: "100644",
             path: recordPath(id),
             type: "blob",
             oid: await git.writeBlob({
                 ...options,
-                blob: Buffer.from(JSON.stringify(record), "utf8"),
+                blob,
             }),
         });
     }
-    return {
+    const entry: TreeEntry = {
         mode: "040000",
         path: viewRecordsPath,
         type: "tree",
         oid: await git.writeTree({ ...options, tree }),
     };
+    recordSearchTiming(
+        "view.history.records.write",
+        performance.now() - started,
+        {
+            serializedBytes,
+            reusedRecords,
+            records: tree.length,
+        },
+    );
+    return entry;
 }
 
 export async function readViewRecord<R>(

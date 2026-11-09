@@ -706,7 +706,7 @@ function assertRegularGeneratedConflict(worktree, path, environment) {
 function containedRegularPath(root, path) {
     const normalized = normalizeCandidatePath(path);
     const rootPath = realpathSync(root);
-    const destination = resolve(root, ...normalized.split("/"));
+    const destination = resolve(rootPath, ...normalized.split("/"));
     const relativeDestination = relative(rootPath, destination);
     if (
         relativeDestination === "" ||
@@ -833,7 +833,7 @@ function copyManifestInputs(worktree, scratchDirectory) {
         ) {
             blockCandidate(`Manifest source escapes the worktree: ${path}`);
         }
-        const destination = resolve(scratchDirectory, ...components.slice(1));
+        const destination = resolve(resolvedScratch, ...components.slice(1));
         const destinationRelative = relative(resolvedScratch, destination);
         if (
             destinationRelative === "" ||

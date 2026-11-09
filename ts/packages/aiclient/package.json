@@ -41,6 +41,7 @@
     "@typeagent/telemetry": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
+    "gpt-tokenizer": "^2.9.0",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

@@ -17,6 +17,7 @@ import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { projectSources } from "./projectTestSources.js";
 import { timelineTestAnswer } from "./timelineTestModel.js";
 import { createOfflineEmbeddingModel } from "./offlineEmbedding.js";
+import { waitForTestState } from "./waitForTestState.js";
 
 const runtimeJest = import.meta.jest;
 const jest = runtimeJest as typeof runtimeJest & {
@@ -87,6 +88,8 @@ describe("timeline configured service pipeline", () => {
     const open = () =>
         new FileMemoryService(root, {
             viewDrafts: true,
+            maintenanceMode: "manual",
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
         });
@@ -150,7 +153,7 @@ describe("timeline configured service pipeline", () => {
     ) {
         const snapshot = await service.listViews(corpusId);
         const sources = await service.listSources(corpusId);
-        let job: ViewBuildJob = await createMemoryServiceRpcFacade(
+        const job: ViewBuildJob = await createMemoryServiceRpcFacade(
             service,
         ).buildViews({
             corpusId,
@@ -177,12 +180,19 @@ describe("timeline configured service pipeline", () => {
             ],
             ...(bounds ? { bounds } : {}),
         });
-        for (let index = 0; index < 300 && job.state === "running"; index++) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            job = (await service.getViewBuild({ corpusId, jobId: job.jobId }))!;
-        }
-        expect(job.state).not.toBe("running");
-        return job;
+        return waitForTestState(
+            async () => {
+                const current = await service.getViewBuild({
+                    corpusId,
+                    jobId: job.jobId,
+                });
+                if (!current)
+                    throw new Error(`Unknown view build '${job.jobId}'`);
+                return current;
+            },
+            (current) => current.state !== "running",
+            "Timeline view build",
+        );
     }
     const log = [
         "## Record hypothesis",

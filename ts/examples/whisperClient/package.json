@@ -23,6 +23,7 @@
     "webpack": "webpack"
   },
   "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0"
   },

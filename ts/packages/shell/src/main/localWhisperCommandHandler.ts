@@ -3,14 +3,9 @@
 
 import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
-import {
-    displayError,
-    displayResult,
-    displayStatus,
-    displaySuccess,
-    displayWarn,
-} from "@typeagent/agent-sdk/helpers/display";
+import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import { ActionContext } from "@typeagent/agent-sdk";
+import type { ShellContext } from "./agent.js";
 
 import registerDebug from "debug";
 import { fileURLToPath } from "url";
@@ -81,7 +76,7 @@ export function isLocalWhisperEnabled() {
     return localWhisperProcess !== undefined;
 }
 
-async function ensureLocalWhisper() {
+export async function ensureLocalWhisper() {
     if (localWhisperProcess === undefined) {
         localWhisperProcess = await createLocalWhisperHost();
         localWhisperProcess.on("exit", function (code, signal) {
@@ -113,45 +108,33 @@ export function closeLocalWhisper() {
     return false;
 }
 
-export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
+export function getLocalWhisperCommandHandlers(
+    selectProvider: (
+        context: ActionContext<ShellContext>,
+        provider: "azure" | "whisper",
+    ) => Promise<void>,
+): CommandHandlerTable {
     return {
         description: "Configure Local Whisper",
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",
-                run: async (context: ActionContext) => {
-                    // This is process wide
-                    if (closeLocalWhisper()) {
-                        displayResult("Local Whisper disabled.", context);
-                    } else {
-                        displayWarn(
-                            "Local Whisper is already disabled.",
-                            context,
-                        );
-                    }
+                run: async (context: ActionContext<ShellContext>) => {
+                    displayWarn(
+                        "Deprecated: use @shell speechProvider azure.",
+                        context,
+                    );
+                    await selectProvider(context, "azure");
                 },
             },
             on: {
                 description: "Turn on Local Whisper integration.",
-                run: async (context: ActionContext) => {
-                    if (isLocalWhisperEnabled()) {
-                        displayWarn(
-                            "Local Whisper is already enabled.",
-                            context,
-                        );
-                        return;
-                    }
-
-                    try {
-                        displayStatus("Starting local whisper...", context);
-                        await ensureLocalWhisper();
-                        displaySuccess("Local whisper started.", context);
-                    } catch (e: any) {
-                        displayError(
-                            `Error starting local whisper: ${e.message}`,
-                            context,
-                        );
-                    }
+                run: async (context: ActionContext<ShellContext>) => {
+                    displayWarn(
+                        "Deprecated: use @shell speechProvider whisper.",
+                        context,
+                    );
+                    await selectProvider(context, "whisper");
                 },
             },
         },

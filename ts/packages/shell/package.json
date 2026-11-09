@@ -49,7 +49,9 @@
     "start:package:linux": "./dist/linux-unpacked/typeagentshell",
     "start:package:macos": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",
     "start:package:win32": ".\\dist\\win-unpacked\\typeagentshell.exe",
-    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:asr": "tsx --test test/unit/localAsr.test.mts",
+    "test:local": "pnpm run test:asr && pnpm run test:startup && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:startup": "tsx --test test/unit/shellStartup.test.mts",
     "tsc:model": "tsc -b src test",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
@@ -82,9 +84,10 @@
     "dompurify": "^3.4.17",
     "dotenv": "^16.3.1",
     "electron-updater": "^6.8.9",
+    "foundry-local-sdk": "2.1.0",
     "jose": "^5.9.6",
     "js-yaml": "^4.3.2",
-    "markdown-it": "^14.3.2",
+    "markdown-it": "^14.3.3",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "typechat": "^0.1.1",
     "ws": "^8.21.3"
@@ -104,7 +107,7 @@
     "cross-env": "^7.0.3",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
-    "electron": "41.10.3",
+    "electron": "45.1.0",
     "electron-builder": "26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "electron-vite": "^4.0.1",
@@ -114,7 +117,7 @@
     "run-script-os": "^1.1.6",
     "type-fest": "^4.39.1",
     "typescript": "~5.4.5",
-    "vite": "^6.4.4"
+    "vite": "^6.4.5"
   },
   "fluidBuild": {
     "tasks": {

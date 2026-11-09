@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { normalizeSearchTerm } from "./termNormalization.js";
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import { createAndTermGroup, createTagSearchTermGroup } from "./searchLib.js";
@@ -611,8 +612,11 @@ class QueryCompiler {
     ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
         const boostWeight =
             this.entityTermMatchWeight / this.defaultTermMatchWeight;
-        return new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-            this.boostEntities(term, sr, scored, boostWeight),
+        return new q.MatchSearchTermExpr(
+            term,
+            (term, sr, scored) =>
+                this.boostEntities(term, sr, scored, boostWeight),
+            (metadata) => metadata.knowledgeType === "entity",
         );
     }
 
@@ -876,7 +880,12 @@ class QueryCompiler {
             term.text !== undefined &&
             term.text.length > 0
         ) {
-            term.text = term.text.toLowerCase();
+            term.normalizationVersion =
+                this.conversation.semanticRefIndex?.normalizationVersion ?? 1;
+            term.text = normalizeSearchTerm(
+                term.text,
+                term.normalizationVersion,
+            );
         }
         return true;
     }

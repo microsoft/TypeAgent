@@ -41,6 +41,12 @@ export function derivedDefinitionInput(
         ...(version.definition.projectSummary
             ? { projectSummary: version.definition.projectSummary }
             : {}),
+        ...(version.definition.schemaView
+            ? { schemaView: version.definition.schemaView }
+            : {}),
+        ...(version.definition.extension
+            ? { extension: version.definition.extension }
+            : {}),
     };
 }
 
@@ -55,6 +61,8 @@ export function materializeDefinition(
             definition.maintenance,
             definition.wiki,
             definition.projectSummary,
+            definition.schemaView,
+            definition.extension,
         ]);
     return {
         ...structuredClone(input),
@@ -109,7 +117,12 @@ export function versionRelationships(
                 revisionId: version.definition.revisionId,
             },
         },
-        ...version.definition.selector.sources.map(
+        ...[
+            ...version.definition.selector.sources,
+            ...(version.definition.selector.kind === "sourceManifest"
+                ? [version.definition.selector.manifest]
+                : []),
+        ].map(
             (source): ViewRelationship => ({
                 id: `dependency:${createHash("sha256").update(viewSourceKey(source)).digest("hex").slice(0, 24)}`,
                 schemaVersion: 1,
@@ -117,7 +130,11 @@ export function versionRelationships(
                 family: "dependency",
                 origin: "system",
                 from,
-                to: { kind: "source", ...source },
+                to: {
+                    kind: "source",
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                },
             }),
         ),
         ...(

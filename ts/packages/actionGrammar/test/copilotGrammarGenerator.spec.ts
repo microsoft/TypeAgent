@@ -91,7 +91,7 @@ class TestClient implements CopilotGrammarClient {
 }
 
 describe("CopilotGrammarGenerator", () => {
-    it("uses GPT-5.6 Sol and cleans up the Copilot session", async () => {
+    it("uses GPT-6.1 Sol and cleans up the Copilot session", async () => {
         const session = new TestSession(JSON.stringify(analysis));
         const client = new TestClient(session);
         const generator = new CopilotGrammarGenerator(
@@ -113,6 +113,7 @@ describe("CopilotGrammarGenerator", () => {
 
         expect(result).toEqual(analysis);
         expect(client.config?.model).toBe(defaultCopilotGrammarModel);
+        expect(defaultCopilotGrammarModel).toBe("gpt-6.1-sol");
         expect(client.config?.streaming).toBe(false);
         expect(session.prompt).toContain("grammar pattern generator");
         expect(session.disconnected).toBe(true);

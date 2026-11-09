@@ -125,6 +125,7 @@ export function addNoiseWordsFromFile(
 export class MessageMetadata
     implements kp.IMessageMetadata, kp.IKnowledgeSource
 {
+    public temporalContext?: kp.MessageTemporalContext | undefined;
     public get source(): string | string[] | undefined {
         return undefined;
     }
@@ -617,7 +618,9 @@ export abstract class Memory<
      * @returns {Promise<Result<kp.AnswerResponse>>} - The answer response.
      */
     public async getAnswerFromSearchResults(
-        searchResult: kp.ConversationSearchResult,
+        searchResult:
+            | kp.ConversationSearchResult
+            | kp.ConversationSearchResult[],
         question?: string,
         progress?: (
             chunk: kp.AnswerContext,
@@ -626,7 +629,9 @@ export abstract class Memory<
         ) => void,
         answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<kp.AnswerResponse>> {
-        question ??= searchResult.rawSearchQuery;
+        question ??= Array.isArray(searchResult)
+            ? searchResult[0]?.rawSearchQuery
+            : searchResult.rawSearchQuery;
         if (!question) {
             return error("No searchResult.rawSearchQuery or question provided");
         }

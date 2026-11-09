@@ -541,7 +541,9 @@ export function selectCopilotModel(
     const requestedModel = byId.get(requested);
     if (requestedModel !== undefined) return requestedModel;
 
-    const previousTier = /^gpt-6-(luna|sol)$/.exec(requested)?.[1];
+    const previousTier = /^gpt-6(?:\.\d+)?-(luna|sol|terra)$/.exec(
+        requested,
+    )?.[1];
     if (previousTier !== undefined) {
         const previousModel = byId.get(`gpt-5.6-${previousTier}`);
         if (previousModel !== undefined) return previousModel;
@@ -927,6 +929,8 @@ export function createCopilotChatModel(
 ): ChatModelWithStreaming {
     // The SDK is used only to mint a provider endpoint; translation requests
     // are then issued as plain HTTP chat/completions calls.
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const endpointProvider = createCopilotEndpointProvider(settings);
     return createCopilotTransportModel(
         settings,
@@ -1066,6 +1070,8 @@ export function createCopilotTransportModel(
     tags: string[] | undefined,
     endpointProvider: CopilotEndpointProvider,
 ): ChatModelWithStreaming {
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const resolvedCompletionSettings = completionSettings ?? {};
     rejectCompletionLimits(resolvedCompletionSettings);
     resolvedCompletionSettings.n ??= 1;

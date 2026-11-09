@@ -129,6 +129,12 @@ export function viewBuildBounds(
     return bounds;
 }
 
+function schemaBuildDefinition(rebuilding?: ViewVersion) {
+    return rebuilding?.definition.schemaView
+        ? { schemaView: rebuilding.definition.schemaView }
+        : {};
+}
+
 export function createViewBuildTargets(
     kinds: Iterable<ViewKind>,
     ids: Map<ViewKind, string>,
@@ -140,6 +146,13 @@ export function createViewBuildTargets(
     projectSources: SourceInput[] = sources,
 ): ViewBuildRequest["targets"] {
     const selectedKinds = [...kinds];
+    if (
+        selectedKinds.includes("schemaView") &&
+        !rebuilding?.definition.schemaView
+    )
+        throw new Error(
+            "Schema-defined views require an approved definition from Questions.",
+        );
     if (selectedKinds.includes("wiki") && !rebuilding?.definition.wiki)
         throw new Error(
             "Wiki pages are created by the indexed informational family",
@@ -190,6 +203,7 @@ export function createViewBuildTargets(
                 ...(rebuilding?.definition.wiki
                     ? { wiki: rebuilding.definition.wiki }
                     : {}),
+                ...schemaBuildDefinition(rebuilding),
                 ...(rebuilding?.definition.projectSummary
                     ? { projectSummary: rebuilding.definition.projectSummary }
                     : kind === "projectBrief"

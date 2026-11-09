@@ -28,7 +28,7 @@ describe("exact-token document aggregation", () => {
         },
     );
 
-    test("preserves oversized indivisible parts, metadata, tags and knowledge without aliasing", () => {
+    test("splits oversized parts without losing text, metadata, tags or knowledge", () => {
         const original = new DocPart(
             " x".repeat(24_001),
             new DocPartMeta("https://memory.test/source"),
@@ -45,8 +45,22 @@ describe("exact-token document aggregation", () => {
             [original, new DocPart("next")],
             24_000,
         );
-        expect(parts).toHaveLength(2);
-        expect(parts[0]).toEqual(original);
+        expect(parts).toHaveLength(3);
+        expect(
+            parts
+                .slice(0, 2)
+                .map((part) => part.textChunks[0])
+                .join(""),
+        ).toBe(original.textChunks[0]);
+        for (const part of parts) {
+            expect(countDocTokens(part.textChunks[0])).toBeLessThanOrEqual(
+                24_000,
+            );
+        }
+        expect(parts[0].metadata).toEqual(original.metadata);
+        expect(parts[0].timestamp).toBe(original.timestamp);
+        expect(parts[1].timestamp).toBe(original.timestamp);
+        expect(parts[2].textChunks).toEqual(["next"]);
         parts[0].tags.push("changed");
         parts[0].knowledge!.topics.push("changed");
         expect(original.tags).toEqual(["section"]);

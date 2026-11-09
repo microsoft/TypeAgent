@@ -121,6 +121,7 @@ export const HOSTED_API_CONFIG_FIELD_POLICY = {
     azureFoundry: "absent",
     azureAISearch: "absent",
     reasoning: "absent",
+    decision: "absent",
     copilot: "absent",
     embedding: "absent",
     modelProvider: "azure-model-provider",

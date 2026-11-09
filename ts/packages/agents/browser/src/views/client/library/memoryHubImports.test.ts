@@ -138,16 +138,22 @@ test("Memory Hub extracts a selected local PDF and submits only ordinary Markdow
         configurable: true,
     });
     const memory = jest.mocked(invokeMemory);
+    let submitted!: () => void;
+    const submission = new Promise<void>((resolve) => {
+        submitted = resolve;
+    });
     memory.mockImplementation(async (method) => {
         if (method === "memoryListCorpora")
             return [{ corpusId: "selected", name: "Documents" }] as never;
-        if (method === "memoryImportDocument")
+        if (method === "memoryImportDocument") {
+            submitted();
             return {
                 jobId: "local-job",
                 sourceId: "local-source",
                 revisionId: "local-revision",
                 state: "accepted",
             } as never;
+        }
         throw new Error(`Unexpected memory method ${method}`);
     });
     mockGetDocument.mockReturnValue({
@@ -181,7 +187,7 @@ test("Memory Hub extracts a selected local PDF and submits only ordinary Markdow
     dialog
         .querySelector("form")!
         .dispatchEvent(new Event("submit", { cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await submission;
     await settle();
     expect(memory).toHaveBeenCalledWith("memoryImportDocument", {
         corpusId: "selected",

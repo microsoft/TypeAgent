@@ -13,12 +13,7 @@ import {
 } from "typechat";
 import * as answerSchema from "./answerResponseSchema.js";
 import * as contextSchema from "./answerContextSchema.js";
-import {
-    asyncArray,
-    getTopK,
-    loadSchema,
-    rewriteText,
-} from "@typeagent/agent-runtime";
+import { asyncArray, getTopK, loadSchema } from "@typeagent/agent-runtime";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,
@@ -38,7 +33,6 @@ import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import {
     getEnclosingDateRangeForMessages,
     getEnclosingMetadataForMessages,
-    getMessagesFromScoredOrdinals,
 } from "./message.js";
 import { ConversationSearchResult } from "./search.js";
 import {
@@ -46,7 +40,7 @@ import {
     AnswerContextOptions,
     answerContextToString,
 } from "./answerContext.js";
-import { flattenResultsArray, Scored, trimStringLength } from "./common.js";
+import { flattenResultsArray, Scored } from "./common.js";
 import { createMultipleChoiceQuestion } from "./searchLib.js";
 
 export type AnswerTranslator =
@@ -93,6 +87,7 @@ export interface IAnswerGenerator {
     combinePartialAnswers(
         question: string,
         responses: answerSchema.AnswerResponse[],
+        onCombination?: AnswerContextOptions["onCombination"],
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
@@ -203,6 +198,7 @@ export async function generateAnswer(
             answerResponse = await generator.combinePartialAnswers(
                 question,
                 partialResponses,
+                contextOptions?.onCombination,
             );
         }
     }
@@ -232,7 +228,12 @@ async function generateAnswerFromSearchResult(
         !chunking
     ) {
         // Context is small enough
-        return generator.generateAnswer(question, contextContent);
+        const response = await generator.generateAnswer(
+            question,
+            contextContent,
+        );
+        progress?.(context, 0, response);
+        return response;
     }
     //
     // Use chunks
@@ -254,6 +255,7 @@ async function generateAnswerFromSearchResult(
     const answer = await generator.combinePartialAnswers(
         question,
         chunkResponses.data,
+        contextOptions?.onCombination,
     );
     return answer;
 }
@@ -286,7 +288,7 @@ export async function generateAnswerInChunks(
     }
 
     const chunkAnswers: answerSchema.AnswerResponse[] = [];
-    const knowledgeChunks = getKnowledgeChunks(chunks);
+    const knowledgeChunks = chunks.filter((chunk) => !chunk.messages?.length);
     let hasKnowledgeAnswer = false;
     if (knowledgeChunks.length > 0) {
         const knowledgeAnswers = await runGenerateAnswers(
@@ -294,6 +296,7 @@ export async function generateAnswerInChunks(
             question,
             knowledgeChunks,
             progress,
+            answerGenerator.settings.fastStop,
         );
         if (!knowledgeAnswers.success) {
             return knowledgeAnswers;
@@ -311,6 +314,7 @@ export async function generateAnswerInChunks(
             answerGenerator,
             question,
             messageChunks,
+            progress,
         );
         if (!messageAnswers.success) {
             return messageAnswers;
@@ -332,32 +336,6 @@ export async function generateAnswerInChunks(
 
     function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
         return answers.some((a) => a.type === "Answered");
-    }
-
-    function getKnowledgeChunks(
-        chunks: contextSchema.AnswerContext[],
-    ): contextSchema.AnswerContext[] {
-        const structuredChunks: contextSchema.AnswerContext[] = [];
-        for (const chunk of chunks) {
-            let knowledgeChunk: contextSchema.AnswerContext | undefined =
-                undefined;
-            if (chunk.entities) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.entities = chunk.entities;
-            }
-            if (chunk.topics) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.topics = chunk.topics;
-            }
-            if (chunk.messages) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.messages = chunk.messages;
-            }
-            if (knowledgeChunk !== undefined) {
-                structuredChunks.push(knowledgeChunk);
-            }
-        }
-        return structuredChunks;
     }
 }
 
@@ -401,6 +379,7 @@ export function generateMultipleChoiceAnswer(
 export class AnswerGenerator implements IAnswerGenerator {
     public settings: AnswerGeneratorSettings;
     private answerTranslator: AnswerTranslator;
+    private answerCombinerTranslator: AnswerTranslator;
     private contextSchema: string;
     private contextTypeName: string;
 
@@ -409,8 +388,15 @@ export class AnswerGenerator implements IAnswerGenerator {
         this.answerTranslator = createAnswerTranslator(
             this.settings.answerGeneratorModel,
         );
+        this.answerCombinerTranslator = createAnswerTranslator(
+            this.settings.answerCombinerModel,
+        );
         this.contextSchema = loadSchema(
-            ["dateTimeSchema.ts", "answerContextSchema.ts"],
+            [
+                "dateTimeSchema.ts",
+                "temporalSchema.ts",
+                "answerContextSchema.ts",
+            ],
             import.meta.url,
         ).trim();
         this.contextTypeName = "AnswerContext";
@@ -420,14 +406,15 @@ export class AnswerGenerator implements IAnswerGenerator {
         question: string,
         context: contextSchema.AnswerContext | string,
     ): Promise<Result<answerSchema.AnswerResponse>> {
-        let contextContent =
+        const contextContent =
             typeof context === "string"
                 ? context
                 : answerContextToString(context);
         if (contextContent.length > this.settings.maxCharsInBudget) {
-            contextContent = trimStringLength(
-                contextContent,
-                this.settings.maxCharsInBudget,
+            return Promise.resolve(
+                error(
+                    "Answer context exceeds the serialized character budget; enable chunking or choose an explicit larger budget.",
+                ),
             );
         }
         const prompt: string[] = [];
@@ -453,6 +440,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     public async combinePartialAnswers(
         question: string,
         partialAnswers: (answerSchema.AnswerResponse | undefined)[],
+        onCombination?: AnswerContextOptions["onCombination"],
     ): Promise<Result<answerSchema.AnswerResponse>> {
         if (partialAnswers.length === 1) {
             const response = partialAnswers[0];
@@ -461,46 +449,80 @@ export class AnswerGenerator implements IAnswerGenerator {
             }
             return error("No answer");
         }
-        let answer = "";
-        let whyNoAnswer: string | undefined;
-        let answerCount = 0;
-        for (const partialAnswer of partialAnswers) {
-            if (partialAnswer) {
-                if (partialAnswer.type === "Answered") {
-                    answerCount++;
-                    answer += partialAnswer.answer + "\n";
-                } else {
-                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
-                }
-            }
-        }
-        if (answer.length > 0) {
-            if (answerCount > 1) {
-                answer = trimStringLength(
-                    answer,
-                    this.settings.maxCharsInBudget,
-                );
-                const rewrittenAnswer = await rewriteText(
-                    this.settings.answerCombinerModel,
-                    answer,
-                    question,
-                );
-                if (!rewrittenAnswer) {
-                    return error("rewriteAnswer failed");
-                }
-                answer = rewrittenAnswer;
-            }
-            return success({
-                type: "Answered",
-                answer,
-            });
-        }
-        whyNoAnswer ??= "";
-        return success({
-            type: "NoAnswer",
-            whyNoAnswer,
-        });
+        const responses = partialAnswers.filter(
+            (response): response is answerSchema.AnswerResponse =>
+                response !== undefined,
+        );
+        if (!responses.length) return error("No partial responses");
+        return this.combineAnswers(
+            question,
+            responses.map((response) => JSON.stringify(response)),
+            onCombination,
+        );
     }
+
+    private async combineAnswers(
+        question: string,
+        answers: string[],
+        onCombination?: AnswerContextOptions["onCombination"],
+    ): Promise<Result<answerSchema.AnswerResponse>> {
+        while (answers.length > 1) {
+            const grouped = groupPartialAnswers(
+                answers,
+                this.settings.maxCharsInBudget,
+            );
+            if (!grouped.success) return grouped;
+            if (grouped.data.length >= answers.length) {
+                return error(
+                    "Partial answers cannot be reduced within the combination budget; no evidence was truncated.",
+                );
+            }
+            const combined: string[] = [];
+            for (const group of grouped.data) {
+                if (group.length === 1) {
+                    combined.push(group[0]);
+                    continue;
+                }
+                const rewritten = await this.answerCombinerTranslator.translate(
+                    `${question}\nReconcile these public partial responses, including useful supportingFacts and facts in NoAnswer explanations. Preserve source ordinals, dates, attribution, corrections, bounds, conflicts and distinct identities. A local NoAnswer does not invalidate its facts. Do not add local counts blindly. Return NoAnswer if the combined evidence is still insufficient, retaining useful supportingFacts for subsequent combinations. Do not invent missing operands or silently prefer the latest assertion. Repeated source facts count once.\n${group.join("\n\n")}`,
+                    this.settings.modelInstructions,
+                );
+                if (!rewritten.success) return rewritten;
+                onCombination?.(
+                    group.map(
+                        (value): answerSchema.AnswerResponse =>
+                            JSON.parse(value),
+                    ),
+                    rewritten.data,
+                );
+                combined.push(JSON.stringify(rewritten.data));
+            }
+            answers = combined;
+        }
+        return success(JSON.parse(answers[0]) as answerSchema.AnswerResponse);
+    }
+}
+
+function groupPartialAnswers(
+    answers: string[],
+    budget: number,
+): Result<string[][]> {
+    const groups: string[][] = [];
+    let current: string[] = [];
+    for (const answer of answers) {
+        if (answer.length > budget) {
+            return error(
+                "Partial answer exceeds the combination budget; no evidence was truncated.",
+            );
+        }
+        if ([...current, answer].join("\n\n").length > budget) {
+            groups.push(current);
+            current = [];
+        }
+        current.push(answer);
+    }
+    if (current.length) groups.push(current);
+    return success(groups);
 }
 
 export function createAnswerGeneratorSettings(
@@ -512,7 +534,7 @@ export function createAnswerGeneratorSettings(
         answerCombinerModel: openai.createChatModel(),
         maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
-        fastStop: true,
+        fastStop: false,
     };
 }
 
@@ -557,11 +579,13 @@ export function getRelevantTopicsForAnswer(
     searchResult: SemanticRefSearchResult,
     topK?: number,
 ): contextSchema.RelevantKnowledge[] {
-    const scoredEntities = getScoredSemanticRefsFromOrdinals(
-        conversation.semanticRefs!,
-        searchResult.semanticRefMatches,
-        "topic",
-    );
+    const scoredEntities = [
+        ...getScoredSemanticRefsFromOrdinals(
+            conversation.semanticRefs!,
+            searchResult.semanticRefMatches,
+            "topic",
+        ),
+    ];
     const mergedTopics = mergeScoredTopics(scoredEntities, true);
     let candidateTopics: Iterable<Scored<MergedTopic>> = mergedTopics.values();
     if (topK !== undefined && topK > 0 && mergedTopics.size > topK) {
@@ -570,12 +594,27 @@ export function getRelevantTopicsForAnswer(
     const relevantTopics: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of candidateTopics) {
         const mergedTopic = scoredValue.item;
-        const relevantTopic = createRelevantKnowledge(
-            conversation,
-            mergedTopic.topic,
-            mergedTopic.sourceMessageOrdinals,
-        );
-        relevantTopics.push(relevantTopic);
+        for (const { item } of scoredEntities.filter(
+            ({ item }) =>
+                "text" in item.knowledge &&
+                item.knowledge.text === mergedTopic.topic.text,
+        )) {
+            const relevantTopic = createRelevantKnowledge(
+                conversation,
+                item.knowledge,
+                [item.range.start.messageOrdinal],
+            );
+            relevantTopic.evidence = [
+                {
+                    semanticRefOrdinal: item.semanticRefOrdinal,
+                    sourceMessageOrdinal: item.range.start.messageOrdinal,
+                    temporalContext: conversation.messages.get(
+                        item.range.start.messageOrdinal,
+                    ).metadata?.temporalContext,
+                },
+            ];
+            relevantTopics.push(relevantTopic);
+        }
     }
     return relevantTopics;
 }
@@ -585,11 +624,13 @@ export function getRelevantEntitiesForAnswer(
     searchResult: SemanticRefSearchResult,
     topK?: number,
 ): contextSchema.RelevantKnowledge[] {
-    const scoredEntities = getScoredSemanticRefsFromOrdinals(
-        conversation.semanticRefs!,
-        searchResult.semanticRefMatches,
-        "entity",
-    );
+    const scoredEntities = [
+        ...getScoredSemanticRefsFromOrdinals(
+            conversation.semanticRefs!,
+            searchResult.semanticRefMatches,
+            "entity",
+        ),
+    ];
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
     let candidateEntities: Iterable<Scored<MergedEntity>> =
         mergedEntities.values();
@@ -599,12 +640,28 @@ export function getRelevantEntitiesForAnswer(
     const relevantEntities: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of candidateEntities) {
         const mergedEntity = scoredValue.item;
-        const relevantEntity = createRelevantKnowledge(
-            conversation,
-            mergedToConcreteEntity(mergedEntity),
-            mergedEntity.sourceMessageOrdinals,
-        );
-        relevantEntities.push(relevantEntity);
+        const entity = mergedToConcreteEntity(mergedEntity);
+        for (const { item } of scoredEntities.filter(
+            ({ item }) =>
+                "name" in item.knowledge &&
+                item.knowledge.name.toLowerCase() === entity.name.toLowerCase(),
+        )) {
+            const relevantEntity = createRelevantKnowledge(
+                conversation,
+                item.knowledge,
+                [item.range.start.messageOrdinal],
+            );
+            relevantEntity.evidence = [
+                {
+                    semanticRefOrdinal: item.semanticRefOrdinal,
+                    sourceMessageOrdinal: item.range.start.messageOrdinal,
+                    temporalContext: conversation.messages.get(
+                        item.range.start.messageOrdinal,
+                    ).metadata?.temporalContext,
+                },
+            ];
+            relevantEntities.push(relevantEntity);
+        }
     }
     return relevantEntities;
 }
@@ -615,18 +672,19 @@ export function getRelevantMessagesForAnswer(
     topK?: number,
 ): contextSchema.RelevantMessage[] {
     const relevantMessages: contextSchema.RelevantMessage[] = [];
-    for (const message of getMessagesFromScoredOrdinals(
-        conversation.messages,
-        messageOrdinals,
-    )) {
+    for (const { messageOrdinal } of messageOrdinals) {
+        const message = conversation.messages.get(messageOrdinal);
         if (message.textChunks.length === 0) {
             continue;
         }
-        const relevantMessage: contextSchema.RelevantMessage = {};
+        const relevantMessage: contextSchema.RelevantMessage = {
+            sourceMessageOrdinals: [messageOrdinal],
+        };
         const meta = message.metadata;
         if (meta) {
             relevantMessage.from = meta.source;
             relevantMessage.to = meta.dest;
+            relevantMessage.temporalContext = meta.temporalContext;
         }
         if (message.timestamp) {
             relevantMessage.timestamp = new Date(message.timestamp);
@@ -662,6 +720,7 @@ async function runGenerateAnswers(
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
     >,
+    stopOnAnswer = false,
 ): Promise<Result<answerSchema.AnswerResponse[]>> {
     if (chunks.length === 0) {
         return success([]);
@@ -669,7 +728,11 @@ async function runGenerateAnswers(
     const results = await asyncArray.mapAsync(
         chunks,
         answerGenerator.settings.concurrency,
-        (chunk) => answerGenerator.generateAnswer(question, chunk),
+        (chunk) =>
+            answerGenerator.generateAnswer(
+                `${question}\n\nThis context is only one part of the retrieved evidence. Always retain supported operands as supportingFacts with sourceMessageOrdinals, even when returning NoAnswer. Preserve dates, attribution, correction details, price bounds and individual identities for combination. Resolve source-relative dates using the owning temporalContext, not the question/import clock. Event time differs from message time. Do not claim local counts or lists are globally complete, prefer later uploads as factual authority, or collapse conflicting values without an explicit correction.`,
+                chunk,
+            ),
         (context, index, response) => {
             if (progress) {
                 progress(context, index, response);
@@ -678,7 +741,7 @@ async function runGenerateAnswers(
                 return false;
             }
             // Return false if mapAsync should stop
-            return response && response.data.type !== "Answered";
+            return !stopOnAnswer || response.data.type !== "Answered";
         },
     );
     return flattenResultsArray(results);
@@ -693,13 +756,15 @@ function createRelevantKnowledge(
         knowledge,
     };
     if (sourceMessageOrdinals) {
+        const ordinals = [...sourceMessageOrdinals];
+        relevantKnowledge.sourceMessageOrdinals = ordinals;
         relevantKnowledge.timeRange = getEnclosingDateRangeForMessages(
             conversation.messages,
-            sourceMessageOrdinals,
+            ordinals,
         );
         const meta = getEnclosingMetadataForMessages(
             conversation.messages,
-            sourceMessageOrdinals,
+            ordinals,
         );
         if (meta.source) {
             relevantKnowledge.origin = meta.source;
@@ -721,7 +786,9 @@ function createQuestionPrompt(question: string): string {
         "===",
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
         "- Answer the user question PRECISELY using ONLY information EXPLICITLY provided in the topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT]",
-        "- Return 'NoAnswer' if you are unsure, , if the answer is not explicitly in [ANSWER CONTEXT], or if the topics or {entity names, types and facets} in the question are not found in [ANSWER CONTEXT].",
+        "- Supported date and numeric operands may be combined using deterministic arithmetic, calendar-day differences, and counts of distinct supported identities. The computed result need not be quoted verbatim. Do not invent missing operands, treat bounds as exact prices, or round an interval without being asked.",
+        "- Temporal metadata and inherited date evidence annotate their owning source, not additional occurrences. Deduplicate repeated source facts and annotations across chunks and searches.",
+        "- Return 'NoAnswer' if the answer cannot be established from the provided evidence and deterministic arithmetic. Retain supported facts and operands as supportingFacts even when the context is incomplete.",
         "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
         "- 'origin' and 'audience' fields contain the names of entities involved in communication about the knowledge",
         "**Important:** Communicating DOES NOT imply associations such as authorship, ownership etc. E.g. origin: [X] telling audience [Y, Z] communicating about a book does not imply authorship.",

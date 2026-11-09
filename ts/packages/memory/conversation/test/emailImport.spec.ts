@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import { importEmailFromMimeText } from "../src/emailImport.js";
+import {
+    importEmailMessage,
+    EmailMessageSerializer,
+} from "../src/emailMessage.js";
 
 describe("email import", () => {
     test("preserves encoded headers, folded recipients, and plain text", async () => {
@@ -48,6 +52,18 @@ describe("email import", () => {
         });
         expect(email?.body.trim()).toBe("Hello team,\nThe report is ready.");
         expect(email?.bcc).toBeUndefined();
+        const message = importEmailMessage(email!);
+        expect(message.metadata.temporalContext?.messageTime).toMatchObject({
+            raw: "Tue, 13 Oct 2026 18:00:00 -0700",
+            localDateTime: "2026-10-13T18:00:00",
+            instantUtc: "2026-10-14T01:00:00.000Z",
+            offsetMinutes: -420,
+        });
+        const serializer = new EmailMessageSerializer();
+        expect(
+            serializer.deserialize(serializer.serialize(message)).metadata
+                .temporalContext,
+        ).toEqual(message.metadata.temporalContext);
     });
 
     test("uses the plain text alternative from multipart mail", async () => {

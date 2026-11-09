@@ -43,40 +43,48 @@ describe("macro recording routing override", () => {
         ).resolves.toEqual({});
         expect(dependencies.localRecipes).toHaveBeenCalledTimes(1);
     });
-    it("off bypasses recipe recording and both execution owners", async () => {
-        const dependencies = {
-            ...createDependencies(false),
-            recipeOwner: () => "off" as const,
-        };
-        await expect(
-            routePrompt(
+    it.each(["direct", "mcp", "dev", "bypass"] as const)(
+        "off disables recording and recipe execution in %s mode",
+        async (mode) => {
+            const dependencies = {
+                ...createDependencies(false),
+                recipeOwner: () => "off" as const,
+            };
+            await expect(
+                routePrompt(
+                    input,
+                    mode,
+                    new AbortController().signal,
+                    dependencies,
+                ),
+            ).resolves.toEqual({});
+            expect(dependencies.claimRecording).not.toHaveBeenCalled();
+            expect(dependencies.localRecipes).not.toHaveBeenCalled();
+        },
+    );
+    it.each(["direct", "mcp", "dev", "bypass"] as const)(
+        "requests a success receipt for selected child learning in %s mode without taking task ownership from Copilot",
+        async (mode) => {
+            const dependencies = createDependencies("child");
+            const output = await routePrompt(
                 input,
-                "direct",
+                mode,
                 new AbortController().signal,
                 dependencies,
-            ),
-        ).resolves.toEqual({});
-        expect(dependencies.claimRecording).not.toHaveBeenCalled();
-        expect(dependencies.localRecipes).not.toHaveBeenCalled();
-    });
-    it("requests an explicit success receipt only for selected child learning and leaves original task ownership in Copilot", async () => {
-        const dependencies = createDependencies("child");
-        const output = await routePrompt(
-            input,
-            "direct",
-            new AbortController().signal,
-            dependencies,
-        );
-        expect(output.additionalContext).toContain(
-            "typeagent_recorded_task_succeeded",
-        );
-        expect(output.additionalContext).toContain(
-            "Do not call it after failed",
-        );
-        expect(output.additionalContext).toContain("do not rerun the task");
-        expect(output.modifiedPrompt).toBeUndefined();
-        expect(dependencies.localRecipes).not.toHaveBeenCalled();
-    });
+            );
+            expect(output.additionalContext).toContain(
+                "typeagent_recorded_task_succeeded",
+            );
+            expect(output.additionalContext).toContain(
+                "Do not call it after failed",
+            );
+            expect(output.additionalContext).toContain("do not rerun the task");
+            expect(output.handled).toBeUndefined();
+            expect(output.modifiedPrompt).toBeUndefined();
+            expect(dependencies.claimRecording).toHaveBeenCalledWith(input);
+            expect(dependencies.localRecipes).not.toHaveBeenCalled();
+        },
+    );
     it.each([
         "list the playlists",
         "learn: create a playlist",
@@ -98,7 +106,7 @@ describe("macro recording routing override", () => {
             expect.any(AbortSignal),
         );
     });
-    it.each(["direct", "mcp", "dev"] as const)(
+    it.each(["direct", "mcp", "dev", "bypass"] as const)(
         "falls through one claimed interaction in %s mode",
         async (mode) => {
             const dependencies = createDependencies(true);
@@ -112,12 +120,13 @@ describe("macro recording routing override", () => {
                 ),
             ).resolves.toEqual({});
             expect(dependencies.claimRecording).toHaveBeenCalledTimes(1);
+            expect(dependencies.claimRecording).toHaveBeenCalledWith(input);
             expect(dependencies.localRecipes).not.toHaveBeenCalled();
         },
     );
 
-    it("does not claim recordings while bypassed", async () => {
-        const dependencies = createDependencies(true);
+    it("does not match or execute recipes for an unclaimed bypass request", async () => {
+        const dependencies = createDependencies(false);
 
         await expect(
             routePrompt(
@@ -127,7 +136,8 @@ describe("macro recording routing override", () => {
                 dependencies,
             ),
         ).resolves.toEqual({});
-        expect(dependencies.claimRecording).not.toHaveBeenCalled();
+        expect(dependencies.claimRecording).toHaveBeenCalledWith(input);
+        expect(dependencies.localRecipes).not.toHaveBeenCalled();
     });
 });
 

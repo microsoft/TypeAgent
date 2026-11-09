@@ -97,6 +97,7 @@ export {
     type AzureStorageConfig,
     type AwsStorageConfig,
     type Config,
+    type DecisionConfig,
     type DatabaseConfig,
     type Deployment,
     type DeploymentEndpoint,

@@ -24,6 +24,7 @@ import {
 } from "./textLocationIndex.js";
 import { getMessageBatches } from "./message.js";
 import { embeddingModelForRole } from "@typeagent/aiclient";
+import { queryEmbedding } from "./queryEmbeddingCache.js";
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
@@ -91,6 +92,27 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
 
     public get size(): number {
         return this.messageCount;
+    }
+
+    public addPreparedData(
+        data: IMessageTextIndexData,
+        messageOrdinal: number,
+    ): void {
+        if (!this.isEmbeddingEnabled) return;
+        if (
+            this.messageCount !== messageOrdinal ||
+            data.messageCount !== 1 ||
+            !data.indexData
+        )
+            throw new Error("Prepared message ordinals are not contiguous");
+        this.textLocationIndex.addPreparedData({
+            embeddings: data.indexData.embeddings,
+            textLocations: data.indexData.textLocations.map((location) => ({
+                ...location,
+                messageOrdinal,
+            })),
+        });
+        this.messageCount++;
     }
 
     /**
@@ -216,9 +238,11 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                 "Message text embedding index is disabled (no embedding model configured)",
             );
         }
-        return generateEmbeddingWithRetry(
-            embeddingModelForRole(embeddingModel, "query"),
-            text,
+        return queryEmbedding(embeddingModel, text, () =>
+            generateEmbeddingWithRetry(
+                embeddingModelForRole(embeddingModel, "query"),
+                text,
+            ),
         );
     }
 
@@ -327,7 +351,7 @@ export async function buildMessageIndex(
     conversation: IConversation,
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     return addToMessageIndex(
         conversation,
@@ -343,7 +367,7 @@ export async function addToMessageIndex(
     settings: MessageTextIndexSettings,
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     const result: ListIndexingResult = {
         numberCompleted: 0,

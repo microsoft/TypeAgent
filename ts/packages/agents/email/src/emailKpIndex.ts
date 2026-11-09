@@ -49,7 +49,7 @@ const DEFAULT_STORAGE_DIR = path.join(
     "kp",
     "email",
 );
-const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
+const DEFAULT_MODEL = "copilot:gpt-6.1-sol";
 const DEFAULT_BACKFILL_BATCH = 50;
 const MAX_BACKFILL_AGE_DAYS = 180; // 6 months
 const MAX_TOTAL_EMAILS = 2000;

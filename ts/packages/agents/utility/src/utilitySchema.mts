@@ -48,7 +48,7 @@ export type LlmTransformAction = {
         parseJson?: boolean;
         // When true, LLM is asked to return HTML; result is stored in historyText as HTML (default: false)
         htmlOutput?: boolean;
-        // Aiclient model endpoint (default: copilot:gpt-5.6-sol)
+        // Aiclient model endpoint (default: copilot:gpt-6.1-sol)
         model?: string;
     };
 };
@@ -60,7 +60,7 @@ export type ClaudeTaskAction = {
         goal: string;
         // Parse the result as JSON and store in historyText (default: false)
         parseJson?: boolean;
-        // Aiclient model endpoint (default: copilot:gpt-5.6-sol)
+        // Aiclient model endpoint (default: copilot:gpt-6.1-sol)
         model?: string;
         // Retained for compatibility; one-shot models ignore this value.
         maxTurns?: number;

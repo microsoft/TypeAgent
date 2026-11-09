@@ -1,0 +1,87 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Prepare a fan-out runner
+description: Install the pinned tools and runner-local native dependencies
+inputs:
+  node-version:
+    required: true
+    description: Exact Node.js version
+  native-cache:
+    default: "false"
+    description: Reuse runtime-specific pnpm native build side effects
+  save-native-cache:
+    default: "false"
+    description: Publish verified native dependencies from the matching memory producer
+runs:
+  using: composite
+  steps:
+    - name: Install Linux prerequisites with bounded network waits
+      if: runner.os == 'Linux'
+      shell: pwsh
+      run: |
+        $aptOptions = @('-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30', '-o', 'Acquire::Retries=2')
+        timeout --kill-after=15s 180s sudo apt-get @aptOptions -o APT::Update::Error-Mode=any update
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        timeout --kill-after=15s 180s sudo apt-get @aptOptions install -y libsecret-1-dev
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        package_json_file: ts/package.json
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.native-cache != 'true' && 'pnpm' || '' }}
+        package-manager-cache: false
+        cache-dependency-path: ts/pnpm-lock.yaml
+    - name: Identify runtime-specific native store
+      id: native_identity
+      if: inputs.native-cache == 'true'
+      shell: pwsh
+      working-directory: ts
+      run: |
+        if (!$env:ImageOS -or !$env:ImageVersion) { throw 'Hosted runner image identity is required for native caching.' }
+        $store = pnpm store path --silent
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the pnpm store.' }
+        "store=$store" >> $env:GITHUB_OUTPUT
+        "image=$env:ImageOS" >> $env:GITHUB_OUTPUT
+        "image-version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+        node -e "console.log('arch=' + process.arch); console.log('abi=' + process.versions.modules)" >> $env:GITHUB_OUTPUT
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the Node ABI.' }
+    - name: Restore runtime-specific pnpm native build side effects
+      id: native_store
+      if: inputs.native-cache == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.native_identity.outputs.store }}
+        key: fanout-native-v2-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-${{ steps.native_identity.outputs.image }}-${{ steps.native_identity.outputs.image-version }}-node-${{ inputs.node-version }}-abi-${{ steps.native_identity.outputs.abi }}-${{ hashFiles('ts/package.json', 'ts/pnpm-lock.yaml', 'ts/pnpm-workspace.yaml', 'ts/.pnpmfile.cjs') }}
+        # Seed a miss from the existing package store; pnpm selects only matching runtime side effects.
+        restore-keys: node-cache-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
+    - name: Install native dependencies with bounded visible retries
+      shell: pwsh
+      working-directory: ts
+      run: |
+        $nativeCache = '${{ inputs.native-cache }}' -eq 'true'
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+          $retryArgs = @()
+          if ($attempt -gt 1) { $retryArgs = @('--force', '--no-side-effects-cache') }
+          elseif ($nativeCache) { $retryArgs = @('--side-effects-cache') }
+          pnpm install --frozen-lockfile --strict-peer-dependencies @retryArgs
+          $status = $LASTEXITCODE
+          $stage = 'Dependency installation'
+          if ($status -eq 0 -and $nativeCache) {
+            node tools/scripts/ciVerifyNativeRuntime.mjs
+            $status = $LASTEXITCODE
+            $stage = 'Node/Electron native runtime verification'
+          }
+          if ($status -eq 0) { exit 0 }
+          if ($attempt -eq 3) { throw "${stage} exhausted 3 attempts; last exit code $status." }
+          Write-Output "::warning::${stage} attempt $attempt failed (exit $status). Retrying with a forced reimport and uncached native rebuild."
+          Start-Sleep -Seconds (5 * $attempt)
+        }
+    - name: Publish verified native dependencies once per target
+      if: inputs.native-cache == 'true' && inputs.save-native-cache == 'true' && steps.native_store.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.native_identity.outputs.store }}
+        key: ${{ steps.native_store.outputs.cache-primary-key }}

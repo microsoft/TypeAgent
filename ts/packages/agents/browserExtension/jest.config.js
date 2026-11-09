@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 export default {
+    ...(process.env.CI === "true" ? { maxWorkers: 1 } : {}),
+    ...(process.env.TYPEAGENT_JEST_NO_CACHE === "true" ? { cache: false } : {}),
     preset: "ts-jest/presets/default-esm",
     extensionsToTreatAsEsm: [".ts"],
     testEnvironment: "jsdom",

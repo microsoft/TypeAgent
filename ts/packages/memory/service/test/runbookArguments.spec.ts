@@ -66,7 +66,7 @@ describe("bounded runbook argument templates", () => {
         ).toThrow();
     });
 
-    it.each([undefined, NaN, Infinity, new Date(), () => undefined])(
+    it.each([undefined, NaN, Infinity, new Date(0), () => undefined])(
         "rejects non-JSON values without coercion: %p",
         (value) => {
             expect(() => validateRunbookBindingArguments({ value })).toThrow();

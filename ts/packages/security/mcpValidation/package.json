@@ -55,7 +55,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "fast-glob": "^3.3.3",
     "validation": "workspace:*",
     "zod": "^3.24.4"

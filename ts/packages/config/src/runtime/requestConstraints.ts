@@ -21,9 +21,13 @@ export function parseModelRequestConstraints(
         throw new Error("modelRequestConstraints must be a map");
     const result = new Map<string, ModelRequestConstraints>();
     for (const [key, entry] of Object.entries(value)) {
-        if (!/^(azure|openai):(chat|embedding):[^:]*$/i.test(key))
+        if (
+            !/^(?:(azure|openai):(chat|embedding):[^:]*|(?:azure|copilot):decision:[^:]*)$/i.test(
+                key,
+            )
+        )
             throw new Error(
-                "modelRequestConstraints keys must be provider:chat|embedding:deployment (empty deployment for the default)",
+                "modelRequestConstraints keys must be azure|openai:chat|embedding:deployment or azure|copilot:decision:model",
             );
         if (!entry || typeof entry !== "object" || Array.isArray(entry))
             throw new Error(`modelRequestConstraints '${key}' must be a map`);
@@ -43,7 +47,8 @@ export function parseModelRequestConstraints(
                     `Invalid positive request constraint '${key}.${field}'`,
                 );
             if (
-                (key.toLowerCase().includes(":chat:") &&
+                ((key.toLowerCase().includes(":chat:") ||
+                    key.toLowerCase().includes(":decision:")) &&
                     field === "embeddingItemTokens") ||
                 (key.toLowerCase().includes(":embedding:") &&
                     ["contextTokens", "outputTokens"].includes(field))

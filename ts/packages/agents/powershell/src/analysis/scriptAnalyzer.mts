@@ -12,7 +12,7 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:analyzer");
 
-const ANALYSIS_MODEL = "copilot:gpt-5.6-sol";
+const ANALYSIS_MODEL = "copilot:gpt-6.1-sol";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB
 
 export class ScriptAnalyzer {

@@ -17,6 +17,8 @@ export type SpeechState =
     | "idle"
     | "listening"
     | "disabled"
+    | "preparing"
+    | "finalizing"
     | "always-on"
     | "wake-word";
 

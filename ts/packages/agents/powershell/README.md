@@ -40,6 +40,13 @@ network, module, or native-program access. A fingerprint detects a changed
 version; it is not a safety assessment or permission to execute a new script.
 Imported and generated code both require authorization before first execution.
 
+The goal is to preserve scripts the user could run directly while preventing
+the agent from executing them without consent. For example, an authorized Git
+flow can start Git and read a repository without a product command allowlist.
+The user's ability to run that script manually does not authorize the agent to
+run it automatically. Import analysis extracts recipe metadata and preserves
+the script content; it does not certify that the script is safe.
+
 Before execution, a compact confirmation shows the flow, working directory,
 arguments, and a warning that the code runs with TypeAgent's user privileges
 without a sandbox. Changed versions are identified. Long summary fields are
@@ -50,6 +57,10 @@ only an explicit execution choice does. Cancel is the default in both views.
 Tests, drafts, repairs, reasoning-loop and background invocations require
 fresh confirmation; an import merely saves a script and cannot authorize it.
 Missing or unavailable confirmation fails closed.
+
+Opening the full review is optional: the user can choose Run once from the
+summary. TypeAgent provides the opportunity to review the code and requires
+authorization; it cannot establish that the user read or understood every line.
 
 The approved working directory comes from the host's action context, including
 for tests, drafts, repairs and saved flows. Relative script operations and the

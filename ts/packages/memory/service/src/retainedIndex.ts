@@ -2,9 +2,32 @@
 // Licensed under the MIT License.
 
 import type { DocMemoryData, DocPart } from "@typeagent/conversation-memory";
-import type * as kp from "@typeagent/knowpro";
+import * as kp from "@typeagent/knowpro";
 
 class ReuseUnavailable extends Error {}
+
+function sourceMetadata(message: DocPart) {
+    const metadata = message.metadata;
+    const temporal = metadata.temporalContext;
+    if (!temporal) return metadata;
+    const {
+        contextHash: _contextHash,
+        discoveredDateEvidence: _discoveredDateEvidence,
+        rejectedDateAnchors: _rejectedDateAnchors,
+        eventMentions: _eventMentions,
+        inheritedDateEvidence,
+        ...sourceContext
+    } = temporal;
+    return {
+        ...metadata,
+        temporalContext: {
+            ...sourceContext,
+            inheritedDateEvidence: inheritedDateEvidence.filter(
+                (evidence) => evidence.role === "messageTime",
+            ),
+        },
+    };
+}
 
 function selectedMessages(data: DocMemoryData, parts: DocPart[]): number[] {
     const byUri = new Map<string, number[]>();
@@ -26,7 +49,7 @@ function selectedMessages(data: DocMemoryData, parts: DocPart[]): number[] {
             ordinal === undefined ? undefined : data.messages[ordinal];
         const signature = (message: DocPart) =>
             JSON.stringify([
-                message.metadata,
+                sourceMetadata(message),
                 message.textChunks,
                 message.tags,
                 message.timestamp,
@@ -111,7 +134,10 @@ function projectPostings(
         if (postings.length)
             items.push({ term: item.term, semanticRefOrdinals: postings });
     }
-    return { items };
+    return kp.migrateSearchTermPostings({
+        items,
+        normalizationVersion: data.semanticIndexData.normalizationVersion ?? 1,
+    });
 }
 
 function projectTerms(
@@ -121,7 +147,9 @@ function projectTerms(
 ): kp.ITermsToRelatedTermsIndexData {
     if (data.relatedTermsIndexData?.aliasData?.relatedTerms?.length)
         throw new ReuseUnavailable("Aliases lack source-local provenance");
-    const result: kp.ITermsToRelatedTermsIndexData = {};
+    const result: kp.ITermsToRelatedTermsIndexData = {
+        normalizationVersion: kp.currentTermNormalizationVersion,
+    };
     if (!enabled) return result;
     const source = data.relatedTermsIndexData?.textEmbeddingData;
     if (!source || source.textItems.length !== source.embeddings.length)

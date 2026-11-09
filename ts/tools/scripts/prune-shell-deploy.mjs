@@ -12,8 +12,8 @@
  *
  *   1. The native runtime packages for @github/copilot-sdk and
  *      @anthropic-ai/claude-agent-sdk (~250MB and ~230MB per platform). The
- *      connect-only shell delegates ALL model work to the agent-server (speech
- *      classification, translation, embeddings), so it never spawns these host
+ *      connect-only shell delegates classification, translation, and embeddings
+ *      to the agent-server; Nemotron ASR stays local. It never spawns these host
  *      CLIs — every platform-native package is dropped. The small JS wrapper
  *      package (@github/copilot-sdk) is kept so aiclient's
  *      lazy `import()` still resolves in the unlikely event it is reached; the

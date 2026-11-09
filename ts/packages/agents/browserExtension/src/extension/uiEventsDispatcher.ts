@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export {};
+import { simulateMouseClick } from "./mouseEvents";
 
 function escapeCssSelector(selector: string) {
     let prefix = "";
@@ -19,33 +19,6 @@ function escapeCssSelector(selector: string) {
 
     suffix = CSS.escape(suffix);
     return prefix + suffix;
-}
-
-function simulateMouseClick(element: HTMLElement): void {
-    // Element needs to be visible/focusable for this to work properly
-    (element as HTMLElement).focus();
-
-    // Create event options that will be used for all events
-    const eventOptions = {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-    };
-
-    // Simulate the full click sequence
-    const events = [
-        new MouseEvent("mouseenter", eventOptions),
-        new MouseEvent("mouseover", eventOptions),
-        new FocusEvent("focusin", eventOptions),
-        new MouseEvent("mousedown", eventOptions),
-        new PointerEvent("pointerdown", eventOptions),
-        new MouseEvent("mouseup", eventOptions),
-        new PointerEvent("pointerup", eventOptions),
-        new MouseEvent("click", eventOptions),
-    ];
-
-    // Dispatch all events in sequence
-    events.forEach((event) => element.dispatchEvent(event));
 }
 
 function clickOnElement(selector: string) {

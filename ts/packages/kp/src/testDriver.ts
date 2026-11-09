@@ -285,7 +285,7 @@ async function generateQueryPlan(
 // =========================================================================
 
 async function main() {
-    const model = process.env.KP_MODEL ?? "copilot:gpt-5.6-sol";
+    const model = process.env.KP_MODEL ?? "copilot:gpt-6.1-sol";
 
     console.log("=== kp Test Driver ===\n");
 

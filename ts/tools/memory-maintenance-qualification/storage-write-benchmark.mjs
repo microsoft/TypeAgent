@@ -11,7 +11,6 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { FileMemoryService } from "../../packages/memory/service/dist/fileMemoryService.js";
 import { createKnowProCorpusIndex } from "../../packages/memory/service/dist/knowProCorpusIndex.js";
 import { createDocMemorySettings } from "../../packages/memory/conversation/dist/docMemory.js";
 import {
@@ -20,6 +19,25 @@ import {
 } from "../../packages/knowPro/dist/segmentedJson.js";
 import { waitForMemoryJob } from "../../packages/memory/service/dist/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "../../packages/memory/service/dist/test/fakeSemanticCorpusIndex.js";
+
+const copyDirectory = fs.cp;
+let onIndexCopy;
+// Product timing wrappers capture filesystem methods when the service loads.
+fs.cp = async function (...args) {
+    const result = await copyDirectory(...args);
+    onIndexCopy?.();
+    return result;
+};
+syncBuiltinESMExports();
+let FileMemoryService;
+try {
+    ({ FileMemoryService } = await import(
+        "../../packages/memory/service/dist/fileMemoryService.js"
+    ));
+} finally {
+    fs.cp = copyDirectory;
+    syncBuiltinESMExports();
+}
 
 const productRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -156,8 +174,7 @@ async function batchWorkload(root, samples) {
             indexFactory: (_, indexDirectory) =>
                 new CountingIndex(indexDirectory),
         });
-        const writeFile = fs.writeFile,
-            cp = fs.cp;
+        const writeFile = fs.writeFile;
         fs.writeFile = async function (file, data, ...args) {
             const result = await writeFile.call(this, file, data, ...args);
             if (
@@ -170,10 +187,8 @@ async function batchWorkload(root, samples) {
             }
             return result;
         };
-        fs.cp = async function (source, destination, ...args) {
-            const result = await cp.call(this, source, destination, ...args);
+        onIndexCopy = () => {
             if (measuring) counters.indexCopies++;
-            return result;
         };
         syncBuiltinESMExports();
         try {
@@ -239,7 +254,7 @@ async function batchWorkload(root, samples) {
         } finally {
             measuring = false;
             fs.writeFile = writeFile;
-            fs.cp = cp;
+            onIndexCopy = undefined;
             syncBuiltinESMExports();
             await service.close();
         }

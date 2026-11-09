@@ -63,6 +63,23 @@ const input: ViewBuildSnapshot = {
     })),
 };
 const snapshot = createTopicSnapshot(input, input.model);
+const conceptId = `concept:${"c".repeat(32)}`;
+snapshot.curation = {
+    concepts: [
+        {
+            id: conceptId,
+            label: "Held lease",
+            scope: "Resource lifetime",
+            purpose: "Explain retained resource lifetime evidence",
+            memberIds: snapshot.nodes.map((node) => node.id),
+            summary: "",
+            summaryState: "pending",
+            citations: snapshot.nodes.flatMap((node) => node.citations),
+            salience: 6,
+        },
+    ],
+    deferred: [],
+};
 const job: ViewBuildJob = {
     jobId: randomUUID(),
     corpusId: "corpus",
@@ -89,7 +106,9 @@ const job: ViewBuildJob = {
 };
 
 class FixtureService extends FileMemoryService {
+    lastTopicQuery?: TopicQueryRequest;
     override async queryTopics(request: TopicQueryRequest) {
+        this.lastTopicQuery = structuredClone(request);
         return queryTopicSnapshot(snapshot, request);
     }
     override async rebuildTopics(corpusId: string) {
@@ -122,6 +141,14 @@ test("complete topic input and bounded browsing survive actual in-process, RPC a
             await createMemoryServiceRpcFacade(service).queryTopics(request),
         ).toEqual(expected);
         expect(await client.queryTopics(request)).toEqual(expected);
+        const detail = {
+            corpusId: "corpus",
+            curated: true,
+            topicId: conceptId,
+            summarize: true,
+        };
+        await client.queryTopics(detail);
+        expect(service.lastTopicQuery).toEqual(detail);
         expect(topicQueryPageSchema.parse(expected)).toEqual(expected);
         const transported = await client.rebuildTopics("corpus");
         expect(transported).toEqual(job);
