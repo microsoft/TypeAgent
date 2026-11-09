@@ -205,6 +205,15 @@ Node 22 `build_ts (OS, 22.23.4)` required checks from the branch ruleset when
 deploying this matrix change; retain all other required checks and rules.
 PR formatting and all four ratchets run once in sharded analysis.
 
+Generated-file and managed-runtime root fixtures report subprocess failures with
+the fixture stage, argument boundaries, working directory, PID, elapsed time,
+exit status, signal, and spawn error. Captured stdout and stderr are labeled even
+when empty, credential values are redacted, and long fields retain their head
+and tail with an explicit truncation marker. These diagnostics do not retry failed
+commands or convert infrastructure failures into assertion successes. Diagnose
+fixture setup failures independently from product assertions and qualification
+collector failures.
+
 The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
 for each combination of Ubuntu, Windows and macOS with Node
 24.22.1 and 26.12.1. Node 22 is excluded from all CI matrices, including
