@@ -48,9 +48,13 @@ function renderView(
         view.schemaVersion !== 1 ||
         view.presentation.schemaVersion !== 1 ||
         view.presentation.templateVersion !== 1 ||
-        !["document-v1", "grouped-cards-v1", "table-v1", "sources-v1"].includes(
-            view.presentation.templateId,
-        )
+        ![
+            "document-v1",
+            "grouped-cards-v1",
+            "table-v1",
+            "sources-v1",
+            "procedure-guide-v1",
+        ].includes(view.presentation.templateId)
     )
         throw new Error("Unsupported derived-view presentation version");
     const scope = {

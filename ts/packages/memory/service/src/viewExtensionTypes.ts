@@ -89,7 +89,12 @@ export interface ViewEligibilityReceipt {
 
 export interface ViewPresentation {
     schemaVersion: 1;
-    templateId: "document-v1" | "grouped-cards-v1" | "table-v1" | "sources-v1";
+    templateId:
+        | "document-v1"
+        | "grouped-cards-v1"
+        | "table-v1"
+        | "sources-v1"
+        | "procedure-guide-v1";
     templateVersion: 1;
     layouts: Array<{
         id: string;

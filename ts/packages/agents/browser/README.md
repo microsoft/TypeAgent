@@ -55,6 +55,49 @@ Views use paginated cards and a separate detail reader, with build receipts in a
 flyout. Grouped activity, Inbox navigation and responsive detail panels reuse
 summary inventories rather than fetching every view's full evidence. These
 navigation features do not depend on checkpoint or integrated-answer APIs.
+
+User-defined `procedure-guide-v1` views have Support guide, For agents and
+Evidence & gaps tabs. The guide uses unordered action cards or source-supported
+guarded action graphs or partial-order workflows with cited ordering constraints, common rules and
+links to relevant source limitations; the agent tab shows copyable provider-validated
+JSON. Saved layouts retain the same evidence-bound claims, while the human reader
+projects operational guidance. Evidence drawers
+show exact retained supporting/opposing excerpts and open originals through
+the existing authorized reader. Layout, claim and revision links remain
+pinned, with keyboard tab navigation, Escape and focus restoration.
+The themed reader is responsive and displays source policy separately from
+host execution/privacy boundaries. It does not accept generated HTML or
+provide executable action controls.
+Guarded graphs use stacked cards and readable branch endpoints/conditions.
+Card position is explicitly not execution order; source overlaps and unresolved
+boundaries remain visible in source-gap and evidence groups.
+The human guide shows concise action text once and source-grounded comparison
+tables for applicable choices. Typed action details and citations are collapsed;
+ordering/branch claims appear in a closed evidence disclosure, never as extra
+task cards. Source scope, full gaps and unknown terminal outcomes belong in
+Evidence & gaps, not the operational guide. Concrete outcomes remain under
+How to finish, with their human text visible and typed outcome metadata collapsed.
+Explicit prerequisites and conditions remain in the guide; applicability is not
+inferred from generic source descriptions.
+An explicit any-order collection covering the displayed actions retains a short
+option-selection instruction, without bringing its source-scope card back.
+Compact, closed related-gap disclosures accompany actions and choice tables
+sharing exact source/revision/locator/excerpt bindings with a gap. They preserve
+the gap text and link to its pinned evidence claim. Shared citations indicate
+related source material, not a newly inferred dependency or ordering decision.
+Card citations use compact numbered references, with stable numbers for exact
+source/revision/excerpt bindings across layouts. Tooltips and accessible labels
+distinguish supporting and opposing evidence; references open the existing
+evidence drawer and retained-original reader. Tables use text nodes rather
+than generated HTML. Older saved procedure layouts receive the same relationship
+grouping without changing their payloads; only regenerated drafts can add new
+tables. Exact claim links open ancestor disclosures before focusing, while agent
+JSON and evidence retain all claims and source bindings.
+Procedure readers start with their audience tabs and actions, not a wall of
+generated-summary, review or ordering disclaimers. Those notes remain in the
+closed Provider and revision metadata disclosure; substantive source limitations
+remain in Evidence & gaps with related-action pointers. Other view types keep their introductory
+summaries. Saved content, review state and execution permissions are unchanged.
 Inventory pages contain up to 25 summaries per collection, not 25 globally.
 Inbox has counted tabs for Question decisions, Views, and Sources & operations.
 Its All overview shows at most two compact rows per category, with Questions

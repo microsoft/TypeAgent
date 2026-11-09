@@ -710,9 +710,13 @@ function validatePresentation(content: ExtensionViewContent): void {
     if (
         presentation.schemaVersion !== 1 ||
         presentation.templateVersion !== 1 ||
-        !["document-v1", "grouped-cards-v1", "table-v1", "sources-v1"].includes(
-            presentation.templateId,
-        ) ||
+        ![
+            "document-v1",
+            "grouped-cards-v1",
+            "table-v1",
+            "sources-v1",
+            "procedure-guide-v1",
+        ].includes(presentation.templateId) ||
         !presentation.layouts.length ||
         presentation.layouts.length > 16 ||
         presentation.layouts.some((layout) =>
@@ -746,5 +750,52 @@ function validatePresentation(content: ExtensionViewContent): void {
                 throw new Error("Invalid or duplicate presentation group");
             groupIds.add(group.id);
         }
+    }
+    if (presentation.templateId === "procedure-guide-v1")
+        validateProcedurePresentation(content);
+}
+
+function validateProcedurePresentation(content: ExtensionViewContent): void {
+    const layouts = content.presentation.layouts;
+    const requiredGroups = [
+        "overview",
+        "options",
+        "rules",
+        "outcomes",
+        "gaps",
+        "technical",
+    ];
+    const payload = content.payload;
+    if (
+        !payload ||
+        typeof payload !== "object" ||
+        Array.isArray(payload) ||
+        !payload.agentRepresentation ||
+        typeof payload.agentRepresentation !== "object" ||
+        Array.isArray(payload.agentRepresentation) ||
+        layouts.length !== 3 ||
+        !["guide", "agent", "evidence"].every((id) =>
+            layouts.some((layout) => layout.id === id),
+        )
+    )
+        throw new Error(
+            "Procedure guide requires readable, agent and evidence layouts with an agent representation",
+        );
+    for (const layout of layouts) {
+        const represented = layout.groups.flatMap((group) => group.blockIds);
+        if (
+            layout.groups.length !== requiredGroups.length ||
+            !requiredGroups.every((id) =>
+                layout.groups.some((group) => group.id === id),
+            ) ||
+            !layout.groups.find((group) => group.id === "options")?.blockIds
+                .length ||
+            represented.length !== content.sections.length ||
+            new Set(represented).size !== represented.length ||
+            viewHash(layout.groups) !== viewHash(layouts[0].groups)
+        )
+            throw new Error(
+                "Procedure layouts must preserve every evidence-bound claim in consistent groups",
+            );
     }
 }

@@ -111,7 +111,13 @@ function appendArticleIntroduction(
         overview.append(meta);
         appendArticleCoverage(overview, view.content);
     }
-    if (view.content.summary) {
+    if (
+        view.content.summary &&
+        !(
+            view.content.kind === "extension" &&
+            view.content.presentation.templateId === "procedure-guide-v1"
+        )
+    ) {
         const lead = rbMarkdown(view.content.summary);
         lead.classList.add("hub-view-lead");
         overview.append(lead);
@@ -964,6 +970,12 @@ export function mountMemoryHubViews(
             throw new Error(
                 "Requested article anchor is unavailable in this revision",
             );
+        for (
+            let ancestor = page.parentElement;
+            ancestor;
+            ancestor = ancestor.parentElement
+        )
+            if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
         page.focus();
         page.scrollIntoView?.({ block: "start" });
     }

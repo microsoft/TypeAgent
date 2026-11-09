@@ -7,6 +7,7 @@ import { inventoryFixture } from "./memoryHubInventoryTestData";
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { viewRevisionTime, viewTimestamp } from "./memoryHubViewUi";
 import { invokeMemory } from "./viewClient";
+import type { ExtensionViewContent } from "@typeagent/memory-service";
 
 jest.mock("./viewClient", () => ({
     invokeMemory: jest.fn(),
@@ -381,6 +382,77 @@ describe("Memory Center preview-first views", () => {
         expect(host.textContent).not.toContain("Read reusable documents");
         expect(host.textContent).not.toContain("saved views across");
     });
+    test.each(["procedure-guide-v1", "document-v1"] as const)(
+        "reader keeps the %s summary in its intended location without changing content",
+        async (templateId) => {
+            const original = invoke.getMockImplementation()!;
+            const summary =
+                "Source-grounded guidance; human approval is not implied.";
+            const extension: ExtensionViewContent = {
+                kind: "extension",
+                construction: "extension-v1",
+                provider: {
+                    providerId: "synthetic",
+                    version: "1",
+                    implementationDigest: "a".repeat(64),
+                    inputContract: "input-v1",
+                    outputContract: "output-v1",
+                    schemaDigest: "b".repeat(64),
+                    recipeDigest: "c".repeat(64),
+                },
+                title: "Guide",
+                summary,
+                sections: [],
+                citations: [],
+                evidence: [],
+                inputUse: [],
+                payload: {},
+                presentation: {
+                    schemaVersion: 1,
+                    templateId,
+                    templateVersion: 1,
+                    layouts: [
+                        { id: "guide", label: "Support guide", groups: [] },
+                    ],
+                },
+            };
+            const saved = JSON.stringify(extension);
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryViewCapabilities"
+                        ? Promise.resolve({
+                              derivedViews: {
+                                  builds: true,
+                                  kinds: ["extension"],
+                              },
+                          })
+                        : method === "memoryListViews"
+                          ? Promise.resolve({
+                                ...snapshot,
+                                views: [{ ...view, content: extension }],
+                            })
+                          : original(method, params),
+                ),
+            );
+            await panel.refresh();
+            click(host, "Guide");
+            await settle();
+            if (templateId === "procedure-guide-v1") {
+                expect(host.querySelector(".hub-view-lead")).toBeNull();
+                const metadata = host.querySelector<HTMLDetailsElement>(
+                    ".hub-procedure-metadata",
+                )!;
+                expect(metadata.open).toBe(false);
+                expect(metadata.textContent).toContain(summary);
+            } else {
+                expect(
+                    host.querySelector(".hub-view-lead")!.textContent,
+                ).toContain(summary);
+            }
+            expect(JSON.stringify(extension)).toBe(saved);
+        },
+    );
+
     test.each(["empty", "failure"])(
         "type tabs show loading inside the card until an %s result settles",
         async (outcome) => {
