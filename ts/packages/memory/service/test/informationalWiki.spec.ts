@@ -606,6 +606,33 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     includeContext: false,
                 }))!;
                 expect(current.state).toBe("draft");
+                const summaryRequest = {
+                    corpusId,
+                    viewId: current.viewId,
+                };
+                expect(
+                    (await service.listViewSummaries(summaryRequest)).items,
+                ).toEqual([]);
+                expect(
+                    (
+                        await service.listViewSummaries({
+                            ...summaryRequest,
+                            includeDrafts: false,
+                        })
+                    ).items,
+                ).toEqual([]);
+                const draftSummaries = await service.listViewSummaries({
+                    ...summaryRequest,
+                    includeDrafts: true,
+                });
+                expect(draftSummaries.total).toBe(1);
+                expect(draftSummaries.items).toHaveLength(1);
+                expect(draftSummaries.items[0]).toMatchObject({
+                    viewId: current.viewId,
+                    revisionId: current.revisionId,
+                    state: "draft",
+                    publication: { indexState: "absent" },
+                });
                 const publication = await service.getViewPublication({
                     corpusId,
                     viewId: current.viewId,
@@ -689,6 +716,24 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     })
                 ).some((match) => match.view.viewId === current.viewId),
             ).toBe(true);
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "original",
+            );
+            await service.forgetSource({
+                corpusId,
+                sourceId: "original",
+                confirmationToken: preview.confirmationToken,
+            });
+            expect(
+                (
+                    await service.listViewSummaries({
+                        corpusId,
+                        viewId: current.viewId,
+                        includeDrafts: true,
+                    })
+                ).items,
+            ).toEqual([]);
         },
     );
 

@@ -73,6 +73,25 @@ test("view inventory queries accept bounded kind exclusions without changing def
         false,
     );
 });
+test("view inventories opt into drafts only with an explicit boolean", () => {
+    assert.deepEqual(viewSummaryRequestSchema.parse({ corpusId: "corpus" }), {
+        corpusId: "corpus",
+    });
+    for (const includeDrafts of [false, true]) {
+        const request = { corpusId: "corpus", includeDrafts };
+        assert.deepEqual(viewSummaryRequestSchema.parse(request), request);
+    }
+    for (const includeDrafts of ["true", 1, null]) {
+        assert.equal(
+            viewSummaryRequestSchema.safeParse({
+                corpusId: "corpus",
+                includeDrafts,
+            }).success,
+            false,
+        );
+    }
+});
+
 test("build summaries preserve lightweight conflict state and accept legacy responses", () => {
     const summary = {
         jobId: "00000000-0000-4000-8000-000000000001",

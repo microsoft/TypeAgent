@@ -35,6 +35,35 @@ import {
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
 import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
 
+async function verifyDraftInventory(invoke, request, kind, revisionId) {
+    if (kind === "wiki" || kind === "projectBrief") {
+        const hidden = await invoke("memoryListViewSummaries", request);
+        assert.equal(hidden.status, 200);
+        assert.equal(hidden.body.data.total, 0);
+        const browsable = await invoke("memoryListViewSummaries", {
+            ...request,
+            includeDrafts: true,
+        });
+        assert.equal(browsable.status, 200);
+        assert.equal(browsable.body.data.total, 1);
+        assert.equal(browsable.body.data.items[0].state, "draft");
+        assert.equal(browsable.body.data.items[0].revisionId, revisionId);
+        const unpublished = await invoke("memoryGetViewPublication", request);
+        assert.equal(unpublished.status, 200);
+        assert.equal(unpublished.body.data.indexState, "absent");
+        assert.equal(unpublished.body.data.publishedRevisionId, undefined);
+    }
+    assert.equal(
+        (
+            await invoke("memoryListViewSummaries", {
+                ...request,
+                includeDrafts: "true",
+            })
+        ).status,
+        400,
+    );
+}
+
 for (const kind of [
     "troubleshootingGuide",
     "projectBrief",
@@ -439,6 +468,12 @@ for (const kind of [
         }
         assert.equal(job.state, "complete", JSON.stringify(job.results));
         assert.equal(job.results[0].state, "draft");
+        await verifyDraftInventory(
+            invoke,
+            { corpusId: corpus.corpusId, viewId },
+            kind,
+            job.results[0].revisionId,
+        );
         const original = await invoke("memoryHubSourceOriginal", {
             corpusId: corpus.corpusId,
             sourceId: source.sourceId,

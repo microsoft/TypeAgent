@@ -7,9 +7,10 @@ import type {
     ViewDefinitionInput,
 } from "@typeagent/memory-service";
 import { rbNode, rbButton } from "./memoryHubDocumentUi";
+import { projectBriefSectionHeading } from "@typeagent/memory-service/view-text";
 
 const headings: Record<ProjectBriefDetails["kind"], string> = {
-    goalsScope: "Goals and scope",
+    goalsScope: projectBriefSectionHeading("goalsScope"),
     owners: "Owners and responsibilities",
     status: "Project, incident and capacity status",
     milestones: "Milestones and provisional commitments",
