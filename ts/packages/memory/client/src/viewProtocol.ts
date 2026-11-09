@@ -644,6 +644,7 @@ export const extensionViewContentSchema = z.strictObject({
             "grouped-cards-v1",
             "table-v1",
             "sources-v1",
+            "procedure-guide-v1",
         ]),
         layouts: z
             .strictObject({
