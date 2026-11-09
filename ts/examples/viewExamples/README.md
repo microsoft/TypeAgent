@@ -4,6 +4,11 @@ Examples for TypeAgent's existing informational wiki and project-brief
 builders. The private package is named **`wiki-views`**; its shared example
 directory is `examples/viewExamples`. No extension provider is required.
 
+The same package also includes opt-in [procedural memory-view examples](./PROCEDURAL.md)
+with trusted extension providers, an offline lifecycle demonstration and approved
+prose extraction. Those use separate `start` and `live` commands; the `wiki-views`
+commands below retain their existing behavior.
+
 The offline commands use `FileMemoryService`, a real persisted KnowPro corpus index
 and deterministic extraction/synthesis injection. They establish orchestration and lifecycle behavior, **not** factual
 model quality. Original small source fixtures are development material, not

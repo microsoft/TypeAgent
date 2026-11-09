@@ -1,0 +1,13 @@
+Fictional lantern connection support
+
+Applies only to the fictional Lantern simulator. This document is guidance, not device automation.
+
+Before inspecting the simulator status, ask the caller for permission. Do not request passwords. Never factory-reset the simulator or alter account settings.
+
+Ask the caller to read the simulator link indicator. Required inputs are caller consent and the link indicator. The expected indicator is green or amber.
+
+If the caller reports a green indicator, ask them to open the simulator status page and report the result. The required input is the status-page result. Its expected observation is not specified.
+
+If the caller reports an amber indicator, cannot inspect the indicator, or reports that the status page is not ready or its result is unknown, stop and hand the indicator and status-page observations to a human support reviewer.
+
+If the caller reports that the simulator status page says ready, record the caller-confirmed ready result. Do not claim that a real device was repaired.

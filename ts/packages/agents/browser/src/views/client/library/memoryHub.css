@@ -1,4 +1,178 @@
 /* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.hub-procedure-boundary {
+  padding: 14px 18px;
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--primary);
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+.hub-procedure-tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+  margin: 22px 0;
+  overflow-x: auto;
+}
+.hub-procedure-tabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 2px;
+  white-space: nowrap;
+}
+.hub-procedure-tabs button[aria-selected="true"] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.hub-procedure-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 22px;
+}
+.hub-procedure-group {
+  margin-bottom: 20px;
+}
+.hub-procedure-options .hub-procedure-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.hub-procedure-view:is(
+    [data-topology="guarded-graph"],
+    [data-topology="partial-order"]
+  )
+  .hub-procedure-options
+  .hub-procedure-cards {
+  grid-template-columns: minmax(0, 1fr);
+}
+.hub-procedure-card {
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.hub-procedure-card h4 {
+  font-size: 17px;
+}
+.hub-procedure-card p {
+  white-space: pre-wrap;
+}
+.hub-procedure-order-note {
+  color: var(--muted);
+}
+.hub-procedure-gaps .hub-procedure-card {
+  border-left: 4px solid var(--primary);
+  background: var(--accent-soft);
+}
+.hub-procedure-options [data-record-kind="decisionTable"] {
+  grid-column: 1 / -1;
+}
+.hub-procedure-table-container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.hub-procedure-decision-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.hub-procedure-decision-table th,
+.hub-procedure-decision-table td {
+  padding: 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.hub-procedure-decision-table th {
+  background: var(--surface-alt);
+}
+.hub-procedure-claim-details,
+.hub-procedure-ordering-details {
+  margin-top: 12px;
+}
+.hub-procedure-condition {
+  color: var(--muted);
+}
+.hub-procedure-action-gap {
+  margin-top: 12px;
+  padding: 10px;
+  border-left: 4px solid var(--primary);
+  background: var(--accent-soft);
+}
+.hub-procedure-source {
+  display: inline-block;
+  color: var(--primary);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+  padding: 0;
+  margin-right: 6px;
+  text-decoration: underline;
+}
+.hub-procedure-card a {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.hub-procedure-missing {
+  color: var(--muted);
+}
+.hub-procedure-json {
+  white-space: pre;
+  overflow: auto;
+  max-width: 100%;
+  padding: 20px;
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.hub-procedure-drawer {
+  position: fixed;
+  left: auto;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: 0;
+  width: min(560px, 100%);
+  height: 100dvh;
+  max-height: none;
+  border: 1px solid var(--border);
+  padding: 24px;
+  background: var(--surface);
+  color: var(--text);
+}
+.hub-procedure-drawer::backdrop {
+  background: #15233c66;
+}
+.hub-procedure-drawer blockquote {
+  white-space: pre-wrap;
+  border-left: 3px solid var(--primary);
+  padding: 16px;
+  margin: 20px 0;
+  background: var(--surface-alt);
+}
+.hub-procedure-locator {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 900px) {
+  .hub-procedure-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 580px) {
+  .hub-procedure-options .hub-procedure-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 body[data-memory-hub] > .alert {
   position: fixed;
   padding: 12px;
