@@ -8,7 +8,9 @@ import {
     writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import timers from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 
 const workflowPath = ".github/workflows/codeql.yml";
 const shaPattern = /^[a-f0-9]{40}$/i;
@@ -226,6 +228,45 @@ export function prepareSarifFile(directory, language, destination) {
     run.automationDetails = { ...automation, id: `${category}/` };
     writeFileSync(destination, JSON.stringify(sarif), "utf8");
     return destination;
+}
+
+export async function uploadForkSarif(github, repo, { number, sha, sarif }) {
+    requireValue(
+        Number.isSafeInteger(number) && number > 0 && shaPattern.test(sha),
+        "A verified pull request number and head SHA are required for upload.",
+    );
+    // The upload action prefers the trusted checkout's HEAD over its sha input.
+    // Submit the verified destination directly instead of inferring it from Git.
+    const { data: upload } = await github.rest.codeScanning.uploadSarif({
+        ...repo,
+        commit_sha: sha,
+        ref: `refs/pull/${number}/head`,
+        sarif: gzipSync(readFileSync(sarif)).toString("base64"),
+    });
+    requireValue(
+        typeof upload.id === "string" && upload.id.length > 0,
+        "Code scanning did not return a SARIF upload ID.",
+    );
+    for (let attempt = 0; attempt < 60; attempt++) {
+        const { data: status } = await github.rest.codeScanning.getSarif({
+            ...repo,
+            sarif_id: upload.id,
+        });
+        if (status.processing_status === "complete") return;
+        if (status.processing_status === "failed") {
+            throw new Error(
+                `Code scanning rejected SARIF upload ${upload.id}: ${JSON.stringify(status.errors)}.`,
+            );
+        }
+        requireValue(
+            status.processing_status === "pending",
+            `Unexpected SARIF processing status: ${status.processing_status}.`,
+        );
+        if (attempt < 59) await timers.setTimeout(5000);
+    }
+    throw new Error(
+        `Timed out waiting for code scanning to process SARIF upload ${upload.id}.`,
+    );
 }
 
 const script = fileURLToPath(import.meta.url);
