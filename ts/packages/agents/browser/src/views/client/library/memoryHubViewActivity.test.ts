@@ -266,8 +266,8 @@ test("topic generations are not presented as openable Wiki article revisions", a
     }
 });
 
-test("current indexing attention is counted once and maintenance plans respect the 32-view bound", async () => {
-    const views: ViewVersion[] = Array.from({ length: 33 }, (_, index) => ({
+function guide(index: number): ViewVersion {
+    return {
         corpusId: "alpha",
         viewId: `guide-${index}`,
         revisionId: `r-${index}`,
@@ -290,7 +290,148 @@ test("current indexing attention is counted once and maintenance plans respect t
         },
         relationships: [],
         provenance: "generated",
-    }));
+    };
+}
+
+test.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+])(
+    "Inbox pagination labels independent view (%s) and build (%s) feeds only when navigable",
+    async (moreViews, moreBuilds) => {
+        const previous = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            inventoryFixture(async (method, params) => {
+                if (method === "memoryListViews")
+                    return {
+                        head: null,
+                        views: Array.from(
+                            { length: moreViews ? 26 : 1 },
+                            (_, index) => guide(index),
+                        ),
+                    };
+                if (method === "memoryListViewBuilds")
+                    return Array.from(
+                        { length: moreBuilds ? 26 : 1 },
+                        (_, index) => ({ ...job(), jobId: `job-${index}` }),
+                    );
+                if (method === "memoryGetViewPublication")
+                    return { indexState: "absent" };
+                return previous(method, params);
+            }),
+        );
+        const attention = document.createElement("div");
+        const onAttentionCount = jest.fn();
+        const onError = jest.fn();
+        const mounted = mountMemoryHubViewActivity(
+            document.createElement("div"),
+            attention,
+            {
+                scope: () => "alpha",
+                onError,
+                onOpenView: jest.fn(),
+                onOpenBuild: jest.fn(),
+                onAttentionCount,
+            },
+        );
+        try {
+            await mounted.refresh();
+            const viewPages = () =>
+                attention.querySelector<HTMLElement>(
+                    '[aria-label="view attention pages"]',
+                )!;
+            const buildPages = () =>
+                attention.querySelector<HTMLElement>(
+                    '[aria-label="operation attention pages"]',
+                )!;
+            expect(viewPages().hidden).toBe(!moreViews);
+            expect(buildPages().hidden).toBe(!moreBuilds);
+            expect(viewPages().textContent).toContain("View issues");
+            expect(buildPages().textContent).toContain("Build issues");
+            expect(onAttentionCount).toHaveBeenLastCalledWith(
+                1,
+                moreViews || moreBuilds,
+            );
+            if (moreViews && moreBuilds) {
+                const nextViews = new Promise<void>((resolve) =>
+                    onAttentionCount.mockImplementationOnce(() => resolve()),
+                );
+                textButton(attention, "Next view attention page").click();
+                await nextViews;
+                expect(invoke).toHaveBeenCalledWith("memoryListViewSummaries", {
+                    corpusId: "alpha",
+                    pageSize: 25,
+                    continuationToken: "25",
+                });
+                expect(
+                    invoke.mock.calls
+                        .filter(
+                            ([method]) =>
+                                method === "memoryListViewBuildSummaries",
+                        )
+                        .at(-1),
+                ).toEqual([
+                    "memoryListViewBuildSummaries",
+                    { corpusId: "alpha", pageSize: 25 },
+                ]);
+                const nextBuilds = new Promise<void>((resolve) =>
+                    onAttentionCount.mockImplementationOnce(() => resolve()),
+                );
+                textButton(attention, "Next operation attention page").click();
+                await nextBuilds;
+                expect(invoke).toHaveBeenCalledWith(
+                    "memoryListViewBuildSummaries",
+                    {
+                        corpusId: "alpha",
+                        pageSize: 25,
+                        continuationToken: "25",
+                    },
+                );
+                expect(viewPages().hidden).toBe(false);
+                expect(buildPages().hidden).toBe(false);
+                expect(onAttentionCount).toHaveBeenLastCalledWith(1, false);
+            }
+            expect(onError).not.toHaveBeenCalled();
+        } finally {
+            mounted.dispose();
+        }
+    },
+);
+
+test("empty Inbox attention has neither visible pagers nor a phantom heading", async () => {
+    const previous = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryListViewBuildSummaries"
+            ? { items: [], total: 0 }
+            : previous(method, params),
+    );
+    const attention = document.createElement("div");
+    const onAttentionCount = jest.fn();
+    const mounted = mountMemoryHubViewActivity(
+        document.createElement("div"),
+        attention,
+        {
+            scope: () => "alpha",
+            onError: jest.fn(),
+            onOpenView: jest.fn(),
+            onOpenBuild: jest.fn(),
+            onAttentionCount,
+        },
+    );
+    try {
+        await mounted.refresh();
+        expect(attention.querySelector("h3")).toBeNull();
+        expect(attention.querySelectorAll("nav:not([hidden])")).toHaveLength(0);
+        expect(onAttentionCount).toHaveBeenLastCalledWith(0, false);
+    } finally {
+        mounted.dispose();
+    }
+});
+
+test("current indexing attention is counted once and maintenance plans respect the 32-view bound", async () => {
+    const views = Array.from({ length: 33 }, (_, index) => guide(index));
     invoke.mockImplementation(
         inventoryFixture(
             async (

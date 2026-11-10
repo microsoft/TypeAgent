@@ -518,6 +518,31 @@ export function mountMemoryHubViewActivity(
         return { total, running, current: true };
     }
 
+    function renderAttentionNavigation(attentionCount: number): void {
+        if (!visible) {
+            const viewPages = attentionPager.controls(
+                "view attention",
+                () => void run(refresh),
+            );
+            viewPages.prepend(rbNode("span", "View issues"));
+            const buildPages = jobPager.controls(
+                "operation attention",
+                () => void run(refresh),
+            );
+            buildPages.prepend(rbNode("span", "Build issues"));
+            attentionHost.append(viewPages, buildPages);
+        }
+        if (
+            !attentionCount &&
+            (visible || (!attentionPager.canNavigate && !jobPager.canNavigate))
+        )
+            return;
+        const heading = rbNode("h3", "View attention");
+        heading.title =
+            "Current view and build issues in this scope. The filters above apply to source and guide notifications.";
+        attentionHost.prepend(heading);
+    }
+
     async function refresh(): Promise<void> {
         const current = ++sequence;
         const scope = options.scope();
@@ -601,26 +626,7 @@ export function mountMemoryHubViewActivity(
             list.append(
                 jobPager.controls("view operations", () => void run(refresh)),
             );
-        else {
-            attentionHost.append(
-                attentionPager.controls(
-                    "view attention",
-                    () => void run(refresh),
-                ),
-            );
-            attentionHost.append(
-                jobPager.controls(
-                    "operation attention",
-                    () => void run(refresh),
-                ),
-            );
-        }
-        if (attentionHost.childElementCount) {
-            const heading = rbNode("h3", "View attention");
-            heading.title =
-                "Current view and build issues in this scope. The filters above apply to source and guide notifications.";
-            attentionHost.prepend(heading);
-        }
+        renderAttentionNavigation(attentionCount);
         options.onAttentionCount?.(
             attentionCount,
             !visible && (attentionPager.hasNext || jobPager.hasNext),
