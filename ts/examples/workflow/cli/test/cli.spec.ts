@@ -75,17 +75,37 @@ function workflowPath(name: string): string {
 /** Run the CLI and return { stdout, stderr, code }. */
 function runCli(
     args: string[],
+    timeout = 30_000,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
-    return new Promise((resolve) => {
-        execFile(
-            "node",
+    return new Promise((resolve, reject) => {
+        const child = execFile(
+            process.execPath,
             [CLI, ...args],
-            { timeout: 30_000, maxBuffer: 1024 * 1024 },
+            { timeout, maxBuffer: 1024 * 1024 },
             (err, stdout, stderr) => {
-                const code = err && "code" in err ? (err.code as number) : 0;
-                resolve({ stdout, stderr, code: code ?? 0 });
+                const code = err?.code;
+                if (
+                    err &&
+                    (err.killed || err.signal || typeof code !== "number")
+                ) {
+                    reject(
+                        Object.assign(
+                            new Error(
+                                `CLI process did not exit normally: ${err.message}\nstdout: ${stdout}\nstderr: ${stderr}`,
+                            ),
+                            { cause: err },
+                        ),
+                    );
+                    return;
+                }
+                resolve({
+                    stdout,
+                    stderr,
+                    code: typeof code === "number" ? code : 0,
+                });
             },
         );
+        child.stdin?.end();
     });
 }
 
@@ -94,6 +114,12 @@ function cliTest(name: string, fn: () => Promise<void>): void {
 }
 
 describe("CLI integration", () => {
+    cliTest("reports child timeouts instead of a successful exit", async () => {
+        await expect(runCli(["list-tasks"], 1)).rejects.toThrow(
+            "CLI process did not exit normally",
+        );
+    });
+
     describe("list-tasks", () => {
         cliTest("lists all registered tasks", async () => {
             const { stdout, code } = await runCli(["list-tasks"]);
