@@ -357,6 +357,12 @@ Node and chained test commands use whole-package retries, preserving compiler
 steps and lifecycle hooks. Recovered failures remain visible as flaky; failures
 remaining after the existing two retries remain blocking.
 
+Jest packages must load the shared Jest configuration so failures reach the same
+retry harness. The workflow CLI uses this configuration as well; killed or
+timed-out CLI children are infrastructure failures with signal and captured
+output, never successful exit-zero results. Its 30-second child deadline and
+dry-run policy assertions are unchanged.
+
 The Windows native-hook pipe fixture records startup phases around helper
 compilation and pipe creation. Readiness failures include those phases, elapsed
 time, PID, exit/signal status, launch errors, and bounded stdout/stderr tails
