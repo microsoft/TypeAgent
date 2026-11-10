@@ -58,12 +58,22 @@ for (const stage of ["first pass", "retry"]) {
         `the real harness keeps ${stage} timeouts blocking and still runs root tests`,
         { timeout: 25000 },
         (t) => {
-            const directory = fs.mkdtempSync(
+            const temporary = fs.mkdtempSync(
                 path.join(os.tmpdir(), "test-harness-deadline-"),
             );
             t.after(() =>
-                fs.rmSync(directory, { recursive: true, force: true }),
+                fs.rmSync(temporary, { recursive: true, force: true }),
             );
+            const workspace = path.join(temporary, "workspace");
+            const alias = path.join(temporary, "alias");
+            fs.mkdirSync(workspace);
+            fs.symlinkSync(
+                workspace,
+                alias,
+                process.platform === "win32" ? "junction" : "dir",
+            );
+            const directory = fs.realpathSync(alias);
+            assert.notEqual(directory, alias);
             const packageDirectory = path.join(
                 directory,
                 "packages",

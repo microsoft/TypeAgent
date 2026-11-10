@@ -326,6 +326,7 @@ for (const [runtime, failure] of [
 
 function installFixture({
     nativeCache,
+    profiling,
     installFailure = "false",
     probeFailure = "false",
 }) {
@@ -347,6 +348,13 @@ function pnpm {
   $global:LASTEXITCODE = if (${installFailure}) { 1 } else { 0 }
 }
 function node {
+  if ($args[0] -eq 'tools/scripts/ciProfile.mjs') {
+    if ($args.Count -ne 5 -or $args[1] -ne 'record') { throw 'Unexpected profiling invocation.' }
+    ${record} ("profile:" + $args[2] + ":" + $args[4])
+    $global:LASTEXITCODE = 0
+    return
+  }
+  if ($args.Count -ne 1 -or $args[0] -ne 'tools/scripts/ciVerifyNativeRuntime.mjs') { throw 'Unexpected native probe invocation.' }
   $global:probes++
   ${record} 'probe'
   $global:LASTEXITCODE = if (${probeFailure}) { 1 } else { 0 }
@@ -364,68 +372,122 @@ ${install.run.replaceAll("\${{ inputs.native-cache }}", String(nativeCache))}
             {
                 encoding: "utf8",
                 timeout: 30000,
+                env: {
+                    ...process.env,
+                    TYPEAGENT_CI_PROFILE: String(profiling),
+                },
             },
         );
         assert.ifError(result.error);
+        const calls = fs.readFileSync(records, "utf8").trim().split(/\r?\n/);
         return {
             ...result,
-            calls: fs.readFileSync(records, "utf8").trim().split(/\r?\n/),
+            calls: calls.filter((call) => !call.startsWith("profile:")),
+            profiles: calls.filter((call) => call.startsWith("profile:")),
         };
     } finally {
         fs.rmSync(directory, { recursive: true, force: true });
     }
 }
 
-test("default installation preserves its flags and does not add native probes", () => {
-    const result = installFixture({ nativeCache: false });
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.calls, [
-        "install:install --frozen-lockfile --strict-peer-dependencies",
-    ]);
-});
+for (const profiling of [false, true]) {
+    test(`default installation preserves its flags and does not add native probes (profiling=${profiling})`, () => {
+        const result = installFixture({ nativeCache: false, profiling });
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(result.calls, [
+            "install:install --frozen-lockfile --strict-peer-dependencies",
+        ]);
+        assert.deepEqual(
+            result.profiles,
+            profiling ? ["profile:dependency-install:0"] : [],
+        );
+    });
 
-test("native cache hits still require both runtime probes", () => {
-    const result = installFixture({ nativeCache: true });
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.calls, [
-        "install:install --frozen-lockfile --strict-peer-dependencies --side-effects-cache",
-        "probe",
-    ]);
-});
+    test(`native cache hits still require both runtime probes (profiling=${profiling})`, () => {
+        const result = installFixture({ nativeCache: true, profiling });
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(result.calls, [
+            "install:install --frozen-lockfile --strict-peer-dependencies --side-effects-cache",
+            "probe",
+        ]);
+        assert.deepEqual(
+            result.profiles,
+            profiling
+                ? [
+                      "profile:dependency-install:0",
+                      "profile:native-verification:0",
+                  ]
+                : [],
+        );
+    });
 
-for (const stage of ["installation", "verification"]) {
-    test(`${stage} failure forces uncached reimport before accepting a retry`, () => {
+    for (const stage of ["installation", "verification"]) {
+        test(`${stage} failure forces uncached reimport before accepting a retry (profiling=${profiling})`, () => {
+            const result = installFixture({
+                nativeCache: true,
+                profiling,
+                installFailure:
+                    stage === "installation"
+                        ? "$global:installs -eq 1"
+                        : "false",
+                probeFailure:
+                    stage === "verification" ? "$global:probes -eq 1" : "false",
+            });
+            assert.equal(result.status, 0, result.stderr);
+            const installs = result.calls.filter((call) =>
+                call.startsWith("install:"),
+            );
+            assert.equal(installs.length, 2);
+            assert.equal(
+                installs[1],
+                "install:install --frozen-lockfile --strict-peer-dependencies --force --no-side-effects-cache",
+            );
+            assert.equal(result.calls.at(-1), "probe");
+            assert.match(result.stdout, /::warning::.*uncached native rebuild/);
+            const firstAttempt =
+                stage === "installation"
+                    ? ["profile:dependency-install:1"]
+                    : [
+                          "profile:dependency-install:0",
+                          "profile:native-verification:1",
+                      ];
+            assert.deepEqual(
+                result.profiles,
+                profiling
+                    ? [
+                          ...firstAttempt,
+                          "profile:dependency-install:0",
+                          "profile:native-verification:0",
+                      ]
+                    : [],
+            );
+        });
+    }
+
+    test(`persistent runtime failure exhausts three visible attempts and fails the job (profiling=${profiling})`, () => {
         const result = installFixture({
             nativeCache: true,
-            installFailure:
-                stage === "installation" ? "$global:installs -eq 1" : "false",
-            probeFailure:
-                stage === "verification" ? "$global:probes -eq 1" : "false",
+            profiling,
+            probeFailure: "true",
         });
-        assert.equal(result.status, 0, result.stderr);
-        const installs = result.calls.filter((call) =>
-            call.startsWith("install:"),
-        );
-        assert.equal(installs.length, 2);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.calls.filter((call) => call === "probe").length, 3);
         assert.equal(
-            installs[1],
-            "install:install --frozen-lockfile --strict-peer-dependencies --force --no-side-effects-cache",
+            result.calls.filter((call) => call.startsWith("install:")).length,
+            3,
         );
-        assert.equal(result.calls.at(-1), "probe");
-        assert.match(result.stdout, /::warning::.*uncached native rebuild/);
+        assert.match(
+            result.stderr,
+            /native runtime verification exhausted 3 attempts/,
+        );
+        assert.deepEqual(
+            result.profiles,
+            profiling
+                ? Array.from({ length: 3 }, () => [
+                      "profile:dependency-install:0",
+                      "profile:native-verification:1",
+                  ]).flat()
+                : [],
+        );
     });
 }
-
-test("persistent runtime failure exhausts three visible attempts and fails the job", () => {
-    const result = installFixture({ nativeCache: true, probeFailure: "true" });
-    assert.notEqual(result.status, 0);
-    assert.equal(result.calls.filter((call) => call === "probe").length, 3);
-    assert.equal(
-        result.calls.filter((call) => call.startsWith("install:")).length,
-        3,
-    );
-    assert.match(
-        result.stderr,
-        /native runtime verification exhausted 3 attempts/,
-    );
-});
