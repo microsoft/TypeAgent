@@ -414,9 +414,7 @@ test("cache and transport experiments are off by default, pinned, and never skip
     assert.equal(cache.with["restore-keys"], undefined);
     assert.equal(cache.with.path, "${{ runner.temp }}/fanout-build-cache");
     assert.equal(
-        build.steps.find(
-            (step) => step.run === "pnpm run build --timer --logtime",
-        ).if,
+        build.steps.find((step) => step.run === "pnpm run build").if,
         undefined,
     );
     const setup = read("../../../../.github/actions/fanout-setup/action.yml");

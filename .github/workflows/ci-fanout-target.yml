@@ -33,8 +33,6 @@ permissions:
 
 env:
   CI: "true"
-  TYPEAGENT_CI_PROFILE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-  TYPEAGENT_NATIVE_CACHE: ${{ inputs.native_cache }}
   NODE_OPTIONS: --max_old_space_size=8192
   TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ inputs.os == 'windows-latest' && '1' || '0' }}
 
@@ -57,7 +55,7 @@ jobs:
           native-cache: ${{ inputs.native_cache }}
           save-native-cache: "true"
       - name: Build memory service and its test-time client once
-        run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep --timer --logtime
+        run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep
       - name: Discover tests and fingerprint compiled outputs
         run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs create
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -94,7 +92,7 @@ jobs:
         if: inputs.build_cache && steps.build_cache.outputs.cache-hit == 'true'
         run: pnpm run ci:node tools/scripts/ciBuildCache.mjs restore
       - name: Build workspace with normal fluid-build validation even on cache hits
-        run: pnpm run build --timer --logtime
+        run: pnpm run build
       - name: Seal build outputs and incremental metadata for an exact-source cache
         if: inputs.build_cache && steps.build_cache.outputs.cache-hit != 'true'
         run: pnpm run ci:node tools/scripts/ciBuildCache.mjs create

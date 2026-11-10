@@ -60,31 +60,18 @@ runs:
     - name: Install native dependencies with bounded visible retries
       shell: pwsh
       working-directory: ts
-      env:
-        TYPEAGENT_NATIVE_CACHE_HIT: ${{ steps.native_store.outputs.cache-hit == 'true' && 'true' || 'false' }}
       run: |
         $nativeCache = '${{ inputs.native-cache }}' -eq 'true'
         for ($attempt = 1; $attempt -le 3; $attempt++) {
-          $env:TYPEAGENT_INSTALL_ATTEMPT = "$attempt"
           $retryArgs = @()
           if ($attempt -gt 1) { $retryArgs = @('--force', '--no-side-effects-cache') }
           elseif ($nativeCache) { $retryArgs = @('--side-effects-cache') }
-          $watch = [System.Diagnostics.Stopwatch]::StartNew()
           pnpm install --frozen-lockfile --strict-peer-dependencies @retryArgs
           $status = $LASTEXITCODE
-          if ($env:TYPEAGENT_CI_PROFILE -eq 'true') {
-            node tools/scripts/ciProfile.mjs record dependency-install $watch.ElapsedMilliseconds $status
-            if ($LASTEXITCODE -ne 0) { throw 'Dependency-install measurement could not be recorded.' }
-          }
           $stage = 'Dependency installation'
           if ($status -eq 0 -and $nativeCache) {
-            $watch.Restart()
             node tools/scripts/ciVerifyNativeRuntime.mjs
             $status = $LASTEXITCODE
-            if ($env:TYPEAGENT_CI_PROFILE -eq 'true') {
-              node tools/scripts/ciProfile.mjs record native-verification $watch.ElapsedMilliseconds $status
-              if ($LASTEXITCODE -ne 0) { throw 'Native-verification measurement could not be recorded.' }
-            }
             $stage = 'Node/Electron native runtime verification'
           }
           if ($status -eq 0) { exit 0 }

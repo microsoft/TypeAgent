@@ -397,10 +397,7 @@ for (const profiling of [false, true]) {
         assert.deepEqual(result.calls, [
             "install:install --frozen-lockfile --strict-peer-dependencies",
         ]);
-        assert.deepEqual(
-            result.profiles,
-            profiling ? ["profile:dependency-install:0"] : [],
-        );
+        assert.deepEqual(result.profiles, []);
     });
 
     test(`native cache hits still require both runtime probes (profiling=${profiling})`, () => {
@@ -410,15 +407,7 @@ for (const profiling of [false, true]) {
             "install:install --frozen-lockfile --strict-peer-dependencies --side-effects-cache",
             "probe",
         ]);
-        assert.deepEqual(
-            result.profiles,
-            profiling
-                ? [
-                      "profile:dependency-install:0",
-                      "profile:native-verification:0",
-                  ]
-                : [],
-        );
+        assert.deepEqual(result.profiles, []);
     });
 
     for (const stage of ["installation", "verification"]) {
@@ -444,23 +433,7 @@ for (const profiling of [false, true]) {
             );
             assert.equal(result.calls.at(-1), "probe");
             assert.match(result.stdout, /::warning::.*uncached native rebuild/);
-            const firstAttempt =
-                stage === "installation"
-                    ? ["profile:dependency-install:1"]
-                    : [
-                          "profile:dependency-install:0",
-                          "profile:native-verification:1",
-                      ];
-            assert.deepEqual(
-                result.profiles,
-                profiling
-                    ? [
-                          ...firstAttempt,
-                          "profile:dependency-install:0",
-                          "profile:native-verification:0",
-                      ]
-                    : [],
-            );
+            assert.deepEqual(result.profiles, []);
         });
     }
 
@@ -480,14 +453,6 @@ for (const profiling of [false, true]) {
             result.stderr,
             /native runtime verification exhausted 3 attempts/,
         );
-        assert.deepEqual(
-            result.profiles,
-            profiling
-                ? Array.from({ length: 3 }, () => [
-                      "profile:dependency-install:0",
-                      "profile:native-verification:1",
-                  ]).flat()
-                : [],
-        );
+        assert.deepEqual(result.profiles, []);
     });
 }

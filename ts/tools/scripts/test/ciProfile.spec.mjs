@@ -19,7 +19,6 @@ import {
 
 const sha = "a".repeat(40);
 const script = new URL("../ciProfile.mjs", import.meta.url);
-const library = new URL("../lib/ciProfile.mjs", import.meta.url);
 const env = { ...process.env, GITHUB_SHA: sha, TYPEAGENT_INSTALL_ATTEMPT: "" };
 
 function command(args, options = {}) {
@@ -94,34 +93,6 @@ test("invalid stage observations fail explicitly instead of producing plausible 
             TYPEAGENT_INSTALL_ATTEMPT: "0",
         }),
     );
-});
-
-test("synchronous profiling preserves values and original failures with profiling on and off", () => {
-    const source = `
-        import assert from "node:assert/strict";
-        import { profileSyncStage } from ${JSON.stringify(library.href)};
-        const value = {};
-        assert.equal(profileSyncStage("artifact-staging", () => value), value);
-        const failure = new Error("original fixture failure");
-        assert.throws(() => profileSyncStage("artifact-verification", () => { throw failure; }),
-            (error) => error === failure);
-    `;
-    for (const enabled of ["false", "true"]) {
-        const result = spawnSync(
-            process.execPath,
-            ["--input-type=module", "-e", source],
-            {
-                encoding: "utf8",
-                env: { ...env, TYPEAGENT_CI_PROFILE: enabled },
-            },
-        );
-        assert.equal(result.status, 0, result.stderr);
-        const { observations } = profileLog(result.stdout);
-        assert.deepEqual(
-            observations.map((item) => item.outcome),
-            enabled === "true" ? ["success", "failure"] : [],
-        );
-    }
 });
 
 test("log parsing retains job identity, failed observations and overlapping fluid tasks", () => {
@@ -342,7 +313,7 @@ test("offline report combines real input shapes without claiming a speedup or DA
     }
 });
 
-test("fan-out profiling is manual-only and preserves existing retry and native-cache policies", () => {
+test("fan-out omits timing instrumentation and preserves retry and native-cache policies", () => {
     for (const name of ["ci-fanout-target", "ci-fanout-experiment"]) {
         const workflow = yaml.load(
             fs.readFileSync(
@@ -353,9 +324,9 @@ test("fan-out profiling is manual-only and preserves existing retry and native-c
                 "utf8",
             ),
         );
-        assert.equal(
-            workflow.env.TYPEAGENT_CI_PROFILE,
-            "${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}",
+        assert.doesNotMatch(
+            JSON.stringify(workflow),
+            /TYPEAGENT_CI_PROFILE|TYPEAGENT_NATIVE_CACHE|--timer|--logtime/,
         );
         assert.equal(
             workflow.on.workflow_call.inputs.native_cache.default,
@@ -378,9 +349,10 @@ test("fan-out profiling is manual-only and preserves existing retry and native-c
     );
     assert.match(install.run, /\$attempt -le 3/);
     assert.match(install.run, /--force.*--no-side-effects-cache/);
-    assert.match(install.run, /TYPEAGENT_CI_PROFILE -eq 'true'/);
-    assert.match(install.run, /record dependency-install/);
-    assert.match(install.run, /record native-verification/);
+    assert.doesNotMatch(
+        JSON.stringify(action),
+        /ciProfile\.mjs|Stopwatch|TYPEAGENT_CI_PROFILE|TYPEAGENT_INSTALL_ATTEMPT|TYPEAGENT_NATIVE_CACHE_HIT/,
+    );
     assert.match(install.run, /if \(\$status -eq 0\) \{ exit 0 \}/);
     assert.match(install.run, /throw .*exhausted 3 attempts/);
 });

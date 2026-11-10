@@ -53,6 +53,51 @@ test("compiled manifest round-trips without dependencies or credential files", (
     });
 });
 
+test("artifact operations emit no timing records even with inherited profiling enabled", () => {
+    fixture((root) =>
+        fixture((consumer) => {
+            for (const enabled of ["false", "true"]) {
+                const directory = path.join(consumer, `payload-${enabled}`);
+                const result = spawnSync(
+                    process.execPath,
+                    [
+                        "--input-type=module",
+                        "-e",
+                        `
+                            import { createManifest, verifyManifest, stageArtifact } from ${JSON.stringify(new URL("../ciFanoutExperiment.mjs", import.meta.url).href)};
+                            const manifest = createManifest(process.argv[1], ${JSON.stringify(sha)}, [${JSON.stringify(spec)}]);
+                            verifyManifest(process.argv[1], ${JSON.stringify(sha)}, manifest);
+                            stageArtifact(process.argv[1], manifest, process.argv[2]);
+                        `,
+                        root,
+                        directory,
+                    ],
+                    {
+                        encoding: "utf8",
+                        env: {
+                            ...process.env,
+                            TYPEAGENT_CI_PROFILE: enabled,
+                            GITHUB_SHA: "",
+                            BUILD_SOURCEVERSION: "",
+                        },
+                    },
+                );
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stdout, "");
+                assert.equal(
+                    JSON.parse(
+                        fs.readFileSync(
+                            path.join(directory, "ci-fanout-manifest.json"),
+                            "utf8",
+                        ),
+                    ).sha,
+                    sha,
+                );
+            }
+        }),
+    );
+});
+
 test("workspace artifacts reuse transport verification but cannot masquerade as memory artifacts", () => {
     fixture((root, write) => {
         const test = "packages/dispatcher/dispatcher/dist/test/example.spec.js";
@@ -835,7 +880,7 @@ test("test runners install native dependencies but never rebuild shared product 
         target.jobs.build.steps.find((step) =>
             step.name?.startsWith("Build memory service"),
         ).run,
-        'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep --timer --logtime',
+        'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
     );
     assert.deepEqual(
         experiment.jobs.targets.strategy.matrix.version,

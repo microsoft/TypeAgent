@@ -216,14 +216,12 @@ collector failures.
 
 ### Paired setup and smoke measurements
 
-Manual sharded dispatches emit `TYPEAGENT_CI_PROFILE` JSON records for dependency
-installation, native verification, and artifact preparation/staging/verification.
-Each observation identifies the exact SHA, Node/ABI, runner image, entry point,
-restore state, install attempt, and outcome. Failed attempts remain visible.
-Ordinary PR/push runs do not enable these nested observations. Producer builds
-also print fluid-build task timings. Task timings overlap; their sum is not a
-dependency-graph critical path. Artifact staging includes its nested verification.
-Exclude test-fixture entry points (`*.spec.mjs`) from operational comparisons.
+GitHub fan-out does not inject setup/artifact profiling, emit nested
+`TYPEAGENT_CI_PROFILE` observations, or add fluid-build timing flags. Use native
+GitHub job/step timestamps and cache-action logs to compare setup, build,
+artifact transfers, tests, scheduling gaps, and post-job work without adding
+instrumentation to those operations. Artifact integrity checks and native
+runtime probes remain mandatory. Azure smoke profiling remains unchanged.
 
 Compare two branch refs pointing to the **same commit**, with otherwise identical
 inputs. Separate refs prevent the manual workflow concurrency policy from
@@ -232,16 +230,17 @@ cancelling one arm:
 ```powershell
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <control-ref> -f fanout_native_cache=false
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-ref> -f fanout_native_cache=true
+gh run view <run-id> --repo microsoft/TypeAgent --json jobs
 gh run view <run-id> --repo microsoft/TypeAgent --log > <local-run-log>
-node tools/scripts/ciProfile.mjs report --log <local-run-log>
 ```
 
 Keep the independent memory producer, complete OS/Node matrix, full workspace
 builds, test inventories, build-cache policy, compression, and artifact format
 unchanged. Native-cache restore state does not establish whether the ordinary
 package-store cache was cold. Use ordinary step timings from the duration report
-for transfers, combined setup, and post-job cache work; do not add nested
-observations again. The existing native cache remains off by default.
+for transfers, combined setup, and post-job cache work. Job durations and
+parallel stage timings overlap; their sum is not a dependency-graph critical
+path. The existing native cache remains off by default.
 
 Azure Smoke Tests accepts `smokeBuildScope=full` (unchanged production coverage)
 or the opt-in `smoke-closure` candidate. The latter builds `agent-cli`,

@@ -51,22 +51,6 @@ export function stageMeasurement(stage, elapsedMs, outcome, env = process.env) {
     };
 }
 
-export function profileSyncStage(stage, operation) {
-    if (process.env.TYPEAGENT_CI_PROFILE !== "true") return operation();
-    const observation = stageMeasurement(stage, 0, "failure");
-    const started = performance.now();
-    try {
-        const result = operation();
-        observation.outcome = "success";
-        return result;
-    } finally {
-        observation.elapsedMs = performance.now() - started;
-        process.stdout.write(
-            `${profileMarker}${JSON.stringify(observation)}\n`,
-        );
-    }
-}
-
 const stages = [
     [
         "post-job-cache",
