@@ -159,7 +159,7 @@ Sharded CI is the default for PRs, main pushes, merge queues and manual runs. It
 exercises all supported OS/Node targets without Azure access or model keys.
 Its test selections match normal gating: full Linux/Windows coverage and the
 existing minimal macOS compatibility suites, not full macOS package tests.
-The daily schedule retains the legacy macOS-only full-test matrix. Local test
+The daily schedule uses sharded full macOS package coverage on Node 24/26. Local test
 defaults are unchanged. Documentation-only PRs keep their fast path; changes
 to TypeScript or the sharded workflows/action require complete validation.
 
@@ -169,8 +169,8 @@ a 240-minute job limit. The workspace budget does not apply to ordinary PRs,
 other manual rollbacks, or local runs unless explicitly
 set through `TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS` (positive integer milliseconds).
 On expiry the harness reports the deadline and owned process PID, terminates
-that process tree, preserves captured assertion failures as blocking, and runs
-the independent root-script phase. A deadline is an infrastructure failure,
+that process tree and preserves captured assertion failures as blocking.
+Root-script coverage remains independently required. A deadline is an infrastructure failure,
 not a recovered flaky test. Cancellation also cleans up the owned process tree.
 These limits do not replace fixing test resource leaks or failed assertions.
 
@@ -186,8 +186,8 @@ For an isolated full macOS qualification on a feature branch, use:
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f macos_qualification=true
 ```
 
-This opt-in restricts execution to full macOS Node 24/26 coverage. With the
-default `fanout_experiment=true`, each runtime builds the workspace once and
+This opt-in selects the same full macOS Node 24/26 test coverage as the nightly
+schedule. Each runtime builds the workspace once and
 executes four complete-package lanes plus independent root-script/memory-quality
 tests. Each lane contains exactly one of dispatcher, default agent provider,
 memory service, or memory MCP server, plus a duration-balanced share of the
@@ -197,28 +197,53 @@ This is whole-package sharding, not the normal 13-suite compatibility selection.
 The collector requires every planned package/script and all four lanes on both
 runtimes; missing, failed or mismatched reports block qualification.
 
-Set `fanout_experiment=false` alongside `macos_qualification=true` for the
-unsharded macOS-only rollback/control. Both modes retain the approved
-180-minute workspace and 240-minute outer limits (per lane for sharded runs).
-The scheduled nightly remains unsharded until hosted validation supports a
-separate rollout. Memory-only shard/control options apply to ordinary fan-out,
-not the complete-package macOS mode.
+Each full macOS lane retains the approved 180-minute workspace and 240-minute
+outer limits. The legacy matrix, duplicate unsharded memory controls and their
+`fanout_experiment` / `fanout_include_controls` dispatch inputs have been removed.
+Ordinary Ubuntu/Windows coverage and minimal macOS PR compatibility coverage
+are unchanged. Optional cache/artifact settings remain available and off by
+default; promotion of macOS sharding does not promote those settings.
 Verify the resulting run's `headSha` against the published
 candidate commit. GitHub cron schedules execute from the default branch; this
 manual branch dispatch queues a one-off qualification without changing cron.
-Qualify reliability fixes before adding build optimizations so failures and
-timing changes remain attributable.
 
-The historical `fanout_experiment` input is retained for compatibility. Set it
-to false on a manual dispatch to use the unsharded full-test matrix, still
-restricted to Node 24 and 26.
-The six `build_ts (OS, Node)` check names for Node 24 and 26 remain blocking: lightweight
-compatibility jobs require the entire selected strategy to succeed, rejecting
-failed, cancelled, skipped or missing coverage. Only a successful explicit
-documentation-only path decision permits a no-op check. Remove only the three
-Node 22 `build_ts (OS, 22.23.4)` required checks from the branch ruleset when
-deploying this matrix change; retain all other required checks and rules.
-PR formatting and all four ratchets run once in sharded analysis.
+The stable aggregate check is **TypeScript CI**. It requires successful coverage
+selection and the complete selected sharded graph; failed, cancelled, skipped
+or missing required work is blocking. Only a successful explicit
+documentation-only path decision permits a no-op check. PR formatting and all
+four ratchets run once in sharded analysis.
+
+### Required-check migration and rollback
+
+The six `build_ts (OS, Node)` jobs are temporary result-forwarding aliases, not
+test executors or a legacy rollback. They remain until the active main ruleset
+has moved to **TypeScript CI**. Deploy the workflow before changing protection:
+
+1. Merge through the existing six required checks. Verify the new aggregate on
+   ordinary main, PR and merge-group execution; update stale candidates as needed.
+   No additional manual qualification campaign is required for this rollout.
+2. Read the current effective rules and owning ruleset immediately before
+   cutover. The reviewed repository ruleset is `18685584`; do not assume it
+   remains the only source of policy:
+
+   ```powershell
+   gh api repos/microsoft/TypeAgent/rules/branches/main
+   gh api repos/microsoft/TypeAgent/rulesets/18685584
+   ```
+
+3. In one ruleset update replace only the six Node 24/26 `build_ts` contexts with
+   `TypeScript CI`, retaining GitHub Actions integration ID `15368`. Preserve
+   `Repo Policy Check`, both .NET checks, `TypeAgent Smoke Tests` and its integration,
+   strictness, conditions, merge queue, reviews and every unrelated rule.
+   Read back both effective rules and the ruleset to verify the exact change.
+4. Only after that cutover remove the compatibility alias job in a follow-up.
+   Do not combine deletion of still-required checks with an undeployed policy.
+
+Before cutover, rollback is a source revert while the six aliases remain
+required. After cutover, coordinate restoration of the previous contexts with
+the matching workflow; never remove protection or leave a required aggregate
+without an implementation. The retired manual legacy selector is not a rollback
+mechanism.
 
 Generated-file and managed-runtime root fixtures report subprocess failures with
 the fixture stage, argument boundaries, working directory, PID, elapsed time,
@@ -282,11 +307,13 @@ independently. Report Azure required-check latency separately from GitHub wall
 time/runner-minutes. One matched pair is qualification, not a p50/p95 speedup
 claim. Broad live integration is independent and is not part of this dispatch.
 
-The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
+The reusable `ci-fanout.yml` calls `ci-fanout-target.yml` independently
 for each combination of Ubuntu, Windows and macOS with Node
-24.22.1 and 26.12.1. Node 22 is excluded from all CI matrices, including
-scheduled and manual legacy runs; package engines and installer runtime
-support are unchanged. Each target includes the client's compiled view protocol
+24.22.1 and 26.12.1 for ordinary coverage; scheduled/full macOS coverage selects
+only macOS on those runtimes. Node 22 remains supported by package engines and
+installers, but CI qualification intentionally covers Node 24 and 26 only.
+Declared support is not a claim of Node 22 CI qualification. Each ordinary
+target includes the client's compiled view protocol
 dynamically imported by memory-service tests. It fingerprints and uploads that
 small runtime closure and then finishes. It does not build the remaining
 workspace or run non-memory tests, and does not depend on those jobs.
@@ -321,6 +348,21 @@ Chained/non-Jest package phases
 remain intact. Platform-independent formatting and lint run once in a separate
 blocking analysis job.
 
+Every workspace package using `node --test` or `tsx --test` must retain both
+the spec reporter and `tools/scripts/nodeTestFailureReporter.mjs`, with both
+destinations set to stdout. The shared reporter writes structured failures
+when the workspace harness supplies `TYPEAGENT_TEST_FAILURES_DIR`; without
+those artifacts, a failed package remains blocking but cannot be retried.
+Node and chained test commands use whole-package retries, preserving compiler
+steps and lifecycle hooks. Recovered failures remain visible as flaky; failures
+remaining after the existing two retries remain blocking.
+
+The Windows native-hook pipe fixture records startup phases around helper
+compilation and pipe creation. Readiness failures include those phases, elapsed
+time, PID, exit/signal status, launch errors, and bounded stdout/stderr tails
+(4,096 characters each). These diagnostics do not change its 15-second
+readiness deadline or OS pipe/child identity assertions.
+
 CI orchestration uses `pnpm run ci:node tools/scripts/<script>.mjs ...`.
 This supplies pnpm's JavaScript CLI through `npm_execpath`, letting nested
 workspace discovery and partition tests invoke Node directly without a command
@@ -337,12 +379,12 @@ legacy memory-only remainders. The new `fanout-remainder` profile additionally
 excludes exactly `agent-dispatcher` and `default-agent-provider`, which must pass
 their separate partitions. On macOS, `macos-compat-without-memory` reuses the
 existing compatibility list minus its five memory-service suites. Those five
-suites are selected explicitly for both memory discovery and shard/control
+suites are selected explicitly for both memory discovery and shard
 execution; the full memory-service inventory is used only on Linux/Windows.
 The remainder and memory selections together equal the existing 13-suite macOS
 compatibility selection. Missing compiled compatibility suites fail explicitly.
-Local selections are unchanged. Scheduled runs and explicit manual legacy
-rollbacks retain full macOS testing; ordinary sharded CI keeps minimal macOS coverage.
+Local selections are unchanged. Scheduled runs and explicit manual macOS
+qualifications use full package lanes; ordinary CI keeps minimal macOS coverage.
 
 Each producer uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
 OS/architecture, Node/ABI, output hashes, and the complete selected Jest spec inventory.
@@ -355,18 +397,17 @@ outputs, verify the manifest, and run memory-service Jest specs without rebuildi
 Four file-level shards consume the same per-OS/Node artifact. All six toolchain
 combinations must report, giving 24 memory-test reports. Artifact and result
 names include Node versions to prevent collisions. Actual organization/OS
-runner capacity can still queue jobs. Duplicate unsharded controls are disabled
-by default; set `fanout_include_controls=true` for a manual equivalence experiment,
-which requires 30 reports. The redundant `fanout_node_set` / reusable `node_set`
-workflow inputs have been removed: all dispatches qualify Node 24 and 26.
-Offline collectors still accept the historical `24-and-26` selection alias,
-which now has the same coverage as `all`; neither accepts Node 22 reports.
+runner capacity can still queue jobs. Duplicate unsharded controls and the
+obsolete Node-selection alias have been retired. Collectors require exactly
+the planned four shards on Node 24 and 26 and reject extra control or Node 22
+reports.
 Each memory group waits only for its matching target's memory producer.
 Likewise, workspace consumers wait only for their matching workspace producer:
 there are no cross-OS/Node producer barriers. A failed target blocks final
 qualification without skipping successful targets' independent measurements.
-Default full-scope validation has 85 executable jobs, including path selection
-and six compatibility checks. Runner capacity and repeated native installations
+Ordinary full-scope validation has 86 executable jobs during migration, including
+the stable aggregate and six compatibility aliases; removing the aliases after
+the ruleset cutover reduces that to 80. Runner capacity and repeated native installations
 must be measured rather than assuming unlimited parallelism.
 
 Runner-local dependency installation retries visibly up to three times, with
@@ -383,7 +424,7 @@ or lifecycle assumptions change. Consumers check the restored inventory against
 fresh discovery. Failed files get up to two serial, fresh-process, no-cache
 retries; all attempt JSON and new per-file timings are uploaded. Retry-only
 successes remain visible. Qualification requires all 32 package reports in
-addition to the 24 memory reports (30 with controls), 18 exact remainder reports and successful
+addition to the 24 memory reports, 18 exact remainder reports and successful
 analysis, build, root and Linux UI jobs. Remainder reports preserve full script
 inventories, selected packages, artifact fingerprints and producer provenance.
 
@@ -456,12 +497,10 @@ not hosted cold-build, Linux/macOS/UI or end-to-end latency qualification.
 
 The final qualification rejects missing, failed, cancelled or skipped analysis,
 producer or consumer work,
-mixed artifacts, missing/duplicate test files, and differences between control
-and sharded assertion identities and outcomes. Parameterized test names must be
-deterministic across runners; use fixed fixtures rather than clock-derived values.
-The collector does not normalize away differing assertion names. Memory
-shards/controls intentionally do not retry: validation must expose initial
-outcome differences. Existing retries are preserved for the remaining packages;
+mixed artifacts, missing/duplicate test files, missing per-file assertions and
+failed assertion outcomes. Assertion names must be nonempty and statuses valid;
+existing pending/todo assertions are reported separately, not counted as passes.
+Memory shards intentionally do not retry. Existing retries are preserved for the remaining packages;
 memory failures remain blocking rather than being hidden by automatic reruns.
 Its summary reports test-process timings only;
 use job/step timings separately for build, dependency setup, artifact transfer,

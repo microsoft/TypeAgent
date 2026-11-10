@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { localTestCommands, spawnPnpm } from "./runLocalTestPackages.mjs";
 import { fullMacosQualification } from "./lib/ciFanoutTargets.mjs";
-import { verifyManifest, verifyCheckout } from "./ciFanoutExperiment.mjs";
+import { verifyManifest, verifyCheckout } from "./ciFanout.mjs";
 import {
     packageTimingsFromLog,
     planLanes,
@@ -222,7 +222,6 @@ function main() {
         reports,
         process.env.GITHUB_SHA,
         plans,
-        undefined,
         fullMacos,
     );
     console.log(JSON.stringify(summary, null, 2));

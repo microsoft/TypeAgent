@@ -32,7 +32,7 @@ const install = setup.runs.steps.find((step) =>
 
 test("native reuse is explicit opt-in and forwarded to every fan-out install", () => {
     const main = workflow("build-ts");
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout");
     const target = workflow("ci-fanout-target");
     assert.equal(
         main.on.workflow_dispatch.inputs.fanout_native_cache.default,
@@ -45,7 +45,7 @@ test("native reuse is explicit opt-in and forwarded to every fan-out install", (
     assert.equal(target.on.workflow_call.inputs.native_cache.default, false);
     assert.equal(setup.inputs["native-cache"].default, "false");
     assert.equal(
-        main.jobs.fanout_experiment.with.native_cache,
+        main.jobs.sharded.with.native_cache,
         "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_native_cache }}",
     );
     assert.equal(
@@ -61,15 +61,7 @@ test("native reuse is explicit opt-in and forwarded to every fan-out install", (
             "${{ inputs.native_cache }}",
         );
     }
-    assert.equal(
-        main.jobs.build_ts_legacy.steps.find((step) =>
-            step.uses?.startsWith("actions/setup-node@"),
-        ).with.cache,
-        "pnpm",
-    );
-    assert.ok(
-        !JSON.stringify(main.jobs.build_ts_legacy).includes("native_cache"),
-    );
+    assert.equal(main.jobs.build_ts_legacy, undefined);
 });
 
 test("native stores isolate runtime, image, package-manager and build-policy identities", () => {
@@ -242,7 +234,7 @@ test("only each memory producer publishes the verified store before building, ne
             name === "build" ? "true" : undefined,
         );
     }
-    const analysis = workflow("ci-fanout-experiment").jobs.analysis;
+    const analysis = workflow("ci-fanout").jobs.analysis;
     assert.equal(
         analysis.steps.find(
             (step) => step.uses === "./.github/actions/fanout-setup",

@@ -2,14 +2,16 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { localTestCommands } from "../runLocalTestPackages.mjs";
 import { runLocalTestPhases } from "../lib/testRetry.mjs";
-import { readWorkspace } from "../ciWorkspaceLanes.mjs";
+import { readWorkspace, createRemainderPlan } from "../ciWorkspaceLanes.mjs";
 import {
     packageTimingsFromLog,
     planLanes,
@@ -41,6 +43,79 @@ const plans = Object.fromEntries(
     ]),
 );
 const sha = "a".repeat(40);
+
+test("the full macOS collector CLI accepts both complete runtime inventories and rejects a missing lane", (t) => {
+    const workspace = fileURLToPath(new URL("../../../", import.meta.url));
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: workspace,
+        encoding: "utf8",
+    }).trim();
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-full-macos-"),
+    );
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const reportsDirectory = path.join(directory, "fanout-lanes");
+    fs.mkdirSync(reportsDirectory);
+    const plan = createRemainderPlan(readWorkspace(workspace), "darwin", true);
+    assert.equal(plan.groups.length, 4);
+    for (const node of ["v24.22.1", "v26.12.1"]) {
+        for (const [index, group] of plan.groups.entries()) {
+            fs.writeFileSync(
+                path.join(reportsDirectory, `${node}-${index}.lane.json`),
+                JSON.stringify({
+                    sha: head,
+                    platform: "darwin",
+                    node,
+                    group: String(index + 1),
+                    manifestHash: "b".repeat(64),
+                    workspaceHash: "b".repeat(64),
+                    plan,
+                    packages: group.files,
+                    success: true,
+                    elapsedMs: 1,
+                }),
+            );
+        }
+    }
+    const run = () =>
+        spawnSync(
+            process.execPath,
+            [
+                fileURLToPath(
+                    new URL("../ciWorkspaceLanes.mjs", import.meta.url),
+                ),
+                "aggregate",
+            ],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    RUNNER_TEMP: directory,
+                    GITHUB_SHA: head,
+                    GITHUB_STEP_SUMMARY: "",
+                    TYPEAGENT_FULL_MACOS_QUALIFICATION: "true",
+                },
+            },
+        );
+    const complete = run();
+    assert.ifError(complete.error);
+    assert.equal(complete.status, 0, complete.stderr);
+    assert.deepEqual(
+        JSON.parse(complete.stdout).map(({ node, packages }) => ({
+            node,
+            packages,
+        })),
+        [
+            { node: "v24.22.1", packages: plan.packages.length },
+            { node: "v26.12.1", packages: plan.packages.length },
+        ],
+    );
+    fs.rmSync(path.join(reportsDirectory, "v26.12.1-3.lane.json"));
+    const missing = run();
+    assert.ifError(missing.error);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /Expected every full remainder/);
+});
 
 test("the final collector discovers exact package scripts without installing native dependencies", (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-collector-"));
@@ -220,7 +295,7 @@ test("full macOS lanes isolate heavy packages and retain every complete package 
         })),
     );
     const qualify = (rows, expected = plan) =>
-        qualifyLanes(rows, sha, { darwin: expected }, undefined, true);
+        qualifyLanes(rows, sha, { darwin: expected }, true);
     assert.equal(qualify(rows).length, 2);
     assert.throws(() => qualify(rows.slice(1)));
     assert.throws(() => qualifyLanes(rows, sha, { darwin: plan }));
@@ -435,18 +510,14 @@ test("remainder qualification requires every supported target, full script inven
     }
 });
 
-test("legacy Node-selection alias requires the same 18 lanes without accepting Node 22 substitutes", () => {
+test("qualification requires all 18 lanes without accepting Node 22 substitutes", () => {
     const rows = reports();
     assert.equal(rows.length, 18);
-    assert.equal(qualifyLanes(rows, sha, plans, "24-and-26").length, 6);
-    assert.deepEqual(
-        qualifyLanes(rows, sha, plans),
-        qualifyLanes(rows, sha, plans, "24-and-26"),
-    );
-    assert.throws(() => qualifyLanes(rows.slice(1), sha, plans, "24-and-26"));
+    assert.equal(qualifyLanes(rows, sha, plans).length, 6);
+    assert.throws(() => qualifyLanes(rows.slice(1), sha, plans));
     const wrongNode = structuredClone(rows);
     wrongNode[0].node = "v22.23.4";
-    assert.throws(() => qualifyLanes(wrongNode, sha, plans, "24-and-26"));
+    assert.throws(() => qualifyLanes(wrongNode, sha, plans));
     assert.throws(() => qualifyLanes([...rows, wrongNode[0]], sha, plans));
 });
 
@@ -541,7 +612,7 @@ test("cache and transport experiments are off by default, pinned, and never skip
     for (const workflow of [
         main,
         target,
-        read("../../../../.github/workflows/ci-fanout-experiment.yml"),
+        read("../../../../.github/workflows/ci-fanout.yml"),
     ]) {
         for (const job of Object.values(workflow.jobs)) {
             for (const step of job.steps ?? []) {

@@ -19,7 +19,7 @@ import {
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("legacy rollback retains Node 24/26 and full nightly/manual test coverage", () => {
+test("nightly and explicit macOS runs use full sharding without changing ordinary compatibility coverage", () => {
     const workflow = yaml.load(
         fs.readFileSync(
             new URL(
@@ -30,12 +30,10 @@ test("legacy rollback retains Node 24/26 and full nightly/manual test coverage",
         ),
     );
     assert.equal(workflow.on.schedule[0].cron, "17 8 * * *");
-    const job = workflow.jobs.build_ts_legacy;
-    const step = job.steps.find((step) => step.name === "Test");
-    const evaluate = (expression, event, os, inputs = {}) =>
+    const job = workflow.jobs.sharded;
+    const evaluate = (expression, event, inputs = {}) =>
         vm.runInNewContext(expression.slice(3, -2), {
             github: { event_name: event },
-            runner: { os },
             fromJSON: JSON.parse,
             inputs,
         });
@@ -46,83 +44,18 @@ test("legacy rollback retains Node 24/26 and full nightly/manual test coverage",
         "workflow_dispatch",
         "schedule",
     ]) {
-        const matrix = Array.from(evaluate(job.strategy.matrix.os, event));
-        assert.deepEqual(
-            matrix,
-            event === "schedule"
-                ? ["macos-latest"]
-                : ["ubuntu-latest", "windows-latest", "macos-latest"],
-        );
-        for (const os of ["Linux", "Windows", "macOS"]) {
+        for (const macos of [false, true]) {
             assert.equal(
-                evaluate(step.env.TYPEAGENT_TEST_PROFILE, event, os),
-                os === "macOS" &&
-                    !["schedule", "workflow_dispatch"].includes(event)
-                    ? "macos-compat"
-                    : "full",
+                evaluate(job.with.full_macos, event, {
+                    macos_qualification: macos,
+                }),
+                event === "schedule" ||
+                    (event === "workflow_dispatch" && macos),
             );
         }
     }
-    assert.deepEqual(job.strategy.matrix.version, ["24.22.1", "26.12.1"]);
-    assert.equal(step.shell, "pwsh");
-    assert.match(step.run, /exit \$LASTEXITCODE/);
-    assert.equal(evaluate(job["timeout-minutes"], "schedule"), 240);
-    assert.equal(evaluate(job["timeout-minutes"], "workflow_dispatch"), 360);
-    assert.equal(
-        evaluate(step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS, "schedule"),
-        "10800000",
-    );
-    assert.equal(
-        evaluate(
-            step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS,
-            "workflow_dispatch",
-        ),
-        "",
-    );
-    for (const fanout of [true, false]) {
-        const inputs = {
-            fanout_experiment: fanout,
-            macos_qualification: true,
-        };
-        assert.deepEqual(
-            Array.from(
-                evaluate(
-                    job.strategy.matrix.os,
-                    "workflow_dispatch",
-                    "macOS",
-                    inputs,
-                ),
-            ),
-            ["macos-latest"],
-        );
-        assert.equal(
-            evaluate(
-                job["timeout-minutes"],
-                "workflow_dispatch",
-                "macOS",
-                inputs,
-            ),
-            240,
-        );
-        assert.equal(
-            evaluate(
-                step.env.TYPEAGENT_TEST_PROFILE,
-                "workflow_dispatch",
-                "macOS",
-                inputs,
-            ),
-            "full",
-        );
-        assert.equal(
-            evaluate(
-                step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS,
-                "workflow_dispatch",
-                "macOS",
-                inputs,
-            ),
-            "10800000",
-        );
-    }
+    assert.equal(workflow.jobs.build_ts_legacy, undefined);
+    assert.equal(job.uses, "./.github/workflows/ci-fanout.yml");
 });
 
 test("full profile preserves the existing workspace selection and concurrency", () => {

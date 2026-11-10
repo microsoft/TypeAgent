@@ -9,9 +9,6 @@ on:
       full_macos:
         type: boolean
         default: false
-      include_controls:
-        type: boolean
-        default: false
       build_cache:
         type: boolean
         default: false
@@ -100,7 +97,6 @@ jobs:
       full_macos: ${{ inputs.full_macos }}
       os: ${{ matrix.os }}
       version: ${{ matrix.version }}
-      include_controls: ${{ inputs.include_controls }}
       build_cache: ${{ inputs.build_cache }}
       native_cache: ${{ inputs.native_cache }}
       compact_artifact: ${{ inputs.compact_artifact }}
@@ -113,7 +109,6 @@ jobs:
     timeout-minutes: 5
     env:
       TYPEAGENT_FULL_MACOS_QUALIFICATION: ${{ inputs.full_macos }}
-      TYPEAGENT_FANOUT_INCLUDE_CONTROLS: ${{ inputs.include_controls }}
       pnpm_config_verify_deps_before_run: "false"
     defaults:
       run:
@@ -137,9 +132,9 @@ jobs:
           pattern: fanout-result-*
           path: ${{ runner.temp }}/fanout-results
           merge-multiple: true
-      - name: Qualify selected memory shard inventories and optional control comparisons
+      - name: Require exact memory shard inventories and assertion outcomes
         if: "!inputs.full_macos"
-        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs aggregate
+        run: pnpm run ci:node tools/scripts/ciFanout.mjs aggregate
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: "!inputs.full_macos"
         with:

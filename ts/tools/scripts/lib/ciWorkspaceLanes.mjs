@@ -76,33 +76,35 @@ export function planLanes(
     assert.equal(typeof fullMacos, "boolean");
     if (fullMacos) assert.equal(platform, "darwin");
     const compatibility = platform === "darwin" && !fullMacos;
-    const selected =
-        fullMacos
-            ? packages
-                  .filter((pkg) => pkg.scripts["test:local"])
-                  .sort((a, b) => a.name.localeCompare(b.name))
-            : compatibility
-            ? packages.filter((pkg) =>
-                  compatibilityDirectories.includes(pkg.directory),
-              )
-            : remainderPackages(packages);
+    const selected = fullMacos
+        ? packages
+              .filter((pkg) => pkg.scripts["test:local"])
+              .sort((a, b) => a.name.localeCompare(b.name))
+        : compatibility
+          ? packages.filter((pkg) =>
+                compatibilityDirectories.includes(pkg.directory),
+            )
+          : remainderPackages(packages);
     const names = selected.map((pkg) => pkg.name).sort();
-    const balanced =
-        compatibility
-            ? { groups: [{ files: names }], unprofiled: [], fallbackMs: 0 }
-            : balanceTests(
-                  fullMacos
-                      ? names.filter(
-                            (name) => !fullMacosHeavyPackages.includes(name),
-                        )
-                      : names,
-                  timings,
-              );
+    const balanced = compatibility
+        ? { groups: [{ files: names }], unprofiled: [], fallbackMs: 0 }
+        : balanceTests(
+              fullMacos
+                  ? names.filter(
+                        (name) => !fullMacosHeavyPackages.includes(name),
+                    )
+                  : names,
+              timings,
+          );
     if (fullMacos) {
         for (const [index, name] of fullMacosHeavyPackages.entries()) {
-            assert.ok(names.includes(name), `Missing full macOS package: ${name}`);
+            assert.ok(
+                names.includes(name),
+                `Missing full macOS package: ${name}`,
+            );
             balanced.groups[index].files.unshift(name);
-            balanced.groups[index].estimatedMs += timings[name] ?? balanced.fallbackMs;
+            balanced.groups[index].estimatedMs +=
+                timings[name] ?? balanced.fallbackMs;
             if (timings[name] === undefined) balanced.unprofiled.push(name);
         }
         balanced.unprofiled.sort();
@@ -193,8 +195,8 @@ export function packageTimingsFromLog(text) {
     return timings;
 }
 
-export function qualifyLanes(reports, sha, plans, nodeSet, fullMacos = false) {
-    const nodes = fanoutNodes(nodeSet);
+export function qualifyLanes(reports, sha, plans, fullMacos = false) {
+    const nodes = fanoutNodes();
     const platforms = fullMacos ? ["darwin"] : ["linux", "win32", "darwin"];
     assert.deepEqual(Object.keys(plans).sort(), [...platforms].sort());
     assert.equal(

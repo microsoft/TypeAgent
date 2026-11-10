@@ -314,7 +314,7 @@ test("offline report combines real input shapes without claiming a speedup or DA
 });
 
 test("fan-out omits timing instrumentation and preserves retry and native-cache policies", () => {
-    for (const name of ["ci-fanout-target", "ci-fanout-experiment"]) {
+    for (const name of ["ci-fanout-target", "ci-fanout"]) {
         const workflow = yaml.load(
             fs.readFileSync(
                 new URL(

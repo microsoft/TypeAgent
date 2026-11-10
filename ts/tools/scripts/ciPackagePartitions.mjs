@@ -12,7 +12,7 @@ import {
     verifyManifest,
     stageArtifact,
     verifyCheckout,
-} from "./ciFanoutExperiment.mjs";
+} from "./ciFanout.mjs";
 import {
     balanceTests,
     partitionPackages,
