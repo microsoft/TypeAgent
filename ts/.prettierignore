@@ -42,6 +42,10 @@ packages/shell/playwright-report/*
 # Generated cache files
 examples/websiteAliases/cache
 
+# The interface-first experiment keeps its own formatting (4-space files by
+# the author, 2-space elsewhere); see examples/modular/CLAUDE.md.
+examples/modular
+
 # Generated Action Browser (committed HTML + JSON catalog, regenerated and
 # committed per-PR by docs-pr-amend.yml; not hand-edited, so exclude from
 # formatting to avoid churn with the generator's own output).

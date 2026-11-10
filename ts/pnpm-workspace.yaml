@@ -12,6 +12,8 @@ packages:
   - packages/mcp/*
   - packages/security/*
   - examples/*
+  # The interface-first experiment uses npm and its own .npmrc; see its CLAUDE.md.
+  - "!examples/modular"
   - examples/agentExamples/*
   - examples/workflow/*
   - extensions/*
