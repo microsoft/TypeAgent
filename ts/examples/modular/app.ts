@@ -19,14 +19,7 @@ import type { ShapeView } from "./shapeView.ts";
 import type { Renderer, Size } from "./ui.ts";
 import type { Chrome } from "./chrome.ts";
 
-/**
- * The parts an app connects, each already made, and the window's size.
- *
- * @invariant same-layer  The chrome's layer is one of the layers the view draws.
- *   this.view.scene.layers.includes(layer(this.chrome))
- * @invariant fits  The size is at least the chrome's minimum size.
- *   this.size.width >= minimumSize(options(this.chrome)).width && this.size.height >= minimumSize(options(this.chrome)).height
- */
+/** The parts an app connects, each already made, and the window's size. */
 export interface AppParts {
   readonly chrome: Chrome;
   readonly view: ShapeView;
@@ -39,6 +32,11 @@ export interface AppParts {
  * Connected parts. An app is made by a function that takes AppParts and
  * owns them from then on.
  *
+ * @requires same-layer  The chrome's layer is one of the layers the view draws.
+ *   parts(this).view.scene.layers.includes(layer(parts(this).chrome))
+ * @requires fits  The size is at least the chrome's minimum size.
+ *   parts(this).size.width >= minimumSize(options(parts(this).chrome)).width &&
+ *     parts(this).size.height >= minimumSize(options(parts(this).chrome)).height
  * @ensures starts  When made, renders the chrome's controls for the size, and makes the view interactive.
  *   deepEqual(presented(parts(this).renderer), parts(this).chrome.present(parts(this).size)) && parts(this).view.interactive
  * @ensures renders  Each time the chrome emits change, renders its controls for the size once, before the chrome's emit returns.

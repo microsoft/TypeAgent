@@ -11,18 +11,42 @@
  * interface can see. Tests import the vocabulary of the interface they
  * check.
  *
- * Format. Each rule is a tag, a slug and a one-line headline. The tags are
- * @requires (caller's obligation), @ensures (implementation's obligation)
- * and @invariant (always true of a value). Following indented lines, when
- * present, give the rule as a TypeScript boolean expression. A rule with
- * only a headline needs a hand-written test. @unchecked is a rule with no
- * test yet; its headline gives the reason.
+ * Format. Each rule is a tag, a slug and a one-line headline. Following
+ * indented lines, when present, give the rule as a TypeScript boolean
+ * expression. A rule with only a headline needs a hand-written test. The
+ * tags say whose obligation a rule is and when it must hold:
+ * - @requires: the caller's, on entry to a call.
+ * - @ensures: the implementation's, on return from a call.
+ * - @invariant: the implementation's, for one object: true once it is made
+ *   and after every call, so tests check it after each operation.
+ * - @valid: which values are legal members of a type. Like finite numbers
+ *   (below), it holds of every value of the type passed to or returned by
+ *   an interface. Passing an invalid one is outside the rules; returning one
+ *   breaks the implementation's obligation. Tests check it wherever a
+ *   contract gets values of the type from an implementation, or, for a type
+ *   that only flows into implementations, on the contract's generators.
+ * - @abstract: the implementation's, stated for an interface that others
+ *   extend, but testable only for each of them. Each interface that
+ *   extends it, directly or through others, names the rule of its own that
+ *   makes it exact, with a line "@refines <abstract rule's ID>  <own slug>",
+ *   and that rule is tested. An @refines in an ancestor covers the
+ *   interfaces below it. npm run catalog checks all of this.
+ * - @budget: the implementation's, a limit on time or memory. A bench
+ *   script (bench.ts) measures it and reports the result, labeled with the
+ *   rule's ID; exceeding it is reported, not a test failure, because timing
+ *   tests are flaky.
+ * - @deferred: the implementation's, for behavior that can't be checked
+ *   until a feature exists. Two indented lines follow it instead of an
+ *   expression: "when:" names what must exist first, and "how:" says how
+ *   it will be checked then. When a test with its ID is written, the rule
+ *   becomes @ensures. npm run catalog checks both.
  *
  * IDs. A rule's ID follows its location: Interface.slug for a rule in an
  * interface's doc, Interface.member.slug for one in a member's doc. The test
  * that checks a rule has the rule's ID as its name. A rule inherited from
  * another interface keeps its original ID. A rule in a file's header
- * applies to the whole file.
+ * applies to the whole file; its ID is the file's name without .ts, then
+ * the slug, such as window.complete.
  *
  * Outside the rules. When a caller breaks a @requires rule, or passes a value
  * that doesn't match its static type, behavior is unspecified. An

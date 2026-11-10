@@ -20,7 +20,7 @@ import type { Circle, Shape } from "./shape.ts";
 import type { ShapeView } from "./shapeView.ts";
 import type { ItemId, Scene } from "./view.ts";
 import type { FrameScheduler, TapSource } from "./window.ts";
-import { circles, deepEqual, over } from "./shapeView.vocab.ts";
+import { circles, deepEqual, over, validViewport } from "./shapeView.vocab.ts";
 import { coverage } from "./testkit.ts";
 import { ListLayer, ManualScheduler, ManualTaps, testCircle } from "./viewkit.ts";
 
@@ -237,6 +237,19 @@ export function shapeViewContract(make: MakeShapeView): void {
       }));
     });
 
+    // ShapeView has only the identity viewport, so the equal value is a copy of it.
+    test("View.viewport.set-equal", () => {
+      fc.assert(fc.property(fc.integer({ min: 1, max: 3 }), (n) => {
+        const scheduler = new ManualScheduler();
+        const { view } = make({ layers: Array.from({ length: n }, () => new ListLayer()) }, scheduler, new ManualTaps(), width, height);
+        scheduler.runFrame();
+        const emitted: unknown[] = [];
+        view.on("viewport", (v) => emitted.push(v));
+        view.viewport = { ...view.viewport };
+        return !scheduler.isRequested(view) && emitted.length === 0;
+      }));
+    });
+
     test("View.interactive.starts-false", () => {
       const { view } = make({ layers: [new ListLayer()] }, new ManualScheduler(), new ManualTaps(), width, height);
       assert.equal(view.interactive, false);
@@ -251,6 +264,8 @@ export function shapeViewContract(make: MakeShapeView): void {
     rule("View.layer-change", (s) => !s.changing || s.disposed || (s.requestedAfter && sameColors(s.after, s.before)));
 
     rule("View.idle", (s) => s.disposed || s.dirty || !s.requestedAfter);
+
+    rule("Viewport.positive-scale", (s) => validViewport(s.view.viewport));
 
     rule("View.one-listener", (s) => s.disposed || s.op.op === "dispose" || s.listenersAfter.every((n) => n === 1));
 

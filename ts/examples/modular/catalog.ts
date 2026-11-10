@@ -7,7 +7,8 @@
  * conventions those files follow (a doc comment, export interface, members
  * ending in ";"), because TypeScript 7's package has no JavaScript parser.
  * Runs the test files once to learn which rule IDs have a test of that
- * name, and counts the kept adversaries for each rule. Writes catalog.md (a
+ * name, reads bench.ts for the IDs of the @budget rules it measures, and
+ * counts the kept adversaries for each rule. Writes catalog.md (a
  * Mermaid diagram and rule tables) and catalog.html (an interactive map
  * built from catalog.template.html).
  * Run: npm run catalog. Takes about as long as the tests. summary.ts
@@ -16,14 +17,26 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const sources = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "window.ts", "view.ts", "shapeView.ts", "pointer.ts", "ui.ts", "chrome.ts", "app.ts"];
-const tags = ["requires", "ensures", "invariant", "unchecked"] as const;
+const tags = ["requires", "ensures", "invariant", "valid", "abstract", "budget", "deferred"] as const;
 type Tag = (typeof tags)[number];
+/** The scripts that measure @budget rules, each labeling a measurement with the rule's ID. */
+const benches = ["bench.ts"];
 
-/** tested: a test has the rule's ID. caller: a @requires, which the caller keeps. */
-type Status = "tested" | "untested" | "unchecked" | "caller";
+/**
+ * tested: a test has the rule's ID. caller: a @requires, which the caller
+ * keeps. abstract: an @abstract rule, which each interface that extends its
+ * own refines with a tested rule (refinedBy). budget: a @budget rule, which
+ * a bench script measures and reports rather than tests (measuredBy; empty
+ * until the phase 2 task that adds the measurement runs). deferred: a
+ * @deferred rule, checked once a feature exists, as its when and how say.
+ * untested: no test has the rule's ID; the catalog refuses to write while
+ * any rule is untested, so the pages never show it.
+ */
+type Status = "tested" | "untested" | "abstract" | "budget" | "deferred" | "caller";
+type Shown = Exclude<Status, "untested">;
 
 interface Rule {
   id: string;
@@ -31,8 +44,21 @@ interface Rule {
   slug: string;
   headline: string;
   expression: string | null;
+  /** For a @deferred rule: what must exist before it can be checked, and how it will be checked then. */
+  when: string | null;
+  how: string | null;
   status: Status;
   adversaries: number;
+  /** For an @abstract rule, the IDs of the rules that refine it. */
+  refinedBy: string[];
+  /** For a @budget rule, the bench scripts that name its ID. */
+  measuredBy: string[];
+}
+
+/** An @refines line: the abstract rule's ID, and the slug of the refining rule in the same doc. */
+interface Refinement {
+  abstract: string;
+  by: string;
 }
 
 interface Member {
@@ -44,6 +70,8 @@ interface Member {
 export interface Interface {
   name: string;
   file: string;
+  /** True for a file's header rules rather than an interface: no members or edges. */
+  module: boolean;
   /** The type parameters and the extends clause (without "extends"), as written. */
   typeParams: string;
   extendsClause: string;
@@ -52,34 +80,47 @@ export interface Interface {
   extends: string[];
   uses: string[];
   rules: Rule[];
+  /** The abstract rules this interface refines, with the IDs of its refining rules. */
+  refines: Refinement[];
 }
 
-type ParsedRule = Omit<Rule, "id" | "status" | "adversaries">;
+type ParsedRule = Omit<Rule, "id" | "status" | "adversaries" | "refinedBy" | "measuredBy">;
 
-/** A doc comment's prose and its rules. Rule expressions are the indented lines after a rule. */
-function parseDoc(raw: string | undefined): { doc: string; rules: ParsedRule[] } {
-  if (!raw) return { doc: "", rules: [] };
+/**
+ * A doc comment's prose, its rules and its @refines lines. Rule expressions
+ * are the indented lines after a rule, except lines starting "when:" or
+ * "how:", which give a @deferred rule's plan.
+ */
+function parseDoc(raw: string | undefined): { doc: string; rules: ParsedRule[]; refines: Refinement[] } {
+  if (!raw) return { doc: "", rules: [], refines: [] };
   const lines = raw.split(/\r?\n/)
     .map((l) => l.replace(/^\s*\/\*\*\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\* ?/, ""));
   const prose: string[] = [];
   const rules: ParsedRule[] = [];
+  const refines: Refinement[] = [];
   let inTags = false;
   for (const line of lines) {
+    const r = /^@refines\s+(\S+)\s+(\S+)\s*$/.exec(line);
     const m = /^@(\w+)\s+(\S+)\s+(.*)$/.exec(line);
-    if (m && (tags as readonly string[]).includes(m[1])) {
-      rules.push({ tag: m[1] as Tag, slug: m[2], headline: m[3].trim(), expression: null });
+    if (r) {
+      refines.push({ abstract: r[1], by: r[2] });
+      inTags = true;
+    } else if (m && (tags as readonly string[]).includes(m[1])) {
+      rules.push({ tag: m[1] as Tag, slug: m[2], headline: m[3].trim(), expression: null, when: null, how: null });
       inTags = true;
     } else if (line.startsWith("@")) {
       inTags = true;
     } else if (inTags && line.startsWith("  ") && rules.length > 0) {
       const last = rules[rules.length - 1];
-      last.expression = (last.expression ? last.expression + "\n" : "") + line.trimEnd();
+      const plan = /^\s+(when|how):\s*(.*)$/.exec(line);
+      if (plan) last[plan[1] as "when" | "how"] = plan[2].trim();
+      else last.expression = (last.expression ? last.expression + "\n" : "") + line.trimEnd();
     } else if (!inTags) {
       prose.push(line);
     }
   }
   const doc = prose.join("\n").trim().split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ")).join("\n\n");
-  return { doc, rules };
+  return { doc, rules, refines };
 }
 
 interface Declaration {
@@ -204,7 +245,12 @@ function mentions(text: string, known: Set<string>): string[] {
   return [...new Set(text.match(/\b[A-Z]\w*\b/g) ?? [])].filter((n) => known.has(n));
 }
 
-/** The names of every test that ran, from TAP output. */
+/**
+ * The names of every test that ran, from TAP output. The run is expected to
+ * fail while phase 2 modules are missing, so its exit status says nothing.
+ * Throws instead when a package can't be found (node_modules not installed)
+ * or no test ran, since every rule would then read as untested.
+ */
 function testNames(): Set<string> {
   const files = [
     ...readdirSync(".").filter((f) => f.endsWith(".test.ts")),
@@ -213,7 +259,11 @@ function testNames(): Set<string> {
   const run = spawnSync(process.execPath, ["--test", "--test-reporter=tap", ...files], {
     encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: { ...process.env, FC_SEED: process.env.FC_SEED ?? "1" },
   });
-  return new Set([...run.stdout.matchAll(/^\s*(?:not )?ok \d+ - (.+?)\s*$/gm)].map((m) => m[1]));
+  const missing = run.stdout.match(/Cannot find package '[^']+'/);
+  if (missing) throw new Error(`${missing[0]}; run npm ci first. The catalog was not written.`);
+  const names = new Set([...run.stdout.matchAll(/^\s*(?:not )?ok \d+ - (.+?)\s*$/gm)].map((m) => m[1]));
+  if (names.size === 0) throw new Error(`No tests ran; the catalog was not written.\n${run.stderr}`);
+  return names;
 }
 
 function adversaryCounts(): Map<string, number> {
@@ -225,17 +275,36 @@ function adversaryCounts(): Map<string, number> {
   return counts;
 }
 
-/** Every interface in the sources. Rule status comes from tests, which by default are run to find out. */
+/**
+ * Every interface in the sources, and an entry with module set for each file
+ * whose header has rules. Rule status comes from tests, which by default are
+ * run to find out.
+ */
 export function build(tests: Set<string> = testNames()): Interface[] {
   const decls = sources.flatMap(interfacesIn);
   const known = new Set(decls.map((d) => d.name));
   const adversaries = adversaryCounts();
+  const benchText = new Map(benches.filter(existsSync).map((f) => [f, readFileSync(f, "utf8")]));
   const rule = (prefix: string, r: ParsedRule): Rule => {
     const id = `${prefix}.${r.slug}`;
-    const status: Status = r.tag === "unchecked" ? "unchecked" : r.tag === "requires" ? "caller" : tests.has(id) ? "tested" : "untested";
-    return { ...r, id, status, adversaries: adversaries.get(id) ?? 0 };
+    // A @deferred rule with a test reads as tested, which planProblems reports.
+    const status: Status = r.tag === "requires" ? "caller"
+      : r.tag === "abstract" ? "abstract" : r.tag === "budget" ? "budget"
+      : tests.has(id) ? "tested" : r.tag === "deferred" ? "deferred" : "untested";
+    const measuredBy = r.tag === "budget" ? [...benchText].filter(([, text]) => text.includes(id)).map(([f]) => f) : [];
+    return { ...r, id, status, adversaries: adversaries.get(id) ?? 0, refinedBy: [], measuredBy };
   };
-  return decls.map((d) => {
+  // A file's header rules have IDs that start with the file's name (rules.ts).
+  const modules: Interface[] = sources.flatMap((file) => {
+    const header = parseDoc(/^\s*(\/\*\*[\s\S]*?\*\/)/.exec(readFileSync(file, "utf8"))?.[1]);
+    if (header.rules.length === 0) return [];
+    const name = file.replace(/\.ts$/, "");
+    return [{
+      name, file, module: true, typeParams: "", extendsClause: "", doc: header.doc,
+      members: [], extends: [], uses: [], rules: header.rules.map((r) => rule(name, r)), refines: [],
+    }];
+  });
+  const all = [...modules, ...decls.map((d): Interface => {
     const own = parseDoc(d.doc);
     const rules = own.rules.map((r) => rule(d.name, r));
     const uses = new Set(mentions(`${d.typeParams} ${d.extendsClause}`, known));
@@ -249,6 +318,7 @@ export function build(tests: Set<string> = testNames()): Interface[] {
     return {
       name: d.name,
       file: d.file,
+      module: false,
       typeParams: d.typeParams,
       extendsClause: d.extendsClause,
       doc: own.doc,
@@ -256,13 +326,95 @@ export function build(tests: Set<string> = testNames()): Interface[] {
       extends: d.extends.filter((e) => known.has(e)),
       uses: [...uses].filter((u) => u !== d.name && !d.extends.includes(u)).sort(),
       rules,
+      refines: own.refines.map((r) => ({ abstract: r.abstract, by: `${d.name}.${r.by}` })),
     };
+  })];
+  const abstracts = new Map(all.flatMap((i) => i.rules).filter((r) => r.tag === "abstract").map((r) => [r.id, r]));
+  for (const i of all) for (const r of i.refines) abstracts.get(r.abstract)?.refinedBy.push(r.by);
+  return all;
+}
+
+/** The interfaces i extends, directly or through others, nearest first. */
+function ancestors(i: Interface, byName: Map<string, Interface>): Interface[] {
+  const out: Interface[] = [];
+  const visit = (name: string) => {
+    const a = byName.get(name);
+    if (!a || out.includes(a)) return;
+    out.push(a);
+    a.extends.forEach(visit);
+  };
+  i.extends.forEach(visit);
+  return out;
+}
+
+/**
+ * What breaks the @abstract rules' contract: an interface that extends one
+ * without refining it, here or in an ancestor; an @refines naming a rule that
+ * isn't abstract or isn't inherited; or a refining rule that doesn't exist or
+ * has no test.
+ */
+export function refinementProblems(all: Interface[]): string[] {
+  const byName = new Map(all.map((i) => [i.name, i]));
+  const problems: string[] = [];
+  for (const i of all) {
+    const up = ancestors(i, byName);
+    for (const a of up) {
+      for (const r of a.rules.filter((r) => r.tag === "abstract")) {
+        if (![i, ...up].some((j) => j.refines.some((f) => f.abstract === r.id))) problems.push(`${i.name} doesn't refine ${r.id}`);
+      }
+    }
+    for (const f of i.refines) {
+      if (!up.some((a) => a.rules.some((r) => r.id === f.abstract && r.tag === "abstract"))) {
+        problems.push(`${i.name} refines ${f.abstract}, which isn't an @abstract rule of an interface it extends`);
+      }
+      const by = i.rules.find((r) => r.id === f.by);
+      if (!by) problems.push(`${i.name} refines ${f.abstract} with ${f.by}, which isn't one of its rules`);
+      else if (by.status !== "tested") problems.push(`${i.name} refines ${f.abstract} with ${f.by}, which isn't tested`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * What breaks the @deferred rules' contract: a deferred rule without both a
+ * when: and a how: line, a deferred rule that a test now checks (it should
+ * become @ensures), or a plan line on a rule that isn't deferred.
+ */
+export function planProblems(all: Interface[]): string[] {
+  return all.flatMap((i) => i.rules).flatMap((r) => {
+    if (r.tag !== "deferred") return r.when || r.how ? [`${r.id} has a when: or how: line but isn't @deferred`] : [];
+    const out: string[] = [];
+    if (!r.when) out.push(`${r.id} is @deferred without a when: line`);
+    if (!r.how) out.push(`${r.id} is @deferred without a how: line`);
+    if (r.status === "tested") out.push(`${r.id} is @deferred but a test has its ID; change it to @ensures`);
+    return out;
   });
 }
 
-const statusLabel: Record<Status, string> = {
-  tested: "tested", untested: "no test by this ID", unchecked: "@unchecked", caller: "caller's obligation",
+/**
+ * Tags in the sources' doc comments that the rule language doesn't have.
+ * parseDoc skips them, so without this check a misspelled or retired tag
+ * would drop its rule from the catalog without a word.
+ */
+export function tagProblems(): string[] {
+  const known = new Set<string>([...tags, "refines", "module"]);
+  return sources.flatMap((file) => readFileSync(file, "utf8").split(/\r?\n/).flatMap((line, n) => {
+    const m = /^\s*\* @(\w+)/.exec(line);
+    return m && !known.has(m[1]) ? [`${file}:${n + 1} uses @${m[1]}, which isn't a tag of the rule language (rules.ts)`] : [];
+  }));
+}
+
+const statusLabel: Record<Shown, string> = {
+  tested: "tested", abstract: "abstract", budget: "budget", deferred: "deferred", caller: "caller's obligation",
 };
+
+function statusText(r: Rule): string {
+  const label = statusLabel[r.status as Shown];
+  if (r.status === "abstract") return `${label}: refined by ${r.refinedBy.map((id) => `\`${id}\``).join(", ")}`;
+  if (r.status === "budget") return `${label}: ${r.measuredBy.length ? `measured by ${r.measuredBy.join(", ")}` : "not measured yet"}`;
+  if (r.status === "deferred") return `${label}: when ${r.when}`;
+  return label;
+}
 
 function markdown(all: Interface[]): string {
   const out: string[] = [
@@ -294,7 +446,7 @@ function markdown(all: Interface[]): string {
     }
     out.push("| Rule | Tag | Headline | Status | Adversaries |", "|---|---|---|---|---|");
     for (const r of i.rules) {
-      out.push(`| \`${r.id}\` | ${r.tag} | ${r.headline.replace(/\|/g, "\\|")} | ${statusLabel[r.status]} | ${r.adversaries || ""} |`);
+      out.push(`| \`${r.id}\` | ${r.tag} | ${r.headline.replace(/\|/g, "\\|")} | ${statusText(r)} | ${r.adversaries || ""} |`);
     }
     out.push("");
   }
@@ -303,12 +455,18 @@ function markdown(all: Interface[]): string {
 
 if (import.meta.main) {
   const all = build();
+  const rules = all.flatMap((i) => i.rules);
+  const untested = rules.filter((r) => r.status === "untested").map((r) => r.id);
+  if (untested.length > 0) {
+    throw new Error(`No test has the ID of ${untested.join(", ")}. Add one, or mark the rule @deferred with when: and how: lines. The catalog was not written.`);
+  }
+  const problems = [...tagProblems(), ...refinementProblems(all), ...planProblems(all)];
+  if (problems.length > 0) throw new Error(`${problems.join("; ")}. The catalog was not written.`);
   writeFileSync("catalog.md", markdown(all));
   const template = readFileSync("catalog.template.html", "utf8");
   const data = JSON.stringify({ generated: new Date().toLocaleDateString("en-CA"), interfaces: all }).replace(/</g, "\\u003c");
   writeFileSync("catalog.html", template.replace("/*CATALOG_DATA*/null", data));
-  const rules = all.flatMap((i) => i.rules);
   const count = (s: Status) => rules.filter((r) => r.status === s).length;
-  console.log(`${all.length} interfaces, ${rules.length} rules: ${count("tested")} tested, ` +
-    `${count("untested")} with no test by ID, ${count("unchecked")} unchecked, ${count("caller")} caller obligations`);
+  console.log(`${all.filter((i) => !i.module).length} interfaces, ${rules.length} rules: ${count("tested")} tested, ` +
+    `${count("abstract")} abstract, ${count("budget")} budgets, ${count("deferred")} deferred, ${count("caller")} caller obligations`);
 }

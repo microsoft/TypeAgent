@@ -32,7 +32,10 @@ export type ViewBug =
   | "tap-ignores-interactive"  // taps are passed on even when not interactive
   | "tap-twice"                // each tap is emitted twice
   | "tap-rounded"              // tap points are rounded to whole units
-  | "taps-after-dispose";      // dispose leaves the tap listener, and taps are still passed on
+  | "taps-after-dispose"       // dispose leaves the tap listener, and taps are still passed on
+  | "viewport-zero"            // viewport reads as all zeros, a viewport never initialized
+  | "set-requests"             // setting the viewport requests a frame even when the value is unchanged
+  | "tap-in-frame";            // a tap is held until the next frame and emitted from frame()
 
 const identity: Viewport = { scale: 1, rotation: 0, tx: 0, ty: 0 };
 
@@ -44,10 +47,16 @@ export class TestShapeView extends Events<{ viewport: [Viewport]; tap: [Point] }
   private readonly taps: TapSource;
   private readonly bug: ViewBug;
   private disposed = false;
+  private readonly heldTaps: Point[] = [];
   private readonly onTap = (p: Point) => {
     const live = !this.disposed || this.bug === "taps-after-dispose";
     if (!live || (!this.interactive && this.bug !== "tap-ignores-interactive")) return;
     const q = this.bug === "tap-rounded" ? { x: Math.round(p.x), y: Math.round(p.y) } : p;
+    if (this.bug === "tap-in-frame") {
+      this.heldTaps.push(q);
+      this.scheduler.requestFrame(this);
+      return;
+    }
     this.emit("tap", q);
     if (this.bug === "tap-twice") this.emit("tap", q);
   };
@@ -73,16 +82,18 @@ export class TestShapeView extends Events<{ viewport: [Viewport]; tap: [Point] }
 
   get viewport(): Viewport {
     if (this.bug === "viewport-read-requests") this.scheduler.requestFrame(this);
-    return identity;
+    return this.bug === "viewport-zero" ? { scale: 0, rotation: 0, tx: 0, ty: 0 } : identity;
   }
 
   set viewport(_: Viewport) {
     // Only the identity viewport is supported; anything else is outside the rules.
+    if (this.bug === "set-requests") this.scheduler.requestFrame(this);
   }
 
   frame(_timeMs: number): void {
     if (this.disposed && this.bug !== "draws-after-dispose") return;
     this.draw();
+    for (const p of this.heldTaps.splice(0)) this.emit("tap", p);
     if (this.bug === "requests-every-frame") this.scheduler.requestFrame(this);
   }
 

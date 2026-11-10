@@ -10,9 +10,9 @@
 /**
  * An sRGB color with straight (not premultiplied) alpha.
  *
- * @invariant rgb-range  r, g and b are integers from 0 to 255.
+ * @valid rgb-range  r, g and b are integers from 0 to 255.
  *   [this.r, this.g, this.b].every((c) => Number.isInteger(c) && c >= 0 && c <= 255)
- * @invariant alpha-range  a is from 0 (transparent) to 1 (opaque).
+ * @valid alpha-range  a is from 0 (transparent) to 1 (opaque).
  *   this.a >= 0 && this.a <= 1
  */
 export interface Color {

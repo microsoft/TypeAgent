@@ -15,6 +15,7 @@ import fc from "fast-check";
 import type { Point, Rectangle } from "./geometry.ts";
 import type { Color } from "./color.ts";
 import type { InkStroke } from "./shape.ts";
+import { colorContract } from "./color.contract.ts";
 import { shapeContract } from "./shape.contract.ts";
 import {
   deepEqual, distPolylineToRect, distToPolyline, extents, implies, inflate, isEmpty, rectContains,
@@ -143,6 +144,15 @@ export function inkStrokeContract(make: Make): void {
       }));
     });
 
+    test("InkStroke.has-points", () => {
+      fc.assert(fc.property(fields, (f) => make(f).points.length >= 1));
+    });
+
+    test("InkStroke.min-thickness", () => {
+      fc.assert(fc.property(fields, (f) => make(f).thickness >= 1));
+    });
+
+    colorContract(fields.map((f) => make(f).color));
     shapeContract(fields.map(make), fc.tuple(offGrid, fc.nat()).map(([f, i]) => ({ shape: make(f), q: f.points[i % f.points.length] })));
   });
 }

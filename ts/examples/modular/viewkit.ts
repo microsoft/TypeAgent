@@ -13,7 +13,7 @@ import type { ItemId } from "./view.ts";
 import type { FrameHandler, FrameScheduler, TapSource } from "./window.ts";
 import type { DrawingLayer } from "./shapeView.ts";
 import { Events } from "./eventkit.ts";
-import { allFinite, extents, inflate, isEmpty, over, rectContains, rectIntersects } from "./shape.vocab.ts";
+import { allFinite, extents, inflate, isEmpty, over, rectContains, rectIntersects, validCircle } from "./shape.vocab.ts";
 
 // ---- Recording context ----------------------------------------------------
 
@@ -232,13 +232,10 @@ export class ListLayer implements DrawingLayer {
 
 // ---- Circle ---------------------------------------------------------------
 
-const validColor = (c: Color) =>
-  [c.r, c.g, c.b].every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && c.a >= 0 && c.a <= 1;
-
 /** A Circle, so that view tests don't depend on any Circle implementation. */
 export function testCircle(fields: { center: Point; radius: number; color: Color }): Circle {
   const { center: c, radius, color: k } = fields;
-  if (!allFinite([c.x, c.y, radius, k]) || !(radius > 0) || !validColor(k)) throw new RangeError("invalid circle");
+  if (!allFinite([c.x, c.y, radius, k]) || !validCircle(fields)) throw new RangeError("invalid circle");
   const center = { x: c.x, y: c.y };
   const color = { r: k.r, g: k.g, b: k.b, a: k.a };
   const box = inflate(extents([center]), radius);

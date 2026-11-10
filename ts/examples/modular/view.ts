@@ -168,9 +168,13 @@ export interface Scene<T> {
  *
  * Shared gestures come from sources the view is given when it is made
  * (window.ts). So far there is one: taps, from a TapSource, which the view
- * converts to canonical coordinates and emits as tap. What a tap does is up
- * to whoever listens, such as an app's controls (chrome.ts).
+ * converts from view to canonical coordinates and emits as tap. What a tap
+ * does is up to whoever listens, such as an app's controls (chrome.ts).
+ * A TapRecognizer (pointer.ts) on the region that the view's surface covers
+ * exactly meets tap-coordinates, since its taps are in that region's local
+ * coordinates.
  *
+ * @requires tap-coordinates  The tap source is for the view's own surface: it emits points in the view's coordinates.
  * @ensures layer-change  When a layer changes, requests a frame and draws nothing until frame().
  * @ensures idle  Requests no frame while nothing it shows changes.
  * @ensures one-listener  Until disposed, has exactly one listener registered on each layer of its scene, and one on its tap source.
@@ -187,9 +191,13 @@ export interface View<T> extends FrameHandler, Emitter<{ viewport: [Viewport]; t
    * viewport, a listener that sets another view's viewport copies the value
    * as is, without recomputing it.
    *
-   * @unchecked set-redraws  Setting a different viewport requests a frame, and that frame draws through the new viewport; ShapeView has only the identity viewport so far.
-   * @unchecked set-equal  Setting a viewport equal to the current one, field by field, requests no frame and emits nothing; ShapeView has only the identity viewport so far.
-   * @unchecked set-emits  Setting a different viewport emits viewport with the new value before the setter returns; ShapeView has only the identity viewport so far.
+   * @deferred set-redraws  Setting a different viewport requests a frame, and that frame draws through the new viewport.
+   *   when: a ShapeView supports viewports other than the identity.
+   *   how: shapeView.contract.ts gains a step that sets a random viewport (scale 0.5 to 2, rotation a multiple of 90 degrees, whole-number translation, so mapping is exact) and checks that a frame is requested and that afterward each sample point p shows what the scene shows at the viewport's inverse of p; with an adversary that draws through the old viewport.
+   * @ensures set-equal  Setting a viewport equal to the current one, field by field, requests no frame and emits nothing.
+   * @deferred set-emits  Setting a different viewport emits viewport with the new value before the setter returns.
+   *   when: a ShapeView supports viewports other than the identity.
+   *   how: the same step checks that each set of a different viewport emits viewport once, with a value equal to the one set, before the setter returns, and that viewport then reads as that value; with adversaries that emit before updating and that emit twice.
    */
   viewport: Viewport;
 

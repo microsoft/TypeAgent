@@ -22,8 +22,8 @@
  * source such as TapSource below, and a view passes them on in canonical
  * coordinates.
  *
- * @unchecked complete  Each input event updates the model completely before its handler returns, so nothing is left pending and no frame shows part of an action; needs a recording view and scheduler.
- * @unchecked fraction-of-frame  A pen move updates the model in under 5% of a 120 Hz frame; bench.ts measures this, since timing tests would be flaky.
+ * @ensures complete  Each input event updates the model completely before its handler returns, so nothing is left pending and no frame shows part of an action: running the frames afterward changes neither the model nor the controls presented.
+ * @budget fraction-of-frame  A pen move or an eraser move updates the model in under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the document.
  * @module
  */
 
@@ -50,9 +50,9 @@ export interface FrameScheduler {
    * from inside handler.frame(), asks for the following frame, as
    * requestAnimationFrame does; that is how an animation keeps running.
    *
-   * @unchecked merged  Repeated requests with the same handler before a frame call its frame() once in that frame; needs a scheduler driven by a test clock.
-   * @unchecked not-synchronous  Never calls frame() before requestFrame returns; needs a scheduler driven by a test clock.
-   * @unchecked next-frame  A request made during a frame calls frame() in the following frame, not the current one; needs a scheduler driven by a test clock.
+   * @ensures merged  Repeated requests with the same handler before a frame call its frame() once in that frame.
+   * @ensures not-synchronous  Never calls frame() before requestFrame returns.
+   * @ensures next-frame  A request made during a frame calls frame() in the following frame, not the current one.
    */
   requestFrame(handler: FrameHandler): void;
 }
@@ -61,6 +61,7 @@ export interface FrameScheduler {
  * Taps on one surface, as its platform recognizes them: a press and release
  * close together in place and time, by mouse, pen or touch. Recognizing a
  * tap from the platform's own events is the platform's job; a tap carries
- * only where it happened, in the surface's own units.
+ * only where it happened, in the surface's coordinates: layout units, with
+ * (0, 0) at its top left.
  */
 export interface TapSource extends Emitter<{ tap: [Point] }> {}

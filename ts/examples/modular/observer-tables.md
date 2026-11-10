@@ -106,13 +106,13 @@ prefix are `Chrome`'s.
 | `tap` in draw mode | count follows (`counts`) | `tap.draws` | `emits` | `one-listener` | nothing |
 | `tap` in erase mode | count follows (`counts`) | `tap.erases` | `emits` | `one-listener` | nothing |
 | A change to the layer from elsewhere | `counts` | — | `emits` | `one-listener` | — |
-| `present` | `present.pure` | `present.pure` | `present.pure` | unchanged | `present.exact`, and the SemanticNode invariants |
+| `present` | `present.pure` | `present.pure` | `present.pure` | unchanged | `present.exact`, and SemanticNode's `@valid` rules |
 | Reading `state` | unchanged | unchanged | none | unchanged | a value (`state.snapshot`) |
 | `dispose()`, and anything after it | no longer followed | `dispose.detaches` (only edits from elsewhere) | `dispose.detaches` | `dispose.detaches` | nothing |
 | `on`, `off` | — | — | — | — | the Emitter rules apply |
 
 Not covered: how a chrome behaves when its layer holds shapes that aren't
-circles, or when its options break their invariants; both are outside the
+circles, or when its options break their `@valid` rules; both are outside the
 rules.
 
 ## Renderer

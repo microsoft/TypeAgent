@@ -1,6 +1,7 @@
 // Scenario tests for the circles app: each scenario in scenarios.ts, run
 // through a driver (driver.ts), with the scenario's ID as the test's name.
-// When given a reference assembly, also runs random sequences of user
+// The driver checks window.complete after every action, and a test of that
+// name runs random sequences of actions. When given a reference assembly, also runs random sequences of user
 // actions on both and compares, after every action, the presented tree,
 // the layer's circles and what the view shows on a grid of points.
 
@@ -67,6 +68,16 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
   },
 );
 
+/** Does a on d. An activate picks its key from keyed's tree, so that two drivers activate the same control. */
+function act(d: Driver, a: Action, keyed: Driver = d): void {
+  if (a.act === "tap") d.tapView(a.p);
+  else if (a.act === "radius") d.setValue(d.find("slider", "Radius"), a.value);
+  else {
+    const all = keys(keyed.tree());
+    d.activate({ ...keyed.tree(), key: all[a.key % all.length] });
+  }
+}
+
 const grid: Point[] = Array.from({ length: 121 }, (_, i) => ({ x: 20 * (i % 11) + 0.5, y: 20 * Math.floor(i / 11) + 0.5 }));
 
 const sameCircles = (a: Driver, b: Driver) => deepEqual(
@@ -80,20 +91,23 @@ export function scenarioContract(make: () => Driver, reference?: () => Driver): 
       test(scenario.id, () => runScenario(make(), scenario));
     }
 
+    // The driver checks the rule after every action, so the scenarios check
+    // it too; this test gives it random actions under the rule's ID.
+    test("window.complete", () => {
+      fc.assert(fc.property(fc.array(actionArb, { minLength: 1, maxLength: 25 }), (actions) => {
+        const app = make();
+        for (const a of actions) act(app, a);
+        app.dispose();
+      }), { numRuns: 50 });
+    });
+
     if (reference) {
       test("Scenario.random", () => {
         fc.assert(fc.property(fc.array(actionArb, { minLength: 1, maxLength: 25 }), (actions) => {
           const app = make();
           const ref = make === reference ? app : reference();
           for (const a of actions) {
-            for (const d of [app, ref]) {
-              if (a.act === "tap") d.tapView(a.p);
-              else if (a.act === "radius") d.setValue(d.find("slider", "Radius"), a.value);
-              else {
-                const all = keys(ref.tree());
-                d.activate({ ...ref.tree(), key: all[a.key % all.length] });
-              }
-            }
+            for (const d of [app, ref]) act(d, a, ref);
             assert.deepEqual(app.tree(), ref.tree(), "presented trees differ");
             assert.ok(sameCircles(app, ref), "circles differ");
             assert.ok(grid.every((p) => deepEqual(app.painted(p), ref.painted(p))), "views differ");

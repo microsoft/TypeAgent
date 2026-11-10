@@ -22,8 +22,8 @@ import type { ItemId, Layer, View } from "./view.ts";
  * surface; for now the only kind is Circle. painted(this, p) (shapeView.vocab.ts) is
  * what the view shows at point p.
  *
- * With no viewport transform yet, canonical coordinates are the surface's
- * own units. The viewport stays the identity (scale 1, no rotation or
+ * With no viewport transform yet, canonical coordinates are the view's
+ * coordinates. The viewport stays the identity (scale 1, no rotation or
  * translation); setting another one is outside the rules. Its only input
  * is taps, which it emits at the same point (View's taps rule).
  *

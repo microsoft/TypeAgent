@@ -6,7 +6,7 @@ import type { Point, Rectangle } from "../geometry.ts";
 import type { Color } from "../color.ts";
 import type { Circle } from "../shape.ts";
 import type { CircleFields } from "../circle.contract.ts";
-import { allFinite, extents, inflate, isEmpty, rectContains, rectIntersects } from "../shape.vocab.ts";
+import { allFinite, extents, inflate, isEmpty, rectContains, rectIntersects, validColor } from "../shape.vocab.ts";
 
 export type CircleBug =
   | "none"
@@ -16,10 +16,8 @@ export type CircleBug =
   | "intersects-by-box"     // intersects answers from the bounding box alone
   | "touch-is-true"         // intersects is distance <= radius, so a disk that only touches r intersects it
   | "accepts-zero-radius"   // makeCircle accepts a radius of 0
-  | "keeps-center-object";  // makeCircle keeps the caller's center object
-
-const validColor = (c: Color) =>
-  [c.r, c.g, c.b].every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && c.a >= 0 && c.a <= 1;
+  | "keeps-center-object"   // makeCircle keeps the caller's center object
+  | "alpha-as-byte";        // the color's alpha is stored from 0 to 255, as some platforms use
 
 export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) => Circle {
   return (f) => {
@@ -28,7 +26,8 @@ export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) 
       throw new RangeError("invalid circle");
     }
     const center: Point = bug === "keeps-center-object" ? f.center : { x: f.center.x, y: f.center.y };
-    const color: Color = { r: f.color.r, g: f.color.g, b: f.color.b, a: f.color.a };
+    const a = bug === "alpha-as-byte" ? Math.round(f.color.a * 255) : f.color.a;
+    const color: Color = { r: f.color.r, g: f.color.g, b: f.color.b, a };
     const radius = f.radius;
     const box = inflate(extents([center]), bug === "box-uses-diameter" ? 2 * radius : radius);
     const dist = (p: Point) => Math.hypot(p.x - center.x, p.y - center.y);

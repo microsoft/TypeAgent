@@ -44,7 +44,7 @@ export interface Shape {
      * half-open convention, this rectangle contains every point the shape
      * contains. Empty only for a shape that contains no points.
      *
-     * @unchecked exact  Tightness can't be tested for shapes in general; each shape type states its own bounding box rule.
+     * @abstract exact  The rectangle is exactly the shape's extents; each shape type states this for its own geometry.
      */
     boundingBox(): Rectangle;
 
@@ -57,7 +57,7 @@ export interface Shape {
      *   implies(result, rectIntersects(this.boundingBox(), r))
      * @ensures witness  If some point is in both the shape and r, they intersect.
      *   (p: Point) => implies(this.contains(p) && rectContains(r, p), result)
-     * @unchecked only-shared  Intersects r only when some point is in both; can't be tested for shapes in general, so each shape type states its own rule.
+     * @abstract only-shared  Intersects r only when some point is in both; each shape type states this for its own geometry.
      */
     intersects(r: Rectangle): boolean;
 
@@ -80,9 +80,9 @@ export interface Shape {
  * the stroke's maximum x and y. The exact-intersects expression covers every
  * case except the pen exactly touching r; hand-written tests cover those.
  *
- * @invariant has-points  Has at least one point; a single point draws a dot.
+ * @valid has-points  Has at least one point; a single point draws a dot.
  *   this.points.length >= 1
- * @invariant min-thickness  Thickness is at least 1.
+ * @valid min-thickness  Thickness is at least 1.
  *   this.thickness >= 1
  * @ensures box  The bounding box is the points' extents, grown by half the thickness.
  *   deepEqual(this.boundingBox(), inflate(extents(this.points), this.thickness / 2))
@@ -92,6 +92,8 @@ export interface Shape {
  * @ensures exact-intersects  Intersects r exactly when some point it contains is in r; when the pen only touches r, contains() decides.
  *   (r: Rectangle) => implies(!isEmpty(r) && distPolylineToRect(this.points, r) < this.thickness / 2, this.intersects(r)) &&
  *     implies(distPolylineToRect(this.points, r) > this.thickness / 2, !this.intersects(r))
+ * @refines Shape.boundingBox.exact  box
+ * @refines Shape.intersects.only-shared  exact-intersects
  */
 export interface InkStroke extends Shape {
     readonly kind: "ink";
@@ -108,7 +110,7 @@ export interface InkStroke extends Shape {
  * InkStroke with thickness 2 * radius, and its rules are those rules with
  * [center] as the polyline.
  *
- * @invariant positive-radius  The radius is greater than 0.
+ * @valid positive-radius  The radius is greater than 0.
  *   this.radius > 0
  * @ensures box  The bounding box is the center grown by the radius.
  *   deepEqual(this.boundingBox(), inflate(extents([this.center]), this.radius))
@@ -118,6 +120,8 @@ export interface InkStroke extends Shape {
  * @ensures exact-intersects  Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides.
  *   (r: Rectangle) => implies(!isEmpty(r) && distPolylineToRect([this.center], r) < this.radius, this.intersects(r)) &&
  *     implies(distPolylineToRect([this.center], r) > this.radius, !this.intersects(r))
+ * @refines Shape.boundingBox.exact  box
+ * @refines Shape.intersects.only-shared  exact-intersects
  */
 export interface Circle extends Shape {
     readonly kind: "circle";

@@ -10,7 +10,9 @@ import { shapeViewContract } from "../shapeView.contract.ts";
 import { makeTestView } from "./_view.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ListLayer, RecordingContext, testCircle } from "../viewkit.ts";
+import { ListLayer, ManualScheduler, RecordingContext, testCircle } from "../viewkit.ts";
+import { frameSchedulerContract } from "../frameScheduler.contract.ts";
+import { makeTestScheduler } from "./_scheduler.ts";
 import { kitView } from "../shapeviewkit.ts";
 import { ListCollection, ListIndex } from "../modelkit.ts";
 import { rectangleOpsContract } from "../rectangleOps.contract.ts";
@@ -77,6 +79,13 @@ scenarioContract(() => kitDriver(), () => kitDriver());
 
 // The reference rectangle operations.
 rectangleOpsContract(makeTestRectOps());
+
+// The schedulers: the one every view test steps by hand, and the adversaries' helper.
+frameSchedulerContract(() => {
+  const scheduler = new ManualScheduler();
+  return { scheduler, runFrame: () => scheduler.runFrame() };
+});
+frameSchedulerContract(makeTestScheduler());
 
 // The routers.
 routerContract((w, h) => new RefRootRegion(w, h));

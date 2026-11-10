@@ -19,9 +19,11 @@
   --tag-requires: #9a6414;
   --tag-ensures: #2b57a8;
   --tag-invariant: #6f45b5;
-  --tag-unchecked: #687181;
+  --tag-valid: #1d7a78;
+  --tag-abstract: #9b3f78;
+  --tag-budget: #6a6d12;
+  --tag-deferred: #3d6f9e;
   --ok: #2c7f50;
-  --gap: #bd3b28;
   --quiet: #8b94a3;
   --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -49,9 +51,11 @@
     --tag-requires: #e0a64a;
     --tag-ensures: #84a9f0;
     --tag-invariant: #b897ef;
-    --tag-unchecked: #9ba3b1;
+    --tag-valid: #5cc4c0;
+    --tag-abstract: #e08abb;
+    --tag-budget: #c9cc5e;
+    --tag-deferred: #8fb9e3;
     --ok: #5cbf86;
-    --gap: #f07a64;
     --quiet: #6f7a8a;
   }
 }
@@ -69,9 +73,11 @@
   --tag-requires: #e0a64a;
   --tag-ensures: #84a9f0;
   --tag-invariant: #b897ef;
-  --tag-unchecked: #9ba3b1;
+  --tag-valid: #5cc4c0;
+  --tag-abstract: #e08abb;
+  --tag-budget: #c9cc5e;
+  --tag-deferred: #8fb9e3;
   --ok: #5cbf86;
-  --gap: #f07a64;
   --quiet: #6f7a8a;
 }
 
@@ -110,7 +116,6 @@ h1 {
 .stat b { font-family: var(--font-display); font-weight: 600; font-size: var(--step-2); }
 .stat span { color: var(--muted); font-size: var(--step--1); }
 .stat.ok b { color: var(--ok); }
-.stat.gap b { color: var(--gap); }
 
 .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
 .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
@@ -213,16 +218,21 @@ h1 {
 .tag.requires { color: var(--tag-requires); }
 .tag.ensures { color: var(--tag-ensures); }
 .tag.invariant { color: var(--tag-invariant); }
-.tag.unchecked { color: var(--tag-unchecked); }
+.tag.valid { color: var(--tag-valid); }
+.tag.abstract { color: var(--tag-abstract); }
+.tag.budget { color: var(--tag-budget); }
+.tag.deferred { color: var(--tag-deferred); }
 .rule-id { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
 .rule-id b { font-weight: 500; }
 .rule-id span { color: var(--muted); }
 .rule p { font-size: var(--step--1); }
+.rule p.refined { color: var(--muted); }
 .status { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; font-size: 12px; white-space: nowrap; }
 .pill { border-radius: 999px; padding: 0 8px; border: 1px solid currentColor; }
 .pill.tested { color: var(--ok); }
-.pill.untested { color: var(--gap); }
-.pill.unchecked { color: var(--tag-unchecked); border-style: dashed; }
+.pill.abstract { color: var(--tag-abstract); border-style: dotted; }
+.pill.budget { color: var(--tag-budget); border-style: dotted; }
+.pill.deferred { color: var(--tag-deferred); border-style: dashed; }
 .pill.caller { color: var(--muted); }
 .adversaries { color: var(--muted); font-variant-numeric: tabular-nums; }
 dialog.sheet {
@@ -312,11 +322,12 @@ const DATA = /*CATALOG_DATA*/null;
 
 const STATUS = {
   tested: { label: "Tested", long: "tested", color: "var(--ok)" },
-  untested: { label: "No test by ID", long: "no test by this ID", color: "var(--gap)" },
-  unchecked: { label: "@unchecked", long: "@unchecked", color: "var(--tag-unchecked)" },
+  abstract: { label: "Abstract", long: "abstract", color: "var(--tag-abstract)" },
+  budget: { label: "Budget", long: "budget", color: "var(--tag-budget)" },
+  deferred: { label: "Deferred", long: "deferred", color: "var(--tag-deferred)" },
   caller: { label: "Caller's", long: "caller's obligation", color: "var(--quiet)" },
 };
-const ORDER = ["tested", "untested", "unchecked", "caller"];
+const ORDER = ["tested", "abstract", "budget", "deferred", "caller"];
 
 const ifs = DATA.interfaces;
 const byName = new Map(ifs.map((i) => [i.name, i]));
@@ -355,12 +366,13 @@ function summary() {
   const adversaries = all.reduce((n, r) => n + r.adversaries, 0);
   const stat = (n, label, cls = "") => el("div", { class: `stat ${cls}` }, el("b", {}, String(n)), el("span", {}, label));
   document.getElementById("summary").replaceChildren(
-    stat(ifs.length, "interfaces"),
+    stat(ifs.filter((i) => !i.module).length, "interfaces"),
     stat(edges.length, "relationships"),
     stat(all.length, "rules"),
     stat(c.tested, "tested", "ok"),
-    stat(c.untested, "with no test by ID", c.untested ? "gap" : ""),
-    stat(c.unchecked, "@unchecked"),
+    stat(c.abstract, "abstract"),
+    stat(c.budget, "budgets"),
+    stat(c.deferred, "deferred"),
     stat(c.caller, "caller's obligations"),
     stat(adversaries, "kept adversaries"),
   );
@@ -380,7 +392,7 @@ function summary() {
   if (showRules) for (const s of ORDER) keys.push(el("span", { class: "key" }, el("span", { class: "swatch", style: `background: ${STATUS[s].color}` }), STATUS[s].long));
   document.getElementById("legend").replaceChildren(...keys);
   document.getElementById("footer").textContent =
-    `Generated ${DATA.generated} by npm run catalog. "No test by ID" means no test is named after the rule; it may still be covered under another name.`;
+    `Generated ${DATA.generated} by npm run catalog, which writes this page only when every rule is accounted for: a test named by its ID, or a caller's obligation, an abstract rule refined by tested rules, a budget for bench.ts, or a deferred rule with its plan.`;
 }
 
 // ---- Layout: layered by dependency depth, the most dependent interfaces on top ----
@@ -486,7 +498,7 @@ function map() {
     const m = i.rules.reduce((n, r) => n + r.adversaries, 0);
     sub.textContent = showRules
       ? `${i.rules.length} rule${i.rules.length === 1 ? "" : "s"}${m ? ` · ${m} ${m === 1 ? "adversary" : "adversaries"}` : ""}`
-      : `${i.file} · ${i.members.length} member${i.members.length === 1 ? "" : "s"}`;
+      : i.module ? `${i.file} · file rules` : `${i.file} · ${i.members.length} member${i.members.length === 1 ? "" : "s"}`;
     g.append(name, sub);
     if (showRules && i.rules.length) {
       const c = countBy(i.rules);
@@ -551,7 +563,10 @@ function card() {
               el("span", { class: "status" },
                 r.adversaries ? el("span", { class: "adversaries" }, `${r.adversaries} ${r.adversaries === 1 ? "adversary" : "adversaries"}`) : null,
                 el("span", { class: `pill ${r.status}` }, STATUS[r.status].long))),
-            el("p", {}, r.headline));
+            el("p", {}, r.headline),
+            r.refinedBy.length ? el("p", { class: "refined" }, "Refined by ", ...r.refinedBy.flatMap((id, k) => [k ? ", " : "", el("span", { class: "mono" }, id)])) : null,
+            r.tag === "budget" ? el("p", { class: "refined" }, r.measuredBy.length ? ["Measured by ", ...r.measuredBy.map((f) => el("span", { class: "mono" }, f))] : "Not measured yet: the phase 2 task that adds the measurement hasn't run.") : null,
+            r.tag === "deferred" ? el("p", { class: "refined" }, el("b", {}, "When: "), r.when, el("br"), el("b", {}, "How: "), r.how) : null);
         })) : el("p", { class: "none" }, "No rules with this status."))
         : el("p", { class: "none" }, "No rules of its own; see the interfaces it extends.")));
   }

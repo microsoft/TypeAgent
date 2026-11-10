@@ -32,7 +32,9 @@ export interface Size {
 /**
  * What a node is. group, toolbar and radio-group contain other nodes; a
  * radio-group contains only radios. view-host is the area where a view's
- * surface goes; the renderer leaves it empty for the app to fill.
+ * surface goes; the renderer leaves it empty for the app to fill. The
+ * surface covers exactly the view-host's bounds, so a point in view
+ * coordinates is at that point plus the bounds' top left in the window.
  */
 export type Role = "group" | "toolbar" | "radio-group" | "radio" | "slider" | "button" | "text" | "view-host";
 
@@ -41,13 +43,13 @@ export type Role = "group" | "toolbar" | "radio-group" | "radio" | "slider" | "b
  * not undefined. A tree is plain data: comparing two trees with deepEqual
  * says whether they present the same thing.
  *
- * @invariant well-formed  Each node has exactly the fields its role uses, as wellFormed (ui.vocab.ts) checks: value, min, max and step on a slider, with step > 0 and min <= value <= max, value being min plus a whole number of steps; value as a string on text; selected on a radio; children only on group, toolbar and radio-group, and only radios in a radio-group.
+ * @valid well-formed  Each node has exactly the fields its role uses, as wellFormed (ui.vocab.ts) checks: value, min, max and step on a slider, with step > 0 and min <= value <= max, value being min plus a whole number of steps; value as a string on text; selected on a radio; children only on group, toolbar and radio-group, and only radios in a radio-group.
  *   wellFormed(this)
- * @invariant unique-keys  Keys are unique within the tree.
+ * @valid unique-keys  Keys are unique within the tree.
  *   unique(keys(this))
- * @invariant inside  Each child's bounds lie within its parent's.
+ * @valid inside  Each child's bounds lie within its parent's.
  *   nodes(this).every((n) => n.children.every((c) => within(c.bounds, n.bounds)))
- * @invariant disjoint  Siblings' bounds don't overlap, so every point of the window belongs to one path from the root, and a platform's hit testing finds the same node as pointer routing (pointer.ts).
+ * @valid disjoint  Siblings' bounds don't overlap, so every point of the window belongs to one path from the root, and a platform's hit testing finds the same node as pointer routing (pointer.ts).
  *   nodes(this).every((n) => n.children.every((a, i) => n.children.every((b, j) => j <= i || !rectIntersects(a.bounds, b.bounds))))
  */
 export interface SemanticNode {
@@ -94,7 +96,7 @@ export interface Renderer extends Emitter<{ input: [UiEvent] }> {
   /**
    * Presents tree, replacing what was presented.
    *
-   * @requires well-formed  tree holds SemanticNode's invariants.
+   * @requires well-formed  tree holds SemanticNode's @valid rules.
    * @ensures presents  Afterward, the platform presents exactly tree.
    *   deepEqual(presented(this), tree)
    * @ensures quiet  Emits nothing.

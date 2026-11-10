@@ -19,7 +19,9 @@ import type { DrawingLayer } from "./shapeView.ts";
 import type { ItemId } from "./view.ts";
 import type { SemanticNode, Size, UiEvent } from "./ui.ts";
 import type { Chrome, ChromeOptions, ChromeState, MakeCircle } from "./chrome.ts";
-import { byKey, controls, deepEqual, entries, ids, keys, minimumSize, nodes, rectIntersects, snapRadius, unique, wellFormed, within } from "./chrome.vocab.ts";
+import {
+  byKey, controls, deepEqual, entries, ids, keys, minimumSize, nodes, onStep, rectIntersects, snapRadius, unique, validRect, wellFormed, within,
+} from "./chrome.vocab.ts";
 import { coverage } from "./testkit.ts";
 import { ListLayer, testCircle } from "./viewkit.ts";
 
@@ -312,7 +314,10 @@ export function chromeContract(make: MakeChrome): void {
     rule("SemanticNode.disjoint", (s) => s.op.op !== "present" || s.disposed ||
       nodes(presented(s)).every((n) => n.children.every((a, i) => n.children.every((b, j) => j <= i || !rectIntersects(a.bounds, b.bounds)))));
 
-    rule("Chrome.present.pure", (s) => s.op.op !== "present" ||
+    rule("Rectangle.non-negative-size", (s) => s.op.op !== "present" || s.disposed ||
+      nodes(presented(s)).every((n) => validRect(n.bounds)));
+
+    rule("Chrome.present.pure",(s) => s.op.op !== "present" ||
       (deepEqual(s.after, s.before) && s.emitted.length === 0 && deepEqual(idsOf(s.itemsAfter), idsOf(s.itemsBefore))));
 
     rule("Chrome.dispose.detaches", (s) => {
@@ -320,6 +325,18 @@ export function chromeContract(make: MakeChrome): void {
       if (s.layer.listenerCount() !== 0 || s.emitted.length !== 0) return false;
       const own = s.op.op === "tap" || s.op.op === "dispatch";
       return !own || deepEqual(idsOf(s.itemsAfter), idsOf(s.itemsBefore));
+    });
+
+    // ChromeOptions only flow into a chrome, so the generator is where they
+    // are made: options that break their rules would test outside the rules.
+    test("ChromeOptions.palette", () => {
+      fc.assert(fc.property(optionsArb, (o) =>
+        o.palette.length > 0 && unique(o.palette.map((p) => p.label)) && o.palette.every((p) => p.label !== "")));
+    });
+
+    test("ChromeOptions.radius-range", () => {
+      fc.assert(fc.property(optionsArb, ({ radius: r }) =>
+        0 < r.min && r.min <= r.initial && r.initial <= r.max && r.step > 0 && onStep(r, r.max) && onStep(r, r.initial)));
     });
 
     test("Chrome input coverage", () => {

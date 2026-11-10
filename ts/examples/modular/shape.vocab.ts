@@ -6,10 +6,17 @@
  * @module
  */
 
-import type { Shape, ShapeId, ShapeLocatorQueries } from "./shape.ts";
+import type { Circle, Shape, ShapeId, ShapeLocatorQueries } from "./shape.ts";
+
+import { validColor } from "./color.vocab.ts";
 
 export * from "./geometry.vocab.ts";
 export * from "./color.vocab.ts";
+
+/** Whether c holds Circle's @valid rules, and its color Color's. */
+export function validCircle(c: Pick<Circle, "radius" | "color">): boolean {
+  return c.radius > 0 && validColor(c.color);
+}
 
 /**
  * Ghost state: the shapes that q's queries are about. For a ShapeLocator,

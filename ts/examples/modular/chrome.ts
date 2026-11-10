@@ -53,12 +53,12 @@ import type { SemanticNode, Size, UiEvent } from "./ui.ts";
 export type Mode = "draw" | "erase";
 
 /**
- * What a chrome offers. Options that break these invariants are outside
+ * What a chrome offers. Options that break these rules are outside
  * the rules.
  *
- * @invariant palette  At least one color, and labels that are distinct and not empty.
+ * @valid palette  At least one color, and labels that are distinct and not empty.
  *   this.palette.length > 0 && unique(this.palette.map((p) => p.label)) && this.palette.every((p) => p.label !== "")
- * @invariant radius-range  0 < min <= initial <= max, step > 0, and max and initial are min plus whole numbers of steps.
+ * @valid radius-range  0 < min <= initial <= max, step > 0, and max and initial are min plus whole numbers of steps.
  *   0 < this.radius.min && this.radius.min <= this.radius.initial && this.radius.initial <= this.radius.max &&
  *     this.radius.step > 0 && onStep(this.radius, this.radius.max) && onStep(this.radius, this.radius.initial)
  */

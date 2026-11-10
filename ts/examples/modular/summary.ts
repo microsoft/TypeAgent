@@ -276,5 +276,6 @@ function pdf(content: string): Buffer {
   return Buffer.from(out, "latin1");
 }
 
-const all = build(new Set());
+// Interfaces only: a file's header rules have no members to list.
+const all = build(new Set()).filter((i) => !i.module);
 writeFileSync("summary.pdf", pdf(render(all, new Date().toLocaleDateString("en-CA"))));

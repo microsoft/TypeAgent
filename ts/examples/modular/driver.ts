@@ -14,7 +14,7 @@ import type { App, AppParts } from "./app.ts";
 import type { MakeShapeView } from "./shapeView.contract.ts";
 import type { RendererFixture } from "./ui.contract.ts";
 import type { Region, RootRegion, TapRecognizer } from "./pointer.ts";
-import { byKey, controls, entries, nodes } from "./app.vocab.ts";
+import { byKey, controls, deepEqual, entries, nodes } from "./app.vocab.ts";
 import { ManualScheduler } from "./viewkit.ts";
 
 /** How to make each part of an app. */
@@ -61,10 +61,22 @@ export function makeDriver(makers: AppMakers, options: ChromeOptions, size: Size
   const fixture = makers.renderer();
   const app = makers.connect({ chrome, view, renderer: fixture.renderer, size });
 
+  // What the user's actions have changed: the layer's circles, the chrome's state and the controls presented.
+  const model = () => ({
+    circles: entries(layer).map(([id, s]: [unknown, Shape]) => {
+      const c = s as Circle;
+      return { id, center: { x: c.center.x, y: c.center.y }, radius: c.radius, color: { ...c.color } };
+    }),
+    state: chrome.state,
+    tree: fixture.presented(),
+  });
   // As a display would: after each action, run the frames the view asks for.
+  // The action must be complete before they run (window.complete).
   const settle = (action: () => void) => {
     action();
+    const before = model();
     for (let i = 0; i < 10 && scheduler.isRequested(view); i++) scheduler.runFrame();
+    if (!deepEqual(model(), before)) throw new Error("window.complete: running frames after an action changed the model or the controls");
   };
   settle(() => {});
   const tree = () => {

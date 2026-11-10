@@ -14,6 +14,7 @@ import fc from "fast-check";
 import type { Point, Rectangle } from "./geometry.ts";
 import type { Color } from "./color.ts";
 import type { Circle } from "./shape.ts";
+import { colorContract } from "./color.contract.ts";
 import { shapeContract } from "./shape.contract.ts";
 import { deepEqual, distPolylineToRect, distToPolyline, extents, implies, inflate, isEmpty, rectContains } from "./shape.vocab.ts";
 import { color, point, rect } from "./testkit.ts";
@@ -125,6 +126,11 @@ export function circleContract(make: Make): void {
       }));
     });
 
+    test("Circle.positive-radius", () => {
+      fc.assert(fc.property(fields, (f) => make(f).radius > 0));
+    });
+
+    colorContract(fields.map((f) => make(f).color));
     shapeContract(fields.map(make), offGrid.map((f) => ({ shape: make(f), q: f.center })));
   });
 }

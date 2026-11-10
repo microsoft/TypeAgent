@@ -3,8 +3,12 @@
 Each implementation satisfies an interface in the interface files
 (`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `window.ts`, `view.ts`,
 `shapeView.ts`, `pointer.ts`, `ui.ts`, `chrome.ts` and `app.ts`), including
-every rule (`@requires`, `@ensures`, `@invariant`) written there. Rule
-expressions use the vocabulary in `rules.ts` and the `*.vocab.ts` files.
+every rule (`@requires`, `@ensures`, `@invariant`, `@valid`, `@abstract`,
+`@budget`, `@deferred`) written there. `@budget` and `@deferred` rules bind
+the implementation like any other: a budget is measured instead of tested,
+and a deferred rule will be tested as its `how:` line says once its
+`when:` holds. Rule expressions use the vocabulary in `rules.ts` and the
+`*.vocab.ts` files.
 
 ## Rules for every implementation
 
@@ -71,7 +75,7 @@ whose reads include one).
 
 - **Exports:** `export function makeInkStroke(fields: { points: readonly Point[]; thickness: number; color: Color }): InkStroke`
 - **Imports:** `geometry.ts`, `color.ts`, `shape.ts`
-- **Validation:** throws a `RangeError` when the fields break any `@invariant`
+- **Validation:** throws a `RangeError` when the fields break any `@valid` rule
   of `InkStroke` or `Color`, or has a non-finite number (`rules.ts`).
 - **Immutability:** the returned stroke can't be affected by later changes to
   the caller's `points` array or point objects.
@@ -223,11 +227,13 @@ circle, and a canvas view that draws circles.
 - **Binds:** node
 
 Each input event updates the model completely, within a small fraction of a
-frame (the module rule `fraction-of-frame` in `window.ts`). Add a measurement to
-`bench.ts` that checks the budget: **a pen move's model update takes under
-5% of a 120 Hz frame (about 0.42 ms)**, with 10,000 strokes in the document
-layer. Measure, using `ShapeLayer` over `MapShapeCollection` and
-`QuadTreeLocator`:
+frame (the `@budget` rule `window.fraction-of-frame` in `window.ts`). Add a
+measurement to `bench.ts` that checks the budget: **a move's model update
+takes under 5% of a 120 Hz frame (about 0.42 ms)**, with 10,000 strokes in
+the document layer. Label the printed results with the rule's ID,
+`window.fraction-of-frame`; `npm run catalog` looks for that ID in
+`bench.ts` to show the budget as measured. Measure, using `ShapeLayer` over
+`MapShapeCollection` and `QuadTreeLocator`:
 
 - **Drawing:** one pen move, which appends one small stroke chunk to a
   wet-ink layer and replaces a tail layer's one shape (`remove` then
@@ -250,7 +256,7 @@ describes. Exceeding the budget isn't a test failure; report it.
 - **Exports:** `export function makeCircle(fields: { center: Point; radius: number; color: Color }): Circle`
 - **Imports:** `geometry.ts`, `color.ts`, `shape.ts`
 - **Validation:** throws a `RangeError` when the fields break
-  `Circle.positive-radius` or an `@invariant` of `Color`, or have a
+  `Circle.positive-radius` or a `@valid` rule of `Color`, or have a
   non-finite number (`rules.ts`).
 - **Copying:** the circle keeps its own copies of `center` (x and y only)
   and `color` (r, g, b and a only), so later changes to the caller's
@@ -284,7 +290,8 @@ describes. Exceeding the budget isn't a test failure; report it.
     `` `rgba(${r}, ${g}, ${b}, ${a})` `` from the circle's color. The
     recording context in `viewkit.ts` accepts only this form.
   - `viewport` always reads as the identity, `{ scale: 1, rotation: 0, tx: 0, ty: 0 }`.
-    Setting it is outside the rules for now; ignore the value.
+    Setting it to the identity does nothing (`View.viewport.set-equal`);
+    setting another value is outside the rules for now, so ignore it too.
   - `interactive` starts `false`; it only gates taps.
   - `on` and `off` for the `viewport` and `tap` events follow `events.ts`;
     `viewport` is never emitted yet.
@@ -444,7 +451,7 @@ to a tap recognizer, and the recognizer gives the view its taps.
   candidate tap at its point; a move farther than the slop from it
   cancels the candidate; an up within the slop of it, with the candidate
   still standing, emits tap with the down's point.
-- **Decided behavior:** the slop is in the region's units and compared
+- **Decided behavior:** the slop is in layout units and compared
   with the straight-line distance, inclusive: exactly the slop away still
   counts. The composition root uses a slop of 4 (`tapSlop` in
   `driver.ts`).

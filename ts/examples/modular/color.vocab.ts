@@ -9,6 +9,11 @@ import type { Color } from "./color.ts";
 
 export * from "./rules.ts";
 
+/** Whether c holds Color's @valid rules. */
+export function validColor(c: Color): boolean {
+  return [c.r, c.g, c.b].every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && c.a >= 0 && c.a <= 1;
+}
+
 /**
  * Colors composited bottom to top with source-over, starting from
  * transparent. Straight (not premultiplied) alpha in and out. The result is

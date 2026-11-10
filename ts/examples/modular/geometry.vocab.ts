@@ -6,9 +6,19 @@
  * @module
  */
 
-import type { Align, Edge, Point, Rectangle } from "./geometry.ts";
+import type { Align, Edge, Point, Rectangle, Viewport } from "./geometry.ts";
 
 export * from "./rules.ts";
+
+/** Whether r holds Rectangle's @valid rules. */
+export function validRect(r: Rectangle): boolean {
+  return r.width >= 0 && r.height >= 0;
+}
+
+/** Whether v holds Viewport's @valid rules. */
+export function validViewport(v: Viewport): boolean {
+  return v.scale > 0;
+}
 
 export function isEmpty(r: Rectangle): boolean {
   return r.width === 0 || r.height === 0;

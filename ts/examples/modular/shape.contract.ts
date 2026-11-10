@@ -1,11 +1,12 @@
-// Contract tests for the rules every Shape has (shape.ts), run by each shape
-// type's contract with its own generators. Test names are rule IDs.
+// Contract tests for the rules every Shape has (shape.ts), and Rectangle's
+// @valid rule on the bounding boxes shapes return, run by each shape type's
+// contract with its own generators. Test names are rule IDs.
 
 import { test } from "node:test";
 import fc from "fast-check";
 import type { Point } from "./geometry.ts";
 import type { Shape } from "./shape.ts";
-import { deepEqual, implies, isEmpty, rectContains, rectIntersects } from "./shape.vocab.ts";
+import { deepEqual, implies, isEmpty, rectContains, rectIntersects, validRect } from "./shape.vocab.ts";
 import { point, prevDouble, rect } from "./testkit.ts";
 
 /**
@@ -20,6 +21,11 @@ export function shapeContract(shapes: fc.Arbitrary<Shape>, offGrid: fc.Arbitrary
     fc.assert(fc.property(shapes, point(14), rect(14), (s, p, r) =>
       deepEqual(s.boundingBox(), s.boundingBox()) &&
       s.contains(p) === s.contains(p) && s.intersects(r) === s.intersects(r)));
+  });
+
+  test("Rectangle.non-negative-size", () => {
+    fc.assert(fc.property(shapes, (s) => validRect(s.boundingBox())));
+    fc.assert(fc.property(offGrid, ({ shape: s }) => validRect(s.boundingBox())));
   });
 
   test("Shape.intersects.empty-rect", () => {

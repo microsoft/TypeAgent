@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 import type { Align, Edge, Rectangle, RectangleOps } from "./geometry.ts";
-import { cutRect, deepEqual, insetRect, isEmpty, placeRect, splitRect } from "./geometry.vocab.ts";
+import { cutRect, deepEqual, insetRect, isEmpty, placeRect, splitRect, validRect } from "./geometry.vocab.ts";
 import { deepFreeze, point, rect } from "./testkit.ts";
 
 const square = { x: 0, y: 0, width: 10, height: 10 };
@@ -82,6 +82,13 @@ export function rectangleOpsContract(ops: RectangleOps): void {
       assert.deepEqual(ops.place({ x: 0, y: 0, width: 20, height: 50 }, { width: 31, height: 10 }, "start", "start"), { x: 0, y: 0, width: 20, height: 10 }, "too wide");
       fc.assert(fc.property(carvable, length, length, align, align, (r, w, h, ax, ay) =>
         deepEqual(ops.place(r, { width: w, height: h }, ax, ay), placeRect(r, { width: w, height: h }, ax, ay))));
+    });
+
+    test("Rectangle.non-negative-size", () => {
+      fc.assert(fc.property(carvable, edge, length, weights, align, align, (r, e, s, w, ax, ay) => [
+        ...ops.cut(r, e, s), ...ops.splitHoriz(r, ...w), ...ops.splitVert(r, ...w),
+        ops.inset(r, s / 2), ops.place(r, { width: s, height: s }, ax, ay),
+      ].every(validRect)));
     });
 
     test("RectangleOps.no-mutation", () => {

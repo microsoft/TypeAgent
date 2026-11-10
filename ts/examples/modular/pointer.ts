@@ -4,8 +4,8 @@
  * the same Emitter (events.ts) every other producer uses. Components get a
  * region from their parent, carve child regions for their own parts with
  * the layout operations (RectangleOps in geometry.ts), and never see
- * outside their own: every event's point is in the receiving region's own
- * coordinates.
+ * outside their own: every event's point is in the receiving region's
+ * region-local coordinates (geometry.ts).
  *
  * Routing decides only which region emits an event; what happens next is
  * the Emitter's rules. A press or a move goes to the innermost region at
@@ -42,9 +42,10 @@ export type PointerKind = keyof PointerEvents;
 
 /**
  * A rectangle of the window that components subscribe to. Its bounds are
- * in its parent's coordinates. Regions nest: a child lies inside its parent,
- * and siblings don't overlap, so every point of the window lies in one path
- * of regions from the root.
+ * in its parent's region-local coordinates, or in window coordinates for
+ * the root. Regions nest: a child lies inside its parent, and siblings
+ * don't overlap, so every point of the window lies in one path of regions
+ * from the root.
  */
 export interface Region extends Emitter<PointerEvents> {
   readonly bounds: Rectangle;

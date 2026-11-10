@@ -3,9 +3,19 @@
  * and the structures that hold them in shape.ts, and showing them in
  * view.ts and window.ts.
  *
- * Coordinates are canonical, oriented like the screen: x increases to the
- * right and y increases downward. Only views transform coordinates, through
- * a Viewport.
+ * Points and rectangles have no coordinate space of their own; each use
+ * says which space it is in. Every space is oriented like the screen: x
+ * increases to the right and y increases downward. The spaces:
+ * - canonical: the model's, in which shapes and scenes are stored.
+ * - window: (0, 0) at the window's top left.
+ * - region-local: (0, 0) at the top left of a region of the window
+ *   (pointer.ts).
+ * - view: (0, 0) at the top left of a view's surface.
+ * Window, region-local and view coordinates are all in layout units, the
+ * platform's density-independent unit (CSS pixels, iOS points, Android
+ * dp), so moving between them is a translation by a top left. Only a
+ * Viewport maps between canonical and view coordinates, and only views
+ * apply one.
  *
  * Points, rectangles and viewports are immutable values, as are colors and
  * shapes.
@@ -15,7 +25,7 @@
  * @module
  */
 
-/** A location in canonical coordinates. */
+/** A location, in the coordinate space its use states. */
 export interface Point {
     readonly x: number;
     readonly y: number;
@@ -28,7 +38,7 @@ export interface Point {
  * rectangles that share only an edge do not overlap. A rectangle with width 0
  * or height 0 is empty and contains no points.
  *
- * @invariant non-negative-size  Width and height are never negative.
+ * @valid non-negative-size  Width and height are never negative.
  *   this.width >= 0 && this.height >= 0
  */
 export interface Rectangle {
@@ -140,15 +150,14 @@ export interface RectangleOps {
 
 /**
  * A 2D similarity transform (uniform scale, rotation, translation) from
- * canonical coordinates to view coordinates. View coordinates are
- * device-independent units (CSS px, iOS points, Android dp), oriented like
- * the screen; each view applies its own pixel density on top.
+ * canonical coordinates to view coordinates (see the top of this file);
+ * each view applies its own pixel density on top.
  *
  * The mapping scales and rotates about the canonical origin, then translates:
  *   vx = scale * (cos(rotation) * x - sin(rotation) * y) + tx
  *   vy = scale * (sin(rotation) * x + cos(rotation) * y) + ty
  *
- * @invariant positive-scale  Scale is greater than 0.
+ * @valid positive-scale  Scale is greater than 0.
  *   this.scale > 0
  */
 export interface Viewport {

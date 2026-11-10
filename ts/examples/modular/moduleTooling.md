@@ -71,7 +71,7 @@ it reads the spec the way a future implementer will.
 | `npm run typecheck` | No type errors | Seconds |
 | `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 5 minutes |
 | `npm run bench` | Prints the measurements | Seconds |
-| `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count | About 15 seconds |
+| `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count. Refuses to write when a rule other than a `@requires` or `@unchecked` has no test by its ID | About 15 seconds |
 | `npm run summary` | Regenerates `summary.pdf`. Doesn't run tests | Under a second |
 
 ### Dependencies
@@ -92,8 +92,11 @@ and the interface file's `.vocab.ts`.
 |---|---|
 | `@requires` | The caller's obligation |
 | `@ensures` | The implementation's obligation |
-| `@invariant` | Always true of a value |
-| `@unchecked` | No test yet; the headline says why |
+| `@invariant` | True of one object once made and after every call; tests check it after each operation |
+| `@valid` | Which values are legal members of a type; tests check it wherever a contract gets values of the type from an implementation |
+| `@abstract` | Stated for an interface others extend; each of them names a tested rule of its own that refines it, with `@refines` |
+| `@budget` | A limit on time or memory; a bench script measures and reports it, labeled with the rule's ID, rather than a test |
+| `@deferred` | Checkable only once a feature exists; its `when:` and `how:` lines say when and how it will be checked, and it becomes `@ensures` once tested |
 
 - A rule's ID comes from where it sits, for example
   `ShapeLocatorQueries.inRect.exact`. The test that checks it has that name. A
@@ -309,7 +312,7 @@ misses:
 | Faults nobody imagined | The throwaway draft in 1b |
 
 Faults across components, and performance, remain outside adversaries: they are
-`@unchecked` rules and bench budgets. A complete observer table also makes
+scenario tests and `@budget` rules. A complete observer table also makes
 a contract equivalent to comparing the implementation with a reference
 model, which is why no separate differential test is needed.
 
@@ -433,6 +436,67 @@ model, which is why no separate differential test is needed.
     references are now one per file, those tasks wire their scenarios
     without their own reference, and a **Hidden** field in impl-specs.md
     makes `task.ts` refuse a workspace that would read one.
+  - Rule tags, after a review of how rules are specified: `@invariant` did
+    two jobs. It now means a state invariant only (`ShapeCollection`,
+    `Layer`), and the new `@valid` marks which values are legal members of
+    a type (`Rectangle`, `Viewport`, `Color`, `InkStroke`, `Circle`,
+    `ChromeOptions`, `SemanticNode`). The eleven value rules that had no
+    test by their ID now have one wherever a contract gets values of the
+    type from an implementation: bounding boxes (`shape.contract.ts`),
+    carving results, presented trees' bounds, a view's viewport, and the
+    fields and colors of made circles and strokes (`color.contract.ts`).
+    `ChromeOptions` only flow into a chrome, so its rules are tested on the
+    contract's generator. `AppParts.same-layer` and `AppParts.fits` became
+    `App.same-layer` and `App.fits`, `@requires` on whoever makes the app.
+    Validity predicates `validRect`, `validViewport`, `validColor` and
+    `validCircle` live in the vocabulary; `viewkit.ts` and
+    `adversaries/_circle.ts` use them instead of private copies. Three new
+    adversaries, all caught on seeds 1 to 3. `npm run catalog` now refuses
+    to write when `node_modules` is missing or no test ran, instead of
+    marking every rule untested.
+  - Coordinate spaces: geometry.ts called every Point canonical and said
+    only views transform coordinates, but pointer.ts uses window and
+    region-local coordinates and ui.ts window coordinates. Point and
+    Rectangle now have no space of their own; geometry.ts lists the
+    spaces (canonical, window, region-local, view), with all but canonical
+    in layout units, and each use names its space. The tap path relied on
+    an unstated fact, now `View.tap-coordinates` (`@requires`): a view's
+    tap source emits in the view's coordinates, which a TapRecognizer on
+    the region the view's surface covers does.
+  - `@unchecked` review: the rules waiting for "a recording view and
+    scheduler" could be tested once those doubles existed. Now tested:
+    `FrameScheduler`'s three rules, by `frameScheduler.contract.ts` on
+    `ManualScheduler` (the double every view test relies on) and later on
+    a platform scheduler with a test clock; `View.viewport.set-equal`,
+    with the identity; and `window.complete`, which the driver checks
+    after every action by running the frames and comparing the model.
+    The catalog now reads rules in a file's header, with IDs such as
+    `window.complete`. impl-specs.md now says `@unchecked` rules bind
+    implementations too. Five new adversaries.
+  - Abstract rules: `Shape.boundingBox.exact` and
+    `Shape.intersects.only-shared` can't be tested for shapes in general,
+    so they were `@unchecked`. They are now `@abstract`, and each shape
+    type names the tested rule that refines them (`@refines
+    Shape.boundingBox.exact  box`). `npm run catalog` refuses to write when
+    an interface extending one doesn't refine it (here or in an ancestor),
+    when an `@refines` names a rule that isn't abstract or inherited, or
+    when the refining rule is missing or untested. The catalog shows an
+    abstract rule's refinements.
+  - Budgets: `window.fraction-of-frame` was `@unchecked` because timing
+    tests are flaky. It is now `@budget`: a bench script measures it and
+    reports the result labeled with the rule's ID, and the catalog shows
+    "measured by bench.ts" when `bench.ts` names that ID. Task 10 adds the
+    measurement, so until it runs the catalog shows "not measured yet"
+    rather than refusing to write. The headline now covers eraser moves
+    too, as task 10 already measured them against the same budget.
+  - Deferred rules: `View.viewport.set-redraws` and `set-emits` wait for a
+    ShapeView with viewports other than the identity. They are now
+    `@deferred`, with a `when:` line (what must exist) and a `how:` line
+    (the test and adversaries to write then). `npm run catalog` refuses to
+    write when either line is missing, when a plan line sits on another
+    tag, or when a test already has the rule's ID, so the rule must become
+    `@ensures`. No rule is `@unchecked` any more. The catalog page's footer
+    no longer explains the removed "no test by ID" status.
   - Phase 1b ran on the split (about 140k tokens: draft about 10%,
     contradictions 30%, adversaries 40%, undecided choices and observer cells
     10% each). It made 15 findings and 25 adversaries, 6 of which escaped:
@@ -458,18 +522,13 @@ model, which is why no separate differential test is needed.
   straddle cell lines, as a possible later round.
 - Parallel implementation rounds for specs with performance or design
   freedom.
-- The two `@unchecked` rules on `Shape` (`boundingBox.exact`,
-  `intersects.only-shared`), which each shape type covers with its own rule.
 - Deferred tooling: a standard bundle of files for phase-2 agents. The
   catalog (`npm run catalog`) now covers interfaces and rule coverage;
   implementations are not on its map yet.
-- Eleven value invariants have no test named by their ID (`Rectangle`,
-  `Color`, `InkStroke`, `Circle`, `Viewport`, `ChromeOptions` and
-  `AppParts`). The `InkStroke`, `Circle` and `Color` ones are covered by
-  `makeInkStroke.validation` and `makeCircle.validation` under other
-  names. The `ChromeOptions` and `AppParts` ones describe what a caller
-  passes, so breaking them is outside the rules; a chrome or app could
-  check them and throw, which would make them testable.
+- A compiler for phase 1: the rule checks now in `catalog.ts` (unknown
+  tags, a test named by each rule's ID, `@abstract` rules refined by
+  tested rules, `@deferred` rules with `when:` and `how:`) move into a
+  compiler for the blueprint, and the catalog only presents its results.
 - Translucent wet ink drawn as chunks blends twice where chunks overlap,
   whether drawn incrementally or not. Options include a layer opacity, with
   each chunk drawn opaque, or a view that draws the layer's coverage with
@@ -492,8 +551,6 @@ model, which is why no separate differential test is needed.
 - The demo page and its static server, to be designed with the method:
   the composition root that makes the real parts for a browser window and
   connects them.
-- A recording view and scheduler, which would let the `@unchecked` rules
-  on `View` and in the `window.ts` header be tested.
 - An editing interface in model terms (for example a stroke builder with
   `begin`, `extend` and `end` that edits layers), if editing logic such as
   smoothing and chunking should be shared across platforms. `Tool` and

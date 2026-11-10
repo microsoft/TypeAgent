@@ -6,6 +6,8 @@ Solid arrows with hollow heads are `extends`; dashed arrows are `uses` (a member
 
 ```mermaid
 classDiagram
+  class window {
+  }
   class Emitter {
     on
     off
@@ -229,6 +231,15 @@ classDiagram
   AppParts ..> Size
 ```
 
+## window
+
+`window.ts`. Interfaces for a window's input and frames. A window gets input events and display frames from its platform, and both are per window: each window is on one display, and so has that display's refresh. Views, which are drawn in a window's frames, are in view.ts. Rules follow the format described in rules.ts.
+
+| Rule | Tag | Headline | Status | Adversaries |
+|---|---|---|---|---|
+| `window.complete` | ensures | Each input event updates the model completely before its handler returns, so nothing is left pending and no frame shows part of an action: running the frames afterward changes neither the model nor the controls presented. | tested | 1 |
+| `window.fraction-of-frame` | budget | A pen move or an eraser move updates the model in under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the document. | budget: not measured yet |  |
+
 ## Emitter
 
 `events.ts`. Something that emits events. Each call to on adds one registration of a listener for one event, even if that listener is already registered.
@@ -242,7 +253,7 @@ classDiagram
 
 ## Point
 
-`geometry.ts`. A location in canonical coordinates.
+`geometry.ts`. A location, in the coordinate space its use states.
 
 No rules of its own.
 
@@ -252,7 +263,7 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `Rectangle.non-negative-size` | invariant | Width and height are never negative. | no test by this ID |  |
+| `Rectangle.non-negative-size` | valid | Width and height are never negative. | tested | 1 |
 
 ## RectangleOps
 
@@ -277,11 +288,11 @@ No rules of its own.
 
 ## Viewport
 
-`geometry.ts`. A 2D similarity transform (uniform scale, rotation, translation) from canonical coordinates to view coordinates. View coordinates are device-independent units (CSS px, iOS points, Android dp), oriented like the screen; each view applies its own pixel density on top.
+`geometry.ts`. A 2D similarity transform (uniform scale, rotation, translation) from canonical coordinates to view coordinates (see the top of this file); each view applies its own pixel density on top.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `Viewport.positive-scale` | invariant | Scale is greater than 0. | no test by this ID |  |
+| `Viewport.positive-scale` | valid | Scale is greater than 0. | tested | 1 |
 
 ## Color
 
@@ -289,8 +300,8 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `Color.rgb-range` | invariant | r, g and b are integers from 0 to 255. | no test by this ID |  |
-| `Color.alpha-range` | invariant | a is from 0 (transparent) to 1 (opaque). | no test by this ID |  |
+| `Color.rgb-range` | valid | r, g and b are integers from 0 to 255. | tested |  |
+| `Color.alpha-range` | valid | a is from 0 (transparent) to 1 (opaque). | tested | 1 |
 
 ## Shape
 
@@ -299,11 +310,11 @@ No rules of its own.
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `Shape.deterministic` | ensures | Every method returns the same result each time it is called with the same arguments. | tested |  |
-| `Shape.boundingBox.exact` | unchecked | Tightness can't be tested for shapes in general; each shape type states its own bounding box rule. | @unchecked |  |
+| `Shape.boundingBox.exact` | abstract | The rectangle is exactly the shape's extents; each shape type states this for its own geometry. | abstract: refined by `InkStroke.box`, `Circle.box` |  |
 | `Shape.intersects.empty-rect` | ensures | Never intersects an empty rectangle. | tested |  |
 | `Shape.intersects.implies-box` | ensures | If the shape intersects r, so does its bounding box. | tested |  |
 | `Shape.intersects.witness` | ensures | If some point is in both the shape and r, they intersect. | tested |  |
-| `Shape.intersects.only-shared` | unchecked | Intersects r only when some point is in both; can't be tested for shapes in general, so each shape type states its own rule. | @unchecked |  |
+| `Shape.intersects.only-shared` | abstract | Intersects r only when some point is in both; each shape type states this for its own geometry. | abstract: refined by `InkStroke.exact-intersects`, `Circle.exact-intersects` |  |
 | `Shape.contains.implies-box` | ensures | Every point in the shape is in its bounding box. | tested |  |
 
 ## InkStroke
@@ -312,8 +323,8 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `InkStroke.has-points` | invariant | Has at least one point; a single point draws a dot. | no test by this ID |  |
-| `InkStroke.min-thickness` | invariant | Thickness is at least 1. | no test by this ID |  |
+| `InkStroke.has-points` | valid | Has at least one point; a single point draws a dot. | tested |  |
+| `InkStroke.min-thickness` | valid | Thickness is at least 1. | tested |  |
 | `InkStroke.box` | ensures | The bounding box is the points' extents, grown by half the thickness. | tested |  |
 | `InkStroke.round-pen` | ensures | Covers every point within half the thickness of the polyline that lies in its bounding box as computed. | tested |  |
 | `InkStroke.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the pen only touches r, contains() decides. | tested | 1 |
@@ -324,7 +335,7 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `Circle.positive-radius` | invariant | The radius is greater than 0. | no test by this ID |  |
+| `Circle.positive-radius` | valid | The radius is greater than 0. | tested |  |
 | `Circle.box` | ensures | The bounding box is the center grown by the radius. | tested | 1 |
 | `Circle.disk` | ensures | Covers every point within the radius of the center that lies in its bounding box as computed. | tested | 2 |
 | `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 2 |
@@ -397,13 +408,13 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `FrameScheduler.requestFrame.merged` | unchecked | Repeated requests with the same handler before a frame call its frame() once in that frame; needs a scheduler driven by a test clock. | @unchecked |  |
-| `FrameScheduler.requestFrame.not-synchronous` | unchecked | Never calls frame() before requestFrame returns; needs a scheduler driven by a test clock. | @unchecked |  |
-| `FrameScheduler.requestFrame.next-frame` | unchecked | A request made during a frame calls frame() in the following frame, not the current one; needs a scheduler driven by a test clock. | @unchecked |  |
+| `FrameScheduler.requestFrame.merged` | ensures | Repeated requests with the same handler before a frame call its frame() once in that frame. | tested | 1 |
+| `FrameScheduler.requestFrame.not-synchronous` | ensures | Never calls frame() before requestFrame returns. | tested | 1 |
+| `FrameScheduler.requestFrame.next-frame` | ensures | A request made during a frame calls frame() in the following frame, not the current one. | tested | 1 |
 
 ## TapSource
 
-`window.ts`. Taps on one surface, as its platform recognizes them: a press and release close together in place and time, by mouse, pen or touch. Recognizing a tap from the platform's own events is the platform's job; a tap carries only where it happened, in the surface's own units.
+`window.ts`. Taps on one surface, as its platform recognizes them: a press and release close together in place and time, by mouse, pen or touch. Recognizing a tap from the platform's own events is the platform's job; a tap carries only where it happened, in the surface's coordinates: layout units, with (0, 0) at its top left.
 
 No rules of its own.
 
@@ -446,14 +457,15 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
+| `View.tap-coordinates` | requires | The tap source is for the view's own surface: it emits points in the view's coordinates. | caller's obligation |  |
 | `View.layer-change` | ensures | When a layer changes, requests a frame and draws nothing until frame(). | tested | 2 |
 | `View.idle` | ensures | Requests no frame while nothing it shows changes. | tested | 1 |
 | `View.one-listener` | ensures | Until disposed, has exactly one listener registered on each layer of its scene, and one on its tap source. | tested | 2 |
 | `View.read-only` | ensures | Reading scene, viewport or interactive changes nothing: what it shows, its frame requests and its listeners stay as they were. | tested | 1 |
 | `View.taps` | ensures | While interactive and not disposed, each tap from its tap source emits tap once, with the tap's point in canonical coordinates, before the source's emit returns; for the identity viewport that is the same point. | tested | 2 |
-| `View.viewport.set-redraws` | unchecked | Setting a different viewport requests a frame, and that frame draws through the new viewport; ShapeView has only the identity viewport so far. | @unchecked |  |
-| `View.viewport.set-equal` | unchecked | Setting a viewport equal to the current one, field by field, requests no frame and emits nothing; ShapeView has only the identity viewport so far. | @unchecked |  |
-| `View.viewport.set-emits` | unchecked | Setting a different viewport emits viewport with the new value before the setter returns; ShapeView has only the identity viewport so far. | @unchecked |  |
+| `View.viewport.set-redraws` | deferred | Setting a different viewport requests a frame, and that frame draws through the new viewport. | deferred: when a ShapeView supports viewports other than the identity. |  |
+| `View.viewport.set-equal` | ensures | Setting a viewport equal to the current one, field by field, requests no frame and emits nothing. | tested | 1 |
+| `View.viewport.set-emits` | deferred | Setting a different viewport emits viewport with the new value before the setter returns. | deferred: when a ShapeView supports viewports other than the identity. |  |
 | `View.interactive.starts-false` | ensures | A new view is not interactive. | tested | 1 |
 | `View.interactive.ignores-input` | ensures | While false, input emits nothing and changes neither the viewport nor the model; so far, taps emit no tap. | tested | 1 |
 | `View.dispose.detaches` | ensures | Afterward, the view has no listeners on the scene's layers or its tap source, and layer changes request no frame. | tested | 1 |
@@ -494,7 +506,7 @@ No rules of its own.
 
 ## Region
 
-`pointer.ts`. A rectangle of the window that components subscribe to. Its bounds are in its parent's coordinates. Regions nest: a child lies inside its parent, and siblings don't overlap, so every point of the window lies in one path of regions from the root.
+`pointer.ts`. A rectangle of the window that components subscribe to. Its bounds are in its parent's region-local coordinates, or in window coordinates for the root. Regions nest: a child lies inside its parent, and siblings don't overlap, so every point of the window lies in one path of regions from the root.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
@@ -540,10 +552,10 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `SemanticNode.well-formed` | invariant | Each node has exactly the fields its role uses, as wellFormed (ui.vocab.ts) checks: value, min, max and step on a slider, with step > 0 and min <= value <= max, value being min plus a whole number of steps; value as a string on text; selected on a radio; children only on group, toolbar and radio-group, and only radios in a radio-group. | tested |  |
-| `SemanticNode.unique-keys` | invariant | Keys are unique within the tree. | tested |  |
-| `SemanticNode.inside` | invariant | Each child's bounds lie within its parent's. | tested |  |
-| `SemanticNode.disjoint` | invariant | Siblings' bounds don't overlap, so every point of the window belongs to one path from the root, and a platform's hit testing finds the same node as pointer routing (pointer.ts). | tested |  |
+| `SemanticNode.well-formed` | valid | Each node has exactly the fields its role uses, as wellFormed (ui.vocab.ts) checks: value, min, max and step on a slider, with step > 0 and min <= value <= max, value being min plus a whole number of steps; value as a string on text; selected on a radio; children only on group, toolbar and radio-group, and only radios in a radio-group. | tested |  |
+| `SemanticNode.unique-keys` | valid | Keys are unique within the tree. | tested |  |
+| `SemanticNode.inside` | valid | Each child's bounds lie within its parent's. | tested |  |
+| `SemanticNode.disjoint` | valid | Siblings' bounds don't overlap, so every point of the window belongs to one path from the root, and a platform's hit testing finds the same node as pointer routing (pointer.ts). | tested |  |
 
 ## Renderer
 
@@ -555,19 +567,19 @@ No rules of its own.
 | `Renderer.reports` | ensures | When the user activates an enabled button, or an enabled radio that isn't selected, emits input once with kind activate and the control's key; when the user sets an enabled slider to a value, emits input once with kind set-value, its key and that value. Each before the user's action completes. | tested | 1 |
 | `Renderer.silent` | ensures | Emits nothing for any other action: on a disabled control, on a selected radio, or on a node that isn't a button, radio or slider. | tested | 2 |
 | `Renderer.stable` | ensures | A node whose key is in both the old tree and the new one, with the same role, stays the same platform widget across a render, so that focus and a drag in progress survive it. | tested | 1 |
-| `Renderer.render.well-formed` | requires | tree holds SemanticNode's invariants. | caller's obligation |  |
+| `Renderer.render.well-formed` | requires | tree holds SemanticNode's @valid rules. | caller's obligation |  |
 | `Renderer.render.presents` | ensures | Afterward, the platform presents exactly tree. | tested | 4 |
 | `Renderer.render.quiet` | ensures | Emits nothing. | tested | 1 |
 | `Renderer.dispose.removes` | ensures | Afterward, presents nothing, emits nothing, and later renders do nothing. | tested | 1 |
 
 ## ChromeOptions
 
-`chrome.ts`. What a chrome offers. Options that break these invariants are outside the rules.
+`chrome.ts`. What a chrome offers. Options that break these rules are outside the rules.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `ChromeOptions.palette` | invariant | At least one color, and labels that are distinct and not empty. | no test by this ID |  |
-| `ChromeOptions.radius-range` | invariant | 0 < min <= initial <= max, step > 0, and max and initial are min plus whole numbers of steps. | no test by this ID |  |
+| `ChromeOptions.palette` | valid | At least one color, and labels that are distinct and not empty. | tested |  |
+| `ChromeOptions.radius-range` | valid | 0 < min <= initial <= max, step > 0, and max and initial are min plus whole numbers of steps. | tested |  |
 
 ## ChromeState
 
@@ -602,10 +614,7 @@ No rules of its own.
 
 `app.ts`. The parts an app connects, each already made, and the window's size.
 
-| Rule | Tag | Headline | Status | Adversaries |
-|---|---|---|---|---|
-| `AppParts.same-layer` | invariant | The chrome's layer is one of the layers the view draws. | no test by this ID |  |
-| `AppParts.fits` | invariant | The size is at least the chrome's minimum size. | no test by this ID |  |
+No rules of its own.
 
 ## App
 
@@ -613,6 +622,8 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
+| `App.same-layer` | requires | The chrome's layer is one of the layers the view draws. | caller's obligation |  |
+| `App.fits` | requires | The size is at least the chrome's minimum size. | caller's obligation |  |
 | `App.starts` | ensures | When made, renders the chrome's controls for the size, and makes the view interactive. | tested | 2 |
 | `App.renders` | ensures | Each time the chrome emits change, renders its controls for the size once, before the chrome's emit returns. | tested | 2 |
 | `App.forwards-input` | ensures | Each input the renderer emits goes to the chrome's dispatch once, unchanged, before the renderer's emit returns. | tested | 1 |
