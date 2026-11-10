@@ -1,24 +1,19 @@
 /**
- * Geometry: points, rectangles and viewports. Colors are in color.ts, shapes
- * and the structures that hold them in shape.ts, and showing them in
- * view.ts and window.ts.
+ * Geometry: points, rectangles and viewports.
  *
  * Points and rectangles have no coordinate space of their own; each use
  * says which space it is in. Every space is oriented like the screen: x
  * increases to the right and y increases downward. The spaces:
  * - canonical: the model's, in which shapes and scenes are stored.
- * - window: (0, 0) at the window's top left.
- * - region-local: (0, 0) at the top left of a region of the window
- *   (pointer.ts).
+ * - window: (0, 0) at the window's top left. Layout objects' regions and
+ *   distributed events' points (layout.ts) are in it.
  * - view: (0, 0) at the top left of a view's surface.
- * Window, region-local and view coordinates are all in layout units, the
- * platform's density-independent unit (CSS pixels, iOS points, Android
- * dp), so moving between them is a translation by a top left. Only a
- * Viewport maps between canonical and view coordinates, and only views
- * apply one.
+ * Window and view coordinates are both in layout units, the platform's
+ * density-independent unit (CSS pixels, iOS points, Android dp), so moving
+ * between them is a translation by the surface's top left. A Viewport
+ * maps canonical coordinates to view coordinates.
  *
- * Points, rectangles and viewports are immutable values, as are colors and
- * shapes.
+ * Points, rectangles and viewports are immutable values.
  *
  * Rules follow the format described in rules.ts.
  *
@@ -56,15 +51,8 @@ export type Align = "start" | "center" | "end";
 
 /**
  * Operations on rectangles, following Rectangle's half-open semantics.
- *
- * Layout is done by carving: a window is one rectangle, and each part of it
- * is cut, split, inset or placed from the rectangle its parent gives it.
- * Content never changes a layout, so moving a part means giving it another
- * rectangle. The carving operations below keep sizes in whole layout units
- * when the rectangle's own size is whole: a share that doesn't divide
- * evenly is rounded down, and the units left over go one each to the
- * shares that lost the most (the largest-remainder method). Each is
- * defined exactly by its reference function in geometry.vocab.ts.
+ * cut, splitHoriz, splitVert, inset and place are each defined exactly by
+ * their reference functions in geometry.vocab.ts.
  *
  * @ensures no-mutation  Never modifies its arguments.
  */
@@ -150,8 +138,7 @@ export interface RectangleOps {
 
 /**
  * A 2D similarity transform (uniform scale, rotation, translation) from
- * canonical coordinates to view coordinates (see the top of this file);
- * each view applies its own pixel density on top.
+ * canonical coordinates to view coordinates (see the top of this file).
  *
  * The mapping scales and rotates about the canonical origin, then translates:
  *   vx = scale * (cos(rotation) * x - sin(rotation) * y) + tx

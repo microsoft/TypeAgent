@@ -113,6 +113,7 @@ export function inkStrokeContract(make: Make): void {
       }));
     });
 
+    // The rule's expression covers every case except the pen exactly touching r; the hand-written cases below cover those.
     test("InkStroke.exact-intersects", () => {
       const diagonal = make({ points: [{ x: 0, y: 0 }, { x: 10, y: 10 }], thickness: 1, color: black });
       assert.equal(diagonal.intersects({ x: 7, y: 0, width: 3, height: 3 }), false, "inside the box but clear of the pen");

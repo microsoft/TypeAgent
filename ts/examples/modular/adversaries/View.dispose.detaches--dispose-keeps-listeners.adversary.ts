@@ -1,4 +1,4 @@
-// Adversary: dispose leaves the view's listeners on the layers.
+// Adversary: dispose leaves the view's listeners on the groups.
 import { shapeViewContract } from "../shapeView.contract.ts";
 import { makeTestView } from "./_view.ts";
 

@@ -1,15 +1,12 @@
 /**
- * Events: the one pattern every producer in the interface files uses to
- * report changes. It is a subset of Node's EventEmitter (on and off), with
- * Node's behavior, so that one small implementation serves the web and each
- * mobile platform implements one model. Producers don't know who listens.
+ * Events: how producers report changes. EventEmitter is a subset of Node's
+ * EventEmitter (on and off), with Node's behavior.
  *
- * Only the producer emits, so emit is not part of the interface: a layer's
- * viewers can listen to it but can't make it report a change. "Emits e"
+ * Only the producer emits, so emit is not part of the interface. "Emits e"
  * in a rule means the producer calls e's listeners as the rules here say.
+ * A listener that throws is outside the rules.
  *
- * A listener that throws is outside the rules. Rules follow the format
- * described in rules.ts.
+ * Rules follow the format described in rules.ts.
  *
  * @module
  */
@@ -24,7 +21,7 @@ export type EventMap = Record<string, unknown[]>;
  * @ensures order  An emit calls its listeners in the order they were registered.
  * @ensures snapshot  An emit calls the listeners registered when it started: a listener added during the emit isn't called by it, and one removed during it still is.
  */
-export interface Emitter<Events extends EventMap> {
+export interface EventEmitter<Events extends EventMap> {
   /**
    * Registers listener for event. Returns this.
    *

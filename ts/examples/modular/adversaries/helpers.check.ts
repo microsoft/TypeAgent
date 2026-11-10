@@ -3,47 +3,36 @@
 // runs this first.
 import { shapeCollectionContract } from "../shapeCollection.contract.ts";
 import { shapeLocatorContract } from "../shapeLocator.contract.ts";
-import { layerContract } from "../layer.contract.ts";
+import { renderGroupContract } from "../renderGroup.contract.ts";
 import { circleContract } from "../circle.contract.ts";
 import { makeTestCircle } from "./_circle.ts";
 import { shapeViewContract } from "../shapeView.contract.ts";
 import { makeTestView } from "./_view.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ListLayer, ManualScheduler, RecordingContext, testCircle } from "../viewkit.ts";
+import { ListGroup, ManualScheduler, RecordingContext, testCircle } from "../viewkit.ts";
 import { frameSchedulerContract } from "../frameScheduler.contract.ts";
 import { makeTestScheduler } from "./_scheduler.ts";
 import { kitView } from "../shapeviewkit.ts";
 import { ListCollection, ListIndex } from "../modelkit.ts";
 import { rectangleOpsContract } from "../rectangleOps.contract.ts";
 import { makeTestRectOps } from "./_rectOps.ts";
-import { routerContract } from "../pointer.contract.ts";
-import { RefRootRegion } from "../routerkit.ts";
-import { makeTestRoot } from "./_router.ts";
-import { tapRecognizerContract } from "../tapRecognizer.contract.ts";
-import { RefTaps as KitTaps } from "../tapkit.ts";
-import { makeTestTaps } from "./_taps.ts";
-import { chromeContract } from "../chrome.contract.ts";
-import { RefChrome } from "../chromekit.ts";
-import { makeTestChrome } from "./_chrome.ts";
-import { rendererContract } from "../ui.contract.ts";
-import { TreeRenderer } from "../uikit.ts";
-import { makeTestWeb } from "./_webRenderer.ts";
-import { appContract } from "../app.contract.ts";
-import { kitConnect } from "../appkit.ts";
-import { makeTestApp } from "./_app.ts";
+import { eventDistributorContract } from "../eventDistributor.contract.ts";
+import { RefDistributor } from "../distributorkit.ts";
+import { makeTestDistributor } from "./_distributor.ts";
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitDriver } from "../scenariokit.ts";
-import { TestCollection, TestLayer } from "./_layer.ts";
+import { kitFixture } from "../scenariokit.ts";
+import { makeTestCircles } from "./_circles.ts";
+import { TestCollection, TestGroup } from "./_group.ts";
 import { QuadTree } from "./_quadtree.ts";
 
 shapeLocatorContract(() => new QuadTree("none"));
 shapeCollectionContract(() => new TestCollection());
-layerContract(() => new TestLayer());
+renderGroupContract(() => new TestGroup());
 circleContract(makeTestCircle());
 shapeViewContract(makeTestView());
 // The view contract's own doubles.
-layerContract(() => new ListLayer());
+renderGroupContract(() => new ListGroup());
 circleContract(testCircle);
 shapeViewContract(kitView);
 // The model doubles.
@@ -62,20 +51,9 @@ test("RecordingContext.context allows only DrawingContext's members", () => {
   assert.throws(() => context.canvas.getContext, /DrawingContext\.canvas/);
 });
 
-// The reference chrome.
-chromeContract((layer, options, makeCircle) => new RefChrome(layer, options, makeCircle));
-chromeContract(makeTestChrome());
-
-// The renderers.
-rendererContract(() => new TreeRenderer());
-rendererContract(makeTestWeb());
-
-// The reference app.
-appContract(kitConnect);
-appContract(makeTestApp());
-
-// The scenarios, on the reference assembly: a scenario that fails here disagrees with the rules.
-scenarioContract(() => kitDriver(), () => kitDriver());
+// The scenarios, on the reference app and on the adversaries' helper: a scenario that fails here disagrees with itself.
+scenarioContract(() => kitFixture(), () => kitFixture());
+scenarioContract(() => kitFixture({ app: makeTestCircles() }), () => kitFixture());
 
 // The reference rectangle operations.
 rectangleOpsContract(makeTestRectOps());
@@ -87,10 +65,6 @@ frameSchedulerContract(() => {
 });
 frameSchedulerContract(makeTestScheduler());
 
-// The routers.
-routerContract((w, h) => new RefRootRegion(w, h));
-routerContract(makeTestRoot());
-
-// The tap recognizers.
-tapRecognizerContract((region, slop) => new KitTaps(region, slop));
-tapRecognizerContract(makeTestTaps());
+// The event distributors.
+eventDistributorContract((region, locate) => new RefDistributor(region, locate));
+eventDistributorContract(makeTestDistributor());

@@ -29,23 +29,20 @@ it reads the spec the way a future implementer will.
 
 | File | Holds |
 |---|---|
-| `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `window.ts`, `view.ts`, `shapeView.ts`, `pointer.ts`, `ui.ts`, `chrome.ts`, `app.ts` | Interfaces, each with rules in the format below |
+| `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `frames.ts`, `view.ts`, `shapeView.ts`, `layout.ts` | Interfaces, each with rules in the format below |
 | `canvas.ts`, `dom.ts` | Platform subsets: the parts of the web canvas and DOM that web implementations may use. No rules; their meaning is the platform's |
 | `platform/*.check.ts`, `platform/tsconfig.json` | Compile with the DOM library, and fail unless the browser's types fit the subsets. The rest of the repo compiles without it |
 | `rules.ts` | The rule format, and the generic vocabulary of rule expressions: `old`, `implies`, `sameSet`, `deepEqual` and the like. Imports nothing |
 | `<file>.vocab.ts` | The vocabulary of rule expressions about an interface file's domain: ghost state such as `indexed(locator)` and `painted(view, p)`, and reference functions such as `rectContains` and `over`. Each re-exports `rules.ts` and the vocabulary of the files its interface file imports, and imports nothing else |
 | `testkit.ts` | Shared test helpers: fast-check seeding (`FC_SEED`), `prevDouble`, test shapes, and `coverage`, which checks that generators reach each input class |
-| `eventkit.ts` | `Events`, an Emitter with `emit` and `listenerCount`, for test doubles |
-| `uikit.ts` | `TreeRenderer`, a Renderer that keeps its tree and acts as its own fixture |
-| `domkit.ts` | A recording DOM implementing `dom.ts`, which computes the semantic tree a browser would expose (the web renderer's WAI-ARIA mapping) and acts as a user |
-| `chromekit.ts`, `appkit.ts` | The reference Chrome and App, written from the vocabulary |
-| `driver.ts` | The scenario driver: finds controls by role and label, acts, taps the view, reads what it shows; assembled from any mix of real parts and doubles |
-| `scenarios.ts` | Scenarios as data: named stories with exact steps and expectations, and the demo's options and window size |
-| `scenario.contract.ts` | Runs each scenario by ID, and random sequences compared against the reference assembly |
+| `eventkit.ts` | `Events`, an EventEmitter with `emit` and `listenerCount`, for test doubles |
+| `driver.ts` | The test platform's app fixture: assembles a circles app from any mix of real parts and doubles, does the scenarios' actions with its controls (methods), taps through an EventDistributor at the drawing's offset, and reads what the view shows |
+| `scenarios.ts` | Scenarios as data: named stories of actions (what the user does, not which control) and what the drawing then shows, and the demo's settings |
+| `scenario.contract.ts` | `AppFixture`, which each platform writes; runs each scenario by ID, `frames.complete`, and random sequences compared against the reference assembly |
 | `scenariokit.ts` | The reference assembly: every part a test double |
-| `shapeviewkit.ts`, `routerkit.ts`, `tapkit.ts` | The reference ShapeView, router and tap recognizer, one per file, so that each task can be kept from reading the reference for its own part |
+| `shapeviewkit.ts`, `distributorkit.ts`, `circleskit.ts` | The reference ShapeView, EventDistributor and circles controller, one per file, so that each task can be kept from reading the reference for its own part |
 | `modelkit.ts` | Test doubles for the shape model: `ListCollection` and `ListIndex`, so that contracts for things built on them depend on no generated implementation. Checked by `helpers.check.ts` |
-| `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler`, `ListLayer` and `testCircle`. Checked by `helpers.check.ts` |
+| `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler`, `ListGroup` and `testCircle`. Checked by `helpers.check.ts` |
 | `observer-tables.md` | For each stateful interface, every call against every observer, with the rules that settle each cell |
 | `<interface>.contract.ts` | A contract suite for each interface, a function taking a factory. Test names are rule IDs. `shape.contract.ts` holds the rules every Shape has, which each shape type's contract runs |
 | `<impl>.test.ts` | Wires an implementation to its contract over test doubles, plus tests of behavior the spec decides for that implementation only |
@@ -54,14 +51,14 @@ it reads the spec the way a future implementer will.
 | `tasks.json`, `reports/` | Collected tasks: output hashes, token use, and each agent's report |
 | `impl-specs.md` | What to build, round by round, and the rules every implementation follows |
 | `adversaries/<RuleID>--<variant>.adversary.ts` | Deliberately wrong implementations, each run against a contract |
-| `adversaries/_quadtree.ts`, `adversaries/_layer.ts`, `adversaries/_circle.ts`, `adversaries/_view.ts` | Configurable helper implementations that adversaries are built from |
+| `adversaries/_*.ts` (quadtree, group, circle, view, scheduler, rectangle operations, distributor, circles app) | Configurable helper implementations that adversaries are built from |
 | `adversaries/helpers.check.ts` | Runs every helper, with no bug switched on, against its contract |
 | `adversaries.ts` | The runner behind `npm run adversaries` |
 | `bench.ts` | Measurements behind the Cost and Choose when header fields |
 | `method.md` | The procedure in brief |
 | `catalog.ts`, `catalog.template.html` | The script behind `npm run catalog` and the page it fills in |
 | `catalog.md`, `catalog.html` | Generated: the interface map with rule status, as a Mermaid diagram and as an interactive page |
-| `summary.ts`, `summary.pdf` | The script behind `npm run summary`, and its output: one printable page of every interface's typed members, with extends shown in each heading |
+| `summary.ts`, `summary.pdf` | The script behind `npm run summary`, and its output: printable pages of every interface's typed members, with what each extends and what extends or uses it, and the page each is on. Each group ends with the type aliases its interfaces mention. Interfaces are grouped by their extends and uses edges, each group on one page where it fits, and no type is smaller than 10 pt |
 
 ### Commands
 
@@ -71,7 +68,7 @@ it reads the spec the way a future implementer will.
 | `npm run typecheck` | No type errors | Seconds |
 | `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 5 minutes |
 | `npm run bench` | Prints the measurements | Seconds |
-| `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count. Refuses to write when a rule other than a `@requires` or `@unchecked` has no test by its ID | About 15 seconds |
+| `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count. Refuses to write when a rule isn't accounted for: a test named by its ID, or a `@requires`, a refined `@abstract`, a `@budget` or a planned `@deferred` | About 15 seconds |
 | `npm run summary` | Regenerates `summary.pdf`. Doesn't run tests | Under a second |
 
 ### Dependencies
@@ -101,7 +98,7 @@ and the interface file's `.vocab.ts`.
 - A rule's ID comes from where it sits, for example
   `ShapeLocatorQueries.inRect.exact`. The test that checks it has that name. A
   rule inherited from another interface keeps its original ID, so a
-  `Layer`'s contract runs tests named `ShapeLocatorQueries.inRect.exact`.
+  `RenderGroup`'s contract runs tests named `ShapeLocatorQueries.inRect.exact`.
 - A rule with an expression is tested by generating inputs. A rule with
   only a headline needs a hand-written test.
 - **Outside the rules.** When a caller breaks a `@requires` rule, or passes
@@ -334,8 +331,8 @@ model, which is why no separate differential test is needed.
   agent's quadtree helper itself had a rounding bug. `npm run adversaries` now
   refuses to run unless every helper passes its contract cleanly.
 - **A harness can hide a fault by how it watches.** In round 4, the
-  reference subscriber queried the layer during every add, which masked a
-  query that changed the layer; and it never unsubscribed, so a layer with
+  reference subscriber queried the group during every add, which masked a
+  query that changed the group; and it never unsubscribed, so a group with
   no subscriptions was never tested. Both were found by adversaries that
   escaped for the wrong reason.
 - **Generated sequences must be as long as they look.** In round 4, two
@@ -508,6 +505,40 @@ model, which is why no separate differential test is needed.
     now outside the rules. Next time, narrow the draft to interfaces with
     real design freedom.
   - Phase 2 then runs rounds 3 and 4 together.
+  - Layout, events and the app as behavior (2026-11-10). The platforms
+    define their events: names, structures and gestures such as a tap.
+    `layout.ts` replaces `pointer.ts`: a `LayoutObject` is a `region` in
+    window coordinates, and an `EventDistributor<M>` over the platform's
+    event map `M` delivers each event to the innermost target registered
+    for its name, with `except` and a boolean result so that a nested
+    distributor can pass a miss back to its parent; no capture. Its
+    contract is a table of single-event cases on one fixed scene (each of
+    the six ways to miss, and the hits), plus a focused property for
+    `off.removes-one` and a `snapshot` test, with 16 adversaries, all
+    caught on seeds 1 to 3. An earlier random version needed points aimed
+    at targets to reach nesting at all. `View` takes no input any more:
+    `TapSource`, `interactive` and the tap rules went, and a controller
+    gets events through a distributor with the view's surface as its
+    target. `chrome.ts`, `ui.ts` and `app.ts` were removed: an app's
+    controls are the platform's, and its behavior is the scenarios, whose
+    actions say what the user does and whose expectations are only what
+    the drawing shows. Each platform writes an `AppFixture`. Tasks 13 to
+    15, 17 and 18 went; task 19 (`rectDistributor.ts`) is new. 11
+    scenario adversaries, rebuilt on a bugged controller (`_circles.ts`).
+  - Renames and a prose review (2026-11-10). `Layer` became `RenderGroup`,
+    since what matters is that its items are drawn and invalidated
+    together; stacking is the scene's order and z-order. `DrawingLayer`,
+    `ShapeLayer`, `ListLayer` and `TestLayer` became `DrawingGroup`,
+    `ShapeGroup`, `ListGroup` and `TestGroup`, and `Scene.layers` became
+    `groups`. `Emitter` became `EventEmitter`, and `window.ts` became
+    `frames.ts` (its rule IDs are `frames.complete` and
+    `frames.fraction-of-frame`). The prose above each interface keeps only
+    definitions, testable statements and advice useful to every
+    implementer of that interface; rationale, pointers to other files and
+    advice to callers went. `Exporter` was removed, having no rules,
+    contract or implementation. "Shapes are immutable values" became
+    `Shape.immutable` (`@invariant`), tested on every shape type, with
+    an adversary that caches a query on the circle.
 
 ## Acknowledgments
 
@@ -530,13 +561,13 @@ model, which is why no separate differential test is needed.
   tested rules, `@deferred` rules with `when:` and `how:`) move into a
   compiler for the blueprint, and the catalog only presents its results.
 - Translucent wet ink drawn as chunks blends twice where chunks overlap,
-  whether drawn incrementally or not. Options include a layer opacity, with
-  each chunk drawn opaque, or a view that draws the layer's coverage with
+  whether drawn incrementally or not. Options include a group opacity, with
+  each chunk drawn opaque, or a view that draws the group's coverage with
   max blending.
-- A conversion contract between a source and the layer that presents it:
-  that the layer's items, IDs and regions are the right ones for the
-  source. The Layer contract checks the layer on its own, so for
-  `ShapeLayer` the edits are checked only as far as the layer shows them.
+- A conversion contract between a source and the group that presents it:
+  that the group's items, IDs and regions are the right ones for the
+  source. The RenderGroup contract checks the group on its own, so for
+  `ShapeGroup` the edits are checked only as far as the group shows them.
   It should also require that an item's region never changes while its ID
   stays the same; otherwise caching by ID silently breaks.
 - Snapshots for collaboration: caching a collection and its locator in a
@@ -544,14 +575,10 @@ model, which is why no separate differential test is needed.
   of both, which would change `ShapeLocator`'s mutating `add` and `remove`.
 - Checking `RecordingContext` against a real canvas once, for example by
   comparing pixels away from circle edges in the demo page.
-- Checking `domkit.ts` against a real browser once: that its semantic tree
-  matches the browser's accessibility tree for the web renderer's
-  elements, and that clicks on disabled buttons, range snapping and the
-  value property's dirty flag behave as it assumes.
 - The demo page and its static server, to be designed with the method:
   the composition root that makes the real parts for a browser window and
   connects them.
 - An editing interface in model terms (for example a stroke builder with
-  `begin`, `extend` and `end` that edits layers), if editing logic such as
+  `begin`, `extend` and `end` that edits groups), if editing logic such as
   smoothing and chunking should be shared across platforms. `Tool` and
   `PointerSample` were removed because input events are platform-specific.

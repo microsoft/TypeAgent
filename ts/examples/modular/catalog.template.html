@@ -297,7 +297,7 @@ footer { color: var(--muted); font-size: var(--step--1); }
 <div class="page">
   <header>
     <h1>Interface Atlas</h1>
-    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">window.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Click an interface to highlight its relationships. The <kbd>arrow</kbd> keys walk the rows; <kbd>Shift</kbd> follows the diagram instead, down to what it extends or uses, up to what extends or uses it, and sideways to a node sharing one of those; <kbd>Ctrl</kbd> goes to the nearest node on screen. Press <kbd>c</kbd> for the card and <kbd>Escape</kbd> to close it.</p>
+    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">frames.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Click an interface to highlight its relationships. The <kbd>arrow</kbd> keys walk the rows; <kbd>Shift</kbd> follows the diagram instead, down to what it extends or uses, up to what extends or uses it, and sideways to a node sharing one of those; <kbd>Ctrl</kbd> goes to the nearest node on screen. Press <kbd>c</kbd> for the card and <kbd>Escape</kbd> to close it.</p>
   </header>
 
   <div class="summary" id="summary"></div>
@@ -354,7 +354,7 @@ const svgEl = (tag, attrs = {}) => {
 
 let showRules = true;
 try { showRules = localStorage.getItem("atlas.rules") !== "off"; } catch {}
-// Null until the reader picks one. A deep link such as #Layer selects it and opens its card.
+// Null until the reader picks one. A deep link such as #RenderGroup selects it and opens its card.
 let selected = decodeURIComponent(location.hash.slice(1));
 if (!byName.has(selected)) selected = null;
 let ruleFilter = "all";
@@ -385,7 +385,7 @@ function summary() {
     el("span", { class: "key" }, line(false), "extends"),
     el("span", { class: "key" }, line(true), "uses"),
     el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface); border: 1px solid var(--line)" }), "geometry.ts, color.ts, shape.ts"),
-    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface-alt); border: 1px solid var(--line)" }), "window.ts, pointer.ts"),
+    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface-alt); border: 1px solid var(--line)" }), "frames.ts, pointer.ts"),
     el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--accent-soft); border: 1px solid var(--line)" }), "view.ts, shapeView.ts"),
     el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--app-soft); border: 1px solid var(--line)" }), "ui.ts, chrome.ts, app.ts"),
   ];

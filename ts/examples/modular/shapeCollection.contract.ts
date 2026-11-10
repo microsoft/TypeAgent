@@ -1,5 +1,5 @@
 // Contract tests for ShapeCollection (geometry.ts). Every implementation runs
-// this suite, including every Layer. Test names are rule IDs.
+// this suite, including every RenderGroup. Test names are rule IDs.
 //
 // The suite runs random sequences of add, remove and removeMultiple, and
 // checks the rules after every step. Removals pick among every ID the

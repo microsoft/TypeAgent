@@ -19,7 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const sources = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "window.ts", "view.ts", "shapeView.ts", "pointer.ts", "ui.ts", "chrome.ts", "app.ts"];
+const sources = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "frames.ts", "view.ts", "shapeView.ts", "layout.ts"];
 const tags = ["requires", "ensures", "invariant", "valid", "abstract", "budget", "deferred"] as const;
 type Tag = (typeof tags)[number];
 /** The scripts that measure @budget rules, each labeling a measurement with the rule's ID. */
@@ -201,7 +201,7 @@ function splitTopLevel(text: string): string[] {
 
 /**
  * The index of the interface body's opening brace: the first "{" outside
- * angle brackets, so that an extends clause such as Emitter<{ change: [] }>
+ * angle brackets, so that an extends clause such as EventEmitter<{ change: [] }>
  * isn't mistaken for the body.
  */
 function bodyStart(text: string, from: number): number {
@@ -238,6 +238,32 @@ function interfacesIn(file: string): Declaration[] {
     });
   }
   return found;
+}
+
+/** A type alias declared in an interface file, with its definition as one line. */
+export interface TypeAlias { name: string; file: string; doc: string; text: string }
+
+function aliasesIn(file: string): TypeAlias[] {
+  const text = readFileSync(file, "utf8");
+  const re = /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/)?\s*export type (\w+)/g;
+  return [...text.matchAll(re)].map((m) => {
+    const start = m.index + m[0].length;
+    let depth = 0;
+    let j = start;
+    for (; j < text.length; j++) {
+      const c = text[j];
+      if ("({[<".includes(c)) depth++;
+      else if (")}]".includes(c) || (c === ">" && text[j - 1] !== "=")) depth--;
+      else if (c === ";" && depth === 0) break;
+    }
+    const definition = `type ${m[2]}${text.slice(start, j)}`.replace(/\s+/g, " ").replace(/= \| /, "= ").trim();
+    return { name: m[2], file, doc: parseDoc(m[1]).doc, text: definition };
+  });
+}
+
+/** Every exported type alias in the interface files. */
+export function typeAliases(): TypeAlias[] {
+  return sources.flatMap(aliasesIn);
 }
 
 /** The known interface names a piece of type text mentions. */

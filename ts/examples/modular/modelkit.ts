@@ -1,6 +1,6 @@
 // Test doubles for the shape model: a collection and a locator, each the
 // simplest correct version, so that a contract for something built on them
-// (such as a layer) doesn't depend on any generated implementation.
+// (such as a group) doesn't depend on any generated implementation.
 // helpers.check.ts runs their contracts on them.
 
 import type { Point, Rectangle } from "./geometry.ts";

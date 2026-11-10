@@ -35,154 +35,77 @@ the collection.
 Unspecified on purpose: `add` with an ID that is already indexed
 (`add.new-id`), and shapes outside ±1e300 (`add.in-range`).
 
-## Layer
+## RenderGroup
 
-A Layer (`view.ts`) is read-only: its changes come from edits to its
+A RenderGroup (`view.ts`) is read-only: its changes come from edits to its
 source. Its table has those edits as calls, as the contract's fixture makes
-them, and the layer's own observers, `on` and `off`. The Emitter rules
-(`events.ts`) are checked through the layer's change event.
+them, and the group's own observers, `on` and `off`. The EventEmitter rules
+(`events.ts`) are checked through the group's change event.
 
 | Call | get, size, forEach, compareZ | inRect, atPoint results | Earlier `out` arrays | Listener calls | Returns |
 |---|---|---|---|---|---|
-| An edit that changes the items | `size`, `z-order`, `get-agrees`, `stable`, `no-reuse` | `*.exact` over `regions` | `no-retain` | `notifies`, `Emitter.on.notified`, `Emitter.off.removes-one`, `Emitter.order`, `Emitter.snapshot` | deferred† |
+| An edit that changes the items | `size`, `z-order`, `get-agrees`, `stable`, `no-reuse` | `*.exact` over `regions` | `no-retain` | `notifies`, `EventEmitter.on.notified`, `EventEmitter.off.removes-one`, `EventEmitter.order`, `EventEmitter.snapshot` | deferred† |
 | An edit that changes nothing | `read-only`\* | `*.exact` | `no-retain` | `quiet` | deferred† |
 | `get`, `size`, `forEach`, `compareZ` | `read-only`, `compareZ.zero-iff-same`, `compareZ.antisymmetric` | `read-only` | `no-retain` | `quiet` | `get-agrees`, `size`, `z-order`, `compareZ.*` |
 | `inRect`, `atPoint` | `read-only` | `read-only`; results by `*.exact`, `*.once`, `*.count` | `*.append`, `no-retain` | `quiet` | `*.count` |
-| `on`, `off` | `read-only` | `read-only` | `no-retain` | `Emitter.on.notified`, `Emitter.off.removes-one`, `quiet` | `this`, by type |
+| `on`, `off` | `read-only` | `read-only` | `no-retain` | `EventEmitter.on.notified`, `EventEmitter.off.removes-one`, `quiet` | `this`, by type |
 
 \* An edit that changes nothing leaves the items as they were by
 definition; `read-only` covers reads made by listeners during an edit.
 
-† Edits belong to the source, not the layer, so what they return is the
-source's business. For `ShapeLayer` they follow `ShapeCollection`'s rules,
+† Edits belong to the source, not the group, so what they return is the
+source's business. For `ShapeGroup` they follow `ShapeCollection`'s rules,
 which the conversion contract below will check.
 
 Unspecified on purpose: a listener that changes the source while it is
 being called, or throws. A listener that adds or removes listeners is
-covered by `Emitter.snapshot`. Not yet covered: whether the
-layer's items are the right ones for its source. That belongs to a
-conversion contract between a source and its layer, which is deferred; for
-`ShapeLayer` the fixture's edits are checked only as far as the layer
+covered by `EventEmitter.snapshot`. Not yet covered: whether the
+group's items are the right ones for its source. That belongs to a
+conversion contract between a source and its group, which is deferred; for
+`ShapeGroup` the fixture's edits are checked only as far as the group
 shows them.
 
 ## ShapeView
 
 A ShapeView (`shapeView.ts`) is checked with its View rules (`view.ts`).
 Its observables are what its surface shows (`painted`), its frame requests
-(through a `ManualScheduler`), and its listeners on the scene's layers.
+(through a `ManualScheduler`), and its listeners on the scene's groups.
 Rule IDs without a prefix are `View`'s.
 
-| Call | What the surface shows | Frame requests | Listeners on layers | Returns |
+| Call | What the surface shows | Frame requests | Listeners on groups | Returns |
 |---|---|---|---|---|
-| Creating the view | unspecified until the first frame | `ShapeView.first-frame` | one listener per layer (`one-listener`) | — |
-| A layer change | `layer-change` (unchanged until a frame) | `layer-change` | `one-listener` | — |
+| Creating the view | unspecified until the first frame | `ShapeView.first-frame` | one listener per group (`one-listener`) | — |
+| A group change | `group-change` (unchanged until a frame) | `group-change` | `one-listener` | — |
 | `frame()` | `ShapeView.frame.paints` | `idle` | `one-listener` | nothing |
-| Reading `scene`, `viewport`, `interactive` | `read-only` | `read-only` | `read-only` | `viewport` is the identity, by the ShapeView doc§ |
+| Reading `scene`, `viewport` | `read-only` | `read-only` | `read-only` | `viewport` is the identity, by the ShapeView doc§ |
 | `dispose()`, and anything after it | `dispose.inert` | `dispose.detaches` | `dispose.detaches` | nothing |
 | Setting `viewport` | outside the rules for ShapeView | outside the rules | outside the rules | — |
-| Setting `interactive` | no input yet, so nothing to observe | — | — | — |
-| `on`, `off` (viewport) | — | — | — | the Emitter rules apply; `viewport` is never emitted yet |
+| `on`, `off` (viewport) | — | — | — | the EventEmitter rules apply; `viewport` is never emitted yet |
 
 § No test reads the viewport's value; the identity is stated in prose.
 
 Unspecified on purpose: what the surface shows before the first frame,
 and how a view draws (only the result at each point is a rule). Not yet
-covered: viewports other than the identity, input, and shape kinds other
-than Circle.
+covered: viewports other than the identity, and shape kinds other than
+Circle. A view takes no input (`view.ts`).
 
-## Chrome
+## EventDistributor
 
-A Chrome (`chrome.ts`) is checked with `chrome.contract.ts`. Its
-observables are its state, its layer's items, the changes it emits, its
-listeners on the layer, and what `present` returns. Rule IDs without a
-prefix are `Chrome`'s.
+An EventDistributor (`layout.ts`) is observed through which listeners an
+event reaches, in what order, and what `distribute` returns. Rule IDs
+without a prefix are `EventDistributor`'s.
 
-| Call | State | Layer | Emits change | Listeners on layer | Returns |
-|---|---|---|---|---|---|
-| Making a chrome | `starts` | unchanged | — | `one-listener` | — |
-| `dispatch` that acts (mode, color, radius) | `dispatch.mode`, `dispatch.color`, `dispatch.radius` | unchanged (`dispatch.ignores` covers the rest) | `emits` | `one-listener` | nothing |
-| `dispatch` of clear | count follows (`counts`) | `dispatch.clear` | `emits` | `one-listener` | nothing |
-| `dispatch` that doesn't act | `dispatch.ignores` | `dispatch.ignores` | `dispatch.ignores` | `one-listener` | nothing |
-| `tap` in draw mode | count follows (`counts`) | `tap.draws` | `emits` | `one-listener` | nothing |
-| `tap` in erase mode | count follows (`counts`) | `tap.erases` | `emits` | `one-listener` | nothing |
-| A change to the layer from elsewhere | `counts` | — | `emits` | `one-listener` | — |
-| `present` | `present.pure` | `present.pure` | `present.pure` | unchanged | `present.exact`, and SemanticNode's `@valid` rules |
-| Reading `state` | unchanged | unchanged | none | unchanged | a value (`state.snapshot`) |
-| `dispose()`, and anything after it | no longer followed | `dispose.detaches` (only edits from elsewhere) | `dispose.detaches` | `dispose.detaches` | nothing |
-| `on`, `off` | — | — | — | — | the Emitter rules apply |
-
-Not covered: how a chrome behaves when its layer holds shapes that aren't
-circles, or when its options break their `@valid` rules; both are outside the
-rules.
-
-## Renderer
-
-A Renderer (`ui.ts`) is checked with `ui.contract.ts` through a fixture that
-reads the platform's widgets and acts as the user. Rule IDs without a
-prefix are `Renderer`'s.
-
-| Call or action | What the platform presents | Input emitted | Widgets |
-|---|---|---|---|
-| Making a renderer | nothing (`starts-empty`) | — | — |
-| `render(tree)` | `render.presents` | none (`render.quiet`) | kept for keys whose role is unchanged (`stable`) |
-| The user activates an enabled button, or an enabled radio that isn't selected | unchanged until the next render | `reports` | unchanged |
-| The user sets an enabled slider | the slider shows the value until the next render | `reports` | unchanged |
-| Any other action (disabled, selected radio, other roles, unknown key) | unchanged | none (`silent`) | unchanged |
-| `dispose()`, and anything after it | nothing (`dispose.removes`) | none (`dispose.removes`) | — |
-| `on`, `off` | — | the Emitter rules apply | — |
-
-Between a slider drag and the next render, the platform shows the user's
-value, which may differ from the tree's. The rules don't say what is
-presented then; only the next render's result is a rule.
-
-## App
-
-An App (`app.ts`) is checked with `app.contract.ts`, and the circles app as
-a whole with the scenarios (`scenarios.ts`). The Scenarios column names the
-scenarios that exercise each row through a driver. Rule IDs without a
-prefix are `App`'s.
-
-| Event | Renderer's tree | Chrome calls | View | Listeners | Parts disposed | Scenarios |
-|---|---|---|---|---|---|---|
-| Connecting | the chrome's controls (`starts`) | `present` | interactive (`starts`) | one each (`one-listener`) | none | `starts` |
-| The chrome emits change | the chrome's new controls (`renders`) | `present` | — | unchanged | none | `draw-one`, `clear`, `erase-misses` |
-| The renderer emits input | follows through the chrome (`renders`) | `dispatch` (`forwards-input`) | — | unchanged | none | `color-and-radius`, `erase-disables-drawing-controls`, `clear-in-erase-mode` |
-| The view emits tap | follows through the chrome (`renders`) | `tap` (`forwards-taps`) | — | unchanged | none | `draw-one`, `erase-top-of-overlap`, `draw-after-erase-is-on-top` |
-| `dispose()`, twice | unchanged; the renderer is disposed | none afterward | disposed | removed (`dispose.detaches`) | each once, chrome, view, renderer (`dispose.detaches`) | — |
-
-## RootRegion and Region
-
-A router (`pointer.ts`) is checked with `pointer.contract.ts`, which keeps
-its own model of the regions in window coordinates. The observables are
-which regions emit each delivered event, with what point and time, and each
-region's bounds. Rule IDs without a prefix are `RootRegion`'s.
-
-| Call | Which region receives | Point and time | Regions |
-|---|---|---|---|
-| `deliver` with no press in progress | `innermost-listener` | `local` | unchanged |
-| `deliver` during a press its down's receiver captured | `capture` | `local` | unchanged |
-| `deliver` during a press after the captor was removed | none (`released-capture`) | — | unchanged |
-| `deliver` during a press no region received | none (`uncaptured`) | — | unchanged |
-| `add(rect)` | — | — | a new child with bounds `rect` (`Region.add.adds`) |
-| `remove()` | none for it or under it, from then on (`Region.remove.detaches`) | — | gone from its parent's children |
-| `on`, `off` | change who qualifies as a listener | — | — |
-
-Outside the rules: a down delivered during a press, `add` that breaks its
-requirements, and removing the root.
-
-## TapRecognizer
-
-A TapRecognizer (`pointer.ts`) is checked with `tapRecognizer.contract.ts`,
-on a region nested in a reference root. The observables are the taps it
-emits and its listeners on the region.
-
-| Event on its region | Taps emitted | Listeners on the region |
+| Call | Which listeners a later event reaches | What distribute returns |
 |---|---|---|
-| A press that stays within the slop | one, at the down's point, at the up (`taps`) | `one-listener` |
-| A press that wanders past the slop, even if it comes back | none (`only-taps`) | `one-listener` |
-| A press that starts outside the region | none: the region never receives it (`only-taps`) | `one-listener` |
-| A hover move, or an up with no press | none (`only-taps`) | `one-listener` |
-| `dispose()`, and anything after it | none (`dispose.detaches`) | none (`dispose.detaches`) |
+| `on` | `on.registers` | `distribute.reports` |
+| `off` | `off.removes-one` | `distribute.reports` |
+| `distribute` | `distribute.innermost`, `distribute.only-enclosed`; registrations changed by its listeners, `snapshot` | `distribute.reports` |
+| Changing a target's `region` | `live-regions` | `live-regions` |
+| Calling `distribute` detached | `distribute.detached` | `distribute.detached` |
+| Reading `region`, calling `locate` | no rule | no rule |
+
+Not yet covered: the bottom row. Nothing says that reading `region` or
+calling `locate` leaves the registrations as they were.
 
 ## What the tables found
 
@@ -222,6 +145,10 @@ could change with it; that became `Chrome.state.snapshot`. And the
 renderer's widget column needed a rule for focus and drags to survive a
 render, which became `Renderer.stable`.
 
-The router's table found an empty row: nothing said where a press goes
+The chrome, renderer, app, router and tap recognizer tables went with
+those interfaces in round 7. The router's table found an empty row: nothing said where a press goes
 when no region receives its down. It became `RootRegion.uncaptured`: the
 press belongs to no region, and its moves and up go nowhere.
+
+The EventDistributor table found one empty row: reading `region` and
+calling `locate` (above). It is left open for the human's decision.

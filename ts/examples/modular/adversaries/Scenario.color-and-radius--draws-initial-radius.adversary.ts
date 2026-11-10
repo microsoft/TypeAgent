@@ -1,6 +1,6 @@
-// Adversary: the chrome draws with the initial radius. Every other part is the reference.
+// Adversary: The app always draws with the initial radius. Every other part is the reference.
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitDriver } from "../scenariokit.ts";
-import { makeTestChrome } from "./_chrome.ts";
+import { kitFixture } from "../scenariokit.ts";
+import { makeTestCircles } from "./_circles.ts";
 
-scenarioContract(() => kitDriver({ chrome: makeTestChrome("draws-initial-radius") }), () => kitDriver());
+scenarioContract(() => kitFixture({ app: makeTestCircles("draws-initial-radius") }), () => kitFixture());

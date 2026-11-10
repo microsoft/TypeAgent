@@ -1,32 +1,25 @@
 import { CanvasShapeView } from "./canvasShapeView.ts";
 import { shapeViewContract } from "./shapeView.contract.ts";
-import { RecordingContext } from "./viewkit.ts";
-import { ListLayer, testCircle } from "./viewkit.ts";
-import { RefChrome } from "./chromekit.ts";
-import { TreeRenderer } from "./uikit.ts";
-import { kitConnect } from "./appkit.ts";
-import { RefRootRegion } from "./routerkit.ts";
-import { RefTaps } from "./tapkit.ts";
+import { RecordingContext, ListGroup, testCircle } from "./viewkit.ts";
+import { RefDistributor } from "./distributorkit.ts";
+import { RefCircles } from "./circleskit.ts";
 import { scenarioContract } from "./scenario.contract.ts";
-import { makeDriver } from "./driver.ts";
-import { demoOptions, demoSize } from "./scenarios.ts";
+import { makeFixture } from "./driver.ts";
+import { demoSettings } from "./scenarios.ts";
 
-shapeViewContract((scene, scheduler, taps, width, height) => {
+shapeViewContract((scene, scheduler, width, height) => {
   const recording = new RecordingContext(width, height);
-  return { view: new CanvasShapeView(scene, recording.context, scheduler, taps), painted: (p) => recording.painted(p) };
+  return { view: new CanvasShapeView(scene, recording.context, scheduler), painted: (p) => recording.painted(p) };
 });
 
-// The scenarios, with every other part a test double. This task never sees the reference for its own part, so the comparison with the reference assembly runs in app.integration.test.ts.
-scenarioContract(() => makeDriver({
-  layer: () => new ListLayer(),
+// The scenarios, with every other part a test double. This task never sees the reference for its own part, so there is no comparison with the reference assembly here.
+scenarioContract(() => makeFixture({
+  group: () => new ListGroup(),
   makeCircle: testCircle,
-  chrome: (layer, options, makeCircle) => new RefChrome(layer, options, makeCircle),
-  view: (scene, scheduler, taps, width, height) => {
+  view: (scene, scheduler, width, height) => {
     const recording = new RecordingContext(width, height);
-    return { view: new CanvasShapeView(scene, recording.context, scheduler, taps), painted: (p) => recording.painted(p) };
+    return { view: new CanvasShapeView(scene, recording.context, scheduler), painted: (p) => recording.painted(p) };
   },
-  renderer: () => new TreeRenderer(),
-  connect: kitConnect,
-  root: (width, height) => new RefRootRegion(width, height),
-  taps: (region, slop) => new RefTaps(region, slop),
-}, demoOptions, demoSize));
+  distributor: (region, locate) => new RefDistributor(region, locate),
+  app: (parts) => new RefCircles(parts),
+}, demoSettings));

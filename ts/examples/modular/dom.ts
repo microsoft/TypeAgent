@@ -1,15 +1,14 @@
 /**
- * A platform subset: the part of the web's DOM that web implementations of
- * ui.ts may use. It is not part of the blueprint. Its names and signatures
+ * A platform subset: the part of the web's DOM that web implementations
+ * may use. It is not part of the blueprint. Its names and signatures
  * are the DOM's, and so is its meaning, so it has no rules of its own; a
  * browser is the reference.
  *
  * Two checks keep it honest, as for canvas.ts. platform/dom.check.ts
  * compiles with the DOM library and fails unless the browser's types fit.
- * The recording document in domkit.ts implements only these members and
- * computes the semantic tree a browser would expose from the elements, so
- * an implementation that needs more fails to compile; the fix is to add
- * the member here and teach the recording document what it does.
+ * The second, a recording document that implements only these members, so
+ * that an implementation that needs more fails to compile, went with the
+ * web renderer (domkit.ts); a new one comes with the web app (STATE.md).
  *
  * Members are added when an implementation spec decides to use them, not
  * before.

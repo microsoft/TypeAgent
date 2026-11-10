@@ -1,6 +1,6 @@
-// Adversary: the router leaves points in window coordinates, so a tap on the view lands a toolbar's height too low. Every other part is the reference.
+// Adversary: The app uses a tap as it is in the window, so circles land a controls-height too low. Every other part is the reference.
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitDriver } from "../scenariokit.ts";
-import { makeTestRoot } from "./_router.ts";
+import { kitFixture } from "../scenariokit.ts";
+import { makeTestCircles } from "./_circles.ts";
 
-scenarioContract(() => kitDriver({ root: makeTestRoot("window-points") }), () => kitDriver());
+scenarioContract(() => kitFixture({ app: makeTestCircles("window-points") }), () => kitFixture());

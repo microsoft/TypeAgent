@@ -17,7 +17,8 @@ export type CircleBug =
   | "touch-is-true"         // intersects is distance <= radius, so a disk that only touches r intersects it
   | "accepts-zero-radius"   // makeCircle accepts a radius of 0
   | "keeps-center-object"   // makeCircle keeps the caller's center object
-  | "alpha-as-byte";        // the color's alpha is stored from 0 to 255, as some platforms use
+  | "alpha-as-byte"         // the color's alpha is stored from 0 to 255, as some platforms use
+  | "caches-on-shape";      // contains remembers its last point in a field of the circle
 
 export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) => Circle {
   return (f) => {
@@ -31,10 +32,14 @@ export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) 
     const radius = f.radius;
     const box = inflate(extents([center]), bug === "box-uses-diameter" ? 2 * radius : radius);
     const dist = (p: Point) => Math.hypot(p.x - center.x, p.y - center.y);
-    const contains = (p: Point) =>
+    const remember = (p: Point) => {
+      if (bug === "caches-on-shape") (circle as Circle & { lastQuery?: Point }).lastQuery = { x: p.x, y: p.y };
+      return true;
+    };
+    const contains = (p: Point) => remember(p) && (
       bug === "contains-closed" ? dist(p) <= radius
       : bug === "contains-strict" ? rectContains(box, p) && dist(p) < radius
-      : rectContains(box, p) && dist(p) <= radius;
+      : rectContains(box, p) && dist(p) <= radius);
     const intersects = (r: Rectangle) => {
       if (isEmpty(r)) return false;
       if (bug !== "touch-is-true" && !rectIntersects(box, r)) return false;
@@ -49,6 +54,7 @@ export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) 
       if (d !== radius) return d < radius;
       return rectContains(r, q) && contains(q);
     };
-    return { kind: "circle", center, radius, color, boundingBox: () => box, contains, intersects };
+    const circle: Circle = { kind: "circle", center, radius, color, boundingBox: () => box, contains, intersects };
+    return circle;
   };
 }

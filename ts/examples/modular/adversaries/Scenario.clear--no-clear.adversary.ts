@@ -1,6 +1,6 @@
-// Adversary: the view draws over its last frame without clearing it. Every other part is the reference.
+// Adversary: The view draws over its last frame without clearing it. Every other part is the reference.
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitDriver } from "../scenariokit.ts";
+import { kitFixture } from "../scenariokit.ts";
 import { makeTestView } from "./_view.ts";
 
-scenarioContract(() => kitDriver({ view: makeTestView("no-clear") }), () => kitDriver());
+scenarioContract(() => kitFixture({ view: makeTestView("no-clear") }), () => kitFixture());

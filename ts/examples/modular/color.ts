@@ -1,8 +1,5 @@
 /**
- * Colors. Kept apart from geometry and shapes because color never affects
- * where a shape is: shapes such as InkStroke carry a Color, but bounding
- * boxes, queries and locators never read it. Rules follow the format
- * described in rules.ts.
+ * Colors. Rules follow the format described in rules.ts.
  *
  * @module
  */

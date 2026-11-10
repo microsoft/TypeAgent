@@ -23,6 +23,18 @@ export function shapeContract(shapes: fc.Arbitrary<Shape>, offGrid: fc.Arbitrary
       s.contains(p) === s.contains(p) && s.intersects(r) === s.intersects(r)));
   });
 
+  // A shape's data fields, deeply, as plain values; methods are left out.
+  const fields = (s: Shape) => JSON.parse(JSON.stringify(s));
+  test("Shape.immutable", () => {
+    fc.assert(fc.property(shapes, point(14), rect(14), (s, p, r) => {
+      const before = fields(s);
+      s.boundingBox();
+      s.contains(p);
+      s.intersects(r);
+      return deepEqual(fields(s), before);
+    }));
+  });
+
   test("Rectangle.non-negative-size", () => {
     fc.assert(fc.property(shapes, (s) => validRect(s.boundingBox())));
     fc.assert(fc.property(offGrid, ({ shape: s }) => validRect(s.boundingBox())));

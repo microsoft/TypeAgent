@@ -1,11 +1,11 @@
-// An Emitter (events.ts) for test doubles: Node's semantics, plus emit and
+// An EventEmitter (events.ts) for test doubles: Node's semantics, plus emit and
 // a count of registrations, which the contracts' one-listener rules read.
 // Checked through the doubles built on it: helpers.check.ts runs their
 // contracts.
 
-import type { Emitter, EventMap } from "./events.ts";
+import type { EventEmitter, EventMap } from "./events.ts";
 
-export class Events<M extends EventMap> implements Emitter<M> {
+export class Events<M extends EventMap> implements EventEmitter<M> {
   private readonly lists = new Map<string, unknown[]>();
 
   on<E extends keyof M & string>(event: E, listener: (...args: M[E]) => void): this {

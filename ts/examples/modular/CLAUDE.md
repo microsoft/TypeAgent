@@ -4,8 +4,8 @@ This directory is an experiment in an interface-first way of building
 software with agents. A human and a design agent agree on interfaces whose
 rules are exact enough to test. Fresh agents then implement them, and the
 contracts, scenarios and adversaries check the result. The circles app is
-the worked example: shapes, a view, chrome with controls, layout and mouse
-routing.
+the worked example: shapes, a view, layout and event distribution, and the
+app's behavior as scenarios.
 
 Where things stand now, and what has been deferred, is in `STATE.md`.
 

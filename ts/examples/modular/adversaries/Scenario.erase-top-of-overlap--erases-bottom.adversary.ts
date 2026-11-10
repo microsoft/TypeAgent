@@ -1,6 +1,6 @@
-// Adversary: the chrome erases the bottom circle at the point. Every other part is the reference.
+// Adversary: The app erases the bottom circle at the point. Every other part is the reference.
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitDriver } from "../scenariokit.ts";
-import { makeTestChrome } from "./_chrome.ts";
+import { kitFixture } from "../scenariokit.ts";
+import { makeTestCircles } from "./_circles.ts";
 
-scenarioContract(() => kitDriver({ chrome: makeTestChrome("erases-bottom") }), () => kitDriver());
+scenarioContract(() => kitFixture({ app: makeTestCircles("erases-bottom") }), () => kitFixture());

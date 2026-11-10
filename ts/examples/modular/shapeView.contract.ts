@@ -3,10 +3,10 @@
 // whatever surface it draws on: its fixture reports what each point shows.
 // Test names are rule IDs.
 //
-// The suite builds a scene of one to three ListLayers (viewkit.ts), and a
+// The suite builds a scene of one to three ListGroups (viewkit.ts), and a
 // view of it driven by a ManualScheduler. Random sequences add and remove
 // circles, run frames and read the view; some sequences dispose of the view
-// partway, and some tap the surface, with the view interactive or not.
+// partway.
 // After every step the rules are checked at every half-integer point of a
 // 12 x 12 surface. Centers and radii are integers, so no sample
 // point is ever on a circle's edge or at its maximum x or y.
@@ -19,10 +19,10 @@ import type { Color } from "./color.ts";
 import type { Circle, Shape } from "./shape.ts";
 import type { ShapeView } from "./shapeView.ts";
 import type { ItemId, Scene } from "./view.ts";
-import type { FrameScheduler, TapSource } from "./window.ts";
+import type { FrameScheduler } from "./frames.ts";
 import { circles, deepEqual, over, validViewport } from "./shapeView.vocab.ts";
 import { coverage } from "./testkit.ts";
-import { ListLayer, ManualScheduler, ManualTaps, testCircle } from "./viewkit.ts";
+import { ListGroup, ManualScheduler, testCircle } from "./viewkit.ts";
 
 /** A view, and what its surface shows at each point. */
 export interface ShapeViewFixture {
@@ -30,7 +30,7 @@ export interface ShapeViewFixture {
   painted(p: Point): Color;
 }
 
-export type MakeShapeView = (scene: Scene<Shape>, scheduler: FrameScheduler, taps: TapSource, width: number, height: number) => ShapeViewFixture;
+export type MakeShapeView = (scene: Scene<Shape>, scheduler: FrameScheduler, width: number, height: number) => ShapeViewFixture;
 
 const width = 12;
 const height = 12;
@@ -42,54 +42,46 @@ const color: fc.Arbitrary<Color> = fc.constantFrom(
 );
 
 type Op =
-  | { op: "add"; layer: number; center: Point; radius: number; color: Color }
-  | { op: "remove"; layer: number; pick: number }
+  | { op: "add"; group: number; center: Point; radius: number; color: Color }
+  | { op: "remove"; group: number; pick: number }
   | { op: "frame" }
   | { op: "read" }
-  | { op: "tap"; p: Point }
-  | { op: "interactive"; value: boolean }
   | { op: "dispose" };
 
 const opArb: fc.Arbitrary<Op> = fc.oneof(
   {
     weight: 4,
     arbitrary: fc.record({
-      layer: fc.nat(),
+      group: fc.nat(),
       center: fc.record({ x: fc.integer({ min: -2, max: width + 2 }), y: fc.integer({ min: -2, max: height + 2 }) }),
       radius: fc.integer({ min: 1, max: 5 }),
       color,
     }).map((a): Op => ({ op: "add", ...a })),
   },
-  { weight: 2, arbitrary: fc.record({ layer: fc.nat(), pick: fc.nat() }).map((a): Op => ({ op: "remove", ...a })) },
+  { weight: 2, arbitrary: fc.record({ group: fc.nat(), pick: fc.nat() }).map((a): Op => ({ op: "remove", ...a })) },
   { weight: 3, arbitrary: fc.constant<Op>({ op: "frame" }) },
   { weight: 1, arbitrary: fc.constant<Op>({ op: "read" }) },
-  {
-    weight: 2,
-    arbitrary: fc.record({ x: fc.integer({ min: 0, max: width - 1 }), y: fc.integer({ min: 0, max: height - 1 }) })
-      .map((p): Op => ({ op: "tap", p: { x: p.x + 0.25, y: p.y + 0.75 } })),
-  },
-  { weight: 1, arbitrary: fc.boolean().map((value): Op => ({ op: "interactive", value })) },
 );
 
-/** A layer count, and ops; a third of sequences dispose of the view partway. */
+/** A group count, and ops; a third of sequences dispose of the view partway. */
 const sequence = fc.record({
-  layers: fc.integer({ min: 1, max: 3 }),
+  groups: fc.integer({ min: 1, max: 3 }),
   ops: fc.array(opArb, { minLength: 1, maxLength: 30, size: "max" }),
   disposeAt: fc.option(fc.nat({ max: 29 }), { freq: 2 }),
-}).map(({ layers, ops, disposeAt }) => ({
-  layers,
+}).map(({ groups, ops, disposeAt }) => ({
+  groups,
   ops: disposeAt === null ? ops : [...ops.slice(0, disposeAt), { op: "dispose" } as Op, ...ops.slice(disposeAt)],
 }));
-type Sequence = { layers: number; ops: Op[] };
+type Sequence = { groups: number; ops: Op[] };
 
 interface Step {
   op: Op;
   view: ShapeView;
   scene: Scene<Shape>;
-  layers: ListLayer[];
+  groups: ListGroup[];
   /** Whether dispose was called before this step. */
   disposed: boolean;
-  /** Whether an edit changed a layer during this step. */
+  /** Whether an edit changed a group during this step. */
   changing: boolean;
   /** Whether a change is still to be drawn after this step: true from creation, or a change, until a frame. */
   dirty: boolean;
@@ -99,13 +91,9 @@ interface Step {
   /** What each sample point showed before and after the step. */
   before: Color[];
   after: Color[];
-  /** Each layer's listener count, and then the tap source's, before and after the step. */
+  /** Each group's listener count before and after the step. */
   listenersBefore: number[];
   listenersAfter: number[];
-  /** Whether the view was interactive before the step. */
-  interactive: boolean;
-  /** The points the view emitted as tap during the step. */
-  tapped: Point[];
 }
 
 /** What each sample point should show for the scene as it is now. */
@@ -119,16 +107,13 @@ const sameCounts = (a: number[], b: number[]) => a.every((n, i) => n === b[i]);
 
 /** Runs a sequence against a fresh view, calling check after each step. */
 function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void {
-  const layers = Array.from({ length: seq.layers }, () => new ListLayer());
-  const scene: Scene<Shape> = { layers };
+  const groups = Array.from({ length: seq.groups }, () => new ListGroup());
+  const scene: Scene<Shape> = { groups };
   const scheduler = new ManualScheduler();
-  const taps = new ManualTaps();
-  const { view, painted } = make(scene, scheduler, taps, width, height);
+  const { view, painted } = make(scene, scheduler, width, height);
   const look = () => samples.map(painted);
-  const counts = () => [...layers.map((l) => l.listenerCount()), taps.listenerCount("tap")];
-  let tapped: Point[] = [];
-  view.on("tap", (p) => tapped.push(p));
-  const returned: ItemId[][] = layers.map(() => []);
+  const counts = () => groups.map((l) => l.listenerCount());
+  const returned: ItemId[][] = groups.map(() => []);
   let disposed = false;
   let dirty = true;
   let shown = look();
@@ -136,22 +121,20 @@ function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void
     const before = shown;
     const requestedBefore = scheduler.isRequested(view);
     const listenersBefore = counts();
-    const interactive = view.interactive;
-    tapped = [];
     let changing = false;
     switch (op.op) {
       case "add": {
-        const i = op.layer % layers.length;
-        returned[i].push(layers[i].add(testCircle(op)));
+        const i = op.group % groups.length;
+        returned[i].push(groups[i].add(testCircle(op)));
         changing = true;
         break;
       }
       case "remove": {
-        const i = op.layer % layers.length;
+        const i = op.group % groups.length;
         const ids = returned[i];
-        // ids.length stands for an ID the layer never returned.
+        // ids.length stands for an ID the group never returned.
         const n = op.pick % (ids.length + 1);
-        changing = layers[i].remove(n < ids.length ? ids[n] : (1e9 as ItemId));
+        changing = groups[i].remove(n < ids.length ? ids[n] : (1e9 as ItemId));
         break;
       }
       case "frame":
@@ -161,13 +144,6 @@ function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void
       case "read":
         void view.scene;
         void view.viewport;
-        void view.interactive;
-        break;
-      case "tap":
-        taps.emit("tap", op.p);
-        break;
-      case "interactive":
-        view.interactive = op.value;
         break;
       case "dispose":
         view.dispose();
@@ -176,9 +152,9 @@ function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void
     if (changing) dirty = true;
     shown = look();
     check({
-      op, view, scene, layers, disposed, changing, dirty, requestedBefore,
+      op, view, scene, groups, disposed, changing, dirty, requestedBefore,
       requestedAfter: scheduler.isRequested(view), before, after: shown,
-      listenersBefore, listenersAfter: counts(), interactive, tapped,
+      listenersBefore, listenersAfter: counts(),
     });
     if (op.op === "dispose") disposed = true;
   }
@@ -187,7 +163,7 @@ function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void
 /** The input classes one sequence reaches, for the coverage test. */
 function labelsOf(make: MakeShapeView, seq: Sequence): Set<string> {
   const seen = new Set<string>();
-  let changedLayers = new Set<number>();
+  let changedGroups = new Set<number>();
   run(make, seq, (s) => {
     if (s.op.op === "add" && (s.op.center.x - s.op.radius < 0 || s.op.center.x + s.op.radius > width)) {
       seen.add("circle partly off the surface");
@@ -195,25 +171,23 @@ function labelsOf(make: MakeShapeView, seq: Sequence): Set<string> {
     if (s.op.op === "dispose" && s.requestedBefore) seen.add("dispose with a frame pending");
     if (s.disposed && s.changing) seen.add("edit after dispose");
     if (s.disposed && s.op.op === "frame") seen.add("frame after dispose");
-    if (s.op.op === "tap" && s.disposed && s.interactive) seen.add("tap after dispose, interactive");
-    if (s.op.op === "tap" && !s.disposed) seen.add(s.interactive ? "tap while interactive" : "tap while not interactive");
     if (s.disposed) return;
-    if (s.changing && (s.op.op === "add" || s.op.op === "remove")) changedLayers.add(s.op.layer % s.layers.length);
+    if (s.changing && (s.op.op === "add" || s.op.op === "remove")) changedGroups.add(s.op.group % s.groups.length);
     if (s.op.op === "remove" && s.changing) seen.add("removal");
     if (s.op.op !== "frame") return;
     if (!s.requestedBefore) seen.add("frame with nothing changed");
-    if (changedLayers.size >= 2) seen.add("two layers changed before a frame");
-    changedLayers = new Set();
+    if (changedGroups.size >= 2) seen.add("two groups changed before a frame");
+    changedGroups = new Set();
     const all = circles(s.scene);
     const owner = new Map<Circle, number>();
-    s.layers.forEach((layer, i) => layer.forEach((_, c) => owner.set(c as Circle, i)));
+    s.groups.forEach((group, i) => group.forEach((_, c) => owner.set(c as Circle, i)));
     for (const p of samples) {
       const here = all.filter((c) => c.contains(p));
       if (here.length < 2) continue;
       if (here.at(-1)!.color.a < 1) seen.add("translucent circle over another");
-      if (new Set(here.map((c) => owner.get(c))).size >= 2) seen.add("circles overlap across layers");
+      if (new Set(here.map((c) => owner.get(c))).size >= 2) seen.add("circles overlap across groups");
       if (here.some((c, i) => i > 0 && owner.get(c) === owner.get(here[i - 1]) && !deepEqual(c.color, here[i - 1].color))) {
-        seen.add("circles of different colors overlap within a layer");
+        seen.add("circles of different colors overlap within a group");
       }
     }
   });
@@ -232,7 +206,7 @@ export function shapeViewContract(make: MakeShapeView): void {
     test("ShapeView.first-frame", () => {
       fc.assert(fc.property(fc.integer({ min: 1, max: 3 }), (n) => {
         const scheduler = new ManualScheduler();
-        const { view } = make({ layers: Array.from({ length: n }, () => new ListLayer()) }, scheduler, new ManualTaps(), width, height);
+        const { view } = make({ groups: Array.from({ length: n }, () => new ListGroup()) }, scheduler, width, height);
         return scheduler.isRequested(view);
       }));
     });
@@ -241,7 +215,7 @@ export function shapeViewContract(make: MakeShapeView): void {
     test("View.viewport.set-equal", () => {
       fc.assert(fc.property(fc.integer({ min: 1, max: 3 }), (n) => {
         const scheduler = new ManualScheduler();
-        const { view } = make({ layers: Array.from({ length: n }, () => new ListLayer()) }, scheduler, new ManualTaps(), width, height);
+        const { view } = make({ groups: Array.from({ length: n }, () => new ListGroup()) }, scheduler, width, height);
         scheduler.runFrame();
         const emitted: unknown[] = [];
         view.on("viewport", (v) => emitted.push(v));
@@ -250,18 +224,9 @@ export function shapeViewContract(make: MakeShapeView): void {
       }));
     });
 
-    test("View.interactive.starts-false", () => {
-      const { view } = make({ layers: [new ListLayer()] }, new ManualScheduler(), new ManualTaps(), width, height);
-      assert.equal(view.interactive, false);
-    });
-
-    rule("View.taps", (s) => s.op.op !== "tap" || !s.interactive || s.disposed || deepEqual(s.tapped, [s.op.p]));
-
-    rule("View.interactive.ignores-input", (s) => s.op.op !== "tap" || s.interactive || s.disposed || s.tapped.length === 0);
-
     rule("ShapeView.frame.paints", (s) => s.op.op !== "frame" || s.disposed || sameColors(s.after, expected(s.scene)));
 
-    rule("View.layer-change", (s) => !s.changing || s.disposed || (s.requestedAfter && sameColors(s.after, s.before)));
+    rule("View.group-change", (s) => !s.changing || s.disposed || (s.requestedAfter && sameColors(s.after, s.before)));
 
     rule("View.idle", (s) => s.disposed || s.dirty || !s.requestedAfter);
 
@@ -277,7 +242,7 @@ export function shapeViewContract(make: MakeShapeView): void {
       return s.listenersAfter.every((n) => n === 0) && (!s.changing || s.requestedAfter === s.requestedBefore);
     });
 
-    rule("View.dispose.inert", (s) => !s.disposed || (sameColors(s.after, s.before) && s.tapped.length === 0));
+    rule("View.dispose.inert", (s) => !s.disposed || sameColors(s.after, s.before));
 
     test("ShapeView input coverage", () => {
       // Minimums are about half the shares measured on seeds 1-3.
@@ -287,9 +252,8 @@ export function shapeViewContract(make: MakeShapeView): void {
 }
 
 const MINIMUMS: Record<string, number> = {
-  "circle partly off the surface": 0.39, "circles of different colors overlap within a layer": 0.09,
-  "circles overlap across layers": 0.07, "dispose with a frame pending": 0.16, "edit after dispose": 0.09,
+  "circle partly off the surface": 0.39, "circles of different colors overlap within a group": 0.09,
+  "circles overlap across groups": 0.07, "dispose with a frame pending": 0.16, "edit after dispose": 0.09,
   "frame after dispose": 0.09, "frame with nothing changed": 0.22, "removal": 0.19,
-  "translucent circle over another": 0.08, "two layers changed before a frame": 0.11,
-  "tap while interactive": 0.1, "tap while not interactive": 0.29, "tap after dispose, interactive": 0.025,
+  "translucent circle over another": 0.08, "two groups changed before a frame": 0.11,
 };

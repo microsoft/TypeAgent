@@ -1,8 +1,7 @@
 // Test doubles for views: a canvas context that records what it is asked to
 // draw and computes what each point shows, a frame scheduler stepped by
-// hand, a tap source tapped by hand, a plain layer that counts its
-// listeners, and a circle. Each is correct by construction or checked:
-// helpers.check.ts runs the Layer and Circle contracts on ListLayer and
+// hand, a plain group that counts its listeners, and a circle. Each is correct by construction or checked:
+// helpers.check.ts runs the RenderGroup and Circle contracts on ListGroup and
 // testCircle.
 
 import type { Point, Rectangle } from "./geometry.ts";
@@ -10,8 +9,8 @@ import type { Color } from "./color.ts";
 import type { Circle, Shape } from "./shape.ts";
 import type { DrawingContext } from "./canvas.ts";
 import type { ItemId } from "./view.ts";
-import type { FrameHandler, FrameScheduler, TapSource } from "./window.ts";
-import type { DrawingLayer } from "./shapeView.ts";
+import type { FrameHandler, FrameScheduler } from "./frames.ts";
+import type { DrawingGroup } from "./shapeView.ts";
 import { Events } from "./eventkit.ts";
 import { allFinite, extents, inflate, isEmpty, over, rectContains, rectIntersects, validCircle } from "./shape.vocab.ts";
 
@@ -142,6 +141,11 @@ export class ManualScheduler implements FrameScheduler {
     return this.pending.has(handler);
   }
 
+  /** Whether any handler has asked for the next frame. */
+  anyRequested(): boolean {
+    return this.pending.size > 0;
+  }
+
   /** Runs one frame: calls frame() on each handler that asked before it started. */
   runFrame(): void {
     const handlers = [...this.pending];
@@ -151,13 +155,13 @@ export class ManualScheduler implements FrameScheduler {
   }
 }
 
-// ---- Layer ----------------------------------------------------------------
+// ---- RenderGroup ----------------------------------------------------------------
 
 /**
- * A layer of shapes kept in a plain array, with the edits the Layer
+ * A group of shapes kept in a plain array, with the edits the RenderGroup
  * contract drives, and a count of its listeners for the view contracts.
  */
-export class ListLayer implements DrawingLayer {
+export class ListGroup implements DrawingGroup {
   private items: [ItemId, Shape][] = [];
   private listeners: (() => void)[] = [];
   private nextId = 1;
@@ -253,8 +257,3 @@ export function testCircle(fields: { center: Point; radius: number; color: Color
   };
   return { kind: "circle", center, radius, color, boundingBox: () => box, contains, intersects };
 }
-
-// ---- Taps -----------------------------------------------------------------
-
-/** A TapSource whose taps come from the test: call emit("tap", p). */
-export class ManualTaps extends Events<{ tap: [Point] }> implements TapSource {}

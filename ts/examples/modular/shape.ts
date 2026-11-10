@@ -2,13 +2,9 @@
  * Shapes and the structures that hold them. A Shape is a region of the
  * plane, and each shape type, such as InkStroke or Circle, adds its own
  * rules. A ShapeCollection keeps shapes in z-order under ShapeIds, and a
- * ShapeLocator finds them by location; whether a collection has a locator
- * is up to the code that owns both. Shapes are immutable values;
- * collections and locators are mutable.
+ * ShapeLocator finds them by location. Collections and locators are
+ * mutable.
  *
- * Nothing here depends on views. A view shows a collection through a Layer
- * (view.ts) that presents it, such as ShapeLayer (impl-specs.md, section
- * 9); shapeView.ts draws them.
  * Rules follow the format described in rules.ts.
  *
  * @module
@@ -20,21 +16,22 @@ import type { Color } from "./color.ts";
 /**
  * A region of the plane, such as an ink stroke.
  *
- * Every non-empty shape has nonzero area. Shapes drawn as lines (segments,
- * polylines) are modeled as stroked regions with a positive thickness, not as
- * zero-width curves. Shapes follow Rectangle's half-open convention at their
- * extremes: a point at the shape's maximum x or maximum y is not in the shape.
+ * Every non-empty shape has nonzero area: a shape drawn as a line is a
+ * stroked region with a positive thickness. Shapes follow Rectangle's
+ * half-open convention at their extremes: a point at the shape's maximum x
+ * or maximum y is not in the shape.
  *
  * A shape's methods agree with one another as actually computed, rounding
  * included: contains and intersects never reach outside the rectangle that
- * boundingBox returns. Indexes such as a quadtree prune by that rectangle.
+ * boundingBox returns.
  *
+ * @invariant immutable  A shape's data fields, including nested ones, keep the values they had when it was made.
  * @ensures deterministic  Every method returns the same result each time it is called with the same arguments.
  */
 export interface Shape {
     /**
-     * Identifies the shape's type, so that code such as a view can tell which
-     * kind of shape it has. Each shape type declares its own unique literal.
+     * Identifies the shape's type. Each shape type declares its own unique
+     * literal.
      */
     readonly kind: string;
 
@@ -77,8 +74,7 @@ export interface Shape {
  *
  * The half-open rule applies to the whole stroke: whether a point on the
  * pen's edge is contained can depend on points far away, because they set
- * the stroke's maximum x and y. The exact-intersects expression covers every
- * case except the pen exactly touching r; hand-written tests cover those.
+ * the stroke's maximum x and y.
  *
  * @valid has-points  Has at least one point; a single point draws a dot.
  *   this.points.length >= 1
@@ -139,9 +135,7 @@ export interface Circle extends Shape {
 export type ShapeId = number & { readonly __brand: "ShapeId" };
 
 /**
- * A collection of shapes, kept in z-order. Indexes such as a ShapeLocator
- * hold only IDs and geometry. A view shows a collection through a Layer
- * (view.ts) that presents it.
+ * A collection of shapes, kept in z-order.
  *
  * @invariant size  size counts the shapes forEach visits.
  *   this.size === ids(this).length
@@ -218,8 +212,7 @@ export interface ShapeCollection<S extends Shape = Shape> {
 }
 
 /**
- * Finds shapes by location. Read-only: code that only looks shapes
- * up gets this, so it can't change what is indexed.
+ * Finds shapes by location. Read-only.
  *
  * Queries append to out and return the number of IDs appended. Results are in
  * no particular order. Rules use indexed(this), the shapes the queries are
@@ -262,10 +255,7 @@ export interface ShapeLocatorQueries {
 
 /**
  * A spatial index that finds shapes by location, such as a quadtree. It holds
- * IDs and geometry only; the ShapeCollection is the authority on what exists.
- * A collection and a locator are separate: whether a collection has a
- * locator is the choice of the code that owns both, which keeps them in
- * sync.
+ * IDs and geometry only.
  *
  * indexed(this) is the shapes added and not yet removed, as tracked by the
  * test harness.
@@ -274,8 +264,7 @@ export interface ShapeLocatorQueries {
  */
 export interface ShapeLocator extends ShapeLocatorQueries {
     /**
-     * Indexes shape under id. To change a shape's geometry, remove it and add
-     * it again.
+     * Indexes shape under id.
      *
      * IDs that were removed may be added again, and one shape object may be
      * indexed under several IDs.

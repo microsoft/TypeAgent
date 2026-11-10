@@ -1,8 +1,8 @@
 # Implementation specs: round 1
 
 Each implementation satisfies an interface in the interface files
-(`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `window.ts`, `view.ts`,
-`shapeView.ts`, `pointer.ts`, `ui.ts`, `chrome.ts` and `app.ts`), including
+(`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `frames.ts`, `view.ts`,
+`shapeView.ts` and `layout.ts`), including
 every rule (`@requires`, `@ensures`, `@invariant`, `@valid`, `@abstract`,
 `@budget`, `@deferred`) written there. `@budget` and `@deferred` rules bind
 the implementation like any other: a budget is measured instead of tested,
@@ -168,7 +168,7 @@ code. `bench.ts` may print whatever ratios the headers need.
 # Implementation specs: round 4
 
 The rules for every implementation above still apply. Round 4 builds the
-view–model relationship: a collection and a layer that indexes its shapes
+view–model relationship: a collection and a group that indexes its shapes
 and emits change when it changes, a benchmark budget for model updates, a
 circle, and a canvas view that draws circles.
 
@@ -185,61 +185,61 @@ circle, and a canvas view that draws circles.
 - **Contract:** `shapeCollection.contract.ts`, wired in
   `mapShapeCollection.test.ts`.
 
-## 9. `shapeLayer.ts`
+## 9. `shapeGroup.ts`
 
-- **Exports:** `export class ShapeLayer<S extends Shape = Shape> implements Layer<S>`
+- **Exports:** `export class ShapeGroup<S extends Shape = Shape> implements RenderGroup<S>`
   with the constructor `constructor(shapes: ShapeCollection<S>, locator: ShapeLocator)`,
   plus the edits `add(shape: S): ItemId`, `remove(id: ItemId): boolean` and
   `removeMultiple(ids: readonly ItemId[]): number`. With `S` as `Shape`
-  it is a `DrawingLayer` (`shapeView.ts`), whose rules the edits follow.
-  `on` and `off` come from `Emitter` (`events.ts`).
+  it is a `DrawingGroup` (`shapeView.ts`), whose rules the edits follow.
+  `on` and `off` come from `EventEmitter` (`events.ts`).
 - **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `events.ts`, `shapeView.ts`
-- **Approach:** a layer presenting `shapes`, with each shape as its own
+- **Approach:** a group presenting `shapes`, with each shape as its own
   item and its own region. The edits change `shapes` and `locator`
   together, as `ShapeCollection`'s `add`, `remove` and `removeMultiple` do,
   and then emit change. Storage and z-order are delegated to `shapes`
   and queries to `locator`, using the collection's IDs as the locator's
   IDs. An item's ID is its shape's ID, converted with a cast. Both
-  arguments start empty and belong to the layer from then on; anything else
+  arguments start empty and belong to the group from then on; anything else
   is outside the rules.
 - **Decided behavior:** `add` has the locator's `in-range` requirement: a
   shape whose bounding box goes beyond ±1e300 is outside the rules, so the
-  layer need not handle a locator that rejects one after the collection has
+  group need not handle a locator that rejects one after the collection has
   taken it.
   A listener that throws is outside the rules too (see `events.ts`).
 - **Left to the implementer:** nothing beyond the storage layout. If you
   find a choice the rules leave open, describe it under
   AdditionalSemantics.
-- **Contract:** `layer.contract.ts`, wired in `shapeLayer.test.ts` over the
-  test doubles in `modelkit.ts`. `shapeLayer.integration.test.ts`, which is
+- **Contract:** `renderGroup.contract.ts`, wired in `shapeGroup.test.ts` over the
+  test doubles in `modelkit.ts`. `shapeGroup.integration.test.ts`, which is
   not part of this task, runs it over `MapShapeCollection` with both
   `ListLocator` and `QuadTreeLocator`. The contract checks
-  the layer, not the edits: that `add` puts the shape on top and the
+  the group, not the edits: that `add` puts the shape on top and the
   removals follow `ShapeCollection`'s rules is part of the approach above,
-  and is checked only as far as the layer shows it.
+  and is checked only as far as the group shows it.
 
 ## 10. A budget for model updates in `bench.ts`
 
-- **Outputs:** `bench.ts`, `shapeLayer.ts` (header only)
+- **Outputs:** `bench.ts`, `shapeGroup.ts` (header only)
 - **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `listLocator.ts`,
   `quadTreeLocator.ts`, `inkStroke.ts`, `mapShapeCollection.ts`,
-  `shapeLayer.ts`, and Node built-ins
+  `shapeGroup.ts`, and Node built-ins
 - **Binds:** node
 
 Each input event updates the model completely, within a small fraction of a
-frame (the `@budget` rule `window.fraction-of-frame` in `window.ts`). Add a
+frame (the `@budget` rule `frames.fraction-of-frame` in `frames.ts`). Add a
 measurement to `bench.ts` that checks the budget: **a move's model update
 takes under 5% of a 120 Hz frame (about 0.42 ms)**, with 10,000 strokes in
-the document layer. Label the printed results with the rule's ID,
-`window.fraction-of-frame`; `npm run catalog` looks for that ID in
-`bench.ts` to show the budget as measured. Measure, using `ShapeLayer` over
+the document group. Label the printed results with the rule's ID,
+`frames.fraction-of-frame`; `npm run catalog` looks for that ID in
+`bench.ts` to show the budget as measured. Measure, using `ShapeGroup` over
 `MapShapeCollection` and `QuadTreeLocator`:
 
 - **Drawing:** one pen move, which appends one small stroke chunk to a
-  wet-ink layer and replaces a tail layer's one shape (`remove` then
+  wet-ink group and replaces a tail group's one shape (`remove` then
   `add`; there is no replace edit).
 - **Erasing:** one eraser move, which runs an `inRect` query for the
-  eraser's swept rectangle on the document layer, followed by a
+  eraser's swept rectangle on the document group, followed by a
   `removeMultiple` of what it hit.
 
 The budget is per move, not per operation: time each move as a whole, and
@@ -270,20 +270,18 @@ describes. Exceeding the budget isn't a test failure; report it.
 ## 12. `canvasShapeView.ts`
 
 - **Exports:** `export class CanvasShapeView implements ShapeView` with the
-  constructor `constructor(scene: Scene<Shape>, context: DrawingContext, scheduler: FrameScheduler, taps: TapSource)`.
+  constructor `constructor(scene: Scene<Shape>, context: DrawingContext, scheduler: FrameScheduler)`.
 - **Hidden:** `shapeviewkit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `window.ts`,
+- **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `frames.ts`,
   `shapeView.ts`, `canvas.ts`, `events.ts`. `canvas.ts` is a platform
   subset (see `method.md`): use only its members, with no casts. The tests
   pass a context that throws on any other member.
-- **Approach:** in the constructor, add one change listener to each layer
-  of the scene, add one tap listener to `taps`, and request a frame. The
-  change listener requests a frame and does nothing else. The tap listener
-  emits `tap` with the same point while the view is interactive and not
-  disposed, and does nothing otherwise. `frame()` clears the whole canvas with one `clearRect`,
-  then draws the layers bottom to top, and each layer's items in `forEach`
-  order. It finds items with `forEach`, not queries, since without a
-  viewport the whole scene is visible.
+- **Approach:** in the constructor, add one change listener to each group
+  of the scene, and request a frame. The change listener requests a frame
+  and does nothing else. `frame()` clears the whole canvas with one
+  `clearRect`, then draws the groups bottom to top, and each group's items
+  in `forEach` order. It finds items with `forEach`, not queries, since
+  without a viewport the whole scene is visible.
 - **Decided behavior:**
   - Each circle is drawn as `beginPath()`, one `arc(center.x, center.y, radius, 0, 2 * Math.PI)`,
     then `fill()`, with `fillStyle` set first to
@@ -292,12 +290,11 @@ describes. Exceeding the budget isn't a test failure; report it.
   - `viewport` always reads as the identity, `{ scale: 1, rotation: 0, tx: 0, ty: 0 }`.
     Setting it to the identity does nothing (`View.viewport.set-equal`);
     setting another value is outside the rules for now, so ignore it too.
-  - `interactive` starts `false`; it only gates taps.
-  - `on` and `off` for the `viewport` and `tap` events follow `events.ts`;
+  - `on` and `off` for the `viewport` event follow `events.ts`;
     `viewport` is never emitted yet.
-  - `dispose()` removes the listener from every layer and from `taps`.
-    After it, `frame()` returns at once, including a frame requested before
-    dispose, and nothing is emitted.
+  - `dispose()` removes the listener from every group. After it, `frame()`
+    returns at once, including a frame requested before dispose, and
+    nothing is emitted.
 - **Left to the implementer:** nothing beyond the layout of the class. If
   you find a choice the rules leave open, describe it under
   AdditionalSemantics.
@@ -308,98 +305,24 @@ describes. Exceeding the budget isn't a test failure; report it.
 
 # Round 5: the circles app
 
-The controls around a ShapeView, as a platform-neutral model, a web
-renderer, and the wiring between them (`ui.ts`, `chrome.ts`, `app.ts`). Each
-task's tests use test doubles for every other part, and run the scenarios
-in `scenarios.ts` through a driver (`driver.ts`); `app.integration.test.ts`
-runs them with every real part once all exist.
+The app's controls are each platform's own, and its behavior is the
+scenarios in `scenarios.ts`: what the user does, and what the drawing then
+shows. Each platform writes a fixture (`AppFixture` in
+`scenario.contract.ts`) that does the scenarios' actions with its controls.
+On the test platform (`driver.ts`) the controls are methods, and the
+reference app (`circleskit.ts`) is a controller that gets taps from an
+EventDistributor with the view's surface as their target. No task yet: the
+web app waits until the DOM subset (`dom.ts`) is revisited. The earlier
+chrome, renderer and wiring tasks (13 to 15) were removed with `chrome.ts`,
+`ui.ts` and `app.ts`.
 
-## 13. `chromeModel.ts`
+# Round 6: layout and event distribution
 
-- **Exports:** `export class ChromeModel implements Chrome` with the
-  constructor `constructor(layer: DrawingLayer, options: ChromeOptions, makeCircle: MakeCircle)`.
-- **Hidden:** `chromekit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `color.ts`, `shape.ts`, `view.ts`,
-  `shapeView.ts`, `events.ts`, `ui.ts`, `chrome.ts`
-- **Approach:** the state is a plain value, replaced on each change. One
-  change listener on the layer sets the count from the layer's size.
-  Every change of state goes through one function that compares the new
-  state with the old, field by field, and emits change only if they
-  differ. `dispatch` decides whether an event acts by looking its key up in
-  the controls for the current state, as `present` returns them for the
-  minimum size, so that enabled and role come from one place.
-- **Decided behavior:**
-  - Erasing finds the items at the point with `atPoint` and removes the
-    one that `compareZ` puts on top.
-  - Clear is one `removeMultiple` of every item's ID, in `forEach` order.
-  - `state` returns a new object each time.
-- **Left to the implementer:** nothing beyond the layout of the class.
-- **Contract:** `chrome.contract.ts`, and the scenarios, wired in
-  `chromeModel.test.ts`.
-
-## 14. `webRenderer.ts`
-
-- **Exports:** `export class WebRenderer implements Renderer` with the
-  constructor `constructor(document: DomDocument, container: DomElement)`,
-  plus `elementFor(key: string): DomElement | undefined`, which returns the
-  element presenting the node with that key while it is presented, so the
-  page can put the view's canvas in the view-host.
-- **Hidden:** `adversaries/_webRenderer.ts`
-- **Imports:** `geometry.ts`, `events.ts`, `ui.ts`, `dom.ts`. `dom.ts` is a
-  platform subset (see `method.md`): use only its members, with no casts.
-  The tests use a recording document that implements only those members.
-- **Approach:** keep a map from key to element. A render walks the tree,
-  reuses the element for a key whose role is unchanged, makes one
-  otherwise, and sets the element's attributes and properties from the
-  node. Elements whose keys are gone are dropped.
-- **Decided behavior:** each node is presented with these elements, so
-  that a browser's accessibility tree exposes the node (WAI-ARIA):
-
-  | Role | Element | Label | State |
-  |---|---|---|---|
-  | group, toolbar, radio-group, view-host | `div` with `role` `group`, `toolbar`, `radiogroup` or `region` | `aria-label` | `aria-disabled="true"` when disabled, otherwise absent |
-  | text | `div` with `role` `status` | `aria-label`; the value is its text content | as for `div`s above |
-  | button | `button` | its text content | the `disabled` property |
-  | radio | `button` with `role` `radio` | its text content | `aria-checked` `"true"` or `"false"`; the `disabled` property |
-  | slider | `input` with `type` `range` and `min`, `max` and `step` attributes; the value through the `value` property | `aria-label` | the `disabled` property |
-
-  - Every element gets `data-key` set to its node's key, and style
-    `position: absolute` with `left`, `top`, `width` and `height` in `px`,
-    relative to its parent node's bounds; the root's are relative to the
-    container.
-  - The root element is the container's only child. A container's child
-    elements are its child nodes' elements in order; the child list is
-    replaced only when that list of elements changes, so that a render
-    that changes nothing touches no child list. A view-host's children are
-    left alone: the page puts the canvas there.
-  - Buttons and radios report `click`; sliders report `input`, with the
-    value `Number(element.value)`. A handler looks the node up in the tree
-    last rendered and emits only as the Renderer rules say.
-  - `dispose()` empties the container and drops the map.
-- **Left to the implementer:** nothing beyond the layout of the class.
-- **Contract:** `ui.contract.ts`, the scenarios, and a test of the child
-  lists, wired in `webRenderer.test.ts` with the recording document from
-  `domkit.ts`.
-
-## 15. `connectApp.ts`
-
-- **Exports:** `export function connectApp(parts: AppParts): App`
-- **Hidden:** `appkit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `ui.ts`, `chrome.ts`, `shapeView.ts`, `app.ts`
-- **Approach:** render the chrome's controls, make the view interactive,
-  then add the three listeners. `dispose` removes them, then disposes the
-  chrome, the view and the renderer, in that order.
-- **Left to the implementer:** nothing beyond the layout of the code.
-- **Contract:** `app.contract.ts`, and the scenarios, wired in
-  `connectApp.test.ts`.
-
-# Round 6: layout by carving, and mouse routing
-
-Layout carves rectangles (`RectangleOps` in `geometry.ts`), and mouse input
-is routed to nested regions carved the same way (`pointer.ts`). The
-scenarios now tap the view through the window: the driver delivers a press
-to the root region at the view's offset, the view-host's region routes it
-to a tap recognizer, and the recognizer gives the view its taps.
+Layout carves rectangles (`RectangleOps` in `geometry.ts`); a parent places
+layout objects (`layout.ts`) with them. An EventDistributor passes each of
+a platform's positional events to the innermost target registered for it.
+The router and tap recognizer tasks (17 and 18) were removed with
+`pointer.ts`.
 
 ## 16. Carving in `rectangleOps.ts`
 
@@ -418,43 +341,23 @@ to a tap recognizer, and the recognizer gives the view its taps.
   Update the header's How and Cost.
 - **Contract:** `rectangleOps.contract.ts`, wired in `rectangleOps.test.ts`.
 
-## 17. `regionRouter.ts`
+## 19. `rectDistributor.ts`
 
-- **Exports:** `export class RegionRouter implements RootRegion` with the
-  constructor `constructor(width: number, height: number)`.
-- **Hidden:** `routerkit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `events.ts`, `pointer.ts`
-- **Approach:** a tree of region objects, each with its bounds, its
-  parent, its children in the order added, its listeners per kind, and
-  whether it was removed. The root keeps whether a press is in progress
-  and which region captured it. A delivered event with no press in
-  progress walks down from the root, at each level into the child that
-  contains the point (half-open, as `Rectangle` says), and goes to the
-  deepest region on that path with a listener for its kind.
+- **Exports:** `export class RectDistributor<M> implements EventDistributor<M>`
+  with the constructor `constructor(region: Rectangle, locate: (event: M[keyof M]) => Point)`.
+- **Hidden:** `distributorkit.ts`, `scenariokit.ts`, `adversaries/_distributor.ts`
+- **Imports:** `geometry.ts`, `layout.ts`
+- **Approach:** keep the registrations in a list, in the order made. On
+  `distribute`, take the registrations for the event's name as they are
+  at the start, find the targets among them, other than `except`, whose
+  regions contain the event's point (half-open, as `Rectangle` says), pick
+  the one whose region lies within all the others', and call its
+  listeners in registration order.
 - **Decided behavior:**
-  - Child regions are instances of a class private to the file; only the
-    root is exported.
-  - Emitting follows `events.ts`: a snapshot of the listeners, in the order
-    registered.
-  - `add` and `remove` don't check their requirements.
-- **Left to the implementer:** nothing beyond the layout of the code.
-- **Contract:** `pointer.contract.ts`, and the scenarios, wired in
-  `regionRouter.test.ts`.
-
-## 18. `tapRecognizer.ts`
-
-- **Exports:** `export class RegionTaps implements TapRecognizer` with the
-  constructor `constructor(region: Region, slop: number)`.
-- **Hidden:** `tapkit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `events.ts`, `window.ts`, `pointer.ts`
-- **Approach:** listen to the region's down, move and up. A down starts a
-  candidate tap at its point; a move farther than the slop from it
-  cancels the candidate; an up within the slop of it, with the candidate
-  still standing, emits tap with the down's point.
-- **Decided behavior:** the slop is in layout units and compared
-  with the straight-line distance, inclusive: exactly the slop away still
-  counts. The composition root uses a slop of 4 (`tapSlop` in
-  `driver.ts`).
+  - `distribute` is a property holding an arrow function, so that it works
+    detached (`EventDistributor.distribute.detached`).
+  - `off` searches from the most recent registration.
+  - The requirements (`within`, `nested-or-disjoint`) aren't checked.
 - **Left to the implementer:** nothing beyond the layout of the class.
-- **Contract:** `tapRecognizer.contract.ts`, and the scenarios, wired in
-  `tapRecognizer.test.ts`.
+- **Contract:** `eventDistributor.contract.ts`, wired in
+  `rectDistributor.test.ts`.

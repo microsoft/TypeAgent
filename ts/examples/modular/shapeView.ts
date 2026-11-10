@@ -1,21 +1,15 @@
 /**
- * Showing shapes: the bridge between the shape data (shape.ts) and the
- * generic views (view.ts). It imports both, and neither imports it, so the
- * data side stays independent of views.
- *
- * A ShapeView doesn't depend on any drawing surface: each implementation
- * draws on its own platform's surface, such as a canvas (canvas.ts), and the
- * rules say only what each point shows. For now a ShapeView draws only
- * circles, with the identity viewport, and its only input is taps. Ink,
- * viewport transforms and other input come later. This file also holds
- * DrawingLayer, a layer of shapes that can be edited. Rules follow the
- * format described in rules.ts.
+ * Showing shapes: ShapeView, a view of shapes, and DrawingGroup, a group of
+ * shapes that can be edited. Each ShapeView implementation draws on its
+ * platform's surface, and the rules say only what each point shows. For
+ * now a ShapeView draws only circles, with the identity viewport. Rules
+ * follow the format described in rules.ts.
  *
  * @module
  */
 
 import type { Shape } from "./shape.ts";
-import type { ItemId, Layer, View } from "./view.ts";
+import type { ItemId, RenderGroup, View } from "./view.ts";
 
 /**
  * A view of shapes. It draws each kind of shape itself, on its platform's
@@ -24,10 +18,9 @@ import type { ItemId, Layer, View } from "./view.ts";
  *
  * With no viewport transform yet, canonical coordinates are the view's
  * coordinates. The viewport stays the identity (scale 1, no rotation or
- * translation); setting another one is outside the rules. Its only input
- * is taps, which it emits at the same point (View's taps rule).
+ * translation); setting another one is outside the rules.
  *
- * @requires fixed-layers  The scene's list of layers doesn't change while the view exists; the items in each layer may. The view starts listening to each layer when it is created.
+ * @requires fixed-groups  The scene's list of groups doesn't change while the view exists; the items in each group may. The view starts listening to each group when it is created.
  * @requires circles-only  Every item in the scene is a Circle; other kinds are outside the rules until their drawing is specified.
  *   circles(this.scene).length === items(this.scene).length
  * @ensures first-frame  Requests a frame when created, so that its first frame shows the scene.
@@ -44,12 +37,10 @@ export interface ShapeView extends View<Shape> {
 }
 
 /**
- * A layer of shapes with edits, for code that changes what a layer shows,
- * such as an app's controls (chrome.ts). Each item is its own shape and its
- * own region. ShapeLayer is one: it presents a ShapeCollection with a
- * ShapeLocator, and its edits change both.
+ * A group of shapes with edits. Each item is its own shape and its own
+ * region.
  */
-export interface DrawingLayer extends Layer<Shape> {
+export interface DrawingGroup extends RenderGroup<Shape> {
   /**
    * Adds shape as the top item, and emits change.
    *

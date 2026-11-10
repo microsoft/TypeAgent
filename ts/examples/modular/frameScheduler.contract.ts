@@ -1,4 +1,4 @@
-// Contract tests for FrameScheduler (window.ts). Every implementation runs
+// Contract tests for FrameScheduler (frames.ts). Every implementation runs
 // this suite through a fixture that runs one display frame on demand: a test
 // clock for a platform scheduler, or runFrame for ManualScheduler
 // (viewkit.ts). Test names are rule IDs.
@@ -11,7 +11,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
-import type { FrameHandler, FrameScheduler } from "./window.ts";
+import type { FrameHandler, FrameScheduler } from "./frames.ts";
 import { deepEqual } from "./rules.ts";
 
 /** A scheduler, and a way to run its next display frame. */

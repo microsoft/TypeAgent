@@ -5,12 +5,12 @@ The full procedure, with its reasons, is in `moduleTooling.md`.
 
 ## 1. Agree (human and agent)
 
-- **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `window.ts`, `view.ts`, `shapeView.ts`, `pointer.ts`, `ui.ts`, `chrome.ts` and `app.ts`, with rules in the format described in `rules.ts`.
+- **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`.
 - **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a test double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.
 - **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class.
 - **An observer table** for each stateful interface (`observer-tables.md`): every call against everything observable afterward, each cell settled by a rule.
-- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and sees, with exact text and positions. They run through a driver that finds controls by role and label in the semantic tree a platform presents (`driver.ts`), so the same scenarios run on any platform and any mix of real parts and test doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among reference parts, are named after the scenario that must catch them.
+- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. An action says what the user does, not which control does it. They run through a fixture each platform writes, which does the actions with its own controls (`AppFixture` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and test doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among reference parts, are named after the scenario that must catch them.
 
 ### Platform subsets
 

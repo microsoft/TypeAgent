@@ -2,7 +2,7 @@
 // unless a bug is switched on. helpers.check.ts runs the FrameScheduler
 // contract against it with no bug.
 
-import type { FrameHandler, FrameScheduler } from "../window.ts";
+import type { FrameHandler, FrameScheduler } from "../frames.ts";
 import type { FrameSchedulerFixture } from "../frameScheduler.contract.ts";
 
 export type SchedulerBug =

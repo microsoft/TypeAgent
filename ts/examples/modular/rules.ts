@@ -1,7 +1,7 @@
 /**
  * The rule language: how rules are written in the interface files
- * (events.ts, geometry.ts, color.ts, shape.ts, window.ts, view.ts,
- * shapeView.ts, pointer.ts, ui.ts, chrome.ts and app.ts), and the generic vocabulary
+ * (events.ts, geometry.ts, color.ts, shape.ts, frames.ts, view.ts,
+ * shapeView.ts and layout.ts), and the generic vocabulary
  * for their expressions. Imports nothing.
  *
  * Vocabulary files. An interface file x.ts that needs vocabulary of its own
@@ -46,7 +46,7 @@
  * that checks a rule has the rule's ID as its name. A rule inherited from
  * another interface keeps its original ID. A rule in a file's header
  * applies to the whole file; its ID is the file's name without .ts, then
- * the slug, such as window.complete.
+ * the slug, such as frames.complete.
  *
  * Outside the rules. When a caller breaks a @requires rule, or passes a value
  * that doesn't match its static type, behavior is unspecified. An
@@ -90,19 +90,19 @@ export function allFinite(v: unknown): boolean {
   return Object.values(v).every(allFinite);
 }
 
-/** Anything that visits IDs and values in order, such as a ShapeCollection or a Layer. */
+/** Anything that visits IDs and values in order, such as a ShapeCollection or a RenderGroup. */
 export interface Visitable<Id, T> {
   forEach(visit: (id: Id, value: T) => void): void;
 }
 
-/** The IDs a collection or layer visits, in forEach order. */
+/** The IDs a collection or group visits, in forEach order. */
 export function ids<Id, T>(c: Visitable<Id, T>): Id[] {
   const out: Id[] = [];
   c.forEach((id) => out.push(id));
   return out;
 }
 
-/** The IDs and values a collection or layer visits, in forEach order. */
+/** The IDs and values a collection or group visits, in forEach order. */
 export function entries<Id, T>(c: Visitable<Id, T>): [Id, T][] {
   const out: [Id, T][] = [];
   c.forEach((id, value) => out.push([id, value]));
