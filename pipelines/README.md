@@ -186,9 +186,24 @@ For an isolated full macOS qualification on a feature branch, use:
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f macos_qualification=true
 ```
 
-This opt-in overrides `fanout_experiment` and runs only the full macOS Node 24/26
-legacy jobs and their matching aggregate checks, with the same deadlines as the
-nightly schedule. Verify the resulting run's `headSha` against the published
+This opt-in restricts execution to full macOS Node 24/26 coverage. With the
+default `fanout_experiment=true`, each runtime builds the workspace once and
+executes four complete-package lanes plus independent root-script/memory-quality
+tests. Each lane contains exactly one of dispatcher, default agent provider,
+memory service, or memory MCP server, plus a duration-balanced share of the
+other packages. Packages run sequentially inside each lane; the original
+`test:local` scripts, lifecycle hooks, chained checks and retry budget remain.
+This is whole-package sharding, not the normal 13-suite compatibility selection.
+The collector requires every planned package/script and all four lanes on both
+runtimes; missing, failed or mismatched reports block qualification.
+
+Set `fanout_experiment=false` alongside `macos_qualification=true` for the
+unsharded macOS-only rollback/control. Both modes retain the approved
+180-minute workspace and 240-minute outer limits (per lane for sharded runs).
+The scheduled nightly remains unsharded until hosted validation supports a
+separate rollout. Memory-only shard/control options apply to ordinary fan-out,
+not the complete-package macOS mode.
+Verify the resulting run's `headSha` against the published
 candidate commit. GitHub cron schedules execute from the default branch; this
 manual branch dispatch queues a one-off qualification without changing cron.
 Qualify reliability fixes before adding build optimizations so failures and

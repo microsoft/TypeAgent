@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       macos_qualification:
-        description: Run only full macOS Node 24/26 coverage with nightly deadlines
+        description: Run only full macOS Node 24/26 coverage (sharded, or legacy rollback when fanout is disabled)
         type: boolean
         default: false
       fanout_experiment:
@@ -85,11 +85,12 @@ jobs:
 
   fanout_experiment:
     needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || (inputs.fanout_experiment && !inputs.macos_qualification)) }}
+    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.fanout_experiment) }}
     permissions:
       contents: read
     uses: ./.github/workflows/ci-fanout-experiment.yml
     with:
+      full_macos: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_qualification }}
       include_controls: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}
       build_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_build_cache }}
       native_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_native_cache }}
@@ -113,7 +114,7 @@ jobs:
         env:
           CI_CHANGES_RESULT: ${{ needs.changes.result }}
           CI_COVERAGE_REQUIRED: ${{ needs.changes.outputs.required }}
-          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.macos_qualification || !inputs.fanout_experiment)) }}
+          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment) }}
           CI_SHARDED_RESULT: ${{ needs.fanout_experiment.result }}
           CI_LEGACY_RESULT: ${{ needs.build_ts_legacy.result }}
         run: |
@@ -126,7 +127,7 @@ jobs:
 
   build_ts_legacy:
     needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.macos_qualification || !inputs.fanout_experiment))) }}
+    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment)) }}
     strategy:
       fail-fast: false
       matrix:

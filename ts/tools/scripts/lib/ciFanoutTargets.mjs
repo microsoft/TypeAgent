@@ -3,6 +3,16 @@
 
 import assert from "node:assert/strict";
 
+export function fullMacosQualification(
+    value = process.env.TYPEAGENT_FULL_MACOS_QUALIFICATION ?? "false",
+) {
+    assert.ok(
+        ["true", "false"].includes(value),
+        `Invalid full macOS qualification selection: ${value}`,
+    );
+    return value === "true";
+}
+
 export function fanoutNodes(
     selection = process.env.TYPEAGENT_FANOUT_NODE_SET ?? "all",
 ) {

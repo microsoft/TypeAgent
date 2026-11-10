@@ -563,6 +563,7 @@ test("all CI matrices and collectors use Node 24 and 26 with optional controls",
         "${{ inputs.include_controls }}",
     );
     assert.deepEqual(experiment.jobs.qualification.env, {
+        TYPEAGENT_FULL_MACOS_QUALIFICATION: "${{ inputs.full_macos }}",
         TYPEAGENT_FANOUT_INCLUDE_CONTROLS: "${{ inputs.include_controls }}",
         pnpm_config_verify_deps_before_run: "false",
     });
@@ -593,8 +594,9 @@ test("the default graph has 85 executable jobs across six OS/Node targets", () =
     const experiment = workflow("ci-fanout-experiment");
     const target = workflow("ci-fanout-target");
     const matrix = experiment.jobs.targets.strategy.matrix;
-    let jobs = 3 + matrix.os.length * matrix.version.length;
-    for (const os of matrix.os) {
+    const platforms = matrixValue(matrix.os, { full_macos: false });
+    let jobs = 3 + platforms.length * matrix.version.length;
+    for (const os of platforms) {
         for (const version of matrix.version) {
             const inputs = { os, version, include_controls: false };
             for (const job of Object.values(target.jobs)) {
@@ -697,11 +699,11 @@ test("manual macOS qualification selects only the full nightly matrix and its ma
         };
         assert.equal(
             matrixValue(main.jobs.fanout_experiment.if, inputs, github),
-            false,
+            fanout,
         );
         assert.equal(
             matrixValue(main.jobs.build_ts_legacy.if, inputs, github),
-            true,
+            !fanout,
         );
         for (const job of [main.jobs.build_ts, main.jobs.build_ts_legacy]) {
             assert.deepEqual(
@@ -718,7 +720,7 @@ test("manual macOS qualification selects only the full nightly matrix and its ma
         );
         assert.equal(
             matrixValue(aggregate.env.CI_USE_LEGACY, inputs, github),
-            true,
+            !fanout,
         );
     }
 });
@@ -871,11 +873,12 @@ test("test runners install native dependencies but never rebuild shared product 
     assert.deepEqual(Object.keys(experiment.on), ["workflow_call"]);
     assert.deepEqual(experiment.permissions, { contents: "read" });
     assert.deepEqual(target.permissions, { contents: "read" });
-    assert.deepEqual(experiment.jobs.targets.strategy.matrix.os, [
-        "ubuntu-latest",
-        "windows-latest",
-        "macos-latest",
-    ]);
+    assert.deepEqual(
+        matrixValue(experiment.jobs.targets.strategy.matrix.os, {
+            full_macos: false,
+        }),
+        ["ubuntu-latest", "windows-latest", "macos-latest"],
+    );
     assert.equal(
         target.jobs.build.steps.find((step) =>
             step.name?.startsWith("Build memory service"),
@@ -935,6 +938,77 @@ test("test runners install native dependencies but never rebuild shared product 
             step.if?.includes("needs.targets.result != 'success'"),
         ),
     );
+});
+
+test("full macOS qualification uses four sequential complete-package lanes, roots and fail-closed collection", () => {
+    const main = workflow("build-ts");
+    const experiment = workflow("ci-fanout-experiment");
+    const target = workflow("ci-fanout-target");
+    const inputs = { full_macos: true, os: "macos-latest" };
+    assert.deepEqual(
+        matrixValue(experiment.jobs.targets.strategy.matrix.os, inputs),
+        ["macos-latest"],
+    );
+    assert.equal(
+        main.jobs.fanout_experiment.with.full_macos,
+        "${{ github.event_name == 'workflow_dispatch' && inputs.macos_qualification }}",
+    );
+    assert.equal(
+        experiment.jobs.targets.with.full_macos,
+        "${{ inputs.full_macos }}",
+    );
+    assert.equal(
+        target.env.TYPEAGENT_FULL_MACOS_QUALIFICATION,
+        "${{ inputs.full_macos }}",
+    );
+    assert.equal(
+        experiment.jobs.qualification.env.TYPEAGENT_FULL_MACOS_QUALIFICATION,
+        "${{ inputs.full_macos }}",
+    );
+    assert.deepEqual(
+        matrixValue(target.jobs.remainder.strategy.matrix.group, inputs),
+        ["1", "2", "3", "4"],
+    );
+    assert.equal(
+        matrixValue(target.jobs.remainder["timeout-minutes"], inputs),
+        240,
+    );
+    const step = target.jobs.remainder.steps.find(
+        (step) => step.env?.TYPEAGENT_REMAINDER_ARTIFACT_SCOPE,
+    );
+    assert.equal(
+        matrixValue(step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS, inputs),
+        "10800000",
+    );
+    for (const name of ["build", "test", "package_partitions"]) {
+        assert.equal(
+            vm.runInNewContext(target.jobs[name].if, { inputs }),
+            false,
+        );
+    }
+    for (const name of ["workspace_build", "remainder", "roots"]) {
+        assert.equal(target.jobs[name].if, undefined);
+    }
+    for (const step of experiment.jobs.qualification.steps) {
+        if (
+            step.with?.pattern?.match(/^fanout-(result|partition)-/) ||
+            step.run?.match(
+                /(?:ciFanoutExperiment|ciPackagePartitions)\.mjs aggregate/,
+            )
+        ) {
+            assert.equal(vm.runInNewContext(step.if, { inputs }), false);
+        }
+    }
+    assert.equal(
+        experiment.jobs.qualification.steps.find((step) =>
+            step.run?.includes("ciWorkspaceLanes.mjs aggregate"),
+        ).if,
+        undefined,
+    );
+    const roots = target.jobs.roots.steps.find(
+        (step) => step.env?.TYPEAGENT_TEST_PHASE === "scripts",
+    );
+    assert.equal(roots.env.TYPEAGENT_FULL_MACOS_QUALIFICATION, "false");
 });
 
 test("platform-independent analysis runs once and remains blocking", () => {
@@ -1053,7 +1127,7 @@ test("memory producers never wait for or run non-memory builds or tests", () => 
     );
     assert.equal(
         jobs.remainder.strategy.matrix.group,
-        '${{ inputs.os == \'macos-latest\' && fromJSON(\'["1"]\') || fromJSON(\'["1","2","3","4"]\') }}',
+        '${{ inputs.os == \'macos-latest\' && !inputs.full_macos && fromJSON(\'["1"]\') || fromJSON(\'["1","2","3","4"]\') }}',
     );
     const qualification = workflow("ci-fanout-experiment").jobs.qualification;
     assert.ok(

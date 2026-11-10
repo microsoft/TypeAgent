@@ -16,7 +16,9 @@ import {
     qualifyLanes,
     remainderPackages,
     runtimeClosure,
+    fullMacosHeavyPackages,
 } from "../lib/ciWorkspaceLanes.mjs";
+import { fullMacosQualification } from "../lib/ciFanoutTargets.mjs";
 
 const packages = Array.from({ length: 12 }, (_, i) => ({
     name: `package-${i}`,
@@ -154,6 +156,116 @@ test("macOS uses only canonical compatibility directories in one lane", () => {
         () => planLanes(packages.slice(1), timings, "darwin", compatibility),
         /compatibility/,
     );
+});
+
+test("full macOS lanes isolate heavy packages and retain every complete package script", () => {
+    const inventory = [
+        ...packages,
+        ...fullMacosHeavyPackages.map((name) => ({
+            name,
+            directory: `packages/${name}`,
+            scripts: { "test:local": "jest && node additional-checks" },
+        })),
+        { name: "no-tests", scripts: {} },
+    ];
+    const plan = planLanes(inventory, timings, "darwin", compatibility, true);
+    assert.equal(plan.fullMacos, true);
+    assert.deepEqual(
+        plan,
+        planLanes(
+            [...inventory].reverse(),
+            timings,
+            "darwin",
+            compatibility,
+            true,
+        ),
+    );
+    assert.deepEqual(
+        plan.groups.flatMap(({ files }) => files).sort(),
+        inventory
+            .filter((pkg) => pkg.scripts["test:local"])
+            .map((pkg) => pkg.name)
+            .sort(),
+    );
+    for (const [index, group] of plan.groups.entries()) {
+        assert.deepEqual(
+            group.files.filter((name) => fullMacosHeavyPackages.includes(name)),
+            [fullMacosHeavyPackages[index]],
+        );
+        const command = localTestCommands(
+            "full-macos-lane",
+            "workspace",
+            3,
+            group.files,
+        )[0];
+        assert.ok(command.args.includes("--workspace-concurrency=1"));
+        assert.deepEqual(command.args.slice(-2), ["run", "test:local"]);
+        assert.deepEqual(
+            command.args.filter((arg) => arg.startsWith("--filter=")),
+            group.files.map((name) => `--filter=${name}`),
+        );
+    }
+    const rows = ["v24.22.1", "v26.12.1"].flatMap((node) =>
+        plan.groups.map(({ files }, i) => ({
+            sha,
+            platform: "darwin",
+            node,
+            group: String(i + 1),
+            manifestHash: "b".repeat(64),
+            workspaceHash: "b".repeat(64),
+            plan: structuredClone(plan),
+            packages: [...files],
+            success: true,
+            elapsedMs: 1000,
+        })),
+    );
+    const qualify = (rows, expected = plan) =>
+        qualifyLanes(rows, sha, { darwin: expected }, undefined, true);
+    assert.equal(qualify(rows).length, 2);
+    assert.throws(() => qualify(rows.slice(1)));
+    assert.throws(() => qualifyLanes(rows, sha, { darwin: plan }));
+    for (const change of [
+        (rows) => {
+            rows[0].packages.pop();
+        },
+        (rows) => {
+            rows[0].success = false;
+        },
+        (rows) => {
+            rows[0].platform = "linux";
+        },
+        (rows) => {
+            rows[0].node = "v22.23.4";
+        },
+        (rows) => {
+            rows[0].workspaceHash = "c".repeat(64);
+        },
+        (rows) => {
+            rows[0].plan.packages[0].scripts["test:local"] = "dropped checks";
+        },
+    ]) {
+        const changed = structuredClone(rows);
+        change(changed);
+        assert.throws(() => qualify(changed));
+    }
+    assert.throws(() => qualify(rows, plans.darwin));
+    assert.throws(
+        () =>
+            planLanes(
+                inventory.slice(0, -2),
+                timings,
+                "darwin",
+                compatibility,
+                true,
+            ),
+        /Missing full macOS package/,
+    );
+    assert.throws(() =>
+        planLanes(inventory, timings, "linux", compatibility, true),
+    );
+    assert.equal(fullMacosQualification("false"), false);
+    assert.equal(fullMacosQualification("true"), true);
+    assert.throws(() => fullMacosQualification("typo"), /Invalid full macOS/);
 });
 
 test("new packages are included with explicit median weights", () => {

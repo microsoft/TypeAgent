@@ -9,6 +9,13 @@ import {
     validatePartitions,
 } from "./ciTestPartitions.mjs";
 
+export const fullMacosHeavyPackages = [
+    "agent-dispatcher",
+    "default-agent-provider",
+    "@typeagent/memory-service",
+    "@typeagent/memory-mcp-server",
+];
+
 export function remainderPackages(packages) {
     const excluded = new Set([
         "@typeagent/memory-service",
@@ -33,7 +40,7 @@ export function validateLanePlan(plan) {
         plan.packages.length,
     );
     const names = plan.packages.map((pkg) => pkg.name).sort();
-    if (plan.platform === "darwin") {
+    if (plan.platform === "darwin" && !plan.fullMacos) {
         assert.equal(
             plan.groups.length,
             1,
@@ -41,8 +48,21 @@ export function validateLanePlan(plan) {
         );
         assert.deepEqual([...plan.groups[0].files].sort(), names);
     } else {
-        assert.ok(["linux", "win32"].includes(plan.platform));
+        assert.ok(["linux", "win32", "darwin"].includes(plan.platform));
         validatePartitions(names, plan.groups);
+        if (plan.fullMacos) {
+            assert.equal(plan.fullMacos, true);
+            assert.equal(plan.platform, "darwin");
+            for (const [index, group] of plan.groups.entries()) {
+                assert.deepEqual(
+                    group.files.filter((name) =>
+                        fullMacosHeavyPackages.includes(name),
+                    ),
+                    [fullMacosHeavyPackages[index]],
+                    "Each full macOS lane must retain exactly one heavy package",
+                );
+            }
+        }
     }
 }
 
@@ -51,21 +71,46 @@ export function planLanes(
     timings,
     platform,
     compatibilityDirectories,
+    fullMacos = false,
 ) {
+    assert.equal(typeof fullMacos, "boolean");
+    if (fullMacos) assert.equal(platform, "darwin");
+    const compatibility = platform === "darwin" && !fullMacos;
     const selected =
-        platform === "darwin"
+        fullMacos
+            ? packages
+                  .filter((pkg) => pkg.scripts["test:local"])
+                  .sort((a, b) => a.name.localeCompare(b.name))
+            : compatibility
             ? packages.filter((pkg) =>
                   compatibilityDirectories.includes(pkg.directory),
               )
             : remainderPackages(packages);
     const names = selected.map((pkg) => pkg.name).sort();
     const balanced =
-        platform === "darwin"
+        compatibility
             ? { groups: [{ files: names }], unprofiled: [], fallbackMs: 0 }
-            : balanceTests(names, timings);
+            : balanceTests(
+                  fullMacos
+                      ? names.filter(
+                            (name) => !fullMacosHeavyPackages.includes(name),
+                        )
+                      : names,
+                  timings,
+              );
+    if (fullMacos) {
+        for (const [index, name] of fullMacosHeavyPackages.entries()) {
+            assert.ok(names.includes(name), `Missing full macOS package: ${name}`);
+            balanced.groups[index].files.unshift(name);
+            balanced.groups[index].estimatedMs += timings[name] ?? balanced.fallbackMs;
+            if (timings[name] === undefined) balanced.unprofiled.push(name);
+        }
+        balanced.unprofiled.sort();
+    }
     const plan = {
         version: 1,
         platform,
+        ...(fullMacos ? { fullMacos: true } : {}),
         packages: selected.map(({ name, directory, scripts }) => ({
             name,
             directory,
@@ -75,7 +120,7 @@ export function planLanes(
         unprofiled: balanced.unprofiled,
         fallbackMs: balanced.fallbackMs,
     };
-    if (platform === "darwin") {
+    if (compatibility) {
         assert.deepEqual(
             selected.map((pkg) => pkg.directory).sort(),
             [...compatibilityDirectories].sort(),
@@ -148,8 +193,10 @@ export function packageTimingsFromLog(text) {
     return timings;
 }
 
-export function qualifyLanes(reports, sha, plans, nodeSet) {
+export function qualifyLanes(reports, sha, plans, nodeSet, fullMacos = false) {
     const nodes = fanoutNodes(nodeSet);
+    const platforms = fullMacos ? ["darwin"] : ["linux", "win32", "darwin"];
+    assert.deepEqual(Object.keys(plans).sort(), [...platforms].sort());
     assert.equal(
         reports.length,
         nodes.length *
@@ -160,8 +207,9 @@ export function qualifyLanes(reports, sha, plans, nodeSet) {
         "Expected every full remainder and macOS compatibility lane for selected Nodes",
     );
     const summary = [];
-    for (const platform of ["linux", "win32", "darwin"]) {
+    for (const platform of platforms) {
         const plan = plans[platform];
+        assert.equal(plan.fullMacos === true, fullMacos);
         validateLanePlan(plan);
         for (const node of nodes) {
             const selected = reports.filter(

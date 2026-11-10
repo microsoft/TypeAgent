@@ -6,6 +6,9 @@ name: Build/test one supported target
 on:
   workflow_call:
     inputs:
+      full_macos:
+        type: boolean
+        default: false
       os:
         type: string
         required: true
@@ -35,6 +38,7 @@ env:
   CI: "true"
   NODE_OPTIONS: --max_old_space_size=8192
   TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ inputs.os == 'windows-latest' && '1' || '0' }}
+  TYPEAGENT_FULL_MACOS_QUALIFICATION: ${{ inputs.full_macos }}
 
 defaults:
   run:
@@ -43,6 +47,7 @@ defaults:
 
 jobs:
   build:
+    if: "!inputs.full_macos"
     runs-on: ${{ inputs.os }}
     timeout-minutes: 20
     steps:
@@ -128,7 +133,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.compact_artifact && inputs.os != 'macos-latest'
+        if: inputs.compact_artifact && (inputs.os != 'macos-latest' || inputs.full_macos)
         with:
           name: fanout-remainder-2-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
           path: ${{ runner.temp }}/fanout-remainder-build-2
@@ -137,7 +142,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.compact_artifact && inputs.os != 'macos-latest'
+        if: inputs.compact_artifact && (inputs.os != 'macos-latest' || inputs.full_macos)
         with:
           name: fanout-remainder-3-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
           path: ${{ runner.temp }}/fanout-remainder-build-3
@@ -146,7 +151,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.compact_artifact && inputs.os != 'macos-latest'
+        if: inputs.compact_artifact && (inputs.os != 'macos-latest' || inputs.full_macos)
         with:
           name: fanout-remainder-4-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
           path: ${{ runner.temp }}/fanout-remainder-build-4
@@ -160,9 +165,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ inputs.os == 'macos-latest' && fromJSON('["1"]') || fromJSON('["1","2","3","4"]') }}
+        group: ${{ inputs.os == 'macos-latest' && !inputs.full_macos && fromJSON('["1"]') || fromJSON('["1","2","3","4"]') }}
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.full_macos && 240 || 30 }}
     steps:
       - run: git config --global core.autocrlf false
         working-directory: .
@@ -178,6 +183,7 @@ jobs:
       - name: Test duration-balanced whole-package lanes with existing retries
         env:
           TYPEAGENT_REMAINDER_ARTIFACT_SCOPE: ${{ inputs.compact_artifact && 'remainder' || 'workspace' }}
+          TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS: ${{ inputs.full_macos && '10800000' || '' }}
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
           pnpm run ci:node tools/scripts/ciWorkspaceLanes.mjs test ${{ matrix.group }} 2>&1 | Tee-Object -FilePath $log
@@ -219,6 +225,7 @@ jobs:
       - name: Profile independent root-unit and memory-quality phases
         env:
           TYPEAGENT_TEST_PHASE: scripts
+          TYPEAGENT_FULL_MACOS_QUALIFICATION: "false"
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'typeagent-root-test.log'
           node tools/scripts/runTestLocalWithSummary.mjs 2>&1 | Tee-Object -FilePath $log
@@ -275,6 +282,7 @@ jobs:
           retention-days: 7
 
   test:
+    if: "!inputs.full_macos"
     needs: build
     strategy:
       fail-fast: false
