@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { ciStepStage } from "./ciProfile.mjs";
 
 function instant(value) {
     const time = Date.parse(value);
@@ -115,6 +116,7 @@ export function ciRunTiming(run, jobs, checks, requiredNames) {
             completedAt: job.completed_at,
             steps: job.steps.map((step) => ({
                 name: step.name,
+                stage: ciStepStage(step.name),
                 conclusion: step.conclusion,
                 seconds:
                     step.status === "completed" &&

@@ -163,15 +163,11 @@ test("legacy Node-selection alias requires the same 32 reports and rejects retir
     const sha = "a".repeat(40);
     const rows = reports();
     assert.equal(rows.length, 32);
-    assert.equal(qualifyPartitions(rows, sha, "24-and-26").length, 8);
-    assert.deepEqual(
-        qualifyPartitions(rows, sha),
-        qualifyPartitions(rows, sha, "24-and-26"),
-    );
-    assert.throws(() => qualifyPartitions(rows.slice(1), sha, "24-and-26"));
+    assert.equal(qualifyPartitions(rows, sha).length, 8);
+    assert.throws(() => qualifyPartitions(rows.slice(1), sha));
     const wrongNode = structuredClone(rows);
     wrongNode[0].node = "v22.23.4";
-    assert.throws(() => qualifyPartitions(wrongNode, sha, "24-and-26"));
+    assert.throws(() => qualifyPartitions(wrongNode, sha));
     assert.throws(() => qualifyPartitions([...rows, wrongNode[0]], sha));
 });
 

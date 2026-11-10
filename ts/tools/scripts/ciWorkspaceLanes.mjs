@@ -8,7 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { localTestCommands, spawnPnpm } from "./runLocalTestPackages.mjs";
-import { verifyManifest, verifyCheckout } from "./ciFanoutExperiment.mjs";
+import { fullMacosQualification } from "./lib/ciFanoutTargets.mjs";
+import { verifyManifest, verifyCheckout } from "./ciFanout.mjs";
 import {
     packageTimingsFromLog,
     planLanes,
@@ -61,13 +62,23 @@ export function readWorkspace(directory) {
         .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function createRemainderPlan(packages, platform = process.platform) {
+export function createRemainderPlan(
+    packages,
+    platform = process.platform,
+    fullMacos = fullMacosQualification(),
+) {
     const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
     const compatibility = localTestCommands(
         "macos-compat-without-memory",
         root,
     ).map(({ cwd }) => path.relative(root, cwd).split(path.sep).join("/"));
-    return planLanes(packages, profile.timings, platform, compatibility);
+    return planLanes(
+        packages,
+        profile.timings,
+        platform,
+        compatibility,
+        fullMacos,
+    );
 }
 
 function profile(run, files) {
@@ -139,10 +150,11 @@ function runLane(group, sha) {
             env: {
                 ...process.env,
                 TYPEAGENT_TEST_PHASE: "workspace",
-                TYPEAGENT_TEST_PROFILE:
-                    process.platform === "darwin"
-                        ? "macos-compat-without-memory"
-                        : "fanout-lane",
+                TYPEAGENT_TEST_PROFILE: plan.fullMacos
+                    ? "full-macos-lane"
+                    : process.platform === "darwin"
+                      ? "macos-compat-without-memory"
+                      : "fanout-lane",
                 TYPEAGENT_TEST_PACKAGES_JSON: JSON.stringify(selected.files),
             },
         },
@@ -197,13 +209,21 @@ function main() {
             JSON.parse(fs.readFileSync(path.join(directory, file), "utf8")),
         );
     const packages = readWorkspace(root);
+    const fullMacos = fullMacosQualification();
     const plans = Object.fromEntries(
-        ["linux", "win32", "darwin"].map((platform) => [
-            platform,
-            createRemainderPlan(packages, platform),
-        ]),
+        (fullMacos ? ["darwin"] : ["linux", "win32", "darwin"]).map(
+            (platform) => [
+                platform,
+                createRemainderPlan(packages, platform, fullMacos),
+            ],
+        ),
     );
-    const summary = qualifyLanes(reports, process.env.GITHUB_SHA, plans);
+    const summary = qualifyLanes(
+        reports,
+        process.env.GITHUB_SHA,
+        plans,
+        fullMacos,
+    );
     console.log(JSON.stringify(summary, null, 2));
     if (process.env.GITHUB_STEP_SUMMARY)
         fs.appendFileSync(

@@ -15,11 +15,7 @@ import {
     stageCache,
     verifyCache,
 } from "../ciBuildCache.mjs";
-import {
-    createManifest,
-    stageArtifact,
-    verifyManifest,
-} from "../ciFanoutExperiment.mjs";
+import { createManifest, stageArtifact, verifyManifest } from "../ciFanout.mjs";
 
 const sha = "a".repeat(40);
 const environment = { ImageOS: "test-image", ImageVersion: "1" };

@@ -17,6 +17,40 @@ const hashFile = (file) => ({
 const json = (file) =>
     JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/u, ""));
 
+export function captureNativePipeStartup(child, directory) {
+    const started = Date.now();
+    let stdout = "",
+        stderr = "",
+        spawnError;
+    child.stdout.on("data", (value) => {
+        stdout = (stdout + value.toString()).slice(-4096);
+    });
+    child.stderr.on("data", (value) => {
+        stderr = (stderr + value.toString()).slice(-4096);
+    });
+    child.once("error", (error) => {
+        spawnError = error.message;
+    });
+    return () => {
+        const trace = path.join(directory, "startup.jsonl");
+        return `Owned normal-hook receiver startup failed: ${JSON.stringify({
+            elapsedMs: Date.now() - started,
+            pid: child.pid ?? null,
+            exitCode: child.exitCode,
+            signalCode: child.signalCode,
+            spawnError: spawnError ?? null,
+            phases: fs.existsSync(trace)
+                ? fs
+                      .readFileSync(trace, "utf8")
+                      .slice(-4096)
+                      .replace(/^\uFEFF/u, "")
+                : "No startup phase recorded",
+            stdout,
+            stderr,
+        })}`;
+    };
+}
+
 export function stageNativeNormalHook(layout, deadlineMs) {
     const source = path.join(scripts, "macro-eval-native-hook.mjs");
     const wrapper = path.join(layout.plugin, "macro-eval-native-hook.mjs");
@@ -105,14 +139,13 @@ export async function startNativeNormalHookReader({
         ],
         { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
     );
-    let stderr = "";
-    child.stderr.on("data", (value) => {
-        stderr += value.toString();
-    });
+    const startupFailure = captureNativePipeStartup(child, directory);
     const server = probe(child.pid);
     if (!server) {
         child.kill();
-        throw new Error("Owned normal-hook OS reader identity missing");
+        throw new Error(
+            `Owned normal-hook OS reader identity missing. ${startupFailure()}`,
+        );
     }
     const stop = () => {
         const current = probe(child.pid);
@@ -141,10 +174,7 @@ export async function startNativeNormalHookReader({
             budget.check();
             await delay(50);
         }
-        if (!fs.existsSync(readyFile))
-            throw new Error(
-                `Owned normal-hook receiver startup failed: ${stderr}`,
-            );
+        if (!fs.existsSync(readyFile)) throw new Error(startupFailure());
         const ready = json(readyFile);
         if (
             ready.serverPid !== child.pid ||

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild as settled } from "./viewBuildTestWait.js";
+
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -25,7 +27,6 @@ import type {
     ExtensionViewContent,
 } from "../src/viewExtensionTypes.js";
 import type {
-    ViewBuildJob,
     ViewBuildRequest,
     ViewBuildSnapshot,
     ViewBuildTargetResult,
@@ -340,22 +341,6 @@ function provider(
             authorized = false;
         },
     };
-}
-
-async function settled(
-    service: FileMemoryService,
-    job: ViewBuildJob,
-): Promise<ViewBuildJob> {
-    for (let attempt = 0; attempt < 2000; attempt++) {
-        const current = await service.getViewBuild({
-            corpusId: job.corpusId,
-            jobId: job.jobId,
-        });
-        if (!current) throw new Error("Build disappeared");
-        if (current.state !== "running") return current;
-        await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-    throw new Error("Synthetic provider build did not settle");
 }
 
 test("procedure presentation preserves all claims and rejects hidden evidence or missing agent data", async () => {

@@ -1,35 +1,29 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# This workflow will build and test the TypeAgent TypeScript code
-
 name: build-ts
 
 on:
   workflow_dispatch:
     inputs:
-      fanout_experiment:
-        description: Use sharded CI (disable for a manual legacy-matrix rollback)
-        type: boolean
-        default: true
-      fanout_include_controls:
-        description: Include duplicate unsharded memory controls (fanout experiment only)
+      macos_qualification:
+        description: Run only full sharded macOS Node 24/26 coverage
         type: boolean
         default: false
       fanout_build_cache:
-        description: Trial exact-source compilation caching (fanout experiment only)
+        description: Reuse verified exact-source compilation outputs
         type: boolean
         default: false
       fanout_native_cache:
-        description: Trial runtime-specific pnpm native build reuse (fanout experiment only)
+        description: Reuse runtime-specific pnpm native builds
         type: boolean
         default: false
       fanout_compact_artifact:
-        description: Trial dependency-closure package and remainder artifacts (fanout experiment only)
+        description: Use dependency-closure package and remainder artifacts
         type: boolean
         default: false
       fanout_artifact_compression:
-        description: Artifact compression level (fanout experiment only)
+        description: Artifact compression level
         type: choice
         options: ["0", "3", "6"]
         default: "6"
@@ -71,7 +65,7 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
-              - ".github/workflows/ci-fanout-*.yml"
+              - ".github/workflows/ci-fanout*.yml"
               - ".github/actions/fanout-setup/**"
       - name: Record coverage selection
         shell: pwsh
@@ -79,28 +73,23 @@ jobs:
           CI_COVERAGE_REQUIRED: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         run: Write-Output "TypeScript CI required=$env:CI_COVERAGE_REQUIRED"
 
-  fanout_experiment:
+  sharded:
     needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.fanout_experiment) }}
+    if: ${{ needs.changes.outputs.required == 'true' }}
     permissions:
       contents: read
-    uses: ./.github/workflows/ci-fanout-experiment.yml
+    uses: ./.github/workflows/ci-fanout.yml
     with:
-      include_controls: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}
+      full_macos: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification) }}
       build_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_build_cache }}
       native_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_native_cache }}
       compact_artifact: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_compact_artifact }}
       artifact_compression: ${{ inputs.fanout_artifact_compression || '6' }}
 
-  build_ts:
-    # Preserve required matrix check names; execution is qualified upstream.
+  typescript_ci:
+    name: TypeScript CI
     if: ${{ always() }}
-    needs: [changes, fanout_experiment, build_ts_legacy]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
-        version: ["24.22.1", "26.12.1"]
+    needs: [changes, sharded]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -109,154 +98,28 @@ jobs:
         env:
           CI_CHANGES_RESULT: ${{ needs.changes.result }}
           CI_COVERAGE_REQUIRED: ${{ needs.changes.outputs.required }}
-          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment) }}
-          CI_SHARDED_RESULT: ${{ needs.fanout_experiment.result }}
-          CI_LEGACY_RESULT: ${{ needs.build_ts_legacy.result }}
+          CI_SHARDED_RESULT: ${{ needs.sharded.result }}
         run: |
           if ($env:CI_CHANGES_RESULT -ne 'success') { throw "Coverage selection did not succeed: $env:CI_CHANGES_RESULT" }
           if ($env:CI_COVERAGE_REQUIRED -eq 'false') { Write-Output 'No TypeScript or sharded CI paths changed'; exit 0 }
           if ($env:CI_COVERAGE_REQUIRED -ne 'true') { throw 'Missing coverage selection' }
-          if ($env:CI_USE_LEGACY -notin @('true', 'false')) { throw 'Missing CI strategy selection' }
-          $result = if ($env:CI_USE_LEGACY -eq 'true') { $env:CI_LEGACY_RESULT } else { $env:CI_SHARDED_RESULT }
-          if ($result -ne 'success') { throw "Required CI coverage did not succeed: $result" }
+          if ($env:CI_SHARDED_RESULT -ne 'success') { throw "Required CI coverage did not succeed: $env:CI_SHARDED_RESULT" }
 
-  build_ts_legacy:
-    needs: changes
-    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment)) }}
+  build_ts:
+    # Remove only after main's ruleset requires the deployed TypeScript CI check.
+    if: ${{ always() }}
+    needs: typescript_ci
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        os: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification)) && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
         version: ["24.22.1", "26.12.1"]
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsecret-1-dev
-      - name: Setup Git LF
-        run: |
-          git config --global core.autocrlf false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Full history so the changed-files lint can diff against the base.
-          fetch-depth: 0
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        continue-on-error: true
-        with:
-          filters: |
-            ts:
-              - "ts/**"
-              - ".github/workflows/build-ts.yml"
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        name: Install pnpm
-        with:
-          package_json_file: ts/package.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        with:
-          node-version: ${{ matrix.version }}
-          cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
-      - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          npm run build
-      # On pull requests only changed files are checked (fast); the
-      # format-pr workflow auto-fixes them.  Other events check the whole repo.
-      - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "${{ github.base_ref }}"
-            node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
-          else
-            npm run lint
-          fi
-      # Complexity gate (PRs only): the files this PR changes may not add
-      # functions over the cyclomatic/cognitive budget versus the base branch
-      # (a stateless ratchet — the base branch is the baseline, so the count
-      # can only trend down), and any brand-new file is additionally held to a
-      # hard cap.  Pre-existing offenders are grandfathered by inline
-      # // code-complexity-allow markers.  Tune the thresholds down as hotspots
-      # get refactored.
-      - name: Complexity ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        shell: bash
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
-            --cyclomatic 25 --cognitive 30 \
-            --new-file-cyclomatic 25 --new-file-cognitive 30
-      # Lint ratchet (PRs only): the files this PR changes may not add ESLint
-      # violations (no-explicit-any, no-console, no-unused-vars, ...) versus the
-      # base branch.  Syntactic rules only, so it is fast; the count can only
-      # trend down.  Run `npm run code-lint` locally to see the full report.
-      - name: Lint ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        shell: bash
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-lint -- --ratchet --base "origin/${{ github.base_ref }}"
-      # Circular-dependency ratchet (PRs only): fail if the change introduces a
-      # runtime import cycle not already present at the base.  Builds the cycle
-      # set for HEAD and for the merge base (via a throwaway git worktree), so
-      # this step is heavier than the others (madge runs twice).
-      - name: Circular dependency ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        shell: bash
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}" --exceptions-file tools/scripts/code/circular-baseline-exception.json
-      # Test-debt gate (PRs only): zero tolerance for focused tests
-      # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
-      # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.
-      - name: Test debt gate
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        shell: bash
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
-      # macOS gates use an explicit compatibility selection. Scheduled and
-      # manual runs retain full macOS coverage on all supported Node versions.
-      - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
+      - name: Forward the aggregate result during required-check migration
         shell: pwsh
         env:
-          TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
-          TYPEAGENT_TEST_PROFILE: ${{ runner.os == 'macOS' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && 'macos-compat' || 'full' }}
+          CI_AGGREGATE_RESULT: ${{ needs.typescript_ci.result }}
         run: |
-          $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
-          node tools/scripts/runTestLocalWithSummary.mjs 2>&1 | Tee-Object -FilePath $log
-          exit $LASTEXITCODE
-      - name: Upload test log
-        if: ${{ always() && (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: test-log-${{ matrix.os }}-${{ matrix.version }}
-          path: ${{ runner.temp }}/typeagent-test.log
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: UI tests (requires display)
-        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
-        working-directory: ts
-        run: |
-          Xvfb :99 -screen 0 1600x1200x24 &
-          export DISPLAY=:99
-          npm run test:ui
+          if ($env:CI_AGGREGATE_RESULT -ne 'success') { throw "TypeScript CI did not succeed: $env:CI_AGGREGATE_RESULT" }

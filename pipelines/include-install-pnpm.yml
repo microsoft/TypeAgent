@@ -41,18 +41,20 @@ steps:
 
   # workspace-concurrency 0 means use use the CPU core count. This is better than the default (4) for larger agents.
   - bash: |
+      set -euo pipefail
       echo "Using node $(node --version)"
-      storePath=${{ parameters.pnpmStorePath }}
-      if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-        npm install -g corepack@0.31.0 --force
-        corepack enable
-        storePath=$PNPM_STORE_PATH
-      else
-        npm install -g corepack@0.31.0
-        sudo corepack enable
+      packageManager=$(node -p "require('./package.json').packageManager")
+      if [[ ! "$packageManager" =~ ^pnpm@([0-9]+\.[0-9]+\.[0-9]+)(\+sha512\.[a-zA-Z0-9]+)?$ ]]; then
+        echo "Expected an exact pnpm packageManager version" >&2
+        exit 1
       fi
-      pnpm config set store-dir $storePath
-      pnpm config set -g workspace-concurrency 0
+      npm install --global --force --userconfig "$PWD/.npmrc" "pnpm@${BASH_REMATCH[1]}"
+      storePath='${{ parameters.pnpmStorePath }}'
+      if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
+        storePath=$PNPM_STORE_PATH
+      fi
+      pnpm config set store-dir "$storePath" --location project
+      pnpm config set workspace-concurrency 0 --location project
       echo "Using pnpm $(pnpm -v)"
       echo "Using pnpm store path $(pnpm store path)"
     displayName: Install and configure pnpm

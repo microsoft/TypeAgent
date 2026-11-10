@@ -127,8 +127,8 @@ export function runPartitionAttempts(files, run) {
     };
 }
 
-export function qualifyPartitions(reports, sha, nodeSet) {
-    const nodes = fanoutNodes(nodeSet);
+export function qualifyPartitions(reports, sha) {
+    const nodes = fanoutNodes();
     assert.equal(
         reports.length,
         2 * 2 * nodes.length * 4,

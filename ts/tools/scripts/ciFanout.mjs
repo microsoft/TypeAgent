@@ -9,11 +9,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { localTestCommands } from "./runLocalTestPackages.mjs";
 import { partitionPackages } from "./lib/ciTestPartitions.mjs";
-import { fanoutIncludesControl, fanoutNodes } from "./lib/ciFanoutTargets.mjs";
+import { fanoutNodes } from "./lib/ciFanoutTargets.mjs";
 
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
-const groups = ["1", "2", "3", "4", "control"];
+const groups = ["1", "2", "3", "4"];
 const platforms = ["linux", "win32", "darwin"];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const portable = (value) => value.split(path.sep).join("/");
@@ -236,38 +236,24 @@ export function stageArtifact(root, manifest, directory) {
     );
 }
 
-export function qualify(
-    reports,
-    sha,
-    { nodeSet, includeControls = fanoutIncludesControl() } = {},
-) {
-    const nodes = fanoutNodes(nodeSet);
-    assert.equal(typeof includeControls, "boolean");
-    const expectedGroups = groups.filter(
-        (group) => includeControls || group !== "control",
-    );
+export function qualify(reports, sha) {
+    const nodes = fanoutNodes();
     assert.equal(
         reports.length,
-        platforms.length * nodes.length * expectedGroups.length,
-        "Expected every selected shard and optional control per selected OS/Node",
+        platforms.length * nodes.length * groups.length,
+        "Expected every shard per selected OS/Node",
     );
     return platforms.flatMap((platform) =>
-        nodes.map((node) =>
-            qualifyTarget(reports, sha, platform, node, expectedGroups),
-        ),
+        nodes.map((node) => qualifyTarget(reports, sha, platform, node)),
     );
 }
 
-function qualifyTarget(reports, sha, platform, node, expectedGroups) {
+function qualifyTarget(reports, sha, platform, node) {
     const selected = reports.filter(
         (report) => report.platform === platform && report.node === node,
     );
-    assert.deepEqual(
-        selected.map((report) => report.group).sort(),
-        [...expectedGroups].sort(),
-    );
-    const control = selected.find((report) => report.group === "control");
-    const reference = control ?? selected[0];
+    assert.deepEqual(selected.map((report) => report.group).sort(), groups);
+    const reference = selected[0];
     for (const report of selected) {
         assert.equal(report.sha, sha, "Result SHA mismatch");
         assert.equal(
@@ -285,24 +271,13 @@ function qualifyTarget(reports, sha, platform, node, expectedGroups) {
         new Set(reference.expectedTests).size,
         reference.expectedTests.length,
     );
-    if (control)
-        assert.deepEqual([...control.files].sort(), reference.expectedTests);
-    const shards = selected.filter((report) => report.group !== "control");
+    const shards = selected;
     assert.deepEqual(
         shards.flatMap((report) => report.files).sort(),
         reference.expectedTests,
     );
     const outcomes = shards.flatMap((report) => report.outcomes);
-    if (control) {
-        assert.deepEqual(
-            [...outcomes].sort(),
-            [...control.outcomes].sort(),
-            "Control/shard test outcomes differ",
-        );
-        assert.ok(control.outcomes.length > 0, "No test assertions reported");
-    } else {
-        qualifyShardOutcomes(shards);
-    }
+    qualifyShardOutcomes(shards);
     return {
         platform,
         node,
@@ -311,7 +286,6 @@ function qualifyTarget(reports, sha, platform, node, expectedGroups) {
         skippedAssertions: outcomes.filter(
             (outcome) => JSON.parse(outcome)[2] !== "passed",
         ).length,
-        controlMs: control?.elapsedMs ?? null,
         slowestShardMs: Math.max(...shards.map((report) => report.elapsedMs)),
         shardProcessMs: shards.reduce(
             (sum, report) => sum + report.elapsedMs,
@@ -383,7 +357,7 @@ function runGroup(root, sha, group, directory) {
         `${process.platform}-${process.versions.node}-${group}`,
     );
     const args = ["--json", `--outputFile=${stem}.jest.json`];
-    if (group !== "control") args.push(`--shard=${group}/4`);
+    args.push(`--shard=${group}/4`);
     const start = Date.now();
     const result = spawnSync(process.execPath, jestArgs(root, args), {
         cwd: path.join(root, packagePath),
@@ -479,16 +453,14 @@ function main() {
                 fs.appendFileSync(
                     process.env.GITHUB_STEP_SUMMARY,
                     "## Memory-service fan-out qualification\n\n" +
-                        (fanoutIncludesControl()
-                            ? "Includes unsharded control/outcome comparisons.\n\n"
-                            : "Shard-only inventory qualification; unsharded controls were not run and equivalence is not measured.\n\n") +
+                        "Complete shard inventory and per-file assertion qualification.\n\n" +
                         "Test-process timings only; excludes build, install, artifact transfer and queue delay.\n\n" +
-                        "| OS | Node | Files | Assertions | Skipped | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
-                        "|---|---|---:|---:|---:|---:|---:|---:|\n" +
+                        "| OS | Node | Files | Assertions | Skipped | Slowest shard (s) | Sum of shards (s) |\n" +
+                        "|---|---|---:|---:|---:|---:|---:|\n" +
                         summary
                             .map(
                                 (row) =>
-                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${row.skippedAssertions} | ${row.controlMs === null ? "not run" : (row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
+                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${row.skippedAssertions} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
                             )
                             .join("\n") +
                         "\n",
@@ -497,9 +469,7 @@ function main() {
             break;
         }
         default:
-            throw new Error(
-                "Expected create, test <1|2|3|4|control>, or aggregate",
-            );
+            throw new Error("Expected create, test <1|2|3|4>, or aggregate");
     }
 }
 

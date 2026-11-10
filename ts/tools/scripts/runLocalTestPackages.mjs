@@ -55,11 +55,13 @@ export const macosCompatibilitySuites = [
     },
 ];
 
-function laneCommand(root, workspaceConcurrency, packages) {
-    const excluded = [
-        "@typeagent/memory-service",
-        ...Object.values(partitionPackages).map(({ name }) => name),
-    ];
+function laneCommand(root, workspaceConcurrency, packages, fullMacos = false) {
+    const excluded = fullMacos
+        ? []
+        : [
+              "@typeagent/memory-service",
+              ...Object.values(partitionPackages).map(({ name }) => name),
+          ];
     if (
         !Array.isArray(packages) ||
         packages.length === 0 ||
@@ -109,6 +111,9 @@ export function localTestCommands(
     }
     if (profile === "fanout-lane") {
         return laneCommand(root, workspaceConcurrency, packages);
+    }
+    if (profile === "full-macos-lane") {
+        return laneCommand(root, 1, packages, true);
     }
     if (["full", "full-without-memory", "fanout-remainder"].includes(profile)) {
         return [

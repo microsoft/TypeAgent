@@ -75,13 +75,13 @@ function workflowPath(name: string): string {
 /** Run the CLI and return { stdout, stderr, code }. */
 function runCli(
     args: string[],
-    timeout = 30_000,
+    timeoutMs = 30_000,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
         const child = execFile(
             process.execPath,
             [CLI, ...args],
-            { timeout, maxBuffer: 1024 * 1024 },
+            { timeout: timeoutMs, maxBuffer: 1024 * 1024 },
             (err, stdout, stderr) => {
                 const code = err?.code;
                 if (
@@ -91,7 +91,7 @@ function runCli(
                     reject(
                         Object.assign(
                             new Error(
-                                `CLI process did not exit normally: ${err.message}\nstdout: ${stdout}\nstderr: ${stderr}`,
+                                `CLI subprocess infrastructure failure: ${err.message}; signal=${err.signal ?? "none"}; killed=${err.killed ?? false}; timeoutMs=${timeoutMs}\nstdout:\n${stdout.slice(-4096)}\nstderr:\n${stderr.slice(-4096)}`,
                             ),
                             { cause: err },
                         ),
@@ -116,7 +116,7 @@ function cliTest(name: string, fn: () => Promise<void>): void {
 describe("CLI integration", () => {
     cliTest("reports child timeouts instead of a successful exit", async () => {
         await expect(runCli(["list-tasks"], 1)).rejects.toThrow(
-            "CLI process did not exit normally",
+            "CLI subprocess infrastructure failure:",
         );
     });
 

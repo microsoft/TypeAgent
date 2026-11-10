@@ -12,6 +12,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService, KnowProCorpusIndex } from "../src/index.js";
+import type { IngestionJobStatus } from "../src/types.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 describe.each([false, true])(
@@ -139,13 +140,32 @@ describe.each([false, true])(
         }
 
         async function wait(jobId: string): Promise<void> {
-            for (let i = 0; i < 500; i++) {
-                const job = await service.getJob(jobId);
+            const maxPolls = 500;
+            const pollIntervalMs = 10;
+            const startedAt = Date.now();
+            let job: IngestionJobStatus | undefined;
+            for (let i = 0; i < maxPolls; i++) {
+                job = await service.getJob(jobId);
                 if (job?.state === "complete") return;
                 if (job?.state === "failed") throw new Error(job.error);
-                await new Promise((resolve) => setTimeout(resolve, 10));
+                await new Promise((resolve) =>
+                    setTimeout(resolve, pollIntervalMs),
+                );
             }
-            throw new Error("Fixture ingestion timed out");
+            throw new Error(
+                `Fixture ingestion timed out: ${JSON.stringify({
+                    jobId,
+                    prepared,
+                    polls: maxPolls,
+                    pollIntervalMs,
+                    elapsedMs: Date.now() - startedAt,
+                    state: job?.state ?? "missing",
+                    progress: job?.progress,
+                    updatedAt: job?.updatedAt,
+                    extractionCalls,
+                    embeddingCalls,
+                })}`,
+            );
         }
 
         beforeEach(async () => {
@@ -175,6 +195,54 @@ describe.each([false, true])(
                         previousPrepared;
             }
         });
+
+        test.each([false, true])(
+            "ingestion timeout reports the last job state without extending the wait (missing=%s)",
+            async (missing) => {
+                const clock = import.meta.jest;
+                const job: IngestionJobStatus = {
+                    jobId: "diagnostic-job",
+                    corpusId: "diagnostic-corpus",
+                    sourceId: "diagnostic-source",
+                    revisionId: "diagnostic-revision",
+                    state: "embedding",
+                    progress: { completed: 1, total: 2, stage: "embedding" },
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:01.000Z",
+                    warnings: [],
+                };
+                const getJob = clock
+                    .spyOn(service, "getJob")
+                    .mockResolvedValue(missing ? undefined : job);
+                clock.useFakeTimers();
+                clock.setSystemTime(0);
+                try {
+                    const assertion = expect(wait(job.jobId)).rejects.toThrow(
+                        `Fixture ingestion timed out: ${JSON.stringify({
+                            jobId: job.jobId,
+                            prepared,
+                            polls: 500,
+                            pollIntervalMs: 10,
+                            elapsedMs: 5000,
+                            state: missing ? "missing" : job.state,
+                            progress: missing ? undefined : job.progress,
+                            updatedAt: missing ? undefined : job.updatedAt,
+                            extractionCalls: 0,
+                            embeddingCalls: 0,
+                        })}`,
+                    );
+                    await clock.advanceTimersByTimeAsync(4999);
+                    expect(clock.getTimerCount()).toBe(1);
+                    await clock.advanceTimersByTimeAsync(1);
+                    await assertion;
+                    expect(getJob).toHaveBeenCalledTimes(500);
+                    expect(clock.getTimerCount()).toBe(0);
+                } finally {
+                    clock.useRealTimers();
+                    getJob.mockRestore();
+                }
+            },
+        );
 
         async function ingest(capturedAt?: string): Promise<string> {
             const { corpusId } = await service.createCorpus("Retained test");
