@@ -71,8 +71,7 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - task: AzureCLI@2
-        displayName: Live Tests (Linux)
-        timeoutInMinutes: 60
+        displayName: Azure login + Get Keys
         inputs:
           azureSubscription: $(azureSubscription)
           scriptType: bash
@@ -82,6 +81,19 @@ jobs:
             set -euo pipefail
             unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
             node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+
+      - task: AzureCLI@2
+        displayName: Live Tests (Linux)
+        continueOnError: true
+        timeoutInMinutes: 60
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            set -euo pipefail
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
             npm run test:live
 
       - pwsh: |

@@ -91,9 +91,16 @@ export function windowsPnpmCommand(args) {
     return `"pnpm ${args.map((arg) => `"${arg}"`).join(" ")}"`;
 }
 
-export function runLocalTestPhases(runWorkspaceTests, runScriptTests) {
-    const workspaceStatus = runWorkspaceTests();
-    const scriptStatus = runScriptTests();
+export function runLocalTestPhases(
+    runWorkspaceTests,
+    runScriptTests,
+    phase = "all",
+) {
+    if (!["all", "workspace", "scripts"].includes(phase)) {
+        throw new Error(`Unknown TYPEAGENT_TEST_PHASE: ${phase}`);
+    }
+    const workspaceStatus = phase === "scripts" ? 0 : runWorkspaceTests();
+    const scriptStatus = phase === "workspace" ? 0 : runScriptTests();
     return workspaceStatus !== 0 || scriptStatus !== 0 ? 1 : 0;
 }
 

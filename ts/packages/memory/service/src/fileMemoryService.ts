@@ -1781,6 +1781,9 @@ export class FileMemoryService
                 } finally {
                     this.pendingReadCleanup.delete(corpusId);
                 }
+                // A reader may release while cleanup publication still holds the pending flag.
+                if (this.retiredCorpora.has(corpusId))
+                    this.scheduleReadCleanup(corpusId);
             },
         );
     }
@@ -3574,11 +3577,11 @@ export class FileMemoryService
             frameHash([runtime.manifest.sources, runtime.events]),
         );
         if (current !== frames.authoritative)
-            throw new Error(
+            throw new ViewBuildStaleError(
                 "Frame authoritative snapshot changed during the read",
             );
         if (frames.providerStamp !== this.frameProviderStamp())
-            throw new Error(
+            throw new ViewBuildStaleError(
                 "Frame provider registration changed during the read",
             );
         if (frames.viewsHead !== undefined)
@@ -3725,6 +3728,31 @@ export class FileMemoryService
             },
         };
     }
+    private scheduleFrameProjections(corpusId: string): void {
+        if (!this.frameOptions.frameProjections || this.closed) return;
+        this.maintenance.request(
+            corpusId,
+            "frames",
+            undefined,
+            async (signal) => {
+                signal.throwIfAborted();
+                try {
+                    const status =
+                        await this.getFrameProjectionStatus(corpusId);
+                    if (status.coverage.failed)
+                        throw new Error(
+                            `${status.coverage.failed} frame owner projections failed`,
+                        );
+                } catch (error) {
+                    if (!(error instanceof ViewBuildStaleError)) throw error;
+                    signal.throwIfAborted();
+                    // A foreground write invalidated the read; keep its replacement queued.
+                    this.scheduleFrameProjections(corpusId);
+                }
+            },
+        );
+    }
+
     public getFrameProjectionStatus(
         corpusId: string,
     ): Promise<FrameProjectionStatus> {
@@ -7527,6 +7555,10 @@ export class FileMemoryService
     }
 
     private async reconcileSchemaViews(corpusId: string): Promise<void> {
+        if (this.maintenance.status().paused) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
         const snapshot = await this.listViews(corpusId);
         const views = snapshot.views.filter(
             (view) =>
@@ -11971,11 +12003,15 @@ export class FileMemoryService
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
             this.maintenance.cancel(request.corpusId, request.family);
-            return this.enqueueWrite(request.corpusId, () =>
+            const result = await this.enqueueWrite(request.corpusId, () =>
                 request.family === "topics"
                     ? this.maintainTopics(runtime, request)
                     : this.maintainWikiFamily(runtime, request),
             );
+            // Index installation can schedule work while the committed snapshot publishes.
+            if (request.operation === "pause")
+                this.maintenance.cancel(request.corpusId, request.family);
+            return result;
         }
         return this.enqueueWrite(request.corpusId, async () => {
             const plan = await this.planMaintenanceLocked(
@@ -15269,21 +15305,7 @@ export class FileMemoryService
                 ),
             ),
         );
-        if (this.frameOptions.frameProjections && !this.closed)
-            this.maintenance.request(
-                corpusId,
-                "frames",
-                undefined,
-                async (signal) => {
-                    signal.throwIfAborted();
-                    const status =
-                        await this.getFrameProjectionStatus(corpusId);
-                    if (status.coverage.failed)
-                        throw new Error(
-                            `${status.coverage.failed} frame owner projections failed`,
-                        );
-                },
-            );
+        this.scheduleFrameProjections(corpusId);
         return result;
     }
 
@@ -18133,6 +18155,11 @@ export class FileMemoryService
         request: ViewSummaryRequest,
     ): Promise<ViewSummaryPage> {
         validateInventoryPage(request);
+        if (
+            request.includeDrafts !== undefined &&
+            typeof request.includeDrafts !== "boolean"
+        )
+            throw new Error("View summary includeDrafts must be a boolean");
         const runtime = await this.requireViews(request.corpusId);
         return runtime.access.read(() =>
             this.viewStore.withInventorySnapshot(request.corpusId, async () => {
@@ -18141,7 +18168,11 @@ export class FileMemoryService
                 );
                 const eligible = await Promise.all(
                     snapshot.views.map((view) =>
-                        this.informationalVersionEligible(view, view),
+                        this.informationalVersionEligible(
+                            view,
+                            view,
+                            request.includeDrafts === true,
+                        ),
                     ),
                 );
                 const views = snapshot.views.filter(

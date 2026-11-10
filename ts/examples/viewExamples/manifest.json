@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "packId": "typeagent-procedure-example",
+  "files": [
+    "dist/procedural/contract.js",
+    "dist/procedural/provider.js",
+    "dist/procedural/recipe.txt",
+    "dist/procedural/pack.js",
+    "dist/procedural/proseProvider.js",
+    "dist/procedural/proseContract.js",
+    "dist/procedural/extractionSchema.ts",
+    "dist/procedural/proseRecipe.txt"
+  ],
+  "providers": [
+    {
+      "providerId": "typeagent-support-procedure",
+      "factory": "createProcedureProvider"
+    },
+    {
+      "providerId": "typeagent-support-procedure-prose",
+      "factory": "createProseProcedureProvider"
+    }
+  ]
+}

@@ -1,10 +1,26 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-name: Build/test fan-out qualification
+name: Sharded TypeScript CI
 
 on:
   workflow_call:
+    inputs:
+      include_controls:
+        type: boolean
+        default: false
+      build_cache:
+        type: boolean
+        default: false
+      native_cache:
+        type: boolean
+        default: false
+      compact_artifact:
+        type: boolean
+        default: false
+      artifact_compression:
+        type: string
+        default: "6"
 
 permissions:
   contents: read
@@ -17,154 +33,96 @@ jobs:
   analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: ts
     steps:
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y libsecret-1-dev
-        working-directory: .
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          package_json_file: ts/package.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/fanout-setup
         with:
           node-version: "24.22.1"
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile --strict-peer-dependencies
+          native-cache: ${{ inputs.native_cache }}
       - name: Check platform-independent formatting and lint once
-        run: npm run lint
-
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        version: ["22.23.4", "24.22.1", "26.12.1"]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    defaults:
-      run:
-        shell: pwsh
         working-directory: ts
-    steps:
-      - run: git config --global core.autocrlf false
-        working-directory: .
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          sudo apt-get install -y libsecret-1-dev
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          package_json_file: ts/package.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ matrix.version }}
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Install native dependencies for this runner
-        run: pnpm install --frozen-lockfile --strict-peer-dependencies
-      - name: Build memory service and its test-time client once
-        run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep
-      - name: Discover tests and fingerprint compiled outputs
-        run: node tools/scripts/ciFanoutExperiment.mjs create
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fanout-build-${{ matrix.os }}-${{ matrix.version }}-${{ github.sha }}
-          path: ${{ runner.temp }}/fanout-build
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 7
-      - name: Build remaining workspace incrementally for this OS and Node
-        run: pnpm run build
-      - name: Test remaining packages and root scripts with existing retries
+        shell: pwsh
         env:
-          TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
-          TYPEAGENT_TEST_PROFILE: full-without-memory
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_BASE_REF: ${{ github.base_ref }}
         run: |
-          $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
-          node tools/scripts/runTestLocalWithSummary.mjs 2>&1 | Tee-Object -FilePath $log
+          if ($env:CI_EVENT_NAME -eq 'pull_request') {
+            git fetch --no-tags origin $env:CI_BASE_REF
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node tools/scripts/prettier-changed.mjs --base "origin/$env:CI_BASE_REF"
+          } else {
+            npm run lint
+          }
           exit $LASTEXITCODE
-      - name: Upload remaining test log
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fanout-remaining-log-${{ matrix.os }}-${{ matrix.version }}
-          path: ${{ runner.temp }}/typeagent-test.log
-          if-no-files-found: warn
-          retention-days: 14
-      - name: UI tests (requires display)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          Xvfb :99 -screen 0 1600x1200x24 >/dev/null 2>&1 &
-          XVFB_PID=$!
-          trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
-          export DISPLAY=:99
-          npm run test:ui
+      - name: Complexity ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-complexity -- --ratchet --base "origin/$env:CI_BASE_REF" --cyclomatic 25 --cognitive 30 --new-file-cyclomatic 25 --new-file-cognitive 30
+      - name: Lint ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-lint -- --ratchet --base "origin/$env:CI_BASE_REF"
+      - name: Circular dependency ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-circular -- --ratchet --base "origin/$env:CI_BASE_REF" --exceptions-file tools/scripts/code/circular-baseline-exception.json
+      - name: Test debt gate
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-debt -- --gate --base "origin/$env:CI_BASE_REF"
 
-  test:
-    needs: build
+  targets:
     strategy:
       fail-fast: false
-      max-parallel: 12
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        version: ["22.23.4", "24.22.1", "26.12.1"]
-        group: ["1", "2", "3", "4", control]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 65
-    defaults:
-      run:
-        shell: pwsh
-        working-directory: ts
-    steps:
-      - run: git config --global core.autocrlf false
-        working-directory: .
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          sudo apt-get install -y libsecret-1-dev
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          package_json_file: ts/package.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ matrix.version }}
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Install native dependencies for this runner
-        run: pnpm install --frozen-lockfile --strict-peer-dependencies
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: fanout-build-${{ matrix.os }}-${{ matrix.version }}-${{ github.sha }}
-          path: ts
-      - name: Verify and test downloaded outputs without rebuilding
-        run: node tools/scripts/ciFanoutExperiment.mjs test ${{ matrix.group }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: fanout-result-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.group }}
-          path: ${{ runner.temp }}/fanout-results/*
-          if-no-files-found: error
-          retention-days: 7
+        version: ["24.22.1", "26.12.1"]
+    uses: ./.github/workflows/ci-fanout-target.yml
+    with:
+      os: ${{ matrix.os }}
+      version: ${{ matrix.version }}
+      include_controls: ${{ inputs.include_controls }}
+      build_cache: ${{ inputs.build_cache }}
+      native_cache: ${{ inputs.native_cache }}
+      compact_artifact: ${{ inputs.compact_artifact }}
+      artifact_compression: ${{ inputs.artifact_compression }}
 
   qualification:
     if: always()
-    needs: [analysis, build, test]
+    needs: [analysis, targets]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      TYPEAGENT_FANOUT_INCLUDE_CONTROLS: ${{ inputs.include_controls }}
+      pnpm_config_verify_deps_before_run: "false"
+    defaults:
+      run:
+        working-directory: ts
     steps:
+      - name: Reject failed, cancelled or skipped work
+        if: ${{ needs.analysis.result != 'success' || needs.targets.result != 'success' }}
+        shell: pwsh
+        working-directory: .
+        run: throw "Analysis or a supported target did not succeed. Inspect the failed job before comparing results."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ts/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.22.1"
@@ -173,10 +131,19 @@ jobs:
           pattern: fanout-result-*
           path: ${{ runner.temp }}/fanout-results
           merge-multiple: true
-      - name: Compare inventories, outcomes and test-process timings
-        working-directory: ts
-        run: node tools/scripts/ciFanoutExperiment.mjs aggregate
-      - name: Reject failed, cancelled or skipped work
-        if: ${{ needs.analysis.result != 'success' || needs.build.result != 'success' || needs.test.result != 'success' }}
-        run: throw "Analysis, build or test matrix did not succeed."
-        shell: pwsh
+      - name: Qualify selected memory shard inventories and optional control comparisons
+        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs aggregate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: fanout-partition-*
+          path: ${{ runner.temp }}/fanout-partitions
+          merge-multiple: true
+      - name: Require exact dispatcher and provider partition coverage
+        run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs aggregate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: fanout-lane-*
+          path: ${{ runner.temp }}/fanout-lanes
+          merge-multiple: true
+      - name: Require exact remainder package and script coverage
+        run: pnpm run ci:node tools/scripts/ciWorkspaceLanes.mjs aggregate

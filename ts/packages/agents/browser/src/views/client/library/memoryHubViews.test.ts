@@ -7,6 +7,11 @@ import { inventoryFixture } from "./memoryHubInventoryTestData";
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { viewRevisionTime, viewTimestamp } from "./memoryHubViewUi";
 import { invokeMemory } from "./viewClient";
+import type {
+    ExtensionViewContent,
+    ViewSummaryPage,
+    ViewSummaryRequest,
+} from "@typeagent/memory-service";
 
 jest.mock("./viewClient", () => ({
     invokeMemory: jest.fn(),
@@ -330,12 +335,18 @@ describe("Memory Center preview-first views", () => {
             .filter(([method]) => method === "memoryListViewSummaries")
             .map(([, request]) => request);
         expect(requests).toEqual([
-            { corpusId: "c", pageSize: 25, excludeKinds: ["schemaView"] },
+            {
+                corpusId: "c",
+                pageSize: 25,
+                excludeKinds: ["schemaView"],
+                includeDrafts: true,
+            },
             {
                 corpusId: "c",
                 pageSize: 25,
                 continuationToken: "25",
                 excludeKinds: ["schemaView"],
+                includeDrafts: true,
             },
         ]);
     });
@@ -381,6 +392,77 @@ describe("Memory Center preview-first views", () => {
         expect(host.textContent).not.toContain("Read reusable documents");
         expect(host.textContent).not.toContain("saved views across");
     });
+    test.each(["procedure-guide-v1", "document-v1"] as const)(
+        "reader keeps the %s summary in its intended location without changing content",
+        async (templateId) => {
+            const original = invoke.getMockImplementation()!;
+            const summary =
+                "Source-grounded guidance; human approval is not implied.";
+            const extension: ExtensionViewContent = {
+                kind: "extension",
+                construction: "extension-v1",
+                provider: {
+                    providerId: "synthetic",
+                    version: "1",
+                    implementationDigest: "a".repeat(64),
+                    inputContract: "input-v1",
+                    outputContract: "output-v1",
+                    schemaDigest: "b".repeat(64),
+                    recipeDigest: "c".repeat(64),
+                },
+                title: "Guide",
+                summary,
+                sections: [],
+                citations: [],
+                evidence: [],
+                inputUse: [],
+                payload: {},
+                presentation: {
+                    schemaVersion: 1,
+                    templateId,
+                    templateVersion: 1,
+                    layouts: [
+                        { id: "guide", label: "Support guide", groups: [] },
+                    ],
+                },
+            };
+            const saved = JSON.stringify(extension);
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryViewCapabilities"
+                        ? Promise.resolve({
+                              derivedViews: {
+                                  builds: true,
+                                  kinds: ["extension"],
+                              },
+                          })
+                        : method === "memoryListViews"
+                          ? Promise.resolve({
+                                ...snapshot,
+                                views: [{ ...view, content: extension }],
+                            })
+                          : original(method, params),
+                ),
+            );
+            await panel.refresh();
+            click(host, "Guide");
+            await settle();
+            if (templateId === "procedure-guide-v1") {
+                expect(host.querySelector(".hub-view-lead")).toBeNull();
+                const metadata = host.querySelector<HTMLDetailsElement>(
+                    ".hub-procedure-metadata",
+                )!;
+                expect(metadata.open).toBe(false);
+                expect(metadata.textContent).toContain(summary);
+            } else {
+                expect(
+                    host.querySelector(".hub-view-lead")!.textContent,
+                ).toContain(summary);
+            }
+            expect(JSON.stringify(extension)).toBe(saved);
+        },
+    );
+
     test.each(["empty", "failure"])(
         "type tabs show loading inside the card until an %s result settles",
         async (outcome) => {
@@ -855,6 +937,7 @@ describe("Memory Center preview-first views", () => {
             corpusId: "c",
             pageSize: 25,
             excludeKinds: ["schemaView"],
+            includeDrafts: true,
         });
         expect(
             invoke.mock.calls.filter(([method]) =>
@@ -1114,6 +1197,56 @@ describe("Memory Center preview-first views", () => {
             "Builds use one explicit collection",
         );
     });
+    test("current draft browsing and exact-revision labels do not require publication", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(async (method, params) => {
+            if (method !== "memoryListViewSummaries")
+                return original(method, params);
+            const request = params as ViewSummaryRequest;
+            const result = (await original(method, params)) as ViewSummaryPage;
+            return {
+                ...result,
+                total: request.includeDrafts ? result.total : 0,
+                items: request.includeDrafts
+                    ? result.items.map((item) => ({
+                          ...item,
+                          publication: {
+                              viewId: item.viewId,
+                              indexState: "absent",
+                              reason: "No published revision",
+                          },
+                      }))
+                    : [],
+            };
+        });
+        await panel.show({ corpusId: "c", viewId: "guide", revisionId: "v1" });
+        expect(host.textContent).toContain("Exact revision (read-only)");
+        expect(host.textContent).not.toContain("Historical revision");
+        click(host, "Open current view");
+        await settle();
+        expect(host.querySelector(".hub-view-document")?.textContent).toContain(
+            "Guide",
+        );
+        expect(host.textContent).not.toContain("View details unavailable");
+        expect(errors).toEqual([]);
+        click(host, "Back to views");
+        await settle();
+        expect(host.querySelectorAll(".hub-view-card")).toHaveLength(1);
+        const reads = invoke.mock.calls.filter(
+            ([method]) => method === "memoryListViewSummaries",
+        );
+        expect(reads.length).toBeGreaterThan(0);
+        for (const [, request] of reads)
+            expect(request).toMatchObject({ includeDrafts: true });
+        expect(
+            invoke.mock.calls.some(
+                ([method]) =>
+                    method === "memoryPublishView" ||
+                    method === "memoryRetryViewIndex",
+            ),
+        ).toBe(false);
+    });
+
     test.each([undefined, "old"])(
         "direct reader revision %s skips gallery loading and returns to the named complete All-memory list",
         async (revisionId) => {

@@ -20,13 +20,12 @@ import {
     changeFamily,
     settleConsolidation,
 } from "./sourceFollowingFixtures.js";
-import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
+import {
+    editPausedConsolidationDraft,
+    originalFixtureRoot,
+} from "./wikiConsolidationFixtures.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
-import {
-    authoredRelationships,
-    derivedDefinitionInput,
-} from "../src/viewRelationships.js";
 
 async function prePolicyClasses(directory: string) {
     const compiled = path.resolve(
@@ -230,17 +229,14 @@ test.each([false, true])(
                 ":indexed-evidence-v2",
             );
             expect(old.content.sections[0].body).not.toContain(tail);
-            const content = structuredClone(old.content);
-            content.title = "My worksheet navigation";
-            await service.saveViewDraft({
+            await editPausedConsolidationDraft(
+                service,
                 corpusId,
                 viewId,
-                expectedHead: (await service.listViews(corpusId)).head,
-                expectedVersion: old.version,
-                definition: derivedDefinitionInput(old),
-                content,
-                relationships: authoredRelationships(old),
-            });
+                (content) => {
+                    content.title = "My worksheet navigation";
+                },
+            );
             await publishCurrent(service, corpusId, viewId);
             await changeFamily(service, corpusId, "resume");
             await settleConsolidation(service, corpusId);

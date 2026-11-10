@@ -40,8 +40,8 @@
 #     task performs the federated (secret-free) login, pulls the secrets, and
 #     publishes AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE so
 #     the quick CLI smoke step authenticates to Azure OpenAI through
-#     @azure/identity's WorkloadIdentityCredential. The long-running shell and
-#     live suites each take a fresh per-step login instead (they can outlive this
+#     @azure/identity's WorkloadIdentityCredential. The long-running shell
+#     suites each take a fresh per-step login instead (they can outlive this
 #     token). Nothing to rotate.
 #
 # Prerequisites:
@@ -169,8 +169,8 @@ jobs:
     # required status check keeps passing on PRs that do not touch ts/**.
     dependsOn: detect_changes
     condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'))
-    # Generous cap: the Linux leg can run the shell smoke (60m) + live (60m)
-    # tests back to back. Requires purchased parallelism for hosted agents.
+    # Covers setup, build, and the shell suite. Broad live integration runs
+    # independently in azure-live-tests.yml.
     timeoutInMinutes: 150
     strategy:
       # Both legs run independently; one failing does not cancel the other
@@ -200,8 +200,15 @@ jobs:
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
       - script: |
-          pnpm exec playwright install --with-deps
-        displayName: Install Playwright Browsers
+          pnpm exec playwright install chromium
+        displayName: Install Playwright Browsers (Windows)
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+        workingDirectory: $(buildDirectory)/packages/shell
+
+      - script: |
+          pnpm exec playwright install --with-deps chromium
+        displayName: Install Playwright Browsers (Linux)
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         workingDirectory: $(buildDirectory)/packages/shell
 
       - script: |
@@ -221,8 +228,8 @@ jobs:
       # OpenAI User' on the Azure OpenAI resource(s).
       #
       # NOTE: the OIDC token is short-lived (~15 min). Only the immediate CLI
-      # smoke step relies on this shared login. Every long-running suite (the
-      # shell tests and Live Tests) can run past the token's lifetime, so each
+      # smoke step relies on this shared login. The long-running shell tests
+      # can run past the token's lifetime, so each
       # takes its own fresh AzureCLI@2 login below instead.
       - task: AzureCLI@2
         displayName: Azure login + Get Keys
@@ -292,23 +299,6 @@ jobs:
             trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
             export DISPLAY=:99
             npm run shell:smoke
-
-      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
-      # rationale as "Shell Tests - full" above. Non-blocking (continueOnError)
-      # so a late auth issue won't fail the run.
-      - task: AzureCLI@2
-        displayName: Live Tests (Linux)
-        timeoutInMinutes: 60
-        continueOnError: true
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
-        inputs:
-          azureSubscription: $(azureSubscription)
-          scriptType: bash
-          scriptLocation: inlineScript
-          workingDirectory: $(buildDirectory)
-          inlineScript: |
-            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
-            npm run test:live
 
       # Remove provisioned secrets even if a prior step failed.
       - pwsh: |

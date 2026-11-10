@@ -41,8 +41,8 @@ returned descriptors through the existing registry. This is trusted code
 activation, not a sandbox or a source grant. Changed assets require an explicit
 inventory update; changing an already imported root also requires host restart.
 
-The [shared manager](../../defaultAgentProvider/src/memoryViewPackages.ts),
-exported as `default-agent-provider/memory-view-packages`, owns acquisition and
+The [shared manager](../../packageInstallation/src/memoryViewPackages.ts),
+exported by the publishable `@typeagent/package-installation` package, owns acquisition and
 the separate locked inventory. It reuses configured path/catalog/feed sources.
 Catalogs declare `memoryViews` beside `agents`; npm metadata uses
 `typeagent.defaultMemoryViewName` and keyword `typeagent-memory-view`.
@@ -52,6 +52,8 @@ Only install supports `--dry-run`/`--source`, available supports `--source`,
 and update supports `--range`. Uninstall removes the record, not retained Views
 or possibly active package roots. Existing agent/MCP commands and defaults
 are unchanged.
+The private `default-agent-provider/memory-view-packages` export remains a
+compatibility facade; external hosts do not need that private workspace package.
 
 For host adoption and validation boundaries, see the
 [cross-repository guide](../../../../../codeDocs/TypeAgent/forAgent/features/memory-view-packaging/README.md).
@@ -446,8 +448,14 @@ Negotiation, CSP, renderer/resource byte ceilings and non-Apps text/citations
 remain on the existing preview stack.
 
 Native Views provides inventory, provider qualification, read-only detail and
-four fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
-`sources-v1`. Pinned routes use
+five fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
+`sources-v1` and `procedure-guide-v1`. The procedure template requires exactly
+the `guide`, `agent` and `evidence` layouts, with consistent `overview`,
+`options`, `rules`, `outcomes`, `gaps` and `technical` groups. Each layout
+must represent every readable claim exactly once, options must be nonempty,
+and the payload must include an object-valued `agentRepresentation`.
+Providers still own their bounded payload schema and semantic validation;
+the template grants neither execution nor source access. Pinned routes use
 `#/views/<corpus>/<view>/revision/<revision>/page/<claim>/layout/<layout>`.
 No model HTML, executable layouts or downloaded renderer code is accepted.
 
@@ -932,6 +940,12 @@ Foreground reads may use an older committed generation while maintenance runs.
 Retrying a failed View build selects its history head and target versions inside
 the admission writer rather than reusing that foreground inventory head.
 Explicit build requests still enforce the caller's `expectedHead`.
+
+With `frameProjections` enabled, a concurrent source or provider change can
+invalidate a frame snapshot. Background frame maintenance queues a fresh read
+instead of retaining that stale snapshot as a permanent failure. Receipt and
+authorization failures remain reported. Foreground frame reads still reject
+changed snapshots rather than returning stale rows.
 
 `topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
 3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.

@@ -48,7 +48,10 @@ import { createTimelineEditor } from "./memoryHubTimeline";
 import { createWikiEditor } from "./memoryHubWiki";
 import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { createGuideEditor } from "./memoryHubGuide";
-import { viewContentToText } from "@typeagent/memory-service/view-text";
+import {
+    projectBriefSectionHeading,
+    viewContentToText,
+} from "@typeagent/memory-service/view-text";
 import { renderExtensionView } from "./memoryHubExtension";
 
 function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
@@ -111,7 +114,13 @@ function appendArticleIntroduction(
         overview.append(meta);
         appendArticleCoverage(overview, view.content);
     }
-    if (view.content.summary) {
+    if (
+        view.content.summary &&
+        !(
+            view.content.kind === "extension" &&
+            view.content.presentation.templateId === "procedure-guide-v1"
+        )
+    ) {
         const lead = rbMarkdown(view.content.summary);
         lead.classList.add("hub-view-lead");
         overview.append(lead);
@@ -459,6 +468,7 @@ export function mountMemoryHubViews(
             corpora.map(async ({ corpusId }) => {
                 const views = await invokeMemory("memoryListViewSummaries", {
                     ...pager.request(corpusId),
+                    includeDrafts: true,
                     ...(route
                         ? { viewId: route.viewId, pageSize: 1 }
                         : {
@@ -782,6 +792,7 @@ export function mountMemoryHubViews(
             corpusId: view.corpusId,
             viewId: view.viewId,
             pageSize: 1,
+            includeDrafts: true,
         });
         if (disposed || current !== sequence) return;
         revisionLabel.textContent =
@@ -800,6 +811,7 @@ export function mountMemoryHubViews(
                 corpusId: view.corpusId,
                 viewId: view.viewId,
                 pageSize: 1,
+                includeDrafts: true,
             }),
             invokeMemory("memoryListViewBuildSummaries", {
                 corpusId: view.corpusId,
@@ -964,6 +976,12 @@ export function mountMemoryHubViews(
             throw new Error(
                 "Requested article anchor is unavailable in this revision",
             );
+        for (
+            let ancestor = page.parentElement;
+            ancestor;
+            ancestor = ancestor.parentElement
+        )
+            if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
         page.focus();
         page.scrollIntoView?.({ block: "start" });
     }
@@ -2093,7 +2111,14 @@ export function mountMemoryHubViews(
                 view.content.sections.length > 1 ||
                 section.heading !== view.content.title
             )
-                page.append(rbNode("h3", section.heading));
+                page.append(
+                    rbNode(
+                        "h3",
+                        view.content.kind === "projectBrief"
+                            ? projectBriefSectionHeading(section.heading)
+                            : section.heading,
+                    ),
+                );
             page.append(rbMarkdown(section.body));
             if (view.content.kind === "timeline") {
                 const record = view.content.sections.find(

@@ -7,12 +7,14 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { localTestCommands } from "./runLocalTestPackages.mjs";
+import { partitionPackages } from "./lib/ciTestPartitions.mjs";
+import { fanoutIncludesControl, fanoutNodes } from "./lib/ciFanoutTargets.mjs";
 
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
 const groups = ["1", "2", "3", "4", "control"];
 const platforms = ["linux", "win32", "darwin"];
-const nodes = ["v22.23.4", "v24.22.1", "v26.12.1"];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const portable = (value) => value.split(path.sep).join("/");
 
@@ -40,7 +42,7 @@ function outputPath(value) {
     return parts;
 }
 
-function outputs(root, relative = "", insideDist = false) {
+export function outputs(root, relative = "", insideDist = false) {
     const files = [];
     for (const entry of fs.readdirSync(path.join(root, relative), {
         withFileTypes: true,
@@ -62,7 +64,7 @@ function outputs(root, relative = "", insideDist = false) {
     return files.sort();
 }
 
-function identity(root, sha) {
+export function identity(root, sha) {
     assert.match(sha, /^[a-f0-9]{40}$/);
     return {
         sha,
@@ -74,21 +76,75 @@ function identity(root, sha) {
     };
 }
 
-export function createManifest(root, sha, tests) {
-    assert.ok(tests.length > 0, "Empty test inventory");
+export function verifyCheckout(root, sha) {
+    assert.match(sha, /^[a-f0-9]{40}$/);
+    assert.equal(
+        execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: root,
+            encoding: "utf8",
+        }).trim(),
+        sha,
+        "Checkout does not match the candidate SHA",
+    );
+}
+
+function scopedOutputs(root, scope, directories) {
+    const files = outputs(root);
+    if (!["packages", "remainder"].includes(scope)) return files;
+    assert.ok(
+        Array.isArray(directories) && directories.length > 0,
+        "Empty runtime closure",
+    );
+    assert.equal(new Set(directories).size, directories.length);
+    for (const directory of directories) {
+        outputPath(`${directory}/dist/index.js`);
+        assert.ok(
+            !directory.split("/").includes("dist"),
+            "Invalid package directory",
+        );
+    }
+    return files.filter(
+        (file) =>
+            (scope === "remainder" || !file.endsWith(".tsbuildinfo")) &&
+            directories.some((directory) =>
+                file.startsWith(`${directory}/dist/`),
+            ),
+    );
+}
+
+export function createManifest(
+    root,
+    sha,
+    tests,
+    scope = "memory",
+    directories,
+) {
+    assert.ok(
+        ["memory", "workspace", "packages", "remainder"].includes(scope),
+        "Unknown artifact scope",
+    );
+    assert.ok(
+        ["workspace", "remainder"].includes(scope) || tests.length > 0,
+        "Empty test inventory",
+    );
     assert.equal(
         new Set(tests).size,
         tests.length,
         "Duplicate discovered tests",
     );
-    const files = outputs(root).map((name) => {
+    const files = scopedOutputs(root, scope, directories).map((name) => {
         const bytes = fs.readFileSync(path.join(root, name));
         return { path: name, size: bytes.length, sha256: digest(bytes) };
     });
     for (const test of tests) {
         outputPath(test);
         assert.ok(
-            test.startsWith(`${packagePath}/dist/test/`) &&
+            (scope === "memory"
+                ? [packagePath]
+                : Object.values(partitionPackages).map(
+                      ({ directory }) => directory,
+                  )
+            ).some((directory) => test.startsWith(`${directory}/dist/test/`)) &&
                 test.endsWith(".spec.js") &&
                 files.some((file) => file.path === test),
             `Test is not a compiled memory-service spec: ${test}`,
@@ -96,19 +152,34 @@ export function createManifest(root, sha, tests) {
     }
     return {
         version: 1,
+        scope,
+        ...(["packages", "remainder"].includes(scope) ? { directories } : {}),
         ...identity(root, sha),
         files,
         tests: [...tests].sort(),
     };
 }
 
-export function verifyManifest(root, sha, manifest) {
+export function verifyManifest(
+    root,
+    sha,
+    manifest,
+    scope = "memory",
+    producer = false,
+) {
+    assert.ok(
+        ["memory", "workspace", "packages", "remainder"].includes(scope),
+        "Unknown artifact scope",
+    );
     assert.equal(manifest.version, 1);
+    assert.equal(manifest.scope, scope, "Artifact scope mismatch");
     for (const [key, value] of Object.entries(identity(root, sha))) {
         assert.equal(manifest[key], value, `Artifact ${key} mismatch`);
     }
     assert.ok(manifest.files.length > 0);
-    assert.ok(manifest.tests.length > 0);
+    assert.ok(
+        ["workspace", "remainder"].includes(scope) || manifest.tests.length > 0,
+    );
     assert.equal(new Set(manifest.tests).size, manifest.tests.length);
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -124,14 +195,22 @@ export function verifyManifest(root, sha, manifest) {
         assert.equal(bytes.length, file.size, `Artifact size: ${file.path}`);
         assert.equal(digest(bytes), file.sha256, `Artifact hash: ${file.path}`);
     }
+    const inventory = manifest.files.map((file) => file.path).sort();
     assert.deepEqual(
-        outputs(root),
-        manifest.files.map((file) => file.path).sort(),
+        scopedOutputs(root, scope, manifest.directories),
+        inventory,
     );
+    if (!producer && ["packages", "remainder"].includes(scope))
+        assert.deepEqual(outputs(root), inventory);
     for (const test of manifest.tests) {
         outputPath(test);
         assert.ok(
-            test.startsWith(`${packagePath}/dist/test/`) &&
+            (scope === "memory"
+                ? [packagePath]
+                : Object.values(partitionPackages).map(
+                      ({ directory }) => directory,
+                  )
+            ).some((directory) => test.startsWith(`${directory}/dist/test/`)) &&
                 test.endsWith(".spec.js"),
         );
         assert.ok(manifest.files.some((file) => file.path === test));
@@ -143,7 +222,7 @@ export function stageArtifact(root, manifest, directory) {
         !fs.existsSync(directory),
         "Artifact staging directory must be new",
     );
-    verifyManifest(root, manifest.sha, manifest);
+    verifyManifest(root, manifest.sha, manifest, manifest.scope, true);
     fs.mkdirSync(directory, { recursive: true });
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -157,61 +236,82 @@ export function stageArtifact(root, manifest, directory) {
     );
 }
 
-export function qualify(reports, sha) {
+export function qualify(
+    reports,
+    sha,
+    { nodeSet, includeControls = fanoutIncludesControl() } = {},
+) {
+    const nodes = fanoutNodes(nodeSet);
+    assert.equal(typeof includeControls, "boolean");
+    const expectedGroups = groups.filter(
+        (group) => includeControls || group !== "control",
+    );
     assert.equal(
         reports.length,
-        platforms.length * nodes.length * groups.length,
-        "Expected four shards and a control per supported OS/Node",
+        platforms.length * nodes.length * expectedGroups.length,
+        "Expected every selected shard and optional control per selected OS/Node",
     );
     return platforms.flatMap((platform) =>
-        nodes.map((node) => qualifyTarget(reports, sha, platform, node)),
+        nodes.map((node) =>
+            qualifyTarget(reports, sha, platform, node, expectedGroups),
+        ),
     );
 }
 
-function qualifyTarget(reports, sha, platform, node) {
+function qualifyTarget(reports, sha, platform, node, expectedGroups) {
     const selected = reports.filter(
         (report) => report.platform === platform && report.node === node,
     );
     assert.deepEqual(
         selected.map((report) => report.group).sort(),
-        [...groups].sort(),
+        [...expectedGroups].sort(),
     );
     const control = selected.find((report) => report.group === "control");
+    const reference = control ?? selected[0];
     for (const report of selected) {
         assert.equal(report.sha, sha, "Result SHA mismatch");
         assert.equal(
             report.manifestHash,
-            control.manifestHash,
+            reference.manifestHash,
             "Mixed build artifacts",
         );
         assert.equal(report.exitCode, 0, "Failed test process");
         assert.equal(report.success, true, "Unsuccessful Jest result");
         assert.ok(Number.isFinite(report.elapsedMs) && report.elapsedMs > 0);
-        assert.deepEqual(report.expectedTests, control.expectedTests);
+        assert.deepEqual(report.expectedTests, reference.expectedTests);
     }
-    assert.ok(control.expectedTests.length > 0);
+    assert.ok(reference.expectedTests.length > 0);
     assert.equal(
-        new Set(control.expectedTests).size,
-        control.expectedTests.length,
+        new Set(reference.expectedTests).size,
+        reference.expectedTests.length,
     );
-    assert.deepEqual([...control.files].sort(), control.expectedTests);
+    if (control)
+        assert.deepEqual([...control.files].sort(), reference.expectedTests);
     const shards = selected.filter((report) => report.group !== "control");
     assert.deepEqual(
         shards.flatMap((report) => report.files).sort(),
-        control.expectedTests,
+        reference.expectedTests,
     );
-    assert.deepEqual(
-        shards.flatMap((report) => report.outcomes).sort(),
-        [...control.outcomes].sort(),
-        "Control/shard test outcomes differ",
-    );
-    assert.ok(control.outcomes.length > 0, "No test assertions reported");
+    const outcomes = shards.flatMap((report) => report.outcomes);
+    if (control) {
+        assert.deepEqual(
+            [...outcomes].sort(),
+            [...control.outcomes].sort(),
+            "Control/shard test outcomes differ",
+        );
+        assert.ok(control.outcomes.length > 0, "No test assertions reported");
+    } else {
+        qualifyShardOutcomes(shards);
+    }
     return {
         platform,
         node,
-        files: control.files.length,
-        assertions: control.outcomes.length,
-        controlMs: control.elapsedMs,
+        files: reference.expectedTests.length,
+        assertions: outcomes.length,
+        skippedAssertions: outcomes.filter(
+            (outcome) => JSON.parse(outcome)[2] !== "passed",
+        ).length,
+        controlMs: control?.elapsedMs ?? null,
         slowestShardMs: Math.max(...shards.map((report) => report.elapsedMs)),
         shardProcessMs: shards.reduce(
             (sum, report) => sum + report.elapsedMs,
@@ -220,12 +320,50 @@ function qualifyTarget(reports, sha, platform, node) {
     };
 }
 
+function qualifyShardOutcomes(shards) {
+    for (const report of shards) {
+        const files = new Set();
+        for (const encoded of report.outcomes) {
+            const outcome = JSON.parse(encoded);
+            assert.ok(Array.isArray(outcome) && outcome.length === 3);
+            const [file, name, status] = outcome;
+            assert.ok(report.files.includes(file), "Assertion outside shard");
+            assert.ok(typeof name === "string" && name.length > 0);
+            assert.ok(
+                ["passed", "pending", "todo"].includes(status),
+                "Unsuccessful assertion outcome",
+            );
+            files.add(file);
+        }
+        assert.deepEqual(
+            [...files].sort(),
+            [...report.files].sort(),
+            "Missing shard assertions",
+        );
+    }
+}
+
+export function memoryTestSelection(root, platform = process.platform) {
+    if (platform !== "darwin") return ["--testPathPattern=.*[.]spec[.]js"];
+    const selection = localTestCommands("macos-compat", root).find(
+        ({ cwd }) => cwd === path.resolve(root, packagePath),
+    );
+    assert.ok(selection, "Missing macOS memory compatibility selection");
+    for (const file of selection.args.slice(3)) {
+        assert.ok(
+            fs.statSync(file).isFile(),
+            `Missing compiled compatibility suite: ${file}`,
+        );
+    }
+    return selection.args.slice(2);
+}
+
 function jestArgs(root, args) {
     return [
         "--no-warnings",
         "--experimental-vm-modules",
         path.join(root, packagePath, "node_modules/jest/bin/jest.js"),
-        "--testPathPattern=.*[.]spec[.]js",
+        ...memoryTestSelection(root),
         "--runInBand",
         ...args,
     ];
@@ -291,14 +429,7 @@ function main() {
         "../..",
     );
     const sha = process.env.GITHUB_SHA;
-    assert.equal(
-        execFileSync("git", ["rev-parse", "HEAD"], {
-            cwd: root,
-            encoding: "utf8",
-        }).trim(),
-        sha,
-        "Checkout does not match the candidate SHA",
-    );
+    verifyCheckout(root, sha);
     assert.ok(
         process.env.RUNNER_TEMP,
         "RUNNER_TEMP is required for CI artifacts",
@@ -348,13 +479,16 @@ function main() {
                 fs.appendFileSync(
                     process.env.GITHUB_STEP_SUMMARY,
                     "## Memory-service fan-out qualification\n\n" +
+                        (fanoutIncludesControl()
+                            ? "Includes unsharded control/outcome comparisons.\n\n"
+                            : "Shard-only inventory qualification; unsharded controls were not run and equivalence is not measured.\n\n") +
                         "Test-process timings only; excludes build, install, artifact transfer and queue delay.\n\n" +
-                        "| OS | Node | Files | Assertions | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
-                        "|---|---|---:|---:|---:|---:|---:|\n" +
+                        "| OS | Node | Files | Assertions | Skipped | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
+                        "|---|---|---:|---:|---:|---:|---:|---:|\n" +
                         summary
                             .map(
                                 (row) =>
-                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${(row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
+                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${row.skippedAssertions} | ${row.controlMs === null ? "not run" : (row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
                             )
                             .join("\n") +
                         "\n",

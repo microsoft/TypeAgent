@@ -14,11 +14,12 @@ import {
     localTestCommands,
     macosCompatibilitySuites,
     runLocalTestPackages,
+    spawnPnpm,
 } from "../runLocalTestPackages.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("workflow retains blocking Linux/Windows, macOS compatibility, and full nightly/manual coverage", () => {
+test("legacy rollback retains Node 24/26 and full nightly/manual test coverage", () => {
     const workflow = yaml.load(
         fs.readFileSync(
             new URL(
@@ -29,7 +30,7 @@ test("workflow retains blocking Linux/Windows, macOS compatibility, and full nig
         ),
     );
     assert.equal(workflow.on.schedule[0].cron, "17 8 * * *");
-    const job = workflow.jobs.build_ts;
+    const job = workflow.jobs.build_ts_legacy;
     const step = job.steps.find((step) => step.name === "Test");
     const evaluate = (expression, event, os) =>
         vm.runInNewContext(expression.slice(3, -2), {
@@ -61,11 +62,7 @@ test("workflow retains blocking Linux/Windows, macOS compatibility, and full nig
             );
         }
     }
-    assert.deepEqual(job.strategy.matrix.version, [
-        "22.23.4",
-        "24.22.1",
-        "26.12.1",
-    ]);
+    assert.deepEqual(job.strategy.matrix.version, ["24.22.1", "26.12.1"]);
     assert.equal(step.shell, "pwsh");
     assert.match(step.run, /exit \$LASTEXITCODE/);
 });
@@ -115,6 +112,34 @@ test("fan-out remainder excludes only memory service and retains complete packag
     );
 });
 
+test("macOS fan-out remainder preserves exactly the non-memory compatibility suites", () => {
+    const full = localTestCommands("macos-compat", root);
+    const remainder = localTestCommands("macos-compat-without-memory", root);
+    assert.deepEqual(
+        remainder,
+        full.filter(
+            ({ cwd }) => cwd !== path.resolve(root, "packages/memory/service"),
+        ),
+    );
+    assert.equal(remainder.length, 4);
+    assert.equal(remainder.flatMap(({ args }) => args.slice(3)).length, 8);
+});
+
+test("partitioned remainder removes exactly memory, dispatcher and provider package scripts", () => {
+    const remainder = localTestCommands("fanout-remainder", root);
+    assert.deepEqual(
+        remainder[0].args.filter((arg) => arg.startsWith("--filter=")),
+        [
+            "--filter=!@typeagent/memory-service",
+            "--filter=!agent-dispatcher",
+            "--filter=!default-agent-provider",
+        ],
+    );
+    assert.deepEqual(
+        remainder[0].args.filter((arg) => !arg.startsWith("--filter=")),
+        localTestCommands("full", root)[0].args,
+    );
+});
 test("invalid workspace concurrency fails before launching any package", () => {
     for (const workspaceConcurrency of [
         0,
@@ -217,20 +242,24 @@ test("unknown profiles fail instead of silently selecting a different suite", ()
     assert.throws(() => localTestCommands("macos-typo", root), /Unknown/);
 });
 
-test("compatibility validates compiled files before running any package", (t) => {
-    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-profile-"));
-    t.after(() => fs.rmSync(empty, { force: true, recursive: true }));
-    assert.throws(
-        () =>
-            runLocalTestPackages({
-                profile: "macos-compat",
-                root: empty,
-                pnpmPath: process.execPath,
-                run: () => assert.fail("Must not start with missing tests"),
-            }),
-        /ENOENT|Missing compiled/,
-    );
-});
+for (const profile of ["macos-compat", "macos-compat-without-memory"]) {
+    test(`${profile} validates compiled files before running any package`, (t) => {
+        const empty = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-profile-"),
+        );
+        t.after(() => fs.rmSync(empty, { force: true, recursive: true }));
+        assert.throws(
+            () =>
+                runLocalTestPackages({
+                    profile,
+                    root: empty,
+                    pnpmPath: process.execPath,
+                    run: () => assert.fail("Must not start with missing tests"),
+                }),
+            /ENOENT|Missing compiled/,
+        );
+    });
+}
 
 test("profile runner preserves errors and invokes pnpm without shell interpolation", () => {
     const calls = [];
@@ -260,4 +289,54 @@ test("profile runner preserves errors and invokes pnpm without shell interpolati
             }),
         error,
     );
+});
+
+test("nested pnpm preserves literal arguments and paths without invoking a shell", (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-pnpm-"));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const manager = path.join(directory, "manager & literal");
+    fs.mkdirSync(manager);
+    const cli = path.join(manager, "pnpm.mjs");
+    fs.writeFileSync(
+        cli,
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)));",
+    );
+    const previous = process.env.npm_execpath;
+    t.after(() => {
+        if (previous === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = previous;
+    });
+    process.env.npm_execpath = cli;
+    const marker = path.join(directory, "injected.txt");
+    const args = [
+        "C:\\repo\\a&b",
+        "%PATH%",
+        'quote"literal',
+        "line\nliteral",
+        `x & echo injected > "${marker}"`,
+    ];
+    const result = spawnPnpm(args, { encoding: "utf8", shell: true });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), args);
+    assert.equal(fs.existsSync(marker), false);
+    const error = new Error("nested spawn failed");
+    assert.equal(spawnPnpm([], {}, () => ({ error })).error, error);
+    assert.equal(spawnPnpm([], {}, () => ({ status: 7 })).status, 7);
+});
+
+test("nested pnpm rejects missing or non-pnpm package-script context", (t) => {
+    const previous = process.env.npm_execpath;
+    t.after(() => {
+        if (previous === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = previous;
+    });
+    for (const cli of [undefined, process.execPath]) {
+        if (cli === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = cli;
+        assert.throws(
+            () => spawnPnpm([], {}, () => assert.fail("Must not spawn")),
+            /requires pnpm's JavaScript CLI/,
+        );
+    }
 });

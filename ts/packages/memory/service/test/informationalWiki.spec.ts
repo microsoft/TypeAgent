@@ -453,9 +453,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             corpusId,
             source: { sourceId, sourceType: "text", title: sourceId, text },
         });
-        expect((await waitForMemoryJob(service, receipt.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, receipt.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
     }
 
     test("exact native wiki reads can disable corpus-wide contextual expansion without changing the default", async () => {
@@ -602,6 +606,33 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     includeContext: false,
                 }))!;
                 expect(current.state).toBe("draft");
+                const summaryRequest = {
+                    corpusId,
+                    viewId: current.viewId,
+                };
+                expect(
+                    (await service.listViewSummaries(summaryRequest)).items,
+                ).toEqual([]);
+                expect(
+                    (
+                        await service.listViewSummaries({
+                            ...summaryRequest,
+                            includeDrafts: false,
+                        })
+                    ).items,
+                ).toEqual([]);
+                const draftSummaries = await service.listViewSummaries({
+                    ...summaryRequest,
+                    includeDrafts: true,
+                });
+                expect(draftSummaries.total).toBe(1);
+                expect(draftSummaries.items).toHaveLength(1);
+                expect(draftSummaries.items[0]).toMatchObject({
+                    viewId: current.viewId,
+                    revisionId: current.revisionId,
+                    state: "draft",
+                    publication: { indexState: "absent" },
+                });
                 const publication = await service.getViewPublication({
                     corpusId,
                     viewId: current.viewId,
@@ -685,6 +716,24 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     })
                 ).some((match) => match.view.viewId === current.viewId),
             ).toBe(true);
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "original",
+            );
+            await service.forgetSource({
+                corpusId,
+                sourceId: "original",
+                confirmationToken: preview.confirmationToken,
+            });
+            expect(
+                (
+                    await service.listViewSummaries({
+                        corpusId,
+                        viewId: current.viewId,
+                        includeDrafts: true,
+                    })
+                ).items,
+            ).toEqual([]);
         },
     );
 
@@ -3218,7 +3267,9 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 text: "Synthetic admission probe",
             },
         });
-        const job = await waitForMemoryJob(service, result.jobId);
+        const job = await waitForMemoryJob(service, result.jobId, {
+            pollIntervalMs: 10,
+        });
         MockIndexedCorpus.prototype.rebuild = original;
         expect(job.state).toBe("failed");
         expect(job.error).toContain("exceeds configured");

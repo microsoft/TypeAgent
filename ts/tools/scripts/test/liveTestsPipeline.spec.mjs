@@ -32,11 +32,14 @@ const liveJob = integration.jobs.find((job) => job.job === "live_tests");
 const liveStep = liveJob.steps.find(
     (step) => step.displayName === "Live Tests (Linux)",
 );
+const provisionStep = liveJob.steps.find(
+    (step) => step.displayName === "Azure login + Get Keys",
+);
 const cleanup = liveJob.steps.find(
     (step) => step.displayName === "Clean up Keys",
 );
 
-test("staged live registration preserves required smoke and its existing live step", () => {
+test("required smoke preserves CLI and shell coverage without broad live integration", () => {
     assert.deepEqual(smoke.trigger.branches.include, [
         "main",
         "gh-readonly-queue/main/*",
@@ -52,12 +55,22 @@ test("staged live registration preserves required smoke and its existing live st
     ]) {
         assert.ok(smokeJob.steps.some((step) => step.displayName === name));
     }
-    const previousLive = smokeJob.steps.find(
-        (step) => step.displayName === "Live Tests (Linux)",
-    );
-    assert.ok(previousLive);
-    assert.equal(previousLive.continueOnError, true);
-    assert.match(previousLive.inputs.inlineScript, /npm run test:live/);
+    for (const job of smoke.jobs) {
+        for (const step of job.steps) {
+            assert.notEqual(step.displayName, "Live Tests (Linux)");
+            const command = [
+                step.inputs?.inlineScript,
+                step.inputs?.script,
+                step.script,
+                step.pwsh,
+                step.bash,
+            ].join("\n");
+            assert.doesNotMatch(
+                command,
+                /\b(?:npm|pnpm)\s+(?:run\s+)?test:live\b/,
+            );
+        }
+    }
 });
 
 test("automatic live integration selects only main and never PRs", () => {
@@ -77,6 +90,39 @@ test("automatic live integration selects only main and never PRs", () => {
     assert.equal(integration.schedules[0].always, true);
     assert.equal(liveJob.dependsOn, undefined);
     assert.equal(integration.resources, undefined);
+});
+
+test("smoke installs only Chromium and provisions OS dependencies only on Linux", () => {
+    for (const [platform, agentOS, command] of [
+        ["Windows", "Windows_NT", "pnpm exec playwright install chromium"],
+        ["Linux", "Linux", "pnpm exec playwright install --with-deps chromium"],
+    ]) {
+        const step = smokeJob.steps.find(
+            (step) =>
+                step.displayName ===
+                `Install Playwright Browsers (${platform})`,
+        );
+        assert.ok(step, `Missing browser installation for ${platform}`);
+        assert.equal(
+            step.condition,
+            `and(succeeded(), eq(variables['Agent.OS'], '${agentOS}'))`,
+        );
+        assert.equal(step.script.trim(), command);
+        assert.equal(step.workingDirectory, "$(buildDirectory)/packages/shell");
+        assert.ok(!step.continueOnError);
+        assert.ok(
+            smokeJob.steps.indexOf(step) <
+                smokeJob.steps.findIndex(
+                    (item) => item.displayName === "Build",
+                ),
+        );
+    }
+    assert.equal(
+        smokeJob.steps.filter((step) =>
+            step.displayName?.startsWith("Install Playwright Browsers"),
+        ).length,
+        2,
+    );
 });
 
 test("candidate validation requires both explicit opt-in and a manual branch run", () => {
@@ -114,31 +160,42 @@ test("live integration preserves native setup and builds before testing", () => 
     assert.equal(liveStep.inputs.workingDirectory, "$(buildDirectory)");
 });
 
-test("live failures and timeouts fail their independent pipeline", () => {
+test("only the moved live-test task retains advisory failure handling", () => {
     assert.equal(liveStep.timeoutInMinutes, 60);
     assert.ok(liveJob.timeoutInMinutes > liveStep.timeoutInMinutes);
     assert.ok(liveJob.cancelTimeoutInMinutes >= 5);
+    assert.equal(liveStep.continueOnError, true);
     for (const item of [liveJob, ...liveJob.steps]) {
-        assert.ok(!item.continueOnError);
+        if (item !== liveStep) assert.ok(!item.continueOnError);
     }
     assert.match(liveStep.inputs.inlineScript, /^set -euo pipefail\n/);
     assert.match(liveStep.inputs.inlineScript, /\nnpm run test:live\s*$/);
 });
 
-test("live tests use their own federated login and provision keys before testing", () => {
-    assert.equal(liveStep.task, "AzureCLI@2");
-    assert.equal(liveStep.inputs.azureSubscription, "$(azureSubscription)");
-    assert.equal(liveStep.inputs.scriptType, "bash");
+test("key provisioning remains blocking before the advisory live task's fresh login", () => {
+    assert.ok(provisionStep);
+    for (const step of [provisionStep, liveStep]) {
+        assert.equal(step.task, "AzureCLI@2");
+        assert.equal(step.inputs.azureSubscription, "$(azureSubscription)");
+        assert.equal(step.inputs.scriptType, "bash");
+        assert.equal(step.inputs.workingDirectory, "$(buildDirectory)");
+        assert.match(step.inputs.inlineScript, /^set -euo pipefail\n/);
+        assert.match(
+            step.inputs.inlineScript,
+            /unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE/,
+        );
+    }
     assert.match(
-        liveStep.inputs.inlineScript,
-        /unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE/,
+        provisionStep.inputs.inlineScript,
+        /\nnode tools\/scripts\/getKeys.mjs --vault build-pipeline-kv --commit\s*$/,
     );
-    const provision = liveStep.inputs.inlineScript.indexOf(
-        "node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit",
-    );
-    assert.ok(provision >= 0);
+    assert.doesNotMatch(liveStep.inputs.inlineScript, /getKeys/);
     assert.ok(
-        liveStep.inputs.inlineScript.indexOf("npm run test:live") > provision,
+        liveJob.steps.indexOf(provisionStep) >
+            liveJob.steps.findIndex((step) => step.displayName === "Build"),
+    );
+    assert.ok(
+        liveJob.steps.indexOf(provisionStep) < liveJob.steps.indexOf(liveStep),
     );
 });
 

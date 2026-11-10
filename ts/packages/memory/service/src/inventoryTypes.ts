@@ -24,6 +24,7 @@ export interface InventoryPageRequest {
 export interface ViewSummaryRequest extends InventoryPageRequest {
     kind?: ViewDefinition["kind"];
     excludeKinds?: ViewDefinition["kind"][];
+    includeDrafts?: boolean;
 }
 export interface QuestionSummaryRequest extends InventoryPageRequest {
     viewId?: string;

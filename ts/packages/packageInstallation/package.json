@@ -1,0 +1,51 @@
+{
+  "name": "@typeagent/package-installation",
+  "version": "0.0.1",
+  "description": "Shared npm acquisition and memory-view package lifecycle",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/packageInstallation"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/memoryViewPackages.js",
+    "./mcp-types": "./dist/mcpTypes.js",
+    "./sources/*": "./dist/sources/*.js"
+  },
+  "types": "./dist/memoryViewPackages.d.ts",
+  "files": [
+    "dist",
+    "!dist/test",
+    "!dist/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
+    "debug": "^4.4.0",
+    "proper-lockfile": "^4.1.2",
+    "semver": "^7.7.2"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/semver": "^7.7.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

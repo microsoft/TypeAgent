@@ -14,6 +14,8 @@
 # derived from the TRUSTED workflow_run payload (head_sha) plus a server-side PR
 # lookup — never from artifact contents — so a malicious fork cannot redirect
 # results to another ref. This is the safe alternative to pull_request_target.
+# Upload through the REST API with an explicit PR SHA: upload-sarif otherwise
+# prefers the trusted helper checkout's HEAD over its sha input.
 
 name: CodeQL fork upload
 
@@ -73,6 +75,7 @@ jobs:
     name: Upload verified CodeQL results (${{ matrix.language }})
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -106,10 +109,18 @@ jobs:
         run: node ts/tools/scripts/codeqlForkUpload.mjs
 
       - name: Upload CodeQL results to the pull request
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CODEQL_PR_NUMBER: ${{ needs.verify.outputs.number }}
+          CODEQL_PR_SHA: ${{ needs.verify.outputs.sha }}
+          CODEQL_SARIF_FILE: ${{ steps.report.outputs.sarif }}
         with:
-          sarif_file: ${{ steps.report.outputs.sarif }}
-          category: /language:${{ matrix.language }}
-          ref: refs/pull/${{ needs.verify.outputs.number }}/head
-          sha: ${{ needs.verify.outputs.sha }}
-          wait-for-processing: true
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const { resolve } = require("node:path");
+            const helper = await import(pathToFileURL(resolve("ts/tools/scripts/codeqlForkUpload.mjs")).href);
+            await helper.uploadForkSarif(github, context.repo, {
+              number: Number(process.env.CODEQL_PR_NUMBER),
+              sha: process.env.CODEQL_PR_SHA,
+              sarif: process.env.CODEQL_SARIF_FILE,
+            });

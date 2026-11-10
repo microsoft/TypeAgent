@@ -633,14 +633,25 @@ export class ViewBuildRunner {
                 signal,
             );
             candidate = prepared.candidate;
-            const { output, conflicts } = prepared;
+            let { output } = prepared;
+            const { conflicts } = prepared;
             let proof: ViewPublicationProof | undefined;
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                await timeSearchStage("view.editorial.verify", () =>
-                    this.verifyEditorialUpdate(result.snapshot, output, signal),
+                const verified = await timeSearchStage(
+                    "view.editorial.verify",
+                    () =>
+                        this.verifyOrRepairProjectSummary(
+                            result.snapshot,
+                            candidate,
+                            output,
+                            current,
+                            signal,
+                        ),
                 );
+                candidate = verified.candidate;
+                output = verified.output;
                 const support = informational
                     ? undefined
                     : await abortable(
@@ -887,8 +898,9 @@ export class ViewBuildRunner {
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
         signal: AbortSignal,
+        forceCheck = false,
     ): Promise<void> {
-        if (!requiresEditorialCheck(input, output)) return;
+        if (!forceCheck && !requiresEditorialCheck(input, output)) return;
         if (!this.adapter.checkEditorial)
             throw new Error(
                 "Consequential editorial update requires an actual-output checker",
@@ -899,6 +911,51 @@ export class ViewBuildRunner {
                 signal,
             ),
         );
+    }
+
+    private async verifyOrRepairProjectSummary(
+        input: ViewBuildSnapshot,
+        candidate: ViewSynthesisOutput,
+        output: ViewSynthesisOutput,
+        current: Parameters<typeof mergeEditorialView>[0],
+        signal: AbortSignal,
+    ): Promise<{
+        candidate: ViewSynthesisOutput;
+        output: ViewSynthesisOutput;
+    }> {
+        let assessment: import("./viewEditorial.js").ViewEditorialAssessment;
+        try {
+            await this.verifyEditorialUpdate(input, output, signal);
+            return { candidate, output };
+        } catch (error) {
+            if (
+                !(error instanceof EditorialRejection) ||
+                error.code !== "critical-distinction" ||
+                input.pipeline !== "informational-project-summary-v1" ||
+                !this.adapter.repairProjectSummary
+            )
+                throw error;
+            assessment = { safe: false, failures: error.failures };
+        }
+        console.warn("Project summary requires evidence-contract repair");
+        const repaired = await abortable(
+            this.adapter.repairProjectSummary(
+                input,
+                output,
+                assessment,
+                signal,
+            ),
+            signal,
+        );
+        validateConstructedGuide(input, repaired);
+        const merged = mergeEditorialView(current, repaired, input.inputs);
+        if (merged.conflicts.length)
+            throw new Error(
+                "Project summary repair introduced protected-edit conflicts",
+            );
+        validateConstructedGuide(input, merged.output);
+        await this.verifyEditorialUpdate(input, merged.output, signal, true);
+        return { candidate: repaired, output: merged.output };
     }
 
     private async skipInformationalTarget(

@@ -3,7 +3,14 @@
 
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import {
+    link,
+    mkdir,
+    readFile,
+    realpath,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 export const categories = [
@@ -50,7 +57,13 @@ export const decode = (value) =>
             : item,
     );
 export async function writeNew(file, value) {
-    await writeFile(file, encode(value), { flag: "wx" });
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+        await writeFile(temporary, encode(value), { flag: "wx" });
+        await link(temporary, file);
+    } finally {
+        await rm(temporary, { force: true });
+    }
 }
 export async function readJson(file) {
     return decode(await readFile(file, "utf8"));

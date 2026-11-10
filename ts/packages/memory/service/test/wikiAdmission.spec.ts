@@ -40,9 +40,9 @@ import {
     prepareWikiContribution,
 } from "../src/viewSynthesis.js";
 import {
-    authoredRelationships,
-    derivedDefinitionInput,
-} from "../src/viewRelationships.js";
+    changeFamily,
+    editPausedConsolidationDraft,
+} from "./wikiConsolidationFixtures.js";
 
 function input(viewId = "candidate"): ViewBuildSnapshot {
     const citation = {
@@ -112,6 +112,73 @@ function page(viewId = "canonical"): ViewVersion {
         provenance: "generated",
     };
 }
+
+test.each(["head", "exhausted", "other"] as const)(
+    "paused consolidation draft edits handle %s conflicts without changing the original version",
+    async (mode) => {
+        const current = page();
+        const original = current.content.summary;
+        const saved = structuredClone(current);
+        saved.content.summary += " Editorial edit.";
+        let attempts = 0;
+        let releases = 0;
+        const failure = new Error(
+            mode === "other"
+                ? "Synthetic validation failure"
+                : "View history head conflict",
+        );
+        const service: Parameters<typeof editPausedConsolidationDraft>[0] = {
+            deferMaintenance: () => () => {
+                releases++;
+            },
+            getMaintenanceStatus: () => ({
+                mode: "automatic",
+                paused: true,
+                settled: false,
+                pending: ["corpus:committed-read-cleanup"],
+                running: [],
+                failures: [],
+                deferred: [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => [],
+            listViews: async () => ({
+                head: `head-${attempts}`,
+                views: [current],
+                wikiFamily: { enabled: false, pending: false },
+            }),
+            saveViewDraft: async (request) => {
+                expect(request.expectedHead).toBe(`head-${attempts}`);
+                expect(request.expectedVersion).toBe(current.version);
+                expect(request.content.summary).toBe(saved.content.summary);
+                attempts++;
+                if (mode !== "head" || attempts === 1) throw failure;
+                return { commitId: "saved", version: saved };
+            },
+        };
+        const result = editPausedConsolidationDraft(
+            service,
+            "corpus",
+            current.viewId,
+            (content) => {
+                content.summary += " Editorial edit.";
+            },
+        );
+        if (mode === "head") {
+            await expect(result).resolves.toEqual({
+                commitId: "saved",
+                version: saved,
+            });
+            expect(attempts).toBe(2);
+        } else {
+            await expect(result).rejects.toBe(failure);
+            expect(attempts).toBe(mode === "exhausted" ? 20 : 1);
+        }
+        expect(current.content.summary).toBe(original);
+        expect(releases).toBe(1);
+    },
+);
+
 function covered(): WikiSubjectAssessment {
     return {
         disposition: "covered",
@@ -1591,12 +1658,7 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             const maintain = async (
                 operation: "pause" | "resume" | "update",
             ) => {
-                const result = await service.maintainViews({
-                    corpusId,
-                    family: "wiki",
-                    operation,
-                    expectedHead: (await service.listViews(corpusId)).head,
-                });
+                const result = await changeFamily(service, corpusId, operation);
                 await finish(result.job);
             };
             await maintain("pause");
@@ -1627,17 +1689,14 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             const beforeEdit = assessed;
             expect(beforeEdit).toBeGreaterThan(0);
             const canonical = (await service.listViews(corpusId)).views[0];
-            const content = structuredClone(canonical.content);
-            content.summary += " Human editorial qualification.";
-            await service.saveViewDraft({
+            await editPausedConsolidationDraft(
+                service,
                 corpusId,
-                viewId: canonical.viewId,
-                definition: derivedDefinitionInput(canonical),
-                content,
-                relationships: authoredRelationships(canonical),
-                expectedHead: (await service.listViews(corpusId)).head,
-                expectedVersion: canonical.version,
-            });
+                canonical.viewId,
+                (content) => {
+                    content.summary += " Human editorial qualification.";
+                },
+            );
             await service.close();
             service = open();
             await maintain("resume");

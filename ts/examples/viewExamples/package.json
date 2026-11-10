@@ -1,0 +1,61 @@
+{
+  "name": "wiki-views",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Informational wiki, project-brief and source-grounded procedural view examples",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/viewExamples"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./memory/views/manifest": "./manifest.json",
+    "./memory/views/provider": "./dist/procedural/pack.js"
+  },
+  "files": [
+    "dist/*.js",
+    "dist/*.d.ts",
+    "dist/procedural/*.js",
+    "dist/procedural/*.d.ts",
+    "dist/procedural/*.txt",
+    "dist/procedural/*Schema.ts",
+    "fixtures",
+    "manifest.json",
+    "README.md",
+    "PROCEDURAL.md"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/procedural/*.txt\" \"src/procedural/*Schema.ts\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log src/*.tsbuildinfo test/*.tsbuildinfo",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "live": "node dist/live.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore --ignore-path .gitignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore --ignore-path .gitignore",
+    "start": "node dist/run.js",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b",
+    "wiki-views": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-service": "workspace:*"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.7",
+    "copyfiles": "^2.4.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
