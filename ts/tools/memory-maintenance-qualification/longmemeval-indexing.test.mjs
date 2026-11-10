@@ -3,6 +3,8 @@
 
 import assert from "node:assert/strict";
 import { constants } from "node:buffer";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import test from "node:test";
 import {
     mkdir,
@@ -33,6 +35,7 @@ import {
 } from "./longmemeval-indexing-contract.mjs";
 import {
     capturePreparation,
+    pauseAt,
     productModules,
 } from "./longmemeval-indexing-storage.mjs";
 import {
@@ -474,6 +477,53 @@ test("provider replay has exact input/identity matching and no success-shaped fa
     );
     assert.equal(replay.calls, 0);
 });
+
+test("recovery checkpoints are not visible until their JSON is complete", async (t) =>
+    temporary(async (root) => {
+        const checkpoint = path.join(root, "checkpoint.json");
+        t.mock.method(Atomics, "wait", () => "timed-out");
+        t.mock.method(fs, "writeFileSync", (file, data, options) => {
+            const fd = fs.openSync(file, options.flag);
+            try {
+                fs.writeSync(fd, data.slice(0, 1));
+                assert.equal(
+                    fs.existsSync(checkpoint),
+                    false,
+                    "The supervisor must not see a partially written checkpoint",
+                );
+                fs.writeSync(fd, data.slice(1));
+            } finally {
+                fs.closeSync(fd);
+            }
+        });
+        syncBuiltinESMExports();
+        try {
+            assert.throws(
+                () => pauseAt(root, "before"),
+                /Recovery supervisor failed to terminate the paused worker/,
+            );
+            assert.deepEqual(await readJson(checkpoint), {
+                point: "before",
+                pid: process.pid,
+            });
+            assert.deepEqual(await readdir(root), ["checkpoint.json"]);
+        } finally {
+            t.mock.restoreAll();
+            syncBuiltinESMExports();
+        }
+    }));
+
+test("recovery checkpoints cannot replace an existing supervisor checkpoint", async (t) =>
+    temporary(async (root) => {
+        const checkpoint = path.join(root, "checkpoint.json");
+        const existing = { point: "before", pid: 123 };
+        await writeNew(checkpoint, existing);
+        const wait = t.mock.method(Atomics, "wait", () => "timed-out");
+        assert.throws(() => pauseAt(root, "rows"), { code: "EEXIST" });
+        assert.equal(wait.mock.callCount(), 0);
+        assert.deepEqual(await readJson(checkpoint), existing);
+        assert.deepEqual(await readdir(root), ["checkpoint.json"]);
+    }));
 
 test(
     "same real SQLite history passes serial/concurrent replay, frames, cancellation, stale input and five hard crashes",

@@ -915,6 +915,40 @@ body[data-memory-hub] {
 .hub-tabs > :focus-visible {
   outline-offset: -3px;
 }
+.hub-view-type-tabs {
+  overflow: visible;
+  align-items: center;
+}
+.hub-view-type-tabs > .hub-menu-host {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.hub-view-type-tabs > [hidden] {
+  display: none;
+}
+.hub-view-type-tabs > .hub-menu-host > button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.hub-view-type-tabs > .hub-menu-host > button[aria-pressed="true"] {
+  color: var(--primary-dark);
+  border-bottom-color: var(--primary);
+}
+.hub-view-type-tabs .hub-menu {
+  top: 100%;
+  max-width: calc(100vw - 32px);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.hub-view-type-tabs .hub-menu [aria-checked="true"] {
+  color: var(--primary-dark);
+  background: var(--accent-soft);
+  font-weight: 650;
+}
+.hub-view-type-tabs .hub-menu button {
+  margin: 0;
+}
 .hub-explore-nav {
   margin-top: 0;
 }
