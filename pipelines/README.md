@@ -363,6 +363,14 @@ timed-out CLI children are infrastructure failures with signal and captured
 output, never successful exit-zero results. Its 30-second child deadline and
 dry-run policy assertions are unchanged.
 
+Offline memory build/consolidation fixtures use a shared elapsed-time waiter.
+Its 30-second default bounds individual reads as well as polling and reports
+the last observed state; recovery stages share a 45-second budget inside the
+unchanged 60-second test deadline. Recovery cases copy a closed, materialized
+baseline and disable unrelated discovery, but still execute actual consolidation,
+interrupted-effect replay and restart/idempotency checks. These remain offline
+correctness gates, not provider-backed live tests; no retry budget was added.
+
 The Windows native-hook pipe fixture records startup phases around helper
 compilation and pipe creation. Readiness failures include those phases, elapsed
 time, PID, exit/signal status, launch errors, and bounded stdout/stderr tails

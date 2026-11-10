@@ -17,6 +17,7 @@ import {
     type ViewBuildJob,
 } from "@typeagent/memory-service";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
+import { waitForViewBuild } from "./viewBuildTestWait.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -399,13 +400,7 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
                 },
             ],
         });
-        while (job.state === "running") {
-            await new Promise<void>((resolve) => setTimeout(resolve, 20));
-            job = (await client.getViewBuild({
-                corpusId: corpus.corpusId,
-                jobId: job.jobId,
-            }))!;
-        }
+        job = await waitForViewBuild(client, job);
         expect(job.state).toBe("complete");
         expect(job.results[0].eligibility?.disposition).toBe("eligible");
         expect(job.results[0].snapshot.inputs).toHaveLength(33);

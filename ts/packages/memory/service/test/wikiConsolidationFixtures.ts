@@ -5,13 +5,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
-import { waitForTestState } from "./waitForTestState.js";
+import { waitForTestState, type TestWaitOptions } from "./waitForTestState.js";
 import {
     indexedLocator,
     parseIndexedLocator,
 } from "../src/indexedFragments.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
-import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
 import {
     authoredRelationships,
@@ -175,6 +174,7 @@ export async function ingestFixture(
     stage: string,
     file: string,
     sourceId: string,
+    wait: TestWaitOptions = {},
 ) {
     const text = await readFile(
         path.join(originalFixtureRoot(), stage, file),
@@ -196,7 +196,20 @@ export async function ingestFixture(
               corpusId,
               source: { ...source, sourceId },
           });
-    expect((await waitForMemoryJob(service, job.jobId)).state).toBe("complete");
+    const current = await waitForTestState(
+        async () => {
+            const value = await service.getJob(job.jobId);
+            if (!value) throw new Error(`Unknown fixture job '${job.jobId}'`);
+            return value;
+        },
+        (value) =>
+            ["complete", "partial", "failed", "cancelled"].includes(
+                value.state,
+            ),
+        `Consolidation ${stage} source ${sourceId}, job ${job.jobId}`,
+        wait,
+    );
+    expect(current.state).toBe("complete");
 }
 export async function settleConsolidation(
     service: Pick<
@@ -205,6 +218,7 @@ export async function settleConsolidation(
     >,
     corpusId: string,
     allowDecision = false,
+    wait: TestWaitOptions & { description?: string } = {},
 ) {
     const hasRunnableMaintenance = () => {
         const status = service.getMaintenanceStatus();
@@ -261,7 +275,8 @@ export async function settleConsolidation(
             };
         },
         (value) => value.settled,
-        "Offline consolidation",
+        wait.description ?? `Offline consolidation ${corpusId}`,
+        wait,
     );
     if (!result.snapshot)
         throw new Error("Settled consolidation snapshot missing");

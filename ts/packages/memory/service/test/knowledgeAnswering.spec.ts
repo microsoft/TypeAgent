@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import type { ChatModel } from "@typeagent/aiclient";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
@@ -239,24 +241,13 @@ describe("service source-plus-view answer integration", () => {
     }
 
     async function settleBuild(job: ViewBuildJob) {
-        for (let attempt = 0; attempt < 300; attempt++) {
-            const current = (await service.getViewBuild({
-                corpusId: job.corpusId,
-                jobId: job.jobId,
-            }))!;
-            if (current.state !== "running") {
-                expect(current.results.map((result) => result.reason)).toEqual(
-                    expect.not.arrayContaining([
-                        expect.stringMatching(/failed|unsupported|conflict/i),
-                    ]),
-                );
-                expect(current.state).toBe("complete");
-                return;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        throw new Error("Offline schema build did not finish");
+        const current = await waitForViewBuild(service, job);
+        expect(current.results.map((result) => result.reason)).toEqual(
+            expect.not.arrayContaining([
+                expect.stringMatching(/failed|unsupported|conflict/i),
+            ]),
+        );
+        expect(current.state).toBe("complete");
     }
 
     test("Find and staged Understanding share validated evidence without repeated search or an initial prose call", async () => {
