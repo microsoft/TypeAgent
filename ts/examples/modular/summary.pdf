@@ -21,49 +21,21 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 8 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 8 0 obj
-<< /Length 1959 >>
+<< /Length 7811 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 1 of 5) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (22 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (21 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (FrameHandler group) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 487.28 Tm (FrameHandler) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 119.47 487.28 Tm (window.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 474.80 Tm (Something that does its work during a display frame.) Tj ET
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (RectangleOps group) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 487.28 Tm (Point) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 68.78 487.28 Tm (geometry.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 474.80 Tm (A location, in the coordinate space its use states.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 462.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 462.80 Tm (FrameScheduler; View \(page 4\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 450.80 Tm (frame\(timeMs: number\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 438.80 Tm (timeMs is the frame's timestamp in milliseconds, on the window's) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 426.80 Tm (monotonic clock.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 404.88 Tm (FrameScheduler) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 132.81 404.88 Tm (window.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 392.40 Tm (Calls handlers before the window's next display refresh.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 380.40 Tm (requestFrame\(handler: FrameHandler\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 368.40 Tm (Asks for one call to handler.frame\(\) before the next display refresh.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 420.40 m 384.00 420.40 l S
-endstream
-endobj
-9 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 10 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
-endobj
-10 0 obj
-<< /Length 9110 >>
-stream
-BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 2 of 5) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (22 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (Viewport group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Layer \(page 4\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (Point) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 68.78 475.28 Tm (geometry.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (A location, in the coordinate space its use states.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (RectangleOps; Shape, InkStroke, Circle \(page 3\); Layer \(page 4\);) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 438.80 Tm (ShapeLocatorQueries, EventDistributor \(page 5\).) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 462.80 Tm (RectangleOps; Shape, InkStroke, Circle \(page 2\);) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 450.80 Tm (ShapeLocatorQueries \(page 3\); RenderGroup \(page 4\); EventDistributor) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 438.80 Tm (\(page 5\).) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 426.80 Tm (readonly x: number) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 414.80 Tm (readonly y: number) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 392.88 Tm (Rectangle) Tj ET
@@ -71,96 +43,81 @@ BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 96.13 392.88 Tm (geometry.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 380.40 Tm (An axis-aligned rectangle covering the half-open region [x, x + width\) × [y, y +) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 368.40 Tm (height\).) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 356.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (RectangleOps; Shape \(page 3\); Layer \(page 4\);) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (ShapeLocatorQueries, LayoutObject \(page 5\).) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (RectangleOps; Shape \(page 2\); ShapeLocatorQueries \(page 3\);) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (RenderGroup \(page 4\); LayoutObject \(page 5\).) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 332.40 Tm (readonly x: number) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 320.40 Tm (readonly y: number) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (readonly width: number) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 296.40 Tm (readonly height: number) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 274.48 Tm (RectangleOps) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 119.47 274.48 Tm (geometry.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 262.00 Tm (Operations on rectangles, following Rectangle's half-open semantics.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 250.00 Tm (contains\(r: Rectangle, p: Point\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 238.00 Tm (Whether p lies in r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 226.00 Tm (intersects\(a: Rectangle, b: Rectangle\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 214.00 Tm (Whether a and b overlap.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 202.00 Tm (cut\(r: Rectangle, edge: Edge, size: number\): [Rectangle,) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 190.00 Tm (Rectangle]) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 178.00 Tm (Cuts a strip of the given size off one edge of r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (splitHoriz\(r: Rectangle, ...weights: number[]\):) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 154.00 Tm (Rectangle[]) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 142.00 Tm (Splits r left to right into one rectangle per weight, each as wide as its share) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 130.00 Tm (of r's width, and as tall as r. splitHoriz\(r, 5, 10, 5\) gives a quarter, a half) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (and a quarter.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 106.00 Tm (splitVert\(r: Rectangle, ...weights: number[]\):) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 94.00 Tm (Rectangle[]) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 82.00 Tm (Splits r top to bottom into one rectangle per weight, each as tall as its) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 70.00 Tm (share of r's height, and as wide as r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 58.00 Tm (inset\(r: Rectangle, d: number\): Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 46.00 Tm (r shrunk by d on every side.) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 262.00 Tm (Operations on rectangles, following Rectangle's half-open semantics. cut,) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 250.00 Tm (splitHoriz, splitVert, inset and place are each defined exactly by their reference) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 238.00 Tm (functions in geometry.vocab.ts.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 226.00 Tm (contains\(r: Rectangle, p: Point\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 214.00 Tm (Whether p lies in r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 202.00 Tm (intersects\(a: Rectangle, b: Rectangle\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 190.00 Tm (Whether a and b overlap.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 178.00 Tm (cut\(r: Rectangle, edge: Edge, size: number\): [Rectangle,) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 166.00 Tm (Rectangle]) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (Cuts a strip of the given size off one edge of r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 142.00 Tm (splitHoriz\(r: Rectangle, ...weights: number[]\):) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 130.00 Tm (Rectangle[]) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (Splits r left to right into one rectangle per weight, each as wide as its share) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 106.00 Tm (of r's width, and as tall as r. splitHoriz\(r, 5, 10, 5\) gives a quarter, a half) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 94.00 Tm (and a quarter.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 82.00 Tm (splitVert\(r: Rectangle, ...weights: number[]\):) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 70.00 Tm (Rectangle[]) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 58.00 Tm (Splits r top to bottom into one rectangle per weight, each as tall as its) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 46.00 Tm (share of r's height, and as wide as r.) Tj ET
 BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (RectangleOps, continued) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (place\(r: Rectangle, size: { readonly width: number;) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 485.60 Tm (readonly height: number }, alignX: Align, alignY:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 473.60 Tm (Align\): Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (A rectangle of the given size placed within r, aligned along each axis at) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 449.60 Tm (the start, the center \(rounded down to a whole unit\) or the end.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 427.68 Tm (Viewport) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 461.46 427.68 Tm (geometry.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 415.20 Tm (A 2D similarity transform \(uniform scale, rotation, translation\) from canonical) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 403.20 Tm (coordinates to view coordinates \(see the top of this file\); each view applies its) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 391.20 Tm (own pixel density on top.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 379.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 379.20 Tm (Exporter; View \(page 4\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 367.20 Tm (readonly scale: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (View units per canonical unit.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 343.20 Tm (readonly rotation: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 331.20 Tm (Radians.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 319.20 Tm (readonly tx: number) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 307.20 Tm (readonly ty: number) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 285.28 Tm (Scene) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 443.35 285.28 Tm (<T>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 464.13 285.28 Tm (view.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 272.80 Tm (What views draw: layers in canonical coordinates, the same for every view,) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 260.80 Tm (with no viewport. layers[0] is the bottom layer.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 248.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 248.80 Tm (Exporter; View \(page 4\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 236.80 Tm (readonly layers: readonly Layer<T>[]) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 214.88 Tm (Exporter) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 457.34 214.88 Tm (<T, Out>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 508.12 214.88 Tm (view.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 202.40 Tm (Produces a document \(SVG, PDF and so on\) from a scene, once, on request.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 190.40 Tm (export\(scene: Scene<T>, viewport: Viewport, width:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 178.40 Tm (number, height: number\): Out) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 156.48 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 144.00 Tm (type Edge = "top" | "bottom" | "left" | "right") Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 132.00 Tm (A side of a rectangle.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 120.00 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 120.00 Tm (RectangleOps.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 108.00 Tm (type Align = "start" | "center" | "end") Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 96.00 Tm (Where a smaller rectangle goes within a larger one, along one axis.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 84.00 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 84.00 Tm (RectangleOps.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (inset\(r: Rectangle, d: number\): Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (r shrunk by d on every side.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 473.60 Tm (place\(r: Rectangle, size: { readonly width: number;) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 461.60 Tm (readonly height: number }, alignX: Align, alignY:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 449.60 Tm (Align\): Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 437.60 Tm (A rectangle of the given size placed within r, aligned along each axis at) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 425.60 Tm (the start, the center \(rounded down to a whole unit\) or the end.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 403.68 Tm (Viewport) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 461.46 403.68 Tm (geometry.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 391.20 Tm (A 2D similarity transform \(uniform scale, rotation, translation\) from canonical) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 379.20 Tm (coordinates to view coordinates \(see the top of this file\).) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 367.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 367.20 Tm (View \(page 4\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 355.20 Tm (readonly scale: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 343.20 Tm (View units per canonical unit.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 331.20 Tm (readonly rotation: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 319.20 Tm (Radians.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 307.20 Tm (readonly tx: number) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 295.20 Tm (readonly ty: number) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 273.28 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 260.80 Tm (type Edge = "top" | "bottom" | "left" | "right") Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 248.80 Tm (A side of a rectangle.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 236.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 236.80 Tm (RectangleOps.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 224.80 Tm (type Align = "start" | "center" | "end") Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 212.80 Tm (Where a smaller rectangle goes within a larger one, along one axis.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 200.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 200.80 Tm (RectangleOps.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 408.40 m 384.00 408.40 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 290.00 m 384.00 290.00 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 443.20 m 756.00 443.20 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 300.80 m 756.00 300.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 230.40 m 756.00 230.40 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 172.00 m 756.00 172.00 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 419.20 m 756.00 419.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 288.80 m 756.00 288.80 l S
 endstream
 endobj
-11 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 12 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 10 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
-12 0 obj
-<< /Length 8270 >>
+10 0 obj
+<< /Length 8265 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 3 of 5) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (22 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 2 of 5) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (21 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (Shape group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Point, Rectangle \(page 2\).) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Point, Rectangle \(page 1\).) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (Color) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 70.11 475.28 Tm (color.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (An sRGB color with straight \(not premultiplied\) alpha.) Tj ET
@@ -174,199 +131,90 @@ BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 380.88 Tm (Shape) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 74.79 380.88 Tm (shape.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 368.40 Tm (A region of the plane, such as an ink stroke.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 356.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (InkStroke, Circle, ShapeCollection; ShapeView, DrawingLayer \(page) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (4\); ShapeLocator \(page 5\).) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (InkStroke, Circle, ShapeCollection; ShapeLocator \(page 3\);) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (ShapeView, DrawingGroup \(page 4\).) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 332.40 Tm (readonly kind: string) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (Identifies the shape's type, so that code such as a view can tell which kind) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 308.40 Tm (of shape it has.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 296.40 Tm (boundingBox\(\): Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (The exact extents of the shape: x and y are its minimum x and y, and x +) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (width and y + height are its maximum x and y.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (intersects\(r: Rectangle\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 248.40 Tm (Whether at least one point lies both in this shape and in r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 236.40 Tm (contains\(p: Point\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (Whether p lies in the shape.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 202.48 Tm (InkStroke) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 93.46 202.48 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 131.26 202.48 Tm (Shape) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 164.04 202.48 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 190.00 Tm (A stroke of digital ink: a polyline drawn with a round pen.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 178.00 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 178.00 Tm (Shape.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (readonly kind: "ink") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 154.00 Tm (readonly points: readonly Point[]) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 142.00 Tm (The polyline's vertices, in drawing order.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 130.00 Tm (readonly thickness: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (Pen diameter, in canonical units.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 106.00 Tm (readonly color: Color) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (Circle) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 444.13 507.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 481.93 507.68 Tm (Shape) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 514.71 507.68 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 495.20 Tm (A filled circle: the points within radius of center, with the half-open rule at its) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 483.20 Tm (maximum x and y.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 471.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 471.20 Tm (Shape.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 459.20 Tm (readonly kind: "circle") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (readonly center: Point) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 435.20 Tm (readonly radius: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 423.20 Tm (In canonical units.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (readonly color: Color) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 389.28 Tm (ShapeCollection) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 502.02 389.28 Tm (<S extends Shape>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 606.80 389.28 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 376.80 Tm (A collection of shapes, kept in z-order.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 364.80 Tm (add\(shape: S\): ShapeId) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 352.80 Tm (Adds shape and returns its new ID.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 340.80 Tm (remove\(id: ShapeId\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 328.80 Tm (Removes the shape with this ID.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 316.80 Tm (removeMultiple\(ids: readonly ShapeId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 304.80 Tm (Removes every listed ID that is present. ids may contain duplicates and) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 292.80 Tm (IDs that aren't present; both are ignored.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 280.80 Tm (get\(id: ShapeId\): S | undefined) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 268.80 Tm (The shape with this ID, or undefined if no such shape exists.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 256.80 Tm (readonly size: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 244.80 Tm (The number of shapes in the collection.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 232.80 Tm (forEach\(visit: \(id: ShapeId, shape: S\) => void\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 220.80 Tm (Calls visit for each shape, bottom to top in z-order. visit must not modify) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 208.80 Tm (the collection.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 196.80 Tm (compareZ\(a: ShapeId, b: ShapeId\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 184.80 Tm (Compares the z-order of two shapes.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 162.88 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 150.40 Tm (type ShapeId = number & { readonly __brand: "ShapeId" }) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 138.40 Tm (Opaque identifier for a shape in a ShapeCollection.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 126.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 126.40 Tm (ShapeCollection, ShapeId; ShapeLocatorQueries, ShapeLocator) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 114.40 Tm (\(page 5\).) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (Identifies the shape's type.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (boundingBox\(\): Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 296.40 Tm (The exact extents of the shape: x and y are its minimum x and y, and x +) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (width and y + height are its maximum x and y.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 272.40 Tm (intersects\(r: Rectangle\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 260.40 Tm (Whether at least one point lies both in this shape and in r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 248.40 Tm (contains\(p: Point\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 236.40 Tm (Whether p lies in the shape.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 214.48 Tm (InkStroke) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 93.46 214.48 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 131.26 214.48 Tm (Shape) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 164.04 214.48 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 202.00 Tm (A stroke of digital ink: a polyline drawn with a round pen.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 190.00 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 190.00 Tm (Shape.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 178.00 Tm (readonly kind: "ink") Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (readonly points: readonly Point[]) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (The polyline's vertices, in drawing order.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 142.00 Tm (readonly thickness: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 130.00 Tm (Pen diameter, in canonical units.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 118.00 Tm (readonly color: Color) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 96.08 Tm (Circle) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 72.13 96.08 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 109.93 96.08 Tm (Shape) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 142.71 96.08 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 83.60 Tm (A filled circle: the points within radius of center, with the half-open rule at its) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 71.60 Tm (maximum x and y.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 59.60 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 59.60 Tm (Shape.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 47.60 Tm (readonly kind: "circle") Tj ET
+BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (Circle, continued) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (readonly center: Point) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 485.60 Tm (readonly radius: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 473.60 Tm (In canonical units.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 461.60 Tm (readonly color: Color) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 439.68 Tm (ShapeCollection) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 502.02 439.68 Tm (<S extends Shape>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 606.80 439.68 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 427.20 Tm (A collection of shapes, kept in z-order.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 415.20 Tm (add\(shape: S\): ShapeId) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 403.20 Tm (Adds shape and returns its new ID.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 391.20 Tm (remove\(id: ShapeId\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 379.20 Tm (Removes the shape with this ID.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 367.20 Tm (removeMultiple\(ids: readonly ShapeId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (Removes every listed ID that is present. ids may contain duplicates and) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 343.20 Tm (IDs that aren't present; both are ignored.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 331.20 Tm (get\(id: ShapeId\): S | undefined) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 319.20 Tm (The shape with this ID, or undefined if no such shape exists.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 307.20 Tm (readonly size: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 295.20 Tm (The number of shapes in the collection.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 283.20 Tm (forEach\(visit: \(id: ShapeId, shape: S\) => void\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 271.20 Tm (Calls visit for each shape, bottom to top in z-order. visit must not modify) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 259.20 Tm (the collection.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 247.20 Tm (compareZ\(a: ShapeId, b: ShapeId\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 235.20 Tm (Compares the z-order of two shapes.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 213.28 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 200.80 Tm (type ShapeId = number & { readonly __brand: "ShapeId" }) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 188.80 Tm (Opaque identifier for a shape in a ShapeCollection.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 176.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 176.80 Tm (ShapeCollection, ShapeId; ShapeLocatorQueries, ShapeLocator) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 164.80 Tm (\(page 3\).) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 396.40 m 384.00 396.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 218.00 m 384.00 218.00 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 404.80 m 756.00 404.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 178.40 m 756.00 178.40 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 230.00 m 384.00 230.00 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 111.60 m 384.00 111.60 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 455.20 m 756.00 455.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 228.80 m 756.00 228.80 l S
 endstream
 endobj
-13 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 14 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 12 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
-14 0 obj
-<< /Length 9461 >>
+12 0 obj
+<< /Length 4467 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 4 of 5) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (22 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (Layer group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to FrameHandler \(page 1\); Point, Rectangle, Scene, Viewport \(page 2\);) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 483.20 Tm (Shape \(page 3\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 463.28 Tm (Emitter) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.34 463.28 Tm (<Events extends EventMap>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 230.12 463.28 Tm (events.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 450.80 Tm (Something that emits events.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 438.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 438.80 Tm (Layer, View.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 426.80 Tm (on<E extends keyof Events & string>\(event: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 414.80 Tm (\(...args: Events[E]\) => void\): this) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 402.80 Tm (Registers listener for event.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 390.80 Tm (off<E extends keyof Events & string>\(event: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 378.80 Tm (\(...args: Events[E]\) => void\): this) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 366.80 Tm (Removes the most recent registration of listener for event; does nothing if) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 354.80 Tm (it has none.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 332.88 Tm (Layer) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 68.02 332.88 Tm (<T>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 88.80 332.88 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 126.60 332.88 Tm (Emitter<{ change: [] }>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 267.38 332.88 Tm (view.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 320.40 Tm (One layer of a scene: items in z-order, found by location, emitting change) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 308.40 Tm (when they change.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 296.40 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 296.40 Tm (Emitter.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 114.91 296.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 156.59 296.40 Tm (DrawingLayer; Scene \(page 2\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 284.40 Tm (get\(id: ItemId\): T | undefined) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (The item with this ID, or undefined if no such item is present.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (readonly size: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 248.40 Tm (The number of items in the layer.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 236.40 Tm (forEach\(visit: \(id: ItemId, item: T\) => void\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (Calls visit for each item, bottom to top in z-order. visit must not change the) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 212.40 Tm (source.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 200.40 Tm (compareZ\(a: ItemId, b: ItemId\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 188.40 Tm (Compares the z-order of two items.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 176.40 Tm (inRect\(r: Rectangle, out: ItemId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 164.40 Tm (Finds the items whose regions intersect r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 152.40 Tm (atPoint\(p: Point, out: ItemId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 140.40 Tm (Finds the items whose regions contain p.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 118.48 Tm (DrawingLayer) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 118.14 118.48 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 155.94 118.48 Tm (Layer<Shape>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 230.72 118.48 Tm (shapeView.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 106.00 Tm (A layer of shapes with edits, for code that changes what a layer shows, such) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 94.00 Tm (as an app's controller.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 82.00 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 82.00 Tm (Layer.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 70.00 Tm (add\(shape: Shape\): ItemId) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 58.00 Tm (Adds shape as the top item, and emits change.) Tj ET
-BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (DrawingLayer, continued) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (remove\(id: ItemId\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Removes the item with ID id, if present, and emits change if it was.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 473.60 Tm (removeMultiple\(ids: readonly ItemId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (Removes every listed item that is present, and emits change once if any) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 449.60 Tm (was.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 427.68 Tm (View) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 435.35 427.68 Tm (<T>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 456.13 427.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 493.93 427.68 Tm (FrameHandler, Emitter<{ viewport:) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 423.00 415.20 Tm ([Viewport] }>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 503.78 415.20 Tm (view.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 403.20 Tm (Shows a scene on screen through a viewport, and stays current.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 391.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 391.20 Tm (Emitter; FrameHandler \(page 1\).) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 596.39 391.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 638.07 391.20 Tm (ShapeView.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 379.20 Tm (readonly scene: Scene<T>) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 367.20 Tm (viewport: Viewport) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (Setting this redraws the view at the next frame and emits viewport with the) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 343.20 Tm (new value.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 331.20 Tm (dispose\(\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 319.20 Tm (Ends the view: removes its listeners from the scene's layers, and) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 307.20 Tm (requests, draws and emits nothing more.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 285.28 Tm (ShapeView) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 474.14 285.28 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 511.94 285.28 Tm (View<Shape>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 580.72 285.28 Tm (shapeView.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 272.80 Tm (A view of shapes.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 260.80 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 260.80 Tm (View.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 248.80 Tm (frame\(timeMs: number\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 236.80 Tm (Draws the scene as it is now.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 214.88 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 202.40 Tm (type EventMap = Record<string, unknown[]>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 190.40 Tm (Each event's name, mapped to the arguments its listeners get.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 178.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 178.40 Tm (Emitter.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 166.40 Tm (type ItemId = number & { readonly __brand: "ItemId" }) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 154.40 Tm (Identifies an item within one layer.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 142.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 142.40 Tm (Layer, DrawingLayer, ItemId.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 348.40 m 384.00 348.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 134.00 m 384.00 134.00 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 443.20 m 756.00 443.20 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 300.80 m 756.00 300.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 230.40 m 756.00 230.40 l S
-endstream
-endobj
-15 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 16 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
-endobj
-16 0 obj
-<< /Length 6807 >>
-stream
-BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 5 of 5) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (22 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 3 of 5) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (21 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (ShapeLocatorQueries group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Point, Rectangle \(page 2\); ShapeId, Shape \(page 3\).) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Point, Rectangle \(page 1\); ShapeId, Shape \(page 2\).) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (ShapeLocatorQueries) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.48 475.28 Tm (shape.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (Finds shapes by location.) Tj ET
@@ -390,47 +238,192 @@ BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 308.40 Tm (Removes id from the in
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 296.40 Tm (removeMultiple\(ids: readonly ShapeId[]\): number) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (Removes every listed ID that is present. ids may contain duplicates and) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (IDs that aren't present; both are ignored.) Tj ET
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 242.48 Tm (LayoutObject group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 230.00 Tm (Refers to Rectangle, Point \(page 2\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 210.08 Tm (LayoutObject) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 115.46 210.08 Tm (layout.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 197.60 Tm (Something placed in a region of a window.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 185.60 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 185.60 Tm (EventDistributor.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 173.60 Tm (region: Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 161.60 Tm (Where it is, in the window's coordinates.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 139.68 Tm (EventDistributor) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 130.01 139.68 Tm (<M>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 150.79 139.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 188.59 139.68 Tm (LayoutObject) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 263.37 139.68 Tm (layout.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 127.20 Tm (Passes a platform's positional events to listeners by where they fall.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 115.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 115.20 Tm (LayoutObject.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 103.20 Tm (locate\(event: M[keyof M]\): Point) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 91.20 Tm (Where event happened, in the window's coordinates.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 79.20 Tm (on<E extends keyof M & string>\(eventName: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 67.20 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 55.20 Tm (Registers listener for eventName on target.) Tj ET
-BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (EventDistributor, continued) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (off<E extends keyof M & string>\(eventName: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 485.60 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 473.60 Tm (Removes the most recent registration of listener for eventName on target;) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (does nothing if there is none.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 449.60 Tm (distribute<E extends keyof M & string>\(eventName: E,) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 437.60 Tm (event: M[E], except?: LayoutObject\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 425.60 Tm (Passes event to the innermost target, among those registered for) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 413.60 Tm (eventName other than except, that contains it.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 391.68 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 379.20 Tm (type Listener<M, E extends keyof M> = \(eventName: E,) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 367.20 Tm (event: M[E]\) => void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (Gets one of a platform's events: its name, and the platform's event object.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 343.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 343.20 Tm (EventDistributor.) Tj ET
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 242.48 Tm (FrameHandler group) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 222.08 Tm (FrameHandler) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 119.47 222.08 Tm (frames.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 209.60 Tm (Something that does its work during a display frame.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 197.60 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 197.60 Tm (FrameScheduler; View \(page 4\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 185.60 Tm (frame\(timeMs: number\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 173.60 Tm (timeMs is the frame's timestamp in milliseconds, on the window's) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 161.60 Tm (monotonic clock.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 139.68 Tm (FrameScheduler) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 132.81 139.68 Tm (frames.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 127.20 Tm (Calls handlers before the window's next display refresh.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 115.20 Tm (requestFrame\(handler: FrameHandler\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 103.20 Tm (Asks for one call to handler.frame\(\) before the next display refresh.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 396.40 m 384.00 396.40 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 262.00 m 384.00 262.00 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 155.20 m 384.00 155.20 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 407.20 m 756.00 407.20 l S
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 14 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
+endobj
+14 0 obj
+<< /Length 10158 >>
+stream
+BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 4 of 5) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (21 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (RenderGroup group) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Point, Rectangle, Viewport \(page 1\); Shape \(page 2\); FrameHandler) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 483.20 Tm (\(page 3\).) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 463.28 Tm (EventEmitter) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 110.02 463.28 Tm (<Events extends EventMap>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 262.80 463.28 Tm (events.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 450.80 Tm (Something that emits events.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 438.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 438.80 Tm (RenderGroup, View.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 426.80 Tm (on<E extends keyof Events & string>\(event: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 414.80 Tm (\(...args: Events[E]\) => void\): this) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 402.80 Tm (Registers listener for event.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 390.80 Tm (off<E extends keyof Events & string>\(event: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 378.80 Tm (\(...args: Events[E]\) => void\): this) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 366.80 Tm (Removes the most recent registration of listener for event; does nothing if) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 354.80 Tm (it has none.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 332.88 Tm (RenderGroup) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 113.34 332.88 Tm (<T>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 134.12 332.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 171.92 332.88 Tm (EventEmitter<{ change: [] }>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 342.70 332.88 Tm (view.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 320.40 Tm (One group of a scene: items in z-order, found by location, emitting change) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 308.40 Tm (when they change.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 296.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 296.40 Tm (EventEmitter.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 140.48 296.40 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 182.16 296.40 Tm (Scene, DrawingGroup.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 284.40 Tm (get\(id: ItemId\): T | undefined) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (The item with this ID, or undefined if no such item is present.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (readonly size: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 248.40 Tm (The number of items in the group.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 236.40 Tm (forEach\(visit: \(id: ItemId, item: T\) => void\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (Calls visit for each item, bottom to top in z-order. visit must not change the) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 212.40 Tm (source.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 200.40 Tm (compareZ\(a: ItemId, b: ItemId\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 188.40 Tm (Compares the z-order of two items.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 176.40 Tm (inRect\(r: Rectangle, out: ItemId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 164.40 Tm (Finds the items whose regions intersect r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 152.40 Tm (atPoint\(p: Point, out: ItemId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 140.40 Tm (Finds the items whose regions contain p.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 118.48 Tm (DrawingGroup) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 122.12 118.48 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 159.92 118.48 Tm (RenderGroup<Shape>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 270.70 118.48 Tm (shapeView.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 106.00 Tm (A group of shapes with edits.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 94.00 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 94.00 Tm (RenderGroup.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 82.00 Tm (add\(shape: Shape\): ItemId) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 70.00 Tm (Adds shape as the top item, and emits change.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 58.00 Tm (remove\(id: ItemId\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 46.00 Tm (Removes the item with ID id, if present, and emits change if it was.) Tj ET
+BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (DrawingGroup, continued) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (removeMultiple\(ids: readonly ItemId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Removes every listed item that is present, and emits change once if any) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 473.60 Tm (was.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 451.68 Tm (Scene) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 443.35 451.68 Tm (<T>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 464.13 451.68 Tm (view.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 439.20 Tm (What views draw: groups in canonical coordinates, the same for every view,) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 427.20 Tm (with no viewport. groups[0] is the bottom group.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 415.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 415.20 Tm (View.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 403.20 Tm (readonly groups: readonly RenderGroup<T>[]) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 381.28 Tm (View) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 435.35 381.28 Tm (<T>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 456.13 381.28 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 493.93 381.28 Tm (FrameHandler, EventEmitter<{ viewport:) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 423.00 368.80 Tm ([Viewport] }>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 503.78 368.80 Tm (view.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 356.80 Tm (Shows a scene on screen through a viewport, and stays current.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 344.80 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 344.80 Tm (EventEmitter; FrameHandler \(page 3\).) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 621.96 344.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 663.64 344.80 Tm (ShapeView.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 332.80 Tm (readonly scene: Scene<T>) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 320.80 Tm (viewport: Viewport) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 308.80 Tm (Setting this redraws the view at the next frame and emits viewport with the) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 296.80 Tm (new value.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 284.80 Tm (dispose\(\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 272.80 Tm (Ends the view: removes its listeners from the scene's groups, and) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 260.80 Tm (requests, draws and emits nothing more.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 238.88 Tm (ShapeView) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 474.14 238.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 511.94 238.88 Tm (View<Shape>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 580.72 238.88 Tm (shapeView.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 226.40 Tm (A view of shapes.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 214.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 214.40 Tm (View.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 202.40 Tm (frame\(timeMs: number\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 190.40 Tm (Draws the scene as it is now.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 168.48 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 156.00 Tm (type EventMap = Record<string, unknown[]>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 144.00 Tm (Each event's name, mapped to the arguments its listeners get.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 132.00 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 132.00 Tm (EventEmitter.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 120.00 Tm (type ItemId = number & { readonly __brand: "ItemId" }) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 108.00 Tm (Identifies an item within one group.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 96.00 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 96.00 Tm (RenderGroup, DrawingGroup, ItemId.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 348.40 m 384.00 348.40 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 134.00 m 384.00 134.00 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 467.20 m 756.00 467.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 396.80 m 756.00 396.80 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 254.40 m 756.00 254.40 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 184.00 m 756.00 184.00 l S
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 16 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
+endobj
+16 0 obj
+<< /Length 4193 >>
+stream
+BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 5 of 5) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (21 interfaces and 6 type aliases from 8 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-10 by npm run summary.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (LayoutObject group) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Rectangle, Point \(page 1\).) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (LayoutObject) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 115.46 475.28 Tm (layout.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (Something placed in a region of a window.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (EventDistributor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 438.80 Tm (region: Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 426.80 Tm (Where it is, in the window's coordinates.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 404.88 Tm (EventDistributor) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 130.01 404.88 Tm (<M>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 150.79 404.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 188.59 404.88 Tm (LayoutObject) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 263.37 404.88 Tm (layout.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 392.40 Tm (Passes a platform's positional events to listeners by where they fall.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 380.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 380.40 Tm (LayoutObject.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 368.40 Tm (locate\(event: M[keyof M]\): Point) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 356.40 Tm (Where event happened, in the window's coordinates.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 344.40 Tm (on<E extends keyof M & string>\(eventName: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 332.40 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (Registers listener for eventName on target.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (off<E extends keyof M & string>\(eventName: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 296.40 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (Removes the most recent registration of listener for eventName on target;) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (does nothing if there is none.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (distribute<E extends keyof M & string>\(eventName: E,) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 248.40 Tm (event: M[E], except?: LayoutObject\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 236.40 Tm (Passes event to the innermost target, among those registered for) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (eventName other than except, that contains it.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 202.48 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 190.00 Tm (type Listener<M, E extends keyof M> = \(eventName: E,) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 178.00 Tm (event: M[E]\) => void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 166.00 Tm (Gets one of a platform's events: its name, and the platform's event object.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 54.00 154.00 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 95.68 154.00 Tm (EventDistributor.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 420.40 m 384.00 420.40 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 218.00 m 384.00 218.00 l S
 endstream
 endobj
 xref
@@ -444,16 +437,16 @@ xref
 0000000446 00000 n 
 0000000541 00000 n 
 0000000695 00000 n 
-0000002706 00000 n 
-0000002861 00000 n 
-0000012024 00000 n 
-0000012180 00000 n 
-0000020503 00000 n 
-0000020659 00000 n 
-0000030173 00000 n 
-0000030329 00000 n 
+0000008558 00000 n 
+0000008713 00000 n 
+0000017031 00000 n 
+0000017187 00000 n 
+0000021707 00000 n 
+0000021863 00000 n 
+0000032075 00000 n 
+0000032231 00000 n 
 trailer
 << /Size 17 /Root 1 0 R >>
 startxref
-37189
+36477
 %%EOF
