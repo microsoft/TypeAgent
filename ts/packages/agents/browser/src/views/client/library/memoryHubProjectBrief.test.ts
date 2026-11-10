@@ -140,7 +140,7 @@ const view = {
 };
 const head = "a".repeat(40);
 async function settle() {
-    for (let index = 0; index < 20; index++) await Promise.resolve();
+    for (let index = 0; index < 60; index++) await Promise.resolve();
 }
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(

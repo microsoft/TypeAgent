@@ -7,6 +7,7 @@ export type MenuItem = {
     action: () => void;
     danger?: boolean;
     disabled?: boolean | (() => boolean);
+    checked?: boolean;
 };
 
 export function icon(name: string): HTMLElement {
@@ -120,7 +121,12 @@ export function menuButton(
         for (const item of items) {
             const entry = document.createElement("button");
             entry.type = "button";
-            entry.setAttribute("role", "menuitem");
+            entry.setAttribute(
+                "role",
+                item.checked === undefined ? "menuitem" : "menuitemradio",
+            );
+            if (item.checked !== undefined)
+                entry.setAttribute("aria-checked", String(item.checked));
             entry.disabled =
                 typeof item.disabled === "function"
                     ? item.disabled()

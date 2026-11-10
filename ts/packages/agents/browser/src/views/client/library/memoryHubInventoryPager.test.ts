@@ -13,7 +13,9 @@ test("bounded per-collection pages traverse exhausted collections and restore pr
         { corpusId: "b", total: 3 },
     ]);
     expect(pager.total).toBe(63);
+    expect(pager.canNavigate).toBe(true);
     const controls = pager.controls("views", reload);
+    expect(controls.hidden).toBe(false);
     const next = controls.querySelector<HTMLButtonElement>(
         '[aria-label="Next views page"]',
     )!;
@@ -33,6 +35,8 @@ test("bounded per-collection pages traverse exhausted collections and restore pr
         .click();
     pager.update([{ corpusId: "a", total: 60 }]);
     expect(pager.hasNext).toBe(false);
+    expect(pager.canNavigate).toBe(true);
+    expect(pager.controls("views", reload).hidden).toBe(false);
     expect(pager.total).toBe(63);
     pager
         .controls("views", reload)
@@ -49,6 +53,8 @@ test("bounded per-collection pages traverse exhausted collections and restore pr
     pager.reset();
     expect(pager.total).toBe(0);
     expect(pager.hasNext).toBe(false);
+    expect(pager.canNavigate).toBe(false);
+    expect(pager.controls("views", reload).hidden).toBe(true);
     expect(
         pager
             .controls("views", reload)
@@ -57,3 +63,17 @@ test("bounded per-collection pages traverse exhausted collections and restore pr
             )!.disabled,
     ).toBe(true);
 });
+
+test.each([0, 1, 25, 50])(
+    "hides static controls when %i total items fit on one page per collection",
+    (total) => {
+        const pager = new MemoryHubInventoryPager();
+        pager.update([
+            { corpusId: "a", total: Math.min(total, 25) },
+            { corpusId: "b", total: Math.max(total - 25, 0) },
+        ]);
+        expect(pager.total).toBe(total);
+        expect(pager.canNavigate).toBe(false);
+        expect(pager.controls("views", jest.fn()).hidden).toBe(true);
+    },
+);

@@ -72,7 +72,7 @@ const job = {
     ],
 };
 async function settle() {
-    for (let index = 0; index < 30; index++) await Promise.resolve();
+    for (let index = 0; index < 60; index++) await Promise.resolve();
 }
 function click(host: HTMLElement, label: string) {
     const find = () =>
@@ -86,6 +86,14 @@ function click(host: HTMLElement, label: string) {
         host
             .querySelector<HTMLButtonElement>(
                 '.hub-view-actions button[aria-haspopup="menu"]',
+            )
+            ?.click();
+        button = find();
+    }
+    if (!button) {
+        host
+            .querySelector<HTMLButtonElement>(
+                '.hub-view-type-tabs button[aria-haspopup="menu"]',
             )
             ?.click();
         button = find();
@@ -332,7 +340,11 @@ describe("Memory Center preview-first views", () => {
         );
         expect(card.textContent).not.toContain("Hidden question");
         const requests = invoke.mock.calls
-            .filter(([method]) => method === "memoryListViewSummaries")
+            .filter(
+                ([method, request]) =>
+                    method === "memoryListViewSummaries" &&
+                    (request as ViewSummaryRequest).pageSize !== 1,
+            )
             .map(([, request]) => request);
         expect(requests).toEqual([
             {
@@ -561,12 +573,14 @@ describe("Memory Center preview-first views", () => {
                 .querySelector('[aria-label="Views list"]')!
                 .getAttribute("aria-busy"),
         ).toBe("false");
-        expect(host.querySelector('[aria-pressed="true"]')!.textContent).toBe(
-            "Project Brief",
-        );
+        expect(
+            host
+                .querySelector('[aria-pressed="true"]')!
+                .getAttribute("aria-label"),
+        ).toBe("More view types, Project Brief selected");
         expect(errors).toEqual([]);
     });
-    test("type tabs use the requested labels and order independently of service capability order", async () => {
+    test("type filters keep populated types on the bar and empty types in ordered overflow", async () => {
         const original = invoke.getMockImplementation()!;
         invoke.mockImplementation((method, params) =>
             method === "memoryViewCapabilities"
@@ -600,14 +614,16 @@ describe("Memory Center preview-first views", () => {
             );
         click(host, "Maintain collection");
         expect(
-            [...tabs.querySelectorAll("button")].map((tab) => tab.textContent),
-        ).toEqual([
-            "All",
-            "Knowledge Wiki",
-            "Project Brief",
-            "Timeline",
-            "Troubleshooting Guide",
-        ]);
+            [...tabs.querySelectorAll(":scope > button")].map(
+                (tab) => tab.textContent,
+            ),
+        ).toEqual(["All", "Troubleshooting Guide"]);
+        click(host, "More view types");
+        expect(
+            [...tabs.querySelectorAll('[role="menuitemradio"]')].map(
+                (item) => item.textContent,
+            ),
+        ).toEqual(["Knowledge Wiki", "Project Brief", "Timeline"]);
         click(host, "Project Brief");
         await settle();
         expect(invoke).toHaveBeenCalledWith(
@@ -615,20 +631,138 @@ describe("Memory Center preview-first views", () => {
             expect.objectContaining({ kind: "projectBrief" }),
         );
         expect(
-            host.querySelector(
-                '[aria-label="Filter view type"] [aria-pressed="true"]',
-            )!.textContent,
-        ).toBe("Project Brief");
+            host
+                .querySelector(
+                    '[aria-label="Filter view type"] [aria-pressed="true"]',
+                )!
+                .getAttribute("aria-label"),
+        ).toBe("More view types, Project Brief selected");
     });
 
-    test("view type tabs preserve filtering, search, scroll position and keyboard focus across refresh", async () => {
+    test("type presence includes later pages, survives filtering and changes with collection scope", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            inventoryFixture((method, params) => {
+                if (method === "memoryListViews")
+                    return Promise.resolve({
+                        head,
+                        views:
+                            (params as { corpusId: string }).corpusId === "c"
+                                ? [
+                                      ...Array.from(
+                                          { length: 30 },
+                                          (_, index) => ({
+                                              ...view,
+                                              viewId: `guide-${index}`,
+                                          }),
+                                      ),
+                                      {
+                                          ...view,
+                                          viewId: "late-wiki",
+                                          content: {
+                                              ...content,
+                                              kind: "wiki",
+                                              title: "Later-page wiki",
+                                          },
+                                      },
+                                  ]
+                                : [],
+                    });
+                return original(method, params);
+            }),
+        );
+        await panel.refresh();
+        const primaryLabels = () =>
+            [
+                ...host.querySelectorAll<HTMLButtonElement>(
+                    ".hub-view-type-tabs > button",
+                ),
+            ].map((button) => button.textContent);
+        expect(host.textContent).not.toContain("Later-page wiki");
+        expect(primaryLabels()).toEqual([
+            "All",
+            "Knowledge Wiki",
+            "Troubleshooting Guide",
+        ]);
+        const probes = () =>
+            invoke.mock.calls.filter(
+                ([method, request]) =>
+                    method === "memoryListViewSummaries" &&
+                    (request as ViewSummaryRequest).pageSize === 1,
+            ).length;
+        const before = probes();
+        click(host, "Knowledge Wiki");
+        await settle();
+        expect(host.querySelector(".hub-view-list")!.textContent).toContain(
+            "Later-page wiki",
+        );
+        expect(primaryLabels()).toEqual([
+            "All",
+            "Knowledge Wiki",
+            "Troubleshooting Guide",
+        ]);
+        expect(probes()).toBe(before);
+        scope = "other";
+        panel.scopeChanged();
+        await settle();
+        expect(primaryLabels()).toEqual(["All"]);
+        expect(errors).toEqual([]);
+    });
+
+    test("selecting a populated type that cannot fit restores focus to the replacement overflow trigger", async () => {
+        const measure = jest
+            .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+            .mockImplementation(function (this: HTMLElement) {
+                const width = this.classList.contains("hub-view-type-tabs")
+                    ? 217
+                    : this.classList.contains("hub-menu-host")
+                      ? 40
+                      : this.textContent === "All"
+                        ? 48
+                        : 250;
+                return {
+                    x: 0,
+                    y: 0,
+                    left: 0,
+                    top: 0,
+                    right: width,
+                    bottom: 36,
+                    width,
+                    height: 36,
+                    toJSON: () => ({}),
+                };
+            });
+        try {
+            await panel.refresh();
+            const trigger = () =>
+                host.querySelector<HTMLButtonElement>(
+                    '.hub-view-type-tabs button[aria-haspopup="menu"]',
+                )!;
+            trigger().focus();
+            click(host, "More view types");
+            click(host, "Troubleshooting Guide");
+            await settle();
+            expect(
+                host.querySelector<HTMLButtonElement>(
+                    '.hub-view-type-tabs > button[aria-pressed="true"]',
+                )!.hidden,
+            ).toBe(true);
+            expect(trigger().getAttribute("aria-pressed")).toBe("true");
+            expect(document.activeElement).toBe(trigger());
+            expect(errors).toEqual([]);
+        } finally {
+            measure.mockRestore();
+        }
+    });
+
+    test("view type overflow preserves filtering, search and keyboard focus across refresh", async () => {
         await panel.refresh();
         const kinds = host.querySelector<HTMLElement>(
             '[aria-label="Filter view type"]',
         )!;
         expect(kinds.classList).toContain("hub-tabs");
-        expect(kinds.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(5);
-        kinds.scrollLeft = 120;
+        expect(kinds.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(3);
+        click(host, "More view types");
         const wiki = [...kinds.querySelectorAll("button")].find(
             (tab) => tab.textContent === "Knowledge Wiki",
         )!;
@@ -642,7 +776,7 @@ describe("Memory Center preview-first views", () => {
         const refreshed = host.querySelector<HTMLElement>(
             '[aria-label="Filter view type"]',
         )!;
-        expect(refreshed.scrollLeft).toBe(120);
+        expect(refreshed.scrollLeft).toBe(0);
         expect(
             refreshed.querySelectorAll('[aria-pressed="true"]'),
         ).toHaveLength(1);
@@ -675,7 +809,8 @@ describe("Memory Center preview-first views", () => {
                 ? new Promise((resolve) => {
                       releaseCapabilities = resolve;
                   })
-                : method === "memoryListViewSummaries"
+                : method === "memoryListViewSummaries" &&
+                    (params as ViewSummaryRequest).pageSize !== 1
                   ? new Promise((resolve) => {
                         releaseInventory = resolve;
                     })
@@ -702,7 +837,8 @@ describe("Memory Center preview-first views", () => {
         const original = invoke.getMockImplementation()!;
         const pendingInventories = new Map<string, (value: unknown) => void>();
         invoke.mockImplementation((method, params) =>
-            method === "memoryListViewSummaries"
+            method === "memoryListViewSummaries" &&
+            (params as ViewSummaryRequest).pageSize !== 1
                 ? new Promise((resolve) => {
                       pendingInventories.set(
                           (params as { corpusId: string }).corpusId,

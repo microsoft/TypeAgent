@@ -13,8 +13,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setImmediate } from "node:timers/promises";
+import { gunzipSync } from "node:zlib";
 import yaml from "js-yaml";
-import { prepareSarifFile, verifyForkAnalysis } from "../codeqlForkUpload.mjs";
+import {
+    prepareSarifFile,
+    uploadForkSarif,
+    verifyForkAnalysis,
+} from "../codeqlForkUpload.mjs";
 
 const headSha = "a".repeat(40);
 const baseSha = "b".repeat(40);
@@ -336,6 +342,160 @@ test("does not follow symbolic links or Windows directory junctions", () => {
     });
 });
 
+function uploadFixture(t, statuses = [{ processing_status: "complete" }]) {
+    const directory = mkdtempSync(join(tmpdir(), "codeql-upload-"));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const sarif = {
+        version: "2.1.0",
+        runs: [
+            {
+                tool: { driver: { name: "CodeQL" } },
+                automationDetails: { id: "/language:python/" },
+                results: [{ ruleId: "example", message: { text: "sample" } }],
+            },
+        ],
+    };
+    const path = join(directory, "validated.sarif");
+    writeFileSync(path, JSON.stringify(sarif));
+    const state = {
+        repo: { owner: "example", repo: "project" },
+        destination: { number: 303, sha: headSha, sarif: path },
+        sarif,
+        submissions: [],
+        polls: [],
+    };
+    state.github = {
+        rest: {
+            codeScanning: {
+                uploadSarif: async (parameters) => {
+                    state.submissions.push(parameters);
+                    return { data: { id: "upload-id" } };
+                },
+                getSarif: async (parameters) => {
+                    state.polls.push(parameters);
+                    return {
+                        data: statuses[
+                            Math.min(
+                                state.polls.length - 1,
+                                statuses.length - 1,
+                            )
+                        ],
+                    };
+                },
+            },
+        },
+    };
+    return state;
+}
+
+test("uploads the verified PR SHA and ref, preserving categories and findings", async (t) => {
+    const state = uploadFixture(t);
+    await uploadForkSarif(state.github, state.repo, state.destination);
+    assert.equal(state.submissions.length, 1);
+    const { sarif, ...metadata } = state.submissions[0];
+    assert.deepEqual(metadata, {
+        ...state.repo,
+        commit_sha: headSha,
+        ref: "refs/pull/303/head",
+    });
+    assert.notEqual(metadata.commit_sha, baseSha);
+    assert.deepEqual(
+        JSON.parse(gunzipSync(Buffer.from(sarif, "base64")).toString("utf8")),
+        state.sarif,
+    );
+    assert.deepEqual(state.polls, [{ ...state.repo, sarif_id: "upload-id" }]);
+});
+
+test("waits until code scanning finishes processing the upload", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const state = uploadFixture(t, [
+        { processing_status: "pending" },
+        { processing_status: "complete" },
+    ]);
+    const upload = uploadForkSarif(state.github, state.repo, state.destination);
+    await setImmediate();
+    assert.equal(state.polls.length, 1);
+    t.mock.timers.tick(5000);
+    await upload;
+    assert.equal(state.polls.length, 2);
+});
+
+test("fails explicitly when code scanning rejects the report", async (t) => {
+    const state = uploadFixture(t, [
+        { processing_status: "failed", errors: ["invalid report"] },
+    ]);
+    await assert.rejects(
+        uploadForkSarif(state.github, state.repo, state.destination),
+        /rejected SARIF upload upload-id: \["invalid report"\]/,
+    );
+});
+
+test("rejects unknown processing statuses instead of reporting success", async (t) => {
+    const state = uploadFixture(t, [{ processing_status: "unknown" }]);
+    await assert.rejects(
+        uploadForkSarif(state.github, state.repo, state.destination),
+        /Unexpected SARIF processing status/,
+    );
+});
+
+test("times out if processing never completes", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const state = uploadFixture(t, [{ processing_status: "pending" }]);
+    const rejection = assert.rejects(
+        uploadForkSarif(state.github, state.repo, state.destination),
+        /Timed out waiting for code scanning/,
+    );
+    for (let attempt = 0; attempt < 60; attempt++) {
+        await setImmediate();
+        t.mock.timers.tick(5000);
+    }
+    await rejection;
+    assert.equal(state.polls.length, 60);
+});
+
+for (const method of ["uploadSarif", "getSarif"]) {
+    test(`propagates ${method} API errors`, async (t) => {
+        const state = uploadFixture(t);
+        state.github.rest.codeScanning[method] = async () => {
+            throw new Error("API unavailable");
+        };
+        await assert.rejects(
+            uploadForkSarif(state.github, state.repo, state.destination),
+            /API unavailable/,
+        );
+    });
+}
+
+test("rejects missing upload IDs before polling", async (t) => {
+    const state = uploadFixture(t);
+    state.github.rest.codeScanning.uploadSarif = async () => ({ data: {} });
+    await assert.rejects(
+        uploadForkSarif(state.github, state.repo, state.destination),
+        /did not return a SARIF upload ID/,
+    );
+    assert.equal(state.polls.length, 0);
+});
+
+test("rejects invalid PR destinations before submitting reports", async (t) => {
+    const state = uploadFixture(t);
+    for (const invalid of [
+        { number: 0 },
+        { number: 1.5 },
+        { number: "303" },
+        { sha: baseSha.slice(1) },
+        { sha: undefined },
+    ]) {
+        await assert.rejects(
+            uploadForkSarif(state.github, state.repo, {
+                ...state.destination,
+                ...invalid,
+            }),
+            /verified pull request number and head SHA/,
+        );
+    }
+    assert.equal(state.submissions.length, 0);
+});
+
 test("workflow verifies first, checks out trusted helpers, and isolates categories", () => {
     const workflow = yaml.load(
         readFileSync(
@@ -372,14 +532,28 @@ test("workflow verifies first, checks out trusted helpers, and isolates categori
     assert.equal(download.with.name, "codeql-sarif-${{ matrix.language }}");
     assert.equal(download.with.pattern, undefined);
     assert.equal(download.with["merge-multiple"], undefined);
-    const upload = workflow.jobs.upload.steps.find((step) =>
-        step.uses?.startsWith("github/codeql-action/upload-sarif@"),
+    const upload = workflow.jobs.upload.steps.find(
+        (step) => step.name === "Upload CodeQL results to the pull request",
     );
-    assert.equal(upload.with.category, "/language:${{ matrix.language }}");
+    assert.ok(upload.uses.startsWith("actions/github-script@"));
     assert.equal(
-        upload.with.ref,
-        "refs/pull/${{ needs.verify.outputs.number }}/head",
+        upload.env.CODEQL_PR_NUMBER,
+        "${{ needs.verify.outputs.number }}",
     );
-    assert.equal(upload.with.sha, "${{ needs.verify.outputs.sha }}");
-    assert.equal(upload.with.sarif_file, "${{ steps.report.outputs.sarif }}");
+    assert.equal(upload.env.CODEQL_PR_SHA, "${{ needs.verify.outputs.sha }}");
+    assert.equal(
+        upload.env.CODEQL_SARIF_FILE,
+        "${{ steps.report.outputs.sarif }}",
+    );
+    assert.match(
+        upload.with.script,
+        /helper\.uploadForkSarif\(github, context\.repo,/,
+    );
+    assert.match(
+        upload.with.script,
+        /number: Number\(process\.env\.CODEQL_PR_NUMBER\)/,
+    );
+    assert.match(upload.with.script, /sha: process\.env\.CODEQL_PR_SHA/);
+    assert.match(upload.with.script, /sarif: process\.env\.CODEQL_SARIF_FILE/);
+    assert.equal(workflow.jobs.upload["timeout-minutes"], 10);
 });

@@ -78,16 +78,22 @@ function runCli(
     timeoutMs = 30_000,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
-        execFile(
+        const child = execFile(
             process.execPath,
             [CLI, ...args],
             { timeout: timeoutMs, maxBuffer: 1024 * 1024 },
             (err, stdout, stderr) => {
                 const code = err?.code;
-                if (err && typeof code !== "number") {
+                if (
+                    err &&
+                    (err.killed || err.signal || typeof code !== "number")
+                ) {
                     reject(
-                        new Error(
-                            `CLI subprocess infrastructure failure: ${err.message}; signal=${err.signal ?? "none"}; killed=${err.killed ?? false}; timeoutMs=${timeoutMs}\nstdout:\n${stdout.slice(-4096)}\nstderr:\n${stderr.slice(-4096)}`,
+                        Object.assign(
+                            new Error(
+                                `CLI subprocess infrastructure failure: ${err.message}; signal=${err.signal ?? "none"}; killed=${err.killed ?? false}; timeoutMs=${timeoutMs}\nstdout:\n${stdout.slice(-4096)}\nstderr:\n${stderr.slice(-4096)}`,
+                            ),
+                            { cause: err },
                         ),
                     );
                     return;
@@ -99,6 +105,7 @@ function runCli(
                 });
             },
         );
+        child.stdin?.end();
     });
 }
 
@@ -106,18 +113,13 @@ function cliTest(name: string, fn: () => Promise<void>): void {
     it(name, fn, 35_000);
 }
 
-describe("CLI subprocess accounting", () => {
-    cliTest(
-        "a killed child is an infrastructure failure, not exit zero",
-        async () => {
-            await expect(runCli(["list-tasks"], 1)).rejects.toThrow(
-                "CLI subprocess infrastructure failure:",
-            );
-        },
-    );
-});
-
 describe("CLI integration", () => {
+    cliTest("reports child timeouts instead of a successful exit", async () => {
+        await expect(runCli(["list-tasks"], 1)).rejects.toThrow(
+            "CLI subprocess infrastructure failure:",
+        );
+    });
+
     describe("list-tasks", () => {
         cliTest("lists all registered tasks", async () => {
             const { stdout, code } = await runCli(["list-tasks"]);
