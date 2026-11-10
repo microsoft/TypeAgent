@@ -28,6 +28,9 @@ Where things stand now, and what has been deferred, is in `STATE.md`.
 - `impl-specs.md` holds the implementation tasks by round, with their
   Outputs, Imports, Binds and Hidden fields.
 - `observer-tables.md` holds the observer tables for the stateful interfaces.
+- `behavior.md` is how the app's behavior is specified (scenarios, not
+  controls), what was decided, and what is open. Read it before any work
+  on behavior.
 
 Read `method.md` first, then the parts of `moduleTooling.md` that the task
 needs.

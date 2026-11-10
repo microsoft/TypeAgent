@@ -21,6 +21,8 @@ deferred.
     model–view relationships, not the means of control). Each platform
     writes an `AppFixture` (`scenario.contract.ts`). The test platform's
     is `driver.ts`, with the reference controller in `circleskit.ts`.
+    `behavior.md` has the orientation, the files, how to add a behavior,
+    and the open questions.
 - **Renames and a prose review** (2026-11-10): `Layer` is `RenderGroup`
   (a group drawn together; stacking is the scene's order and z-order),
   `DrawingLayer` is `DrawingGroup`, `ShapeLayer` (task 9) is

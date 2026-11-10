@@ -43,6 +43,7 @@ it reads the spec the way a future implementer will.
 | `shapeviewkit.ts`, `distributorkit.ts`, `circleskit.ts` | The reference ShapeView, EventDistributor and circles controller, one per file, so that each task can be kept from reading the reference for its own part |
 | `modelkit.ts` | Test doubles for the shape model: `ListCollection` and `ListIndex`, so that contracts for things built on them depend on no generated implementation. Checked by `helpers.check.ts` |
 | `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler`, `ListGroup` and `testCircle`. Checked by `helpers.check.ts` |
+| `behavior.md` | How the app's behavior is specified: the orientation, the files, adding a behavior, open questions |
 | `observer-tables.md` | For each stateful interface, every call against every observer, with the rules that settle each cell |
 | `<interface>.contract.ts` | A contract suite for each interface, a function taking a factory. Test names are rule IDs. `shape.contract.ts` holds the rules every Shape has, which each shape type's contract runs |
 | `<impl>.test.ts` | Wires an implementation to its contract over test doubles, plus tests of behavior the spec decides for that implementation only |
