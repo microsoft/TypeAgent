@@ -1,0 +1,12 @@
+{"schemaVersion":1,"procedureId":"mock-connectivity","title":"Fictional lantern connection support","entryStep":"check-link"}
+{"kind":"context","id":"scope","text":"Applies only to the fictional Lantern simulator. This is guidance, not device automation."}
+{"kind":"prerequisite","id":"permission","text":"Ask the caller for permission to inspect the simulator status. Do not request passwords."}
+{"kind":"guard","id":"no-reset","text":"Never factory-reset the simulator or alter account settings."}
+{"kind":"step","id":"check-link","text":"Ask the caller to read the simulator link indicator.","requiredInputs":["caller consent","link indicator"],"expectedObservation":"The indicator is green or amber."}
+{"kind":"transition","id":"green","from":"check-link","to":"verify-page","condition":"The caller reports a green indicator."}
+{"kind":"transition","id":"amber","from":"check-link","to":"escalate","condition":"The caller reports an amber indicator or cannot inspect it."}
+{"kind":"step","id":"verify-page","text":"Ask the caller to open the simulator status page and report the result.","requiredInputs":["status-page result"],"expectedObservation":null}
+{"kind":"transition","id":"page-ready","from":"verify-page","to":"resolved","condition":"The caller reports that the simulator status page says ready."}
+{"kind":"transition","id":"page-failed","from":"verify-page","to":"escalate","condition":"The page is not ready or the result is unknown."}
+{"kind":"outcome","id":"resolved","text":"Record the caller-confirmed ready result. Do not claim a real device was repaired.","result":"resolved"}
+{"kind":"outcome","id":"escalate","text":"Stop and hand the indicator and status-page observations to a human support reviewer.","result":"escalated"}

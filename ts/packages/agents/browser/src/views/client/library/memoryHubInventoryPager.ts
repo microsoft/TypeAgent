@@ -46,9 +46,13 @@ export class MemoryHubInventoryPager {
     public get hasNext() {
         return [...this.next.values()].some((token) => token !== null);
     }
+    public get canNavigate() {
+        return this.previous.length > 0 || this.hasNext;
+    }
     public controls(label: string, reload: () => void): HTMLElement {
         const nav = rbNode("nav", undefined, "hub-pager");
         nav.setAttribute("aria-label", `${label} pages`);
+        nav.hidden = !this.canNavigate;
         const back = rbIconButton(
             "fa-chevron-left",
             `Previous ${label} page`,

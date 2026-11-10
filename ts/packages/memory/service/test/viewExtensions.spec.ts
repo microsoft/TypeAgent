@@ -13,6 +13,7 @@ import {
     extensionViewId,
     ViewExtensionRegistry,
     ViewExtensionDeferred,
+    validateExtensionContent,
 } from "../src/viewExtensions.js";
 import { viewHash } from "../src/viewContent.js";
 import { createExtensionExecution } from "../src/viewExtensionExecution.js";
@@ -356,6 +357,84 @@ async function settled(
     }
     throw new Error("Synthetic provider build did not settle");
 }
+
+test("procedure presentation preserves all claims and rejects hidden evidence or missing agent data", async () => {
+    const fixture = provider();
+    const input: ViewBuildSnapshot = {
+        corpusId: "fixture",
+        actor: "test",
+        expectedVersion: 0,
+        bounds: {},
+        pipeline: "extension-v1",
+        model: "test",
+        fingerprint: viewHash("fixture"),
+        definition: {
+            viewId: "test-view",
+            kind: "extension",
+            selector: {
+                kind: "sources",
+                sources: [{ sourceId: "source", revisionId: "revision" }],
+            },
+        },
+        inputs: [
+            {
+                sourceId: "source",
+                revisionId: "revision",
+                title: "Source",
+                content: "Retained source",
+                contentHash: viewHash("Retained source"),
+            },
+        ],
+    };
+    const content = await fixture.installed.generate(
+        input,
+        {},
+        {
+            signal: AbortSignal.timeout(1000),
+            deadline: Date.now() + 1000,
+            checkpoint: async () => {},
+            complete: async () => {
+                throw new Error("No model expected");
+            },
+        },
+    );
+    content.payload = { agentRepresentation: { actions: [] } };
+    content.presentation.templateId = "procedure-guide-v1";
+    const groups = [
+        "overview",
+        "options",
+        "rules",
+        "outcomes",
+        "gaps",
+        "technical",
+    ].map((id) => ({
+        id,
+        label: id,
+        blockIds: id === "options" ? ["claim"] : [],
+    }));
+    content.presentation.layouts = ["guide", "agent", "evidence"].map((id) => ({
+        id,
+        label: id,
+        groups: structuredClone(groups),
+    }));
+    expect(() => validateExtensionContent(input, content)).not.toThrow();
+    const hidden = structuredClone(content);
+    hidden.presentation.layouts[2].groups.find(
+        ({ id }) => id === "options",
+    )!.blockIds = [];
+    expect(() => validateExtensionContent(input, hidden)).toThrow(
+        "every evidence-bound claim",
+    );
+    const duplicated = structuredClone(content);
+    duplicated.presentation.layouts[0].groups[0].blockIds.push("claim");
+    expect(() => validateExtensionContent(input, duplicated)).toThrow(
+        "every evidence-bound claim",
+    );
+    content.payload = { agentRepresentation: null };
+    expect(() => validateExtensionContent(input, content)).toThrow(
+        "agent representation",
+    );
+});
 
 describe("registered extension service lifecycle", () => {
     let root: string;

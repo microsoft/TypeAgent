@@ -202,6 +202,7 @@ export const understandingDerivedViewSchema = z.strictObject({
             "grouped-cards-v1",
             "table-v1",
             "sources-v1",
+            "procedure-guide-v1",
         ]),
         templateVersion: z.literal(1),
         layouts: z.strictObject({ id, label: z.string() }).array().max(16),

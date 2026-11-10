@@ -15,6 +15,7 @@ import type {
     ViewKind,
     ViewCitation,
     ViewSummary,
+    ViewSummaryPage,
     ViewBuildSummary,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
@@ -27,13 +28,7 @@ import {
     rbNode,
     rbMarkdown,
 } from "./memoryHubDocumentUi";
-import {
-    icon,
-    menuButton,
-    setIconButton,
-    setTabLabel,
-    type MenuItem,
-} from "./memoryHubUi";
+import { icon, menuButton, setIconButton, type MenuItem } from "./memoryHubUi";
 import { mountFlyout } from "./memoryHubFlyout";
 import { viewRevisionTime, viewSheet } from "./memoryHubViewUi";
 import {
@@ -53,6 +48,10 @@ import {
     viewContentToText,
 } from "@typeagent/memory-service/view-text";
 import { renderExtensionView } from "./memoryHubExtension";
+import {
+    createViewTypeFilter,
+    findPopulatedViewKinds,
+} from "./memoryHubViewTypeFilter";
 
 function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
     if (
@@ -114,7 +113,13 @@ function appendArticleIntroduction(
         overview.append(meta);
         appendArticleCoverage(overview, view.content);
     }
-    if (view.content.summary) {
+    if (
+        view.content.summary &&
+        !(
+            view.content.kind === "extension" &&
+            view.content.presentation.templateId === "procedure-guide-v1"
+        )
+    ) {
         const lead = rbMarkdown(view.content.summary);
         lead.classList.add("hub-view-lead");
         overview.append(lead);
@@ -283,6 +288,9 @@ export function mountMemoryHubViews(
     const pager = new MemoryHubInventoryPager();
     let searchQuery = "";
     let selectedKind: ViewKind | undefined;
+    let populatedKinds = new Set<ViewKind>();
+    let viewTypeInventoryKey = "";
+    let viewTypeFilter: ReturnType<typeof createViewTypeFilter> | undefined;
     let searchTimer: ReturnType<typeof setTimeout> | undefined;
     let policy: ViewPublicationPolicy = {
         revision: 0,
@@ -393,7 +401,36 @@ export function mountMemoryHubViews(
             String(state === "loading"),
         );
         inventoryElements.list.hidden = state !== "ready";
-        inventoryElements.pager.hidden = state !== "ready";
+        inventoryElements.pager.hidden =
+            state !== "ready" || !pager.canNavigate;
+    }
+
+    async function refreshTypePresence(
+        current: number,
+        selectedScope: string | undefined,
+        corpora: { corpusId: string }[],
+        collections: { corpusId: string; views: ViewSummaryPage }[],
+    ): Promise<void> {
+        if (route || current !== sequence || selectedScope !== options.scope())
+            return;
+        const key = JSON.stringify([
+            corpora,
+            supportedKinds,
+            collections.map(({ corpusId, views }) => [corpusId, views.head]),
+        ]);
+        if (key === viewTypeInventoryKey) return;
+        const kinds = await findPopulatedViewKinds(
+            corpora.map(({ corpusId }) => corpusId),
+            supportedKinds.filter((kind) => kind !== "schemaView"),
+            new Set(
+                collections.flatMap(({ views }) =>
+                    views.items.map((view) => view.content.kind),
+                ),
+            ),
+        );
+        if (current !== sequence || selectedScope !== options.scope()) return;
+        populatedKinds = kinds;
+        viewTypeInventoryKey = key;
     }
 
     async function refresh(): Promise<void> {
@@ -439,6 +476,7 @@ export function mountMemoryHubViews(
                 kind === "extension",
         );
         if (!buildsSupported) {
+            viewTypeFilter?.dispose();
             pendingConflicts.clear();
             status.textContent =
                 "The connected memory service does not provide view building. Views may be explicitly disabled by the host or unavailable in this service version. No setting in Memory needs to be enabled.";
@@ -455,7 +493,8 @@ export function mountMemoryHubViews(
         corpusNames = new Map(
             catalog.map((corpus) => [corpus.corpusId, corpus.name]),
         );
-        const corpora = (corpusId ? [{ corpusId }] : catalog).filter((corpus) =>
+        const scopedCorpora = corpusId ? [{ corpusId }] : catalog;
+        const corpora = scopedCorpora.filter((corpus) =>
             pager.includes(corpus.corpusId),
         );
         const collections = await Promise.all(
@@ -473,6 +512,12 @@ export function mountMemoryHubViews(
                 });
                 return { corpusId, views };
             }),
+        );
+        await refreshTypePresence(
+            current,
+            selectedScope,
+            scopedCorpora,
+            collections,
         );
         if (current !== sequence || selectedScope !== options.scope()) return;
         heads.clear();
@@ -503,6 +548,7 @@ export function mountMemoryHubViews(
             ...inventoryBuildControls(corpora),
             rbIconButton("fa-arrows-rotate", "Refresh views", () => {
                 pager.reset();
+                viewTypeInventoryKey = "";
                 void action(refresh);
             }),
             ...(maintenance.length
@@ -970,6 +1016,12 @@ export function mountMemoryHubViews(
             throw new Error(
                 "Requested article anchor is unavailable in this revision",
             );
+        for (
+            let ancestor = page.parentElement;
+            ancestor;
+            ancestor = ancestor.parentElement
+        )
+            if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
         page.focus();
         page.scrollIntoView?.({ block: "start" });
     }
@@ -1746,34 +1798,30 @@ export function mountMemoryHubViews(
         if (dirty) return;
         const previousTabs = drafts.querySelector<HTMLElement>(".hub-tabs");
         const restoreTabFocus = previousTabs?.contains(document.activeElement);
-        const tabScroll = previousTabs?.scrollLeft ?? 0;
+        viewTypeFilter?.dispose();
         const search = document.createElement("input");
         search.type = "search";
         search.setAttribute("aria-label", "Find views");
         search.placeholder = "Find views";
         search.value = searchQuery;
-        const kinds = rbNode("div", undefined, "hub-tabs");
-        kinds.setAttribute("role", "group");
-        kinds.setAttribute("aria-label", "Filter view type");
-        for (const { kind: value, label } of viewTypeTabs) {
-            if (value && !supportedKinds.includes(value)) continue;
-            const tab = setTabLabel(
-                rbButton(label, () => {
-                    selectedKind = value;
-                    for (const other of kinds.querySelectorAll("button"))
-                        other.setAttribute(
-                            "aria-pressed",
-                            String(other === tab),
-                        );
-                    render();
-                    reload();
-                }),
-                value ? viewKindIcons[value] : "fa-layer-group",
-                label,
-            );
-            tab.setAttribute("aria-pressed", String(value === selectedKind));
-            kinds.append(tab);
-        }
+        viewTypeFilter = createViewTypeFilter(
+            viewTypeTabs
+                .filter(({ kind }) => !kind || supportedKinds.includes(kind))
+                .map((option) => ({
+                    ...option,
+                    icon: option.kind
+                        ? viewKindIcons[option.kind]
+                        : "fa-layer-group",
+                })),
+            populatedKinds,
+            selectedKind,
+            (value) => {
+                selectedKind = value;
+                render();
+                reload();
+            },
+        );
+        const kinds = viewTypeFilter.element;
         const list = rbNode("div", undefined, "hub-view-list");
         // Kind plus one publication chip; version and index detail belong to
         // the view's own page.
@@ -1869,10 +1917,12 @@ export function mountMemoryHubViews(
         inventoryElements = { card, list, pager: pagination };
         setInventoryState(inventoryState);
         drafts.replaceChildren(kinds, card);
-        kinds.scrollLeft = tabScroll;
+        viewTypeFilter.layout();
         if (restoreTabFocus)
             kinds
-                .querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+                .querySelector<HTMLButtonElement>(
+                    '[aria-pressed="true"]:not([hidden])',
+                )
                 ?.focus({ preventScroll: true });
         render();
     }
@@ -2969,6 +3019,8 @@ export function mountMemoryHubViews(
             hubNotifications.clear("views");
             sequence++;
             pager.reset();
+            viewTypeInventoryKey = "";
+            viewTypeFilter?.dispose();
             clearTimeout(searchTimer);
             snapshot = { head: null, views: [] };
             builder?.element.remove();
@@ -2993,6 +3045,7 @@ export function mountMemoryHubViews(
             if (timer) clearTimeout(timer);
             window.removeEventListener("beforeunload", beforeUnload);
             flyout?.dispose();
+            viewTypeFilter?.dispose();
             root.remove();
         },
     };
