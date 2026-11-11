@@ -124,6 +124,7 @@ export type ProcessorBug =
   | "client-seq-from-minus-one" // clientSeq starts at -1
   | "refseq-minus-two"    // refSeq starts at -2 before any remote operation
   | "shares-op"           // returns its own stamped operation, which acknowledging later changes
+  | "marks-remote"        // returns the queued remote operation itself, and marks it when applying it
   | "applies-at-once"     // enqueue on local applies the operation immediately
   | "applies-on-read"     // reading the model first applies whatever is queued
   | "self-schedules"      // enqueue schedules process itself
@@ -142,7 +143,7 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
-  readonly remote = { enqueue: (op: ShapeOp) => void this.remoteQueue.push(op) };
+  readonly remote = { enqueue: (op: ShapeOp) => this.enqueueRemote(op) };
   private readonly writer = new TestShapeWriter();
   private readonly localQueue: ShapeOp[] = [];
   private readonly remoteQueue: ShapeOp[] = [];
@@ -206,7 +207,13 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
     return this.bug === "shares-op" ? op : { ...op };
   }
 
+  private enqueueRemote(op: ShapeOp): ShapeOp {
+    this.remoteQueue.push(op);
+    return this.bug === "marks-remote" ? op : { ...op };
+  }
+
   private applyRemote(op: ShapeOp): void {
+    if (this.bug === "marks-remote") Object.assign(op, { applied: true });
     this.lastSeq = op.seq;
     const mine = op.clientId === this.clientId ? this.pending.get(op.clientSeq) : undefined;
     if (mine) {

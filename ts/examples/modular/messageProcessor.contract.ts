@@ -1,4 +1,4 @@
-// Contract tests for MessageProcessor and LocalQueue (dataModel.ts),
+// Contract tests for MessageProcessor and OperationSink (dataModel.ts),
 // with Operation's @valid rules checked on the operations a processor
 // stamps. Each DDS runs this suite through a ProcessorSubject. Test names
 // are rule IDs.
@@ -61,7 +61,7 @@ export interface Client<TR extends DataModelReader, TOp extends Operation> {
   readonly delivered: TOp[];
   /** Copies of the stamped operations waiting for the sequencer, oldest first. */
   readonly outbox: TOp[];
-  /** Each operation p's local enqueue returned, with a copy taken when it returned. */
+  /** Each operation p's local or remote enqueue returned, with a copy taken when it returned. */
   readonly sent: [TOp, TOp][];
   /** The seq of the last remote operation applied, or -1. */
   lastApplied: number;
@@ -175,7 +175,9 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
       for (const d of everyone) {
         const delivered = { ...copyOp(op), seq };
         d.delivered.push(copyOp(delivered));
-        d.p.remote.enqueue(delivered);
+        const returned = d.p.remote.enqueue(delivered);
+        if (!deepEqual(returned, delivered)) violation("OperationSink.enqueue.own-copy", `${d.id}'s remote enqueue returned an operation unlike the one queued`);
+        d.sent.push([returned, copyOp(returned)]);
       }
     });
   };
@@ -215,7 +217,7 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   }
   for (const c of everyone) {
     for (const [op, copy] of c.sent) {
-      if (!deepEqual(op, copy)) violation("LocalQueue.enqueue.own-copy", `${c.id}'s returned operation changed after enqueue returned`);
+      if (!deepEqual(op, copy)) violation("OperationSink.enqueue.own-copy", `${c.id}'s returned operation changed after enqueue returned`);
     }
   }
   hooks.end?.(everyone, violation);
@@ -302,7 +304,7 @@ export function messageProcessorContract<TR extends DataModelReader, TOp extends
   describe("MessageProcessor", () => {
     for (const id of [
       "Operation.seq-range", "Operation.client-seq-range", "Operation.ref-seq-range",
-      "LocalQueue.enqueue.own-copy",
+      "OperationSink.enqueue.own-copy",
       "MessageProcessor.stamps", "MessageProcessor.sole-writer", "MessageProcessor.enqueue-defers",
       "MessageProcessor.converges",
     ]) ruleTest(id, subject, hooks);

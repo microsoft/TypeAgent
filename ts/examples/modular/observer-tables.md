@@ -56,8 +56,8 @@ that return value, so no other call can send one. Rule IDs without a prefix are
 
 | Call | Model | Model change events | Returns |
 |---|---|---|---|---|
-| `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | the stamped operation: `stamps`, `Operation.*`, `LocalQueue.enqueue.own-copy` |
-| `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | nothing |
+| `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | the stamped operation: `stamps`, `Operation.*`, `OperationSink.enqueue.own-copy` |
+| `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | the operation as queued: `OperationSink.enqueue.own-copy` |
 | `process` | `SMP.add-on-z`, `SMP.kept`, `SMP.remove-listed`, `SMP.clear-known`, `SMP.ack-keeps-z`; `converges` across clients | `SMP.one-change`, `SMP.ack-keeps-z` | settles once the queues are empty (by its doc) |
 | `newShapeId` | `sole-writer` | `sole-writer` | `SMP.new-ids` |
 | Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | `SMP.read-facet` |

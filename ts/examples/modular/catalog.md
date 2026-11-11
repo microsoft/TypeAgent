@@ -89,9 +89,6 @@ classDiagram
   class OperationQueue {
     dequeue
   }
-  class LocalQueue {
-    enqueue
-  }
   class MessageProcessor {
     clientId
     model
@@ -163,10 +160,10 @@ classDiagram
   ShapeLocator ..> Shape
   EventEmitter <|-- DataModelReader
   DataModelReader ..> ModelChangeEvents
+  OperationSink ..> Operation
   OperationSink <|-- OperationQueue
-  LocalQueue ..> Operation
+  OperationQueue ..> Operation
   MessageProcessor ..> DataModelReader
-  MessageProcessor ..> LocalQueue
   MessageProcessor ..> Operation
   MessageProcessor ..> OperationSink
   DataModelReader <|-- ShapeCollection
@@ -366,23 +363,17 @@ No rules of its own.
 
 ## OperationSink
 
-`dataModel.ts`. Where producers put operations.
-
-No rules of its own.
-
-## OperationQueue
-
-`dataModel.ts`. A queue of operations, read by the processor. For the message infrastructure, which is not specified yet.
-
-No rules of its own.
-
-## LocalQueue
-
-`dataModel.ts`. A processor's local queue. enqueue stamps the operation and returns it, so that the infrastructure can send it to collaborators; that is the only way a local operation leaves the processor.
+`dataModel.ts`. Where producers put operations. A producer can only enqueue; whoever drains the sink holds it as an OperationQueue.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `LocalQueue.enqueue.own-copy` | ensures | The returned operation is the caller's own: nothing the processor does later, such as acknowledging it, changes it. | tested | 1 |
+| `OperationSink.enqueue.own-copy` | ensures | The returned operation is the caller's own, equal to the operation as queued: nothing the receiver does later, such as acknowledging or applying it, changes it. | tested | 2 |
+
+## OperationQueue
+
+`dataModel.ts`. A queue of operations: a sink that its reader drains. For the message infrastructure, which is not specified yet.
+
+No rules of its own.
 
 ## MessageProcessor
 

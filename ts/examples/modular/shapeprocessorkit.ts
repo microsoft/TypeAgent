@@ -15,7 +15,7 @@ export class RefShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
-  readonly remote = { enqueue: (op: ShapeOp) => void this.remoteQueue.push(op) };
+  readonly remote = { enqueue: (op: ShapeOp) => this.enqueueRemote(op) };
   private readonly writer: ShapeCollectionWriter;
   private readonly localQueue: Stamped[] = [];
   private readonly remoteQueue: ShapeOp[] = [];
@@ -47,6 +47,11 @@ export class RefShapeProcessor implements ShapeMessageProcessor {
   private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {
     const op = { ...content, clientId: this.clientId, clientSeq: ++this.clientSeq, refSeq: this.lastSeq, seq: -1 } as ShapeOp;
     this.localQueue.push(op);
+    return { ...op };
+  }
+
+  private enqueueRemote(op: ShapeOp): ShapeOp {
+    this.remoteQueue.push(op);
     return { ...op };
   }
 

@@ -25,7 +25,7 @@ endobj
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 1 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (RectangleOps group) Tj ET
@@ -108,11 +108,11 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 10 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 10 0 obj
-<< /Length 8572 >>
+<< /Length 8632 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 2 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (ShapeLocator group) Tj ET
@@ -130,173 +130,131 @@ BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 380.88 Tm (Shape) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 74.79 380.88 Tm (shape.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 368.40 Tm (A region of the plane, such as an ink stroke.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 356.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (InkStroke, Circle, ShapeLocator; AddShape \(page 3\);) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor \(page) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 332.40 Tm (6\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 320.40 Tm (readonly kind: string) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 308.40 Tm (Identifies the shape's type.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 296.40 Tm (boundingBox\(\): Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (The exact extents of the shape: x and y are its minimum x and y, and x +) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (width and y + height are its maximum x and y.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (intersects\(r: Rectangle\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 248.40 Tm (Whether at least one point lies both in this shape and in r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 236.40 Tm (contains\(p: Point\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (Whether p lies in the shape.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 202.48 Tm (InkStroke) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 93.46 202.48 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 131.26 202.48 Tm (Shape) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 164.04 202.48 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 190.00 Tm (A stroke of digital ink: a polyline drawn with a round pen.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 178.00 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 178.00 Tm (Shape.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (readonly kind: "ink") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 154.00 Tm (readonly points: readonly Point[]) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 142.00 Tm (The polyline's vertices, in drawing order.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 130.00 Tm (readonly thickness: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (Pen diameter, in canonical units.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 106.00 Tm (readonly color: Color) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (Circle) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 444.13 507.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 481.93 507.68 Tm (Shape) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 514.71 507.68 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 495.20 Tm (A filled circle: the points within radius of center, with the half-open rule at its) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 483.20 Tm (maximum x and y.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 471.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 471.20 Tm (Shape.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 459.20 Tm (readonly kind: "circle") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (readonly center: Point) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 435.20 Tm (readonly radius: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 423.20 Tm (In canonical units.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (readonly color: Color) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 389.28 Tm (ShapeLocatorQueries) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 535.48 389.28 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 376.80 Tm (Finds shapes by location.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 364.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 364.80 Tm (ShapeLocator; ShapeCollection \(page 6\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 352.80 Tm (inRect\(r: Rectangle, out: ShapeId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 340.80 Tm (Finds the shapes that intersect r.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 328.80 Tm (atPoint\(p: Point, out: ShapeId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 316.80 Tm (Finds the shapes that contain p.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 294.88 Tm (ShapeLocator) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 490.80 294.88 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 528.60 294.88 Tm (ShapeLocatorQueries) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 645.38 294.88 Tm (shape.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 282.40 Tm (A spatial index that finds shapes by location, such as a quadtree.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 270.40 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 270.40 Tm (ShapeLocatorQueries.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 258.40 Tm (add\(id: ShapeId, shape: Shape\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 246.40 Tm (Indexes shape under id.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 234.40 Tm (remove\(id: ShapeId\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 222.40 Tm (Removes id from the index.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 210.40 Tm (removeMultiple\(ids: readonly ShapeId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 198.40 Tm (Removes every listed ID that is present. ids may contain duplicates and) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 186.40 Tm (IDs that aren't present; both are ignored.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 164.48 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 152.00 Tm (type ShapeId = string & { readonly __brand: "ShapeId" }) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 140.00 Tm (Identifies a shape on every client.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 128.00 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 128.00 Tm (ShapeLocatorQueries, ShapeLocator, ShapeId; AddShape,) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 116.00 Tm (RemoveShapes \(page 3\); ShapeCollection, ShapeCollectionWriter,) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 104.00 Tm (ShapeMessageProcessor \(page 6\).) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 356.40 Tm (InkStroke, Circle, ShapeLocator; ShapeMessageProcessor \(page 5\);) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (ShapeCollection, ShapeCollectionWriter, AddShape \(page 6\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 332.40 Tm (readonly kind: string) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (Identifies the shape's type.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (boundingBox\(\): Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 296.40 Tm (The exact extents of the shape: x and y are its minimum x and y, and x +) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (width and y + height are its maximum x and y.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 272.40 Tm (intersects\(r: Rectangle\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 260.40 Tm (Whether at least one point lies both in this shape and in r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 248.40 Tm (contains\(p: Point\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 236.40 Tm (Whether p lies in the shape.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 214.48 Tm (InkStroke) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 93.46 214.48 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 131.26 214.48 Tm (Shape) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 164.04 214.48 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 202.00 Tm (A stroke of digital ink: a polyline drawn with a round pen.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 190.00 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 190.00 Tm (Shape.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 178.00 Tm (readonly kind: "ink") Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (readonly points: readonly Point[]) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (The polyline's vertices, in drawing order.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 142.00 Tm (readonly thickness: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 130.00 Tm (Pen diameter, in canonical units.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 118.00 Tm (readonly color: Color) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 96.08 Tm (Circle) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 72.13 96.08 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 109.93 96.08 Tm (Shape) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 142.71 96.08 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 83.60 Tm (A filled circle: the points within radius of center, with the half-open rule at its) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 71.60 Tm (maximum x and y.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 59.60 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 59.60 Tm (Shape.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 47.60 Tm (readonly kind: "circle") Tj ET
+BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (Circle, continued) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (readonly center: Point) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 485.60 Tm (readonly radius: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 473.60 Tm (In canonical units.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 461.60 Tm (readonly color: Color) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 439.68 Tm (ShapeLocatorQueries) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 535.48 439.68 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 427.20 Tm (Finds shapes by location.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 415.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 415.20 Tm (ShapeLocator; ShapeCollection \(page 6\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 403.20 Tm (inRect\(r: Rectangle, out: ShapeId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 391.20 Tm (Finds the shapes that intersect r.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 379.20 Tm (atPoint\(p: Point, out: ShapeId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 367.20 Tm (Finds the shapes that contain p.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 345.28 Tm (ShapeLocator) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 490.80 345.28 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 528.60 345.28 Tm (ShapeLocatorQueries) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 645.38 345.28 Tm (shape.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 332.80 Tm (A spatial index that finds shapes by location, such as a quadtree.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 320.80 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 320.80 Tm (ShapeLocatorQueries.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 308.80 Tm (add\(id: ShapeId, shape: Shape\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 296.80 Tm (Indexes shape under id.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 284.80 Tm (remove\(id: ShapeId\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 272.80 Tm (Removes id from the index.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 260.80 Tm (removeMultiple\(ids: readonly ShapeId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 248.80 Tm (Removes every listed ID that is present. ids may contain duplicates and) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 236.80 Tm (IDs that aren't present; both are ignored.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 214.88 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 202.40 Tm (type ShapeId = string & { readonly __brand: "ShapeId" }) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 190.40 Tm (Identifies a shape on every client.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 178.40 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 178.40 Tm (ShapeLocatorQueries, ShapeLocator, ShapeId;) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 166.40 Tm (ShapeMessageProcessor \(page 5\); ShapeCollection,) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 438.00 154.40 Tm (ShapeCollectionWriter, AddShape, RemoveShapes \(page 6\).) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 396.40 m 384.00 396.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 218.00 m 384.00 218.00 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 404.80 m 756.00 404.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 310.40 m 756.00 310.40 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 180.00 m 756.00 180.00 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 230.00 m 384.00 230.00 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 111.60 m 384.00 111.60 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 455.20 m 756.00 455.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 360.80 m 756.00 360.80 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 230.40 m 756.00 230.40 l S
 endstream
 endobj
 11 0 obj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 12 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 12 0 obj
-<< /Length 7769 >>
+<< /Length 4195 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 3 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (Operation group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to ShapeId, Shape \(page 2\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (Operation) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 95.46 475.28 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (One change to a data model.) Tj ET
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (LayoutObject group) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Rectangle, Point \(page 1\).) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (LayoutObject) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 115.46 475.28 Tm (layout.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (Something placed in a region of a window.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (AddShape, RemoveShapes, ClearShapes; LocalQueue,) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 438.80 Tm (MessageProcessor \(page 5\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 426.80 Tm (readonly type: string) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 414.80 Tm (readonly clientId: string) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 402.80 Tm (readonly clientSeq: number) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 390.80 Tm (readonly refSeq: number) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 378.80 Tm (seq: number) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 356.88 Tm (RemoveShapes) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 128.14 356.88 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 165.94 356.88 Tm (Operation) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 222.72 356.88 Tm (shapeModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 344.40 Tm (Removes the listed shapes that are present.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 332.40 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 332.40 Tm (Operation.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 320.40 Tm (readonly type: "remove") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (readonly ids: readonly ShapeId[]) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 286.48 Tm (ClearShapes) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 111.48 286.48 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 149.28 286.48 Tm (Operation) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 206.06 286.48 Tm (shapeModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 274.00 Tm (Removes the shapes its client knew about \(refSeq in dataModel.ts\).) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 262.00 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 262.00 Tm (Operation.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 250.00 Tm (readonly type: "clear") Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 228.08 Tm (AddShape) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 98.12 228.08 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 135.92 228.08 Tm (Operation) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 192.70 228.08 Tm (shapeModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 215.60 Tm (Adds shape under id.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 203.60 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 203.60 Tm (Operation.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 191.60 Tm (readonly type: "add") Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 179.60 Tm (readonly id: ShapeId) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 167.60 Tm (readonly shape: Shape) Tj ET
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 137.68 Tm (LayoutObject group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 125.20 Tm (Refers to Rectangle, Point \(page 1\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 105.28 Tm (LayoutObject) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 115.46 105.28 Tm (layout.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 92.80 Tm (Something placed in a region of a window.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 80.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 80.80 Tm (EventDistributor.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 68.80 Tm (region: Rectangle) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 56.80 Tm (Where it is, in the window's coordinates.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (EventDistributor) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 502.01 507.68 Tm (<M>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 522.79 507.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 560.59 507.68 Tm (LayoutObject) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 635.37 507.68 Tm (layout.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 495.20 Tm (Passes a platform's positional events to listeners by where they fall.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 483.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 483.20 Tm (LayoutObject.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 471.20 Tm (locate\(event: M[keyof M]\): Point) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 459.20 Tm (Where event happened, in the window's coordinates.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (on<E extends keyof M & string>\(eventName: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 435.20 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 423.20 Tm (Registers listener for eventName on target.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (off<E extends keyof M & string>\(eventName: E, listener:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 399.20 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 387.20 Tm (Removes the most recent registration of listener for eventName on target;) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 375.20 Tm (does nothing if there is none.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 363.20 Tm (distribute<E extends keyof M & string>\(eventName: E,) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 351.20 Tm (event: M[E], except?: LayoutObject\): boolean) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 339.20 Tm (Passes event to the innermost target, among those registered for) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 327.20 Tm (eventName other than except, that contains it.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 305.28 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 292.80 Tm (type Listener<M, E extends keyof M> = \(eventName: E,) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 280.80 Tm (event: M[E]\) => void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 268.80 Tm (Gets one of a platform's events: its name, and the platform's event object.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 256.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 256.80 Tm (EventDistributor.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 372.40 m 384.00 372.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 302.00 m 384.00 302.00 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 243.60 m 384.00 243.60 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 157.20 m 384.00 157.20 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 320.80 m 756.00 320.80 l S
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (EventDistributor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 438.80 Tm (region: Rectangle) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 426.80 Tm (Where it is, in the window's coordinates.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 404.88 Tm (EventDistributor) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 130.01 404.88 Tm (<M>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 150.79 404.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 188.59 404.88 Tm (LayoutObject) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 263.37 404.88 Tm (layout.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 392.40 Tm (Passes a platform's positional events to listeners by where they fall.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 380.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 380.40 Tm (LayoutObject.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 368.40 Tm (locate\(event: M[keyof M]\): Point) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 356.40 Tm (Where event happened, in the window's coordinates.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 344.40 Tm (on<E extends keyof M & string>\(eventName: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 332.40 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (Registers listener for eventName on target.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (off<E extends keyof M & string>\(eventName: E, listener:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 296.40 Tm (Listener<M, E>, target: LayoutObject\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (Removes the most recent registration of listener for eventName on target;) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (does nothing if there is none.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (distribute<E extends keyof M & string>\(eventName: E,) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 248.40 Tm (event: M[E], except?: LayoutObject\): boolean) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 236.40 Tm (Passes event to the innermost target, among those registered for) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 224.40 Tm (eventName other than except, that contains it.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 202.48 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 190.00 Tm (type Listener<M, E extends keyof M> = \(eventName: E,) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 178.00 Tm (event: M[E]\) => void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 166.00 Tm (Gets one of a platform's events: its name, and the platform's event object.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 54.00 154.00 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 95.68 154.00 Tm (EventDistributor.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 420.40 m 384.00 420.40 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 218.00 m 384.00 218.00 l S
 endstream
 endobj
 13 0 obj
@@ -307,7 +265,7 @@ endobj
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 4 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (View group) Tj ET
@@ -385,114 +343,118 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 16 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 16 0 obj
-<< /Length 8289 >>
+<< /Length 8692 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 5 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (OperationSink group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Operation \(page 3\); EventMap, EventEmitter \(page 4\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (ModelChangeEvents) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 156.80 475.28 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 194.60 475.28 Tm (EventMap) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 245.38 475.28 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (A model's change events.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (DataModelReader.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 428.88 Tm (DataModelReader) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 137.35 428.88 Tm (<E extends ModelChangeEvents>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 314.13 428.88 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 416.40 Tm (EventEmitter<E>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 143.78 416.40 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 404.40 Tm (The read side of a data model.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 392.40 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 392.40 Tm (EventEmitter \(page 4\).) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 180.50 392.40 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 222.18 392.40 Tm (MessageProcessor;) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 380.40 Tm (ShapeCollection \(page 6\).) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 358.48 Tm (OperationSink) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 118.02 358.48 Tm (<T>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 138.80 358.48 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 346.00 Tm (Where producers put operations.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 334.00 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 334.00 Tm (OperationQueue, MessageProcessor.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 322.00 Tm (enqueue\(item: T\): void) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 300.08 Tm (OperationQueue) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 130.02 300.08 Tm (<T>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 150.80 300.08 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 188.60 300.08 Tm (OperationSink<T>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 287.38 300.08 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 287.60 Tm (A queue of operations, read by the processor.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 275.60 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 275.60 Tm (OperationSink.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 263.60 Tm (dequeue\(\): T | undefined) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 251.60 Tm (The oldest item, removed; undefined when the queue is empty.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 229.68 Tm (LocalQueue) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 104.69 229.68 Tm (<TOp extends Operation>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 245.47 229.68 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 217.20 Tm (A processor's local queue. enqueue stamps the operation and returns it, so) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 205.20 Tm (that the infrastructure can send it to collaborators; that is the only way a local) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 193.20 Tm (operation leaves the processor.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 181.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 181.20 Tm (MessageProcessor.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 169.20 Tm (enqueue\(content: OperationContent<TOp>\): TOp) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 157.20 Tm (Stamps content \(MessageProcessor.stamps\), queues it, and returns the) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 145.20 Tm (stamped operation.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 123.28 Tm (MessageProcessor) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 145.38 123.28 Tm (<TR extends DataModelReader, TOp) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 110.80 Tm (extends Operation>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 161.78 110.80 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 98.80 Tm (Applies operations to a data model: the only thing that changes it.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 86.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 86.80 Tm (ShapeMessageProcessor \(page 6\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 74.80 Tm (readonly clientId: string) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 62.80 Tm (The client whose local operations this processor applies.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 50.80 Tm (readonly model: TR) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 38.80 Tm (The model's read side.) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Shape, ShapeId \(page 2\); EventMap, EventEmitter \(page 4\);) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 483.20 Tm (Operation, ShapeCollection \(page 6\).) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 463.28 Tm (ModelChangeEvents) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 156.80 463.28 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 194.60 463.28 Tm (EventMap) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 245.38 463.28 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 450.80 Tm (A model's change events.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 438.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 438.80 Tm (DataModelReader.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 416.88 Tm (DataModelReader) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 137.35 416.88 Tm (<E extends ModelChangeEvents>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 314.13 416.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 404.40 Tm (EventEmitter<E>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 143.78 404.40 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 392.40 Tm (The read side of a data model.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 380.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 380.40 Tm (EventEmitter \(page 4\).) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 180.50 380.40 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 222.18 380.40 Tm (MessageProcessor;) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 368.40 Tm (ShapeCollection \(page 6\).) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 346.48 Tm (OperationSink) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 118.02 346.48 Tm (<TIn, TOp extends Operation>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 288.80 346.48 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 334.00 Tm (Where producers put operations.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 322.00 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 322.00 Tm (OperationQueue, MessageProcessor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 310.00 Tm (enqueue\(item: TIn\): TOp) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 298.00 Tm (Queues item and returns the operation as queued.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 276.08 Tm (OperationQueue) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 130.02 276.08 Tm (<TOp extends Operation>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 270.80 276.08 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 263.60 Tm (OperationSink<TOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 161.78 263.60 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 251.60 Tm (A queue of operations: a sink that its reader drains.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 239.60 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 239.60 Tm (OperationSink.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 227.60 Tm (dequeue\(\): TOp | undefined) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 215.60 Tm (The oldest operation, removed; undefined when the queue is empty.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 193.68 Tm (MessageProcessor) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 145.38 193.68 Tm (<TR extends DataModelReader, TOp) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 181.20 Tm (extends Operation>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 161.78 181.20 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 169.20 Tm (Applies operations to a data model: the only thing that changes it.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 157.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 157.20 Tm (ShapeMessageProcessor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 145.20 Tm (readonly clientId: string) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 133.20 Tm (The client whose local operations this processor applies.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 121.20 Tm (readonly model: TR) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 109.20 Tm (The model's read side.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 97.20 Tm (readonly local: OperationSink<OperationContent<TOp>, TOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 85.20 Tm (Where the infrastructure puts the operations controllers send.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 73.20 Tm (readonly remote: OperationSink<TOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 61.20 Tm (Where the collaboration protocol puts sequenced operations.) Tj ET
 BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (MessageProcessor, continued) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (readonly local: LocalQueue<TOp>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Where the infrastructure puts the operations controllers send.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 473.60 Tm (readonly remote: OperationSink<TOp>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (Where the collaboration protocol puts sequenced operations.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 449.60 Tm (process\(\): Promise<void>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 437.60 Tm (Applies the queued operations, interleaving local and remote, and emits) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 425.60 Tm (the model's change events.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 403.68 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 391.20 Tm (type OperationContent<T extends Operation> = T extends) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 379.20 Tm (Operation ? Omit<T, Exclude<keyof Operation, "type">>) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 367.20 Tm (: never) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (What a controller forms: an operation without the fields the processor) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 343.20 Tm (stamps on it.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 331.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 331.20 Tm (LocalQueue, LocalSend.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 319.20 Tm (type LocalSend<TOp extends Operation> = \(content:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 307.20 Tm (OperationContent<TOp>\) => void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 295.20 Tm (How a controller changes a model: it sends each local operation it forms) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 283.20 Tm (to the message infrastructure.) Tj ET
-0.8 0.82 0.86 RG 0.5 w 36.00 444.40 m 384.00 444.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 374.00 m 384.00 374.00 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 315.60 m 384.00 315.60 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 245.20 m 384.00 245.20 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 138.80 m 384.00 138.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 419.20 m 756.00 419.20 l S
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (process\(\): Promise<void>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Applies the queued operations, interleaving local and remote, and emits) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 473.60 Tm (the model's change events.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 451.68 Tm (ShapeMessageProcessor) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 553.39 451.68 Tm (<S extends Shape>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 658.17 451.68 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 423.00 439.20 Tm (MessageProcessor<ShapeCollection<S>, ShapeOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 423.00 427.20 Tm (shapeModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 415.20 Tm (Applies ShapeOps to a ShapeCollection through its writer.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 403.20 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 403.20 Tm (MessageProcessor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 391.20 Tm (newShapeId\(\): ShapeId) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 379.20 Tm (An ID for a new shape, for an AddShape this client makes.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 357.28 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 344.80 Tm (type OperationContent<T extends Operation> = T extends) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 332.80 Tm (Operation ? Omit<T, Exclude<keyof Operation, "type">>) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 320.80 Tm (: never) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 308.80 Tm (What a controller forms: an operation without the fields the processor) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 296.80 Tm (stamps on it.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 284.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 284.80 Tm (MessageProcessor, LocalSend.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 272.80 Tm (type LocalSend<TOp extends Operation> = \(content:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 260.80 Tm (OperationContent<TOp>\) => void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 248.80 Tm (How a controller changes a model: it sends each local operation it forms) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 236.80 Tm (to the message infrastructure.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 224.80 Tm (type ShapeOp = AddShape | RemoveShapes | ClearShapes) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 212.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 212.80 Tm (ShapeMessageProcessor.) Tj ET
+0.8 0.82 0.86 RG 0.5 w 36.00 432.40 m 384.00 432.40 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 362.00 m 384.00 362.00 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 291.60 m 384.00 291.60 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 209.20 m 384.00 209.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 467.20 m 756.00 467.20 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 372.80 m 756.00 372.80 l S
 endstream
 endobj
 17 0 obj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 18 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 18 0 obj
-<< /Length 6429 >>
+<< /Length 8679 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 6 of 6) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (30 interfaces and 10 type aliases from 10 files, in 6 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
 BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (ShapeCollectionWriter group) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to ShapeLocatorQueries, Shape, ShapeId \(page 2\); DataModelReader,) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 483.20 Tm (MessageProcessor \(page 5\).) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to ShapeLocatorQueries, Shape, ShapeId \(page 2\); DataModelReader) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 483.20 Tm (\(page 5\).) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 463.28 Tm (DataModel) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 99.45 463.28 Tm (dataModel.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 450.80 Tm (The write side of a data model: modification methods in derived interfaces.) Tj ET
@@ -509,50 +471,79 @@ BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 368.40 Tm (Extends) Tj ET
 BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 368.40 Tm (ShapeLocatorQueries \(page 2\); DataModelReader \(page 5\).) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 347.25 368.40 Tm (Used) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 356.40 Tm (by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 65.45 356.40 Tm (ShapeCollectionWriter, ShapeMessageProcessor; ShapeView \(page 4\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 344.40 Tm (get\(id: ShapeId\): S | undefined) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 332.40 Tm (The shape with this ID, or undefined if no such shape exists.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 320.40 Tm (readonly size: number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 308.40 Tm (The number of shapes.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 296.40 Tm (forEach\(visit: \(id: ShapeId, shape: S\) => void\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 284.40 Tm (Calls visit for each shape, bottom to top. visit must not change the) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (collection.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 260.40 Tm (compareZ\(a: ShapeId, b: ShapeId\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 248.40 Tm (Negative if a is below b, positive if above.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 226.48 Tm (ShapeCollectionWriter) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 164.69 226.48 Tm (<S extends Shape>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 269.47 226.48 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 214.00 Tm (ShapeCollection<S>, DataModel) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 227.78 214.00 Tm (shapeModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 202.00 Tm (The write side.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 190.00 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 190.00 Tm (ShapeCollection, DataModel.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 178.00 Tm (add\(id: ShapeId, shape: S, below?: ShapeId\): void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 166.00 Tm (Adds shape under id: directly below the shape below, or on top when) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (below is undefined.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 142.00 Tm (remove\(ids: readonly ShapeId[]\): number) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 130.00 Tm (Removes every listed shape that is present; repeats and absent IDs are) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (ignored.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (ShapeMessageProcessor) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 553.39 507.68 Tm (<S extends Shape>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 658.17 507.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 423.00 495.20 Tm (MessageProcessor<ShapeCollection<S>, ShapeOp>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 423.00 483.20 Tm (shapeModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 471.20 Tm (Applies ShapeOps to a ShapeCollection through its writer.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 459.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 459.20 Tm (MessageProcessor \(page 5\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (newShapeId\(\): ShapeId) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 435.20 Tm (An ID for a new shape, for an AddShape this client makes.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 413.28 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 400.80 Tm (type ShapeCollectionEvents = { change: [] }) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 388.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 388.80 Tm (ShapeCollection.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 376.80 Tm (type ShapeOp = AddShape | RemoveShapes | ClearShapes) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 364.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 364.80 Tm (ShapeMessageProcessor.) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 65.45 356.40 Tm (ShapeCollectionWriter; ShapeView \(page 4\); ShapeMessageProcessor) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 344.40 Tm (\(page 5\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 332.40 Tm (get\(id: ShapeId\): S | undefined) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 320.40 Tm (The shape with this ID, or undefined if no such shape exists.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 308.40 Tm (readonly size: number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 296.40 Tm (The number of shapes.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 284.40 Tm (forEach\(visit: \(id: ShapeId, shape: S\) => void\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 272.40 Tm (Calls visit for each shape, bottom to top. visit must not change the) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 260.40 Tm (collection.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 248.40 Tm (compareZ\(a: ShapeId, b: ShapeId\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 236.40 Tm (Negative if a is below b, positive if above.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 214.48 Tm (ShapeCollectionWriter) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 164.69 214.48 Tm (<S extends Shape>) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 269.47 214.48 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 202.00 Tm (ShapeCollection<S>, DataModel) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 227.78 202.00 Tm (shapeModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 190.00 Tm (The write side.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 178.00 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 178.00 Tm (ShapeCollection, DataModel.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (add\(id: ShapeId, shape: S, below?: ShapeId\): void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (Adds shape under id: directly below the shape below, or on top when) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 142.00 Tm (below is undefined.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 130.00 Tm (remove\(ids: readonly ShapeId[]\): number) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (Removes every listed shape that is present; repeats and absent IDs are) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 106.00 Tm (ignored.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (Operation) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 467.46 507.68 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 495.20 Tm (One change to a data model.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 483.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 483.20 Tm (AddShape, RemoveShapes, ClearShapes; OperationSink,) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 423.00 471.20 Tm (OperationQueue, MessageProcessor \(page 5\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 459.20 Tm (readonly type: string) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (readonly clientId: string) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 435.20 Tm (readonly clientSeq: number) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 423.20 Tm (readonly refSeq: number) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (seq: number) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 389.28 Tm (RemoveShapes) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 500.14 389.28 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 537.94 389.28 Tm (Operation) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 594.72 389.28 Tm (shapeModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 376.80 Tm (Removes the listed shapes that are present.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 364.80 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 364.80 Tm (Operation.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 352.80 Tm (readonly type: "remove") Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 340.80 Tm (readonly ids: readonly ShapeId[]) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 318.88 Tm (ClearShapes) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 483.48 318.88 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 521.28 318.88 Tm (Operation) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 578.06 318.88 Tm (shapeModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 306.40 Tm (Removes the shapes its client knew about \(refSeq in dataModel.ts\).) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 294.40 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 294.40 Tm (Operation.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 282.40 Tm (readonly type: "clear") Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 260.48 Tm (AddShape) Tj ET
+BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 470.12 260.48 Tm (extends) Tj ET
+BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 507.92 260.48 Tm (Operation) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 564.70 260.48 Tm (shapeModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 248.00 Tm (Adds shape under id.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 408.00 236.00 Tm (Extends) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 449.68 236.00 Tm (Operation.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 224.00 Tm (readonly type: "add") Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 212.00 Tm (readonly id: ShapeId) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 200.00 Tm (readonly shape: Shape) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 178.08 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 165.60 Tm (type ShapeCollectionEvents = { change: [] }) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 153.60 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 153.60 Tm (ShapeCollection.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 432.40 m 384.00 432.40 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 242.00 m 384.00 242.00 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 428.80 m 756.00 428.80 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 230.00 m 384.00 230.00 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 404.80 m 756.00 404.80 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 334.40 m 756.00 334.40 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 276.00 m 756.00 276.00 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 193.60 m 756.00 193.60 l S
 endstream
 endobj
 xref
@@ -568,16 +559,16 @@ xref
 0000000702 00000 n 
 0000008433 00000 n 
 0000008588 00000 n 
-0000017213 00000 n 
-0000017369 00000 n 
-0000025191 00000 n 
-0000025347 00000 n 
-0000032242 00000 n 
-0000032398 00000 n 
-0000040740 00000 n 
-0000040896 00000 n 
+0000017273 00000 n 
+0000017429 00000 n 
+0000021677 00000 n 
+0000021833 00000 n 
+0000028728 00000 n 
+0000028884 00000 n 
+0000037629 00000 n 
+0000037785 00000 n 
 trailer
 << /Size 19 /Root 1 0 R >>
 startxref
-47378
+46517
 %%EOF

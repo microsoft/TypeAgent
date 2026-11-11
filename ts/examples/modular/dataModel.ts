@@ -87,33 +87,29 @@ export type OperationContent<T extends Operation> =
  */
 export type LocalSend<TOp extends Operation> = (content: OperationContent<TOp>) => void;
 
-/** Where producers put operations. */
-export interface OperationSink<T> {
-    enqueue(item: T): void;
+/**
+ * Where producers put operations. A producer can only enqueue; whoever
+ * drains the sink holds it as an OperationQueue.
+ */
+export interface OperationSink<TIn, TOp extends Operation = TIn & Operation> {
+    /**
+     * Queues item and returns the operation as queued. For a processor's
+     * local sink, that is the stamped operation (MessageProcessor.stamps),
+     * which the infrastructure sends to collaborators: the only way a local
+     * operation leaves the processor.
+     *
+     * @ensures own-copy  The returned operation is the caller's own, equal to the operation as queued: nothing the receiver does later, such as acknowledging or applying it, changes it.
+     */
+    enqueue(item: TIn): TOp;
 }
 
 /**
- * A queue of operations, read by the processor. For the message
+ * A queue of operations: a sink that its reader drains. For the message
  * infrastructure, which is not specified yet.
  */
-export interface OperationQueue<T> extends OperationSink<T> {
-    /** The oldest item, removed; undefined when the queue is empty. */
-    dequeue(): T | undefined;
-}
-
-/**
- * A processor's local queue. enqueue stamps the operation and returns it,
- * so that the infrastructure can send it to collaborators; that is the
- * only way a local operation leaves the processor.
- */
-export interface LocalQueue<TOp extends Operation> {
-    /**
-     * Stamps content (MessageProcessor.stamps), queues it, and returns the
-     * stamped operation.
-     *
-     * @ensures own-copy  The returned operation is the caller's own: nothing the processor does later, such as acknowledging it, changes it.
-     */
-    enqueue(content: OperationContent<TOp>): TOp;
+export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp> {
+    /** The oldest operation, removed; undefined when the queue is empty. */
+    dequeue(): TOp | undefined;
 }
 
 /**
@@ -158,7 +154,7 @@ export interface MessageProcessor<TR extends DataModelReader, TOp extends Operat
     readonly model: TR;
 
     /** Where the infrastructure puts the operations controllers send. */
-    readonly local: LocalQueue<TOp>;
+    readonly local: OperationSink<OperationContent<TOp>, TOp>;
 
     /** Where the collaboration protocol puts sequenced operations. */
     readonly remote: OperationSink<TOp>;
