@@ -4,6 +4,7 @@
 import {
     agentSessionEventDigest,
     buildAgentSessionEpisodes,
+    legacyAgentSessionEventDigests,
     parseAgentSessionChunk,
 } from "../src/agentSessionParsing.js";
 import type {
@@ -527,5 +528,46 @@ describe("bounded causal agent session episodes", () => {
             buildAgentSessionEpisodes([event(), event({ text: "Changed" })]),
         ).toThrow("Conflicting duplicate");
         expect(buildAgentSessionEpisodes([])).toEqual([]);
+    });
+});
+
+describe("colliding redacted keys", () => {
+    const chunk = () =>
+        request(
+            JSON.stringify(
+                sdk(
+                    "tool.execution_start",
+                    {
+                        toolCallId: "call-1",
+                        toolName: "read",
+                        arguments: {
+                            "sk-aaaaaaaaaaaaaaaaaaaa": "first",
+                            "sk-bbbbbbbbbbbbbbbbbbbb": "second",
+                        },
+                    },
+                    { id: "start" },
+                ),
+            ),
+            { importType: "copilot-session-jsonl" },
+        );
+
+    it("keeps every value when redacted keys collide", () => {
+        const [parsed] = parseAgentSessionChunk(chunk()).events;
+        expect(JSON.parse(parsed.text).data.arguments).toEqual({
+            "[REDACTED]": "first",
+            "[REDACTED] (2)": "second",
+        });
+    });
+
+    it("recomputes digests stored when colliding keys were dropped", () => {
+        const [parsed] = parseAgentSessionChunk(chunk()).events;
+        const current = agentSessionEventDigest(parsed);
+        const legacy = legacyAgentSessionEventDigests(chunk()).get(parsed.id);
+        expect(legacy).toBeDefined();
+        expect(legacy).not.toBe(current);
+        // The legacy re-parse must not leak into later parsing.
+        expect(
+            agentSessionEventDigest(parseAgentSessionChunk(chunk()).events[0]),
+        ).toBe(current);
     });
 });
