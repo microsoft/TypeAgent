@@ -60,6 +60,8 @@ interface Task {
   tests: string[];
   /** Files the task must not read. */
   hidden: string[];
+  /** Why the task may not run yet, from its Held field; the human removes the field to release it. */
+  held?: string;
 }
 
 const repo = dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -86,7 +88,8 @@ function parseTasks(specs = read(join(repo, "impl-specs.md")), root = repo): Tas
     const tests = outputs.filter((o) => !o.headerOnly).map((o) => o.file.replace(/\.ts$/, ".test.ts"))
       .filter((t) => existsSync(join(root, t)));
     const hidden = [...(field(part, "Hidden") ?? "").matchAll(/`([\w./]+\.ts)`/g)].map((m) => m[1]);
-    tasks.push({ n: Number(head[1]), title: head[2], section: part.trimEnd(), outputs, imports: tsFiles(imports), binds, tests, hidden });
+    const held = field(part, "Held")?.trim();
+    tasks.push({ n: Number(head[1]), title: head[2], section: part.trimEnd(), outputs, imports: tsFiles(imports), binds, tests, hidden, held });
   }
   return tasks;
 }
@@ -132,22 +135,27 @@ const isDone = (state: State, n: number) => Boolean(state[n]?.collected);
 const statePath = join(repo, "tasks.json");
 const loadState = (): State => (existsSync(statePath) ? JSON.parse(read(statePath)) : {});
 
-/** Pending tasks in waves: a task waits for any pending task whose outputs it reads. */
-function waves(tasks: Task[], state: State): Task[][] {
-  let pending = tasks.filter((t) => !isDone(state, t.n));
+/**
+ * Pending tasks in waves: a task waits for any pending task whose outputs it
+ * reads. Held tasks never run, so tasks that read their outputs wait too.
+ */
+function waves(tasks: Task[], state: State): { waves: Task[][]; waiting: Task[] } {
+  const held = tasks.filter((t) => t.held !== undefined && !isDone(state, t.n));
+  let pending = tasks.filter((t) => t.held === undefined && !isDone(state, t.n));
   const result: Task[][] = [];
+  const outputsOf = (ts: Task[]) => new Set(ts.flatMap((t) => t.outputs.map((o) => o.file)));
   while (pending.length > 0) {
-    const outputsOf = (ts: Task[]) => new Set(ts.flatMap((t) => t.outputs.map((o) => o.file)));
     const ready = pending.filter((t) => {
-      const others = outputsOf(pending.filter((o) => o !== t));
+      const others = outputsOf([...held, ...pending.filter((o) => o !== t)]);
       const needs = closure(repo, [...t.imports, ...t.tests], new Set(t.outputs.map((o) => o.file)));
       return ![...t.imports, ...needs].some((f) => others.has(f));
     });
-    if (ready.length === 0) throw new Error(`tasks depend on each other: ${pending.map((t) => t.n).join(", ")}`);
+    if (ready.length === 0) break;
     result.push(ready);
     pending = pending.filter((t) => !ready.includes(t));
   }
-  return result;
+  if (pending.length > 0 && held.length === 0) throw new Error(`tasks depend on each other: ${pending.map((t) => t.n).join(", ")}`);
+  return { waves: result, waiting: pending };
 }
 
 // ---- Lint -----------------------------------------------------------------
@@ -340,6 +348,7 @@ const leaks = (task: Task) => readsOf(task).filter((f) => task.hidden.includes(f
 
 function make(task: Task): void {
   const dir = workspaceOf(task);
+  if (task.held !== undefined) throw new Error(`task ${task.n} is held: ${task.held}`);
   if (existsSync(dir)) throw new Error(`${dir} exists; delete it first, or collect it`);
   if (leaks(task).length > 0) throw new Error(`task ${task.n} would read hidden files: ${leaks(task).join(", ")}`);
   const reads = readsOf(task);
@@ -576,12 +585,15 @@ function list(): void {
   const tasks = parseTasks();
   const state = loadState();
   for (const t of tasks) if (isDone(state, t.n)) console.log(`done     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}`);
-  waves(tasks, state).forEach((wave, i) => {
+  const { waves: ws, waiting } = waves(tasks, state);
+  for (const t of tasks) if (t.held !== undefined && !isDone(state, t.n)) console.log(`held     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (${t.held})`);
+  ws.forEach((wave, i) => {
     for (const t of wave) {
       const leak = leaks(t);
       console.log(`wave ${i + 1}   ${t.n}. ${t.outputs.map((o) => o.file + (o.headerOnly ? " (header)" : "")).join(", ")}  reads ${readsOf(t).length} files${leak.length ? `  READS HIDDEN ${leak.join(", ")}` : ""}${state[t.n]?.stops?.length ? `  stopped ${state[t.n].stops!.length}x` : ""}`);
     }
   });
+  for (const t of waiting) console.log(`waits    ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (reads the outputs of a held task)`);
 }
 
 function main(args: string[]): void {

@@ -18,9 +18,11 @@ generation task, and enforces these rules rather than only stating them. A secti
 file in its heading; "(header only)" means only the leading comment may
 change), **Imports** (the only files the outputs may import), and
 **Binds** (`node` or `dom`; default neither, so only the ES2022 library),
-and **Hidden** (files the task must not read, such as the reference
+**Hidden** (files the task must not read, such as the reference
 implementation of its own part; `task.ts` refuses to make a workspace
-whose reads include one).
+whose reads include one), and **Held** (why the task may not run yet,
+such as a round the human hasn't reviewed; `task.ts` leaves it out of the
+waves and refuses to make it, and only the human removes the field).
 
 - **Imports:** only the files listed for that implementation. Use `import type`
   for interfaces. Relative imports use the `.ts` extension. No npm packages.
@@ -237,8 +239,9 @@ budget for model updates, a circle, and a canvas view that draws circles.
     processor's own state, and applies nothing. Operations are never
     changed.
   - `model` is a read-only facet of the writer: an object with only
-    `ShapeCollection`'s members, delegating to the writer. Never the writer
-    itself.
+    `ShapeCollection`'s members, delegating to the writer. Its `on` and
+    `off` return the facet itself, not what the writer's return
+    (`ShapeMessageProcessor.read-facet`). Never the writer itself.
   - The writer starts empty and belongs to the processor from then on.
 - **Decided behavior:**
   - `newShapeId` returns `` `${clientId}#${n}` ``, with n counting from 0
@@ -263,7 +266,7 @@ budget for model updates, a circle, and a canvas view that draws circles.
 
 ## 10. A budget for model updates in `bench.ts`
 
-- **Outputs:** `bench.ts`, `shapeProcessor.ts` (header only)
+- **Outputs:** `bench.ts`, `mapShapeCollection.ts` (header only), `shapeProcessor.ts` (header only)
 - **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`,
   `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`,
   `mapShapeCollection.ts`, `shapeProcessor.ts`, and Node built-ins
@@ -402,6 +405,7 @@ The router and tap recognizer tasks (17 and 18) were removed with
 
 ## 16. Carving in `rectangleOps.ts`
 
+- **Held:** until round 6 is reviewed and has had phase 1b
 - **Outputs:** `rectangleOps.ts`
 - **Imports:** `geometry.ts`
 - **Approach:** add `cut`, `splitHoriz`, `splitVert`, `inset` and `place`
@@ -419,6 +423,7 @@ The router and tap recognizer tasks (17 and 18) were removed with
 
 ## 19. `rectDistributor.ts`
 
+- **Held:** until round 6 is reviewed and has had phase 1b
 - **Exports:** `export class RectDistributor<M> implements EventDistributor<M>`
   with the constructor `constructor(region: Rectangle, locate: (event: M[keyof M]) => Point)`.
 - **Hidden:** `distributorkit.ts`, `scenariokit.ts`, `adversaries/_distributor.ts`
