@@ -1,5 +1,5 @@
-// Adversary: off removes every registration of the listener.
-import { renderGroupContract } from "../renderGroup.contract.ts";
-import { TestGroup } from "./_group.ts";
+// Adversary: Off removes every registration of the listener.
+import { eventEmitterContract } from "../eventEmitter.contract.ts";
+import { makeTestEvents } from "./_events.ts";
 
-renderGroupContract(() => new TestGroup("off-removes-all"));
+eventEmitterContract(makeTestEvents("off-removes-all"));

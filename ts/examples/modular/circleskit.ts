@@ -1,13 +1,13 @@
 // The reference circles app on the test platform: a controller that gets
 // taps from an EventDistributor (layout.ts), with the view's surface as
-// their target, and edits the drawing group; the view shows the change.
-// helpers.check.ts runs the scenarios on it.
+// their target, and sends operations on the model; the view shows the
+// change once the infrastructure has processed them. helpers.check.ts runs
+// the scenarios on it.
 
 import type { Point } from "./geometry.ts";
-import type { ItemId } from "./view.ts";
+import type { ShapeId } from "./shape.ts";
 import type { CirclesParts, TapEvent, TestCirclesApp } from "./driver.ts";
 import type { Mode } from "./scenarios.ts";
-import { ids } from "./rules.ts";
 
 export class RefCircles implements TestCirclesApp {
   private readonly parts: CirclesParts;
@@ -18,16 +18,17 @@ export class RefCircles implements TestCirclesApp {
     const r = this.parts.surface.region;
     // In the view's coordinates. ShapeView's viewport is the identity, so these are canonical too.
     const p: Point = { x: event.at.x - r.x, y: event.at.y - r.y };
-    const { group, settings, makeCircle } = this.parts;
+    const { model, localSend, newShapeId, settings, makeCircle } = this.parts;
     if (this.current === "draw") {
-      group.add(makeCircle({ center: p, radius: this.radiusNow, color: settings.palette[this.colorIndex].color }));
+      const shape = makeCircle({ center: p, radius: this.radiusNow, color: settings.palette[this.colorIndex].color });
+      localSend({ type: "add", id: newShapeId(), shape });
       return;
     }
-    let top: ItemId | undefined;
-    group.forEach((id, shape) => {
-      if (shape.contains(p)) top = id;
-    });
-    if (top !== undefined) group.remove(top);
+    const here: ShapeId[] = [];
+    model.atPoint(p, here);
+    if (here.length === 0) return;
+    const top = here.reduce((a, b) => (model.compareZ(a, b) > 0 ? a : b));
+    localSend({ type: "remove", ids: [top] });
   };
 
   constructor(parts: CirclesParts) {
@@ -50,8 +51,7 @@ export class RefCircles implements TestCirclesApp {
   }
 
   clear(): void {
-    const all = ids(this.parts.group);
-    if (all.length > 0) this.parts.group.removeMultiple(all);
+    this.parts.localSend({ type: "clear" });
   }
 
   dispose(): void {

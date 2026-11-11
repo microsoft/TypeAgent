@@ -1,4 +1,7 @@
 import { MapShapeCollection } from "./mapShapeCollection.ts";
-import { shapeCollectionContract } from "./shapeCollection.contract.ts";
+import { shapeCollectionWriterContract } from "./shapeModel.contract.ts";
+import { ListIndex } from "./modelkit.ts";
 
-shapeCollectionContract(() => new MapShapeCollection());
+// Over the locator double, so that these tests depend on no other generated
+// implementation. shapeModel.integration.test.ts wires the real locators.
+shapeCollectionWriterContract(() => new MapShapeCollection(new ListIndex()));

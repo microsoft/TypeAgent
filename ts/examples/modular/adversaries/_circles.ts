@@ -3,7 +3,7 @@
 // bug.
 
 import type { Point } from "../geometry.ts";
-import type { ItemId } from "../view.ts";
+import type { ShapeId } from "../shape.ts";
 import type { AppMakers, CirclesParts, TapEvent, TestCirclesApp } from "../driver.ts";
 import type { Mode } from "../scenarios.ts";
 import { ids } from "../rules.ts";
@@ -19,7 +19,8 @@ export type CirclesBug =
   | "clear-keeps-top"       // clear leaves the top circle
   | "mode-resets"           // changing mode resets the color and radius
   | "clamps-radius"         // radii above 30 are drawn as 30
-  | "edit-in-frame";        // a tap's edit waits for the next frame
+  | "edit-in-frame"         // a tap sends its operation in the next frame
+  | "sends-later";          // a tap sends its operation in a microtask, after its handler returns
 
 class TestCircles implements TestCirclesApp {
   private readonly parts: CirclesParts;
@@ -29,6 +30,7 @@ class TestCircles implements TestCirclesApp {
   private radiusNow: number;
   private readonly onTap = (_: "tap", event: TapEvent) => {
     if (this.bug === "edit-in-frame") this.parts.scheduler.requestFrame({ frame: () => this.edit(event) });
+    else if (this.bug === "sends-later") queueMicrotask(() => this.edit(event));
     else this.edit(event);
   };
 
@@ -42,21 +44,20 @@ class TestCircles implements TestCirclesApp {
   private edit(event: TapEvent): void {
     const r = this.parts.surface.region;
     const p: Point = this.bug === "window-points" ? event.at : { x: event.at.x - r.x, y: event.at.y - r.y };
-    const { group, settings, makeCircle } = this.parts;
+    const { model, localSend, newShapeId, settings, makeCircle } = this.parts;
     if (this.current === "draw") {
       const radius = this.bug === "draws-initial-radius" ? settings.radius.initial
         : this.bug === "clamps-radius" ? Math.min(30, this.radiusNow) : this.radiusNow;
-      group.add(makeCircle({ center: p, radius, color: settings.palette[this.colorIndex].color }));
+      localSend({ type: "add", id: newShapeId(), shape: makeCircle({ center: p, radius, color: settings.palette[this.colorIndex].color }) });
       return;
     }
-    const here: ItemId[] = [];
-    group.forEach((id, shape) => {
-      if (shape.contains(p)) here.push(id);
-    });
-    const all = ids(group);
+    const here: ShapeId[] = [];
+    model.atPoint(p, here);
+    here.sort((a, b) => model.compareZ(a, b));
+    const all = ids(model);
     const target = this.bug === "erases-bottom" ? here[0]
       : this.bug === "erases-any" && here.length === 0 ? all[all.length - 1] : here[here.length - 1];
-    if (target !== undefined) group.remove(target);
+    if (target !== undefined) localSend({ type: "remove", ids: [target] });
   }
 
   color(label: string): void {
@@ -77,9 +78,8 @@ class TestCircles implements TestCirclesApp {
   }
 
   clear(): void {
-    const all = ids(this.parts.group);
-    const removed = this.bug === "clear-keeps-top" ? all.slice(0, -1) : all;
-    if (removed.length > 0) this.parts.group.removeMultiple(removed);
+    if (this.bug === "clear-keeps-top") this.parts.localSend({ type: "remove", ids: ids(this.parts.model).slice(0, -1) });
+    else this.parts.localSend({ type: "clear" });
   }
 
   dispose(): void {

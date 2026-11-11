@@ -1,10 +1,12 @@
 // Contract tests for the shape model (shapeModel.ts): ShapeCollectionWriter,
-// with ShapeCollection's rules, and ShapeMessageProcessor, which also runs
-// the MessageProcessor suite (messageProcessor.contract.ts). Test names are
-// rule IDs.
+// with ShapeCollection's rules and the ShapeLocatorQueries rules it
+// inherits, and ShapeMessageProcessor, which also runs the MessageProcessor
+// suite (messageProcessor.contract.ts). Test names are rule IDs.
 //
 // The writer suite runs random adds (on top or below a present shape) and
-// removes (with repeats and absent IDs) against a list kept by the test.
+// removes (with repeats and absent IDs) against a list kept by the test,
+// and runs the EventEmitter suite (eventEmitter.contract.ts) on the
+// writer's change event.
 // The processor suite plays collaborations and checks, each time a client's
 // process settles, its model against applied(p): the operations the client
 // has applied (shapesAfter in shapeModel.vocab.ts gives the shapes they
@@ -13,15 +15,52 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
+import type { Point, Rectangle } from "./geometry.ts";
+import type { Shape, ShapeId } from "./shape.ts";
 import type { OperationContent } from "./dataModel.ts";
-import type { ShapeCollection, ShapeCollectionWriter, ShapeId, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
 import {
-  addOf, compareOrder, deepEqual, entries, ids, isAdd, isClear, isRemove, isStrictlySorted, knew, removedBy, unique,
+  addOf, compareOrder, deepEqual, entries, ids, isAdd, isClear, isRemove, isStrictlySorted, knew, removedBy, sameSet, unique,
 } from "./shapeModel.vocab.ts";
 import { messageProcessorContract, play, ruleTest, steps, type Client, type Hooks, type ProcessorSubject, type Step } from "./messageProcessor.contract.ts";
-import { coverage, TestBox } from "./testkit.ts";
+import { eventEmitterContract } from "./eventEmitter.contract.ts";
+import { coverage, TestBox, TestTriangle } from "./testkit.ts";
 
 type Check = (rule: string, ok: boolean, detail?: string) => void;
+
+// Queries over the test shapes (below): boxes 2 x 2 at (i, i) for i from 0
+// to 3, and a triangle in the box from (3, 3) to (6, 6). The point (5.5,
+// 5.5) and the rectangle at (4.5, 4.5) are in the triangle's bounding box
+// but not in the triangle.
+const queryRects: readonly Rectangle[] = [
+  { x: 0, y: 0, width: 6, height: 6 }, { x: 1.5, y: 0, width: 1, height: 2 }, { x: 4.5, y: 4.5, width: 1, height: 1 },
+];
+const queryPoints: readonly Point[] = [{ x: 1.5, y: 1.5 }, { x: 3.5, y: 3.5 }, { x: 5.5, y: 5.5 }];
+
+/** Each collection's recent query out arrays, with copies, for no-retain. */
+const filled = new WeakMap<ShapeCollection, [ShapeId[], ShapeId[]][]>();
+
+/** The ShapeLocatorQueries rules, with indexed(c) the shapes in list. */
+function checkQueries(c: ShapeCollection, list: readonly [ShapeId, Shape][], check: Check): void {
+  const kept = filled.get(c) ?? [];
+  filled.set(c, kept);
+  check("ShapeLocatorQueries.no-retain", kept.every(([out, copy]) => deepEqual(out, copy)), "an earlier out array changed");
+  const prefix = ["prefilled" as ShapeId];
+  const one = (query: "inRect" | "atPoint", where: string, run: (out: ShapeId[]) => number, matches: (s: Shape) => boolean) => {
+    const out = [...prefix];
+    const n = run(out);
+    const found = out.slice(prefix.length);
+    const expected = list.filter(([, s]) => matches(s)).map(([id]) => id);
+    check(`ShapeLocatorQueries.${query}.exact`, sameSet(found, expected), `${query} ${where} found ${found.join(", ")}`);
+    check(`ShapeLocatorQueries.${query}.once`, unique(found), `${query} ${where} found ${found.join(", ")}`);
+    check(`ShapeLocatorQueries.${query}.append`, out[0] === prefix[0], `${query} ${where} changed out[0]`);
+    check(`ShapeLocatorQueries.${query}.count`, n === found.length, `${query} ${where} returned ${n}, appended ${found.length}`);
+    kept.push([out, [...out]]);
+  };
+  for (const r of queryRects) one("inRect", JSON.stringify(r), (out) => c.inRect(r, out), (s) => s.intersects(r));
+  for (const p of queryPoints) one("atPoint", JSON.stringify(p), (out) => c.atPoint(p, out), (s) => s.contains(p));
+  kept.splice(0, Math.max(0, kept.length - 24));
+}
 
 /** ShapeCollection's rules, checked on c as it is now. probes are IDs that may or may not be present, such as removed ones. */
 function checkCollection(c: ShapeCollection, check: Check, probes: readonly ShapeId[]): void {
@@ -34,6 +73,7 @@ function checkCollection(c: ShapeCollection, check: Check, probes: readonly Shap
   const present = new Set(list.map(([id]) => id));
   check("ShapeCollection.get-agrees", list.every(([id, s]) => c.get(id) === s) &&
     [...probes, "absent" as ShapeId].every((id) => present.has(id) || c.get(id) === undefined));
+  checkQueries(c, list, check);
   for (const [a] of list) {
     for (const [b] of list) {
       check("ShapeCollection.compareZ.zero-iff-same", (c.compareZ(a, b) === 0) === (a === b), `${a}, ${b}`);
@@ -41,7 +81,9 @@ function checkCollection(c: ShapeCollection, check: Check, probes: readonly Shap
     }
   }
   c.off("change", count);
-  check("ShapeCollection.read-only", deepEqual(entries(c), list) && events.length === 0);
+  const unchanged = deepEqual(entries(c), list) && events.length === 0;
+  check("ShapeCollection.read-only", unchanged);
+  check("ShapeLocatorQueries.read-only", unchanged);
 }
 
 // ---- The writer ------------------------------------------------------------
@@ -55,7 +97,16 @@ const writerOps: fc.Arbitrary<WriterOp[]> = fc.array(fc.oneof(
   { weight: 2, arbitrary: fc.record({ op: fc.constant("remove" as const), ids: fc.array(fc.nat(20), { maxLength: 4 }) }) },
 ), { minLength: 5, maxLength: 25 });
 
-const testShapes = [0, 1, 2, 3, 4].map((i) => new TestBox({ x: i, y: i, width: 2, height: 2 }));
+const testShapes: Shape[] = [
+  ...[0, 1, 2, 3].map((i) => new TestBox({ x: i, y: i, width: 2, height: 2 })),
+  new TestTriangle({ x: 3, y: 3, width: 3, height: 3 }),
+];
+
+/** The ShapeLocatorQueries rules, which ShapeCollection inherits. */
+const queryRules = [
+  ...["inRect", "atPoint"].flatMap((q) => ["exact", "once", "append", "count"].map((slug) => `ShapeLocatorQueries.${q}.${slug}`)),
+  "ShapeLocatorQueries.no-retain", "ShapeLocatorQueries.read-only",
+];
 
 /** Plays ops on a writer, calling check after each. IDs are w0, w1, … in order of adding; below and removes pick among those. */
 function playWriter(make: () => ShapeCollectionWriter, ops: readonly WriterOp[], check: Check): Set<string> {
@@ -101,7 +152,7 @@ export function shapeCollectionWriterContract(make: () => ShapeCollectionWriter)
     for (const id of [
       "ShapeCollectionWriter.add.placed", "ShapeCollectionWriter.remove.removed", "ShapeCollectionWriter.notifies",
       "ShapeCollection.size", "ShapeCollection.z-order", "ShapeCollection.get-agrees", "ShapeCollection.read-only",
-      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric",
+      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric", ...queryRules,
     ]) {
       test(id, () => {
         fc.assert(fc.property(writerOps, (ops) => {
@@ -116,6 +167,12 @@ export function shapeCollectionWriterContract(make: () => ShapeCollectionWriter)
         "remove present": 0.3, "remove absent": 0.3, "remove lists an ID twice": 0.1,
       });
     });
+  });
+
+  eventEmitterContract(() => {
+    const w = make();
+    let n = 0;
+    return { emitter: w, change: () => w.add(`e${n++}` as ShapeId, testShapes[0]) };
   });
 }
 
@@ -212,7 +269,7 @@ export function shapeMessageProcessorContract(make: (clientId: string) => ShapeM
       "ShapeMessageProcessor.kept", "ShapeMessageProcessor.remove-listed", "ShapeMessageProcessor.clear-known",
       "ShapeMessageProcessor.ack-keeps-z", "ShapeMessageProcessor.one-change",
       "ShapeCollection.size", "ShapeCollection.z-order", "ShapeCollection.get-agrees", "ShapeCollection.read-only",
-      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric",
+      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric", ...queryRules,
     ]) ruleTest(id, s, hooks, false, cases[id]);
 
     test("ShapeMessageProcessor input coverage", async () => {

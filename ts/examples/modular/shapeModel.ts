@@ -3,29 +3,21 @@
  * ShapeCollectionWriter the write side, ShapeOp the operations, and
  * ShapeMessageProcessor applies them with the writer's methods.
  *
- * Draft: when agreed, this replaces ShapeCollection in shape.ts.
- *
  * Rules follow the format described in rules.ts.
  *
  * @module
  */
 
-import type { Shape } from "./shape.ts";
+import type { Shape, ShapeId, ShapeLocatorQueries } from "./shape.ts";
 import type { DataModel, DataModelReader, MessageProcessor, Operation } from "./dataModel.ts";
-
-/**
- * Identifies a shape on every client. Made by
- * ShapeMessageProcessor.newShapeId; separate from the clientId and
- * clientSeq that identify operations, since a model loaded from a snapshot
- * holds shapes added by many clients.
- */
-export type ShapeId = string & { readonly __brand: "ShapeId" };
 
 export type ShapeCollectionEvents = { change: [] };
 
 /**
- * Shapes in z-order. The read side: views, render groups and controllers
- * hold this.
+ * Shapes in z-order, found by location. The read side: views and
+ * controllers hold this. The queries (ShapeLocatorQueries in shape.ts) are
+ * about the present shapes: indexed(this) is the shapes forEach visits,
+ * under the same IDs.
  *
  * @invariant size  size counts the shapes forEach visits.
  *   this.size === ids(this).length
@@ -34,9 +26,9 @@ export type ShapeCollectionEvents = { change: [] };
  * @invariant get-agrees  get returns exactly the shapes forEach visits, under the same IDs.
  *   (id: ShapeId) => entries(this).every(([i, s]) => this.get(i) === s) &&
  *     implies(this.get(id) !== undefined, ids(this).includes(id))
- * @ensures read-only  get, size, forEach, compareZ, on and off never change the shapes.
+ * @ensures read-only  get, size, forEach, compareZ, inRect, atPoint, on and off never change the shapes.
  */
-export interface ShapeCollection<S extends Shape = Shape> extends DataModelReader<ShapeCollectionEvents> {
+export interface ShapeCollection<S extends Shape = Shape> extends DataModelReader<ShapeCollectionEvents>, ShapeLocatorQueries {
   /** The shape with this ID, or undefined if no such shape exists. */
   get(id: ShapeId): S | undefined;
 
@@ -68,6 +60,8 @@ export interface ShapeCollectionWriter<S extends Shape = Shape> extends ShapeCol
    *
    * @requires new-id  id isn't present.
    * @requires below-present  below, when given, is present.
+   * @requires in-range  The shape's bounding box lies within ±1e300, right and bottom edges included.
+   *   inRange(shape.boundingBox(), 1e300)
    * @ensures placed  The shape is retrievable under id, directly below below or on top; the other shapes stay, in the same order.
    *   deepEqual(entries(this), below === undefined ? [...old(entries(this)), [id, shape]] :
    *     old(entries(this)).flatMap((e) => (e[0] === below ? [[id, shape], e] : [e])))
@@ -122,6 +116,7 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * processor has applied, and are checked whenever process settles.
  *
  * @requires fresh-add-id  Each add's id came from newShapeId, and no other add has it.
+ * @requires in-range  Each add's shape has its bounding box within ±1e300, right and bottom edges included.
  * @ensures new-ids  newShapeId never returns an ID that it, or any processor with a different clientId, has returned.
  * @ensures read-facet  model has none of the writer's members, so whoever holds it can't change the shapes through it.
  *   !("add" in this.model) && !("remove" in this.model)

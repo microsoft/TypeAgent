@@ -1,4 +1,4 @@
-// Adversary: A tap's edit waits for the next frame. Every other part is the reference.
+// Adversary: A tap sends its operation in the next frame. Every other part is the reference.
 import { scenarioContract } from "../scenario.contract.ts";
 import { kitFixture } from "../scenariokit.ts";
 import { makeTestCircles } from "./_circles.ts";

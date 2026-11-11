@@ -23,6 +23,9 @@ import type { Shape, ShapeId, ShapeLocator } from "./shape.ts";
 import { isEmpty, sameSet, unique } from "./shape.vocab.ts";
 import { coverage, grid, point, rect, shape, shapeOf, TestBox, TestTriangle } from "./testkit.ts";
 
+/** The ID numbered n: IDs are strings, and the suite numbers them. */
+const sid = (n: number) => `${n}` as ShapeId;
+
 /**
  * Out arrays may start with IDs, to check that queries append. Each pick
  * becomes an ID ever added, or 0, which is never added.
@@ -146,7 +149,7 @@ function run(make: () => ShapeLocator, opList: Op[], check: (s: Step) => void): 
   const indexed = new Map<ShapeId, Shape>();
   const added: Shape[] = [];
   let nextId = 1;
-  const pickId = (n: number) => (n % nextId) as ShapeId; // 0 is never added
+  const pickId = (n: number) => sid(n % nextId); // 0 is never added
   for (const op of opList) {
     const before = new Map(indexed);
     let ids: ShapeId[] = [];
@@ -154,8 +157,8 @@ function run(make: () => ShapeLocator, opList: Op[], check: (s: Step) => void): 
     let outBefore: ShapeId[] = [];
     switch (op.op) {
       case "add": {
-        const reused = op.reuse === null ? 0 : pickId(op.reuse);
-        const id = reused !== 0 && !indexed.has(reused) ? reused : nextId++ as ShapeId;
+        const reused = op.reuse === null ? sid(0) : pickId(op.reuse);
+        const id = reused !== sid(0) && !indexed.has(reused) ? reused : sid(nextId++);
         const s = op.sameAs !== null && added.length > 0 ? added[op.sameAs % added.length] : op.shape;
         locator.add(id, s);
         indexed.set(id, s);
@@ -350,10 +353,10 @@ export function shapeLocatorContract(make: () => ShapeLocator): void {
           const a = make();
           const b = make();
           shapes.forEach((s, i) => {
-            a.add((i + 1) as ShapeId, s);
-            b.add((i + 1) as ShapeId, s);
+            a.add(sid(i + 1), s);
+            b.add(sid(i + 1), s);
           });
-          const ids = picks.map((n) => (n % (shapes.length + 2)) as ShapeId);
+          const ids = picks.map((n) => sid(n % (shapes.length + 2)));
           const removedA = a.removeMultiple(ids);
           let removedB = 0;
           for (const id of [...ids].reverse()) if (b.remove(id)) removedB++;
@@ -389,29 +392,29 @@ export function shapeLocatorContract(make: () => ShapeLocator): void {
         { x: 9e299, y: -1e300, width: 1e299, height: 2e300 },
       ];
       const locator = make();
-      shapes.forEach((r, i) => locator.add((i + 1) as ShapeId, new TestBox(r)));
+      shapes.forEach((r, i) => locator.add(sid(i + 1), new TestBox(r)));
       shapes.forEach((r, i) => {
         if (isEmpty(r)) return;
         const out: ShapeId[] = [];
         locator.inRect(r, out);
-        assert.ok(out.includes((i + 1) as ShapeId), `finds shape ${i + 1} by rectangle`);
+        assert.ok(out.includes(sid(i + 1)), `finds shape ${i + 1} by rectangle`);
         const atPointOut: ShapeId[] = [];
         locator.atPoint({ x: r.x, y: r.y }, atPointOut);
-        assert.ok(atPointOut.includes((i + 1) as ShapeId), `finds shape ${i + 1} by point`);
+        assert.ok(atPointOut.includes(sid(i + 1)), `finds shape ${i + 1} by point`);
       });
       const out: ShapeId[] = [];
       locator.inRect(everywhere, out);
-      assert.ok(sameSet(out, [2, 3, 4, 5, 6, 7, 8, 9] as ShapeId[]), "one huge query finds every non-empty shape");
-      assert.equal(locator.remove(1 as ShapeId), true, "the empty shape was indexed");
+      assert.ok(sameSet(out, [2, 3, 4, 5, 6, 7, 8, 9].map(sid)), "one huge query finds every non-empty shape");
+      assert.equal(locator.remove(sid(1)), true, "the empty shape was indexed");
 
       // More shapes at one spot than any cell holds, so a tree can't separate them by splitting.
       for (const r of [{ x: 1, y: 1, width: 0, height: 0 }, { x: 1, y: 1, width: 0.5, height: 0.5 }]) {
         const locator = make();
-        for (let i = 1; i <= 40; i++) locator.add(i as ShapeId, new TestBox(r));
+        for (let i = 1; i <= 40; i++) locator.add(sid(i), new TestBox(r));
         const out: ShapeId[] = [];
         locator.inRect(everywhere, out);
         assert.equal(out.length, isEmpty(r) ? 0 : 40, `40 copies of ${JSON.stringify(r)}`);
-        assert.equal(locator.removeMultiple(Array.from({ length: 40 }, (_, i) => (i + 1) as ShapeId)), 40);
+        assert.equal(locator.removeMultiple(Array.from({ length: 40 }, (_, i) => sid(i + 1))), 40);
       }
     });
 

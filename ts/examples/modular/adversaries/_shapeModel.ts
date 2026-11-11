@@ -2,14 +2,13 @@
 // switched on. helpers.check.ts runs the shape model contracts against them
 // with no bug.
 
-import type { Shape } from "../shape.ts";
+import type { Point, Rectangle } from "../geometry.ts";
+import type { Shape, ShapeId } from "../shape.ts";
 import type { OperationContent } from "../dataModel.ts";
-import type {
-  ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeId, ShapeMessageProcessor, ShapeOp,
-} from "../shapeModel.ts";
-import { compareOrder, knew } from "../shapeModel.vocab.ts";
+import type { ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "../shapeModel.ts";
+import { compareOrder, knew, rectContains } from "../shapeModel.vocab.ts";
 import { Events } from "../eventkit.ts";
-import { readFacet } from "../shapemodelkit.ts";
+import { readFacet } from "../shapewriterkit.ts";
 
 export type WriterBug =
   | "none"
@@ -22,7 +21,14 @@ export type WriterBug =
   | "keeps-removed"      // get still returns removed shapes
   | "get-emits"          // get emits change
   | "compares-shapes"    // compareZ compares the positions of the shapes' objects, not the IDs
-  | "compare-abs";       // compareZ returns the distance between positions, never negative
+  | "compare-abs"        // compareZ returns the distance between positions, never negative
+  | "index-keeps-removed" // queries still find removed shapes
+  | "box-only"           // atPoint answers from bounding boxes
+  | "reports-twice"      // inRect reports the top shape it finds twice
+  | "clears-out"         // atPoint empties out before appending
+  | "returns-length"     // inRect returns out's length, not the number appended
+  | "retains-out"        // a query keeps its out array, and the next query appends to it too
+  | "query-moves-found"; // atPoint moves the shapes it finds to the top, as a most-recently-used cache would
 
 export class TestShapeWriter extends Events<ShapeCollectionEvents> implements ShapeCollectionWriter {
   private items: [ShapeId, Shape][] = [];
@@ -47,6 +53,38 @@ export class TestShapeWriter extends Events<ShapeCollectionEvents> implements Sh
   forEach(visit: (id: ShapeId, shape: Shape) => void): void {
     const list = this.bug === "reversed" ? [...this.items].reverse() : [...this.items];
     for (const [id, shape] of list) visit(id, shape);
+  }
+
+  inRect(r: Rectangle, out: ShapeId[]): number {
+    const found = this.searched().filter(([, s]) => s.intersects(r)).map(([id]) => id);
+    if (this.bug === "reports-twice" && found.length > 0) found.push(found[found.length - 1]);
+    return this.report(found, out);
+  }
+
+  atPoint(p: Point, out: ShapeId[]): number {
+    const hit = (s: Shape) => (this.bug === "box-only" ? rectContains(s.boundingBox(), p) : s.contains(p));
+    const found = this.searched().filter(([, s]) => hit(s)).map(([id]) => id);
+    if (this.bug === "clears-out") out.length = 0;
+    if (this.bug === "query-moves-found") {
+      this.items = [...this.items.filter(([i]) => !found.includes(i)), ...this.items.filter(([i]) => found.includes(i))];
+    }
+    return this.report(found, out);
+  }
+
+  private retained: ShapeId[] | undefined;
+
+  /** The shapes queries search. */
+  private searched(): [ShapeId, Shape][] {
+    return this.bug === "index-keeps-removed" ? [...this.items, ...this.gone] : this.items;
+  }
+
+  private report(found: ShapeId[], out: ShapeId[]): number {
+    out.push(...found);
+    if (this.bug === "retains-out") {
+      this.retained?.push(...found);
+      this.retained = out;
+    }
+    return this.bug === "returns-length" ? out.length : found.length;
   }
 
   compareZ(a: ShapeId, b: ShapeId): number {
@@ -134,6 +172,8 @@ export class TestShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implemen
       get size() { drain(); return facet.size; },
       forEach: (visit) => { drain(); facet.forEach(visit); },
       compareZ: (a, b) => { drain(); return facet.compareZ(a, b); },
+      inRect: (r, out) => { drain(); return facet.inRect(r, out); },
+      atPoint: (p, out) => { drain(); return facet.atPoint(p, out); },
       on(event, listener) { facet.on(event, listener); return this; },
       off(event, listener) { facet.off(event, listener); return this; },
     };

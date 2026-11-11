@@ -1,9 +1,8 @@
 /**
- * Shapes and the structures that hold them. A Shape is a region of the
- * plane, and each shape type, such as InkStroke or Circle, adds its own
- * rules. A ShapeCollection keeps shapes in z-order under ShapeIds, and a
- * ShapeLocator finds them by location. Collections and locators are
- * mutable.
+ * Shapes and finding them. A Shape is a region of the plane, and each shape
+ * type, such as InkStroke or Circle, adds its own rules. A ShapeLocator
+ * finds shapes by location, under their ShapeIds. The collection of shapes
+ * a drawing holds is in shapeModel.ts.
  *
  * Rules follow the format described in rules.ts.
  *
@@ -128,88 +127,12 @@ export interface Circle extends Shape {
 }
 
 /**
- * Opaque identifier for a shape in a ShapeCollection. The brand is
- * compile-time only: a plain number at runtime, but other numbers can't be
+ * Identifies a shape on every client. Made by
+ * ShapeMessageProcessor.newShapeId (shapeModel.ts). The brand is
+ * compile-time only: a plain string at runtime, but other strings can't be
  * passed as one.
  */
-export type ShapeId = number & { readonly __brand: "ShapeId" };
-
-/**
- * A collection of shapes, kept in z-order.
- *
- * @invariant size  size counts the shapes forEach visits.
- *   this.size === ids(this).length
- * @invariant z-order  forEach visits each shape once, from bottom to top.
- *   isStrictlySorted(ids(this), (a, b) => this.compareZ(a, b))
- * @invariant get-agrees  get returns exactly the shapes forEach visits, under the same IDs.
- *   (id: ShapeId) => entries(this).every(([i, s]) => this.get(i) === s) &&
- *     implies(this.get(id) !== undefined, ids(this).includes(id))
- * @ensures observers-read-only  get, size, forEach and compareZ never change the collection.
- */
-export interface ShapeCollection<S extends Shape = Shape> {
-    /**
-     * Adds shape and returns its new ID. The same shape object may be added
-     * more than once; each add gets its own ID.
-     *
-     * @ensures gettable  The new ID retrieves the shape.
-     *   this.get(result) === shape
-     * @ensures on-top  The new shape is above every other shape.
-     *   ids(this).every((other) => other === result || this.compareZ(result, other) > 0)
-     * @ensures fresh-id  Never returns an ID it has returned before, even for a shape that was later removed.
-     * @ensures others-kept  Every other shape keeps its ID and its place in z-order.
-     *   deepEqual(entries(this).filter(([i]) => i !== result), old(entries(this)))
-     */
-    add(shape: S): ShapeId;
-
-    /**
-     * Removes the shape with this ID.
-     *
-     * @ensures result  Returns whether the shape was present.
-     *   result === (old(this.get(id)) !== undefined)
-     * @ensures gone  The shape is no longer retrievable.
-     *   this.get(id) === undefined
-     * @ensures others-kept  Every other shape keeps its ID and its place in z-order.
-     *   deepEqual(entries(this), old(entries(this)).filter(([i]) => i !== id))
-     */
-    remove(id: ShapeId): boolean;
-
-    /**
-     * Removes every listed ID that is present. ids may contain duplicates and
-     * IDs that aren't present; both are ignored.
-     *
-     * @ensures count  Returns the number of shapes actually removed.
-     *   result === old(this.size) - this.size
-     * @ensures gone  None of the listed shapes is retrievable.
-     *   ids.every((id) => this.get(id) === undefined)
-     * @ensures same-as-remove  Has the same effect as calling remove() on each ID, in any order.
-     */
-    removeMultiple(ids: readonly ShapeId[]): number;
-
-    /** The shape with this ID, or undefined if no such shape exists. */
-    get(id: ShapeId): S | undefined;
-
-    /** The number of shapes in the collection. */
-    readonly size: number;
-
-    /**
-     * Calls visit for each shape, bottom to top in z-order. visit must not
-     * modify the collection.
-     */
-    forEach(visit: (id: ShapeId, shape: S) => void): void;
-
-    /**
-     * Compares the z-order of two shapes. Negative if a is below b, positive if
-     * a is above b.
-     *
-     * @requires present  Both shapes are in the collection.
-     *   this.get(a) !== undefined && this.get(b) !== undefined
-     * @ensures zero-iff-same  Returns 0 only when comparing a shape with itself.
-     *   (result === 0) === (a === b)
-     * @ensures antisymmetric  Swapping the arguments flips the sign.
-     *   Math.sign(result) === -Math.sign(this.compareZ(b, a))
-     */
-    compareZ(a: ShapeId, b: ShapeId): number;
-}
+export type ShapeId = string & { readonly __brand: "ShapeId" };
 
 /**
  * Finds shapes by location. Read-only.

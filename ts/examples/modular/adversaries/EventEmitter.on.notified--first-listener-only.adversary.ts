@@ -1,5 +1,5 @@
 // Adversary: Only the first registration is called.
-import { renderGroupContract } from "../renderGroup.contract.ts";
-import { TestGroup } from "./_group.ts";
+import { eventEmitterContract } from "../eventEmitter.contract.ts";
+import { makeTestEvents } from "./_events.ts";
 
-renderGroupContract(() => new TestGroup("first-listener-only"));
+eventEmitterContract(makeTestEvents("first-listener-only"));

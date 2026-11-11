@@ -8,13 +8,14 @@ import type { AppMakers } from "./driver.ts";
 import type { AppFixture } from "./scenario.contract.ts";
 import { makeFixture } from "./driver.ts";
 import { demoSettings } from "./scenarios.ts";
-import { ListGroup, testCircle } from "./viewkit.ts";
+import { testCircle } from "./viewkit.ts";
+import { RefShapeProcessor } from "./shapeprocessorkit.ts";
 import { kitView } from "./shapeviewkit.ts";
 import { RefDistributor } from "./distributorkit.ts";
 import { RefCircles } from "./circleskit.ts";
 
 export const kitMakers: AppMakers = {
-  group: () => new ListGroup(),
+  processor: (clientId) => new RefShapeProcessor(clientId),
   makeCircle: testCircle,
   view: kitView,
   distributor: (region, locate) => new RefDistributor(region, locate),

@@ -9,6 +9,6 @@ shapeLocatorContract(() => new QuadTreeLocator());
 test("QuadTreeLocator.add.duplicate-throws", () => {
   const locator = new QuadTreeLocator();
   const box = { kind: "box", boundingBox: () => ({ x: 0, y: 0, width: 1, height: 1 }), contains: () => true, intersects: () => true };
-  locator.add(1 as ShapeId, box);
-  assert.throws(() => locator.add(1 as ShapeId, box), Error);
+  locator.add("1" as ShapeId, box);
+  assert.throws(() => locator.add("1" as ShapeId, box), Error);
 });

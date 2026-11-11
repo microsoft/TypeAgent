@@ -1,17 +1,14 @@
 // Test doubles for views: a canvas context that records what it is asked to
 // draw and computes what each point shows, a frame scheduler stepped by
-// hand, a plain group that counts its listeners, and a circle. Each is correct by construction or checked:
-// helpers.check.ts runs the RenderGroup and Circle contracts on ListGroup and
-// testCircle.
+// hand, and a circle. Each is correct by construction or checked:
+// helpers.check.ts runs the FrameScheduler and Circle contracts on
+// ManualScheduler and testCircle.
 
 import type { Point, Rectangle } from "./geometry.ts";
 import type { Color } from "./color.ts";
-import type { Circle, Shape } from "./shape.ts";
+import type { Circle } from "./shape.ts";
 import type { DrawingContext } from "./canvas.ts";
-import type { ItemId } from "./view.ts";
 import type { FrameHandler, FrameScheduler } from "./frames.ts";
-import type { DrawingGroup } from "./shapeView.ts";
-import { Events } from "./eventkit.ts";
 import { allFinite, extents, inflate, isEmpty, over, rectContains, rectIntersects, validCircle } from "./shape.vocab.ts";
 
 // ---- Recording context ----------------------------------------------------
@@ -152,85 +149,6 @@ export class ManualScheduler implements FrameScheduler {
     this.pending.clear();
     this.time += 1000 / 120;
     for (const h of handlers) h.frame(this.time);
-  }
-}
-
-// ---- RenderGroup ----------------------------------------------------------------
-
-/**
- * A group of shapes kept in a plain array, with the edits the RenderGroup
- * contract drives, and a count of its listeners for the view contracts.
- */
-export class ListGroup implements DrawingGroup {
-  private items: [ItemId, Shape][] = [];
-  private listeners: (() => void)[] = [];
-  private nextId = 1;
-
-  get size(): number {
-    return this.items.length;
-  }
-
-  /** The number of listener registrations. */
-  listenerCount(): number {
-    return this.listeners.length;
-  }
-
-  private emit(): void {
-    for (const listener of [...this.listeners]) listener();
-  }
-
-  add(shape: Shape): ItemId {
-    const id = this.nextId++ as ItemId;
-    this.items.push([id, shape]);
-    this.emit();
-    return id;
-  }
-
-  remove(id: ItemId): boolean {
-    return this.removeMultiple([id]) > 0;
-  }
-
-  removeMultiple(ids: readonly ItemId[]): number {
-    const before = this.items.length;
-    this.items = this.items.filter(([i]) => !ids.includes(i));
-    const removed = before - this.items.length;
-    if (removed > 0) this.emit();
-    return removed;
-  }
-
-  get(id: ItemId): Shape | undefined {
-    return this.items.find(([i]) => i === id)?.[1];
-  }
-
-  forEach(visit: (id: ItemId, item: Shape) => void): void {
-    for (const [id, item] of [...this.items]) visit(id, item);
-  }
-
-  compareZ(a: ItemId, b: ItemId): number {
-    return this.items.findIndex(([i]) => i === a) - this.items.findIndex(([i]) => i === b);
-  }
-
-  inRect(r: Rectangle, out: ItemId[]): number {
-    const found = this.items.filter(([, s]) => s.intersects(r)).map(([id]) => id);
-    out.push(...found);
-    return found.length;
-  }
-
-  atPoint(p: Point, out: ItemId[]): number {
-    const found = this.items.filter(([, s]) => s.contains(p)).map(([id]) => id);
-    out.push(...found);
-    return found.length;
-  }
-
-  on(event: "change", listener: () => void): this {
-    this.listeners.push(listener);
-    return this;
-  }
-
-  off(event: "change", listener: () => void): this {
-    const i = this.listeners.lastIndexOf(listener);
-    if (i >= 0) this.listeners.splice(i, 1);
-    return this;
   }
 }
 

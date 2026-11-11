@@ -1,4 +1,4 @@
-// Adversary: A group change marks the view but requests no frame.
+// Adversary: A model change marks the view but requests no frame.
 import { shapeViewContract } from "../shapeView.contract.ts";
 import { makeTestView } from "./_view.ts";
 

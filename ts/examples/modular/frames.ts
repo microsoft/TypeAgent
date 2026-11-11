@@ -8,8 +8,8 @@
  *
  * Rules follow the format described in rules.ts.
  *
- * @ensures complete  Each input event updates the model completely before its handler returns, so nothing is left pending and no frame shows part of an action: running the frames afterward doesn't change the model.
- * @budget fraction-of-frame  A pen move or an eraser move updates the model in under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the document.
+ * @ensures complete  Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model.
+ * @budget fraction-of-frame  Sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model.
  * @module
  */
 

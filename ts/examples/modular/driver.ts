@@ -5,11 +5,19 @@
 // drawing's offset. Scenario tests use only the fixture, so they run on any
 // assembly: all test doubles, one generated part among doubles, or every
 // real part.
+//
+// The fixture is also the message infrastructure (dataModel.ts) for one
+// client with no collaborators. It owns the processor: the app gets only
+// the model and a LocalSend. Each operation sent is enqueued at once, goes
+// out, gets the next seq and comes back as its acknowledgment. Only the
+// fixture calls process: after each action, and again after the frames.
 
 import type { Point, Rectangle } from "./geometry.ts";
 import type { Color } from "./color.ts";
-import type { Circle, Shape } from "./shape.ts";
-import type { DrawingGroup, ShapeView } from "./shapeView.ts";
+import type { Circle, Shape, ShapeId } from "./shape.ts";
+import type { LocalSend } from "./dataModel.ts";
+import type { ShapeCollection, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+import type { ShapeView } from "./shapeView.ts";
 import type { EventDistributor, LayoutObject } from "./layout.ts";
 import type { FrameScheduler } from "./frames.ts";
 import type { MakeShapeView } from "./shapeView.contract.ts";
@@ -29,7 +37,12 @@ export type MakeCircle = (fields: { center: Point; radius: number; color: Color 
 
 /** What a circles app is made with. */
 export interface CirclesParts {
-  readonly group: DrawingGroup;
+  /** The drawing's shapes: the processor's model. */
+  readonly model: ShapeCollection;
+  /** Sends a local operation to the message infrastructure. */
+  readonly localSend: LocalSend<ShapeOp>;
+  /** An ID for a shape this client adds. */
+  readonly newShapeId: () => ShapeId;
   readonly view: ShapeView;
   /** Where the view's surface is, in the window. */
   readonly surface: LayoutObject;
@@ -50,7 +63,7 @@ export interface TestCirclesApp {
 
 /** How to make each part of an app. */
 export interface AppMakers {
-  group: () => DrawingGroup;
+  processor: (clientId: string) => ShapeMessageProcessor;
   makeCircle: MakeCircle;
   view: MakeShapeView;
   distributor: (region: Rectangle, locate: (event: TapEvent) => Point) => EventDistributor<TapEvents>;
@@ -64,26 +77,39 @@ export function makeFixture(makers: AppMakers, settings: CirclesSettings): AppFi
   const { width, height } = settings.drawing;
   const window: Rectangle = { x: 0, y: 0, width, height: controlsHeight + height };
   const surface: LayoutObject = { region: { x: 0, y: controlsHeight, width, height } };
-  const group = makers.group();
+  const processor = makers.processor("local");
+  let seq = 0;
+  processor.on("outgoing", (op) => processor.remote.enqueue({ ...op, seq: seq++ }));
+  const localSend: LocalSend<ShapeOp> = (content) => processor.local.enqueue(content);
+  const newShapeId = () => processor.newShapeId();
   const scheduler = new ManualScheduler();
-  const { view, painted } = makers.view({ groups: [group] }, scheduler, width, height);
+  const { view, painted } = makers.view(processor.model, scheduler, width, height);
   const distributor = makers.distributor(window, (event) => event.at);
-  const app = makers.app({ group, view, surface, distributor, scheduler, settings, makeCircle: makers.makeCircle });
+  const app = makers.app({
+    model: processor.model, localSend, newShapeId, view, surface, distributor, scheduler, settings, makeCircle: makers.makeCircle,
+  });
 
-  // The model: the group's circles, bottom to top.
-  const model = () => entries(group).map(([, s]: [unknown, Shape]) => {
+  // The model: its circles, bottom to top.
+  const model = () => entries(processor.model).map(([, s]: [unknown, Shape]) => {
     const c = s as Circle;
     return { center: { x: c.center.x, y: c.center.y }, radius: c.radius, color: { ...c.color } };
   });
-  // As a display would: after each action, run the frames anything asks
-  // for. The action must be complete before they run (frames.complete).
-  const settle = (action: () => void) => {
-    action();
-    const before = model();
+  const runFrames = () => {
     for (let i = 0; i < 10 && scheduler.anyRequested(); i++) scheduler.runFrame();
-    if (!deepEqual(model(), before)) throw new Error("frames.complete: running frames after an action changed the model");
   };
-  settle(() => {});
+  // As a display would: after each action, process what it sent and run
+  // the frames anything asks for. The action must have sent everything
+  // before it returned (frames.complete), so processing again after the
+  // frames changes nothing.
+  const settle = async (action: () => void) => {
+    action();
+    await processor.process();
+    const before = model();
+    runFrames();
+    await processor.process();
+    if (!deepEqual(model(), before)) throw new Error("frames.complete: the model changed after an action's operations were processed");
+  };
+  runFrames();
   return {
     act: (a) => settle(() => {
       switch (a.act) {

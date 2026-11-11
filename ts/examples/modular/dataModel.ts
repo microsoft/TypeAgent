@@ -6,6 +6,10 @@
  * server). The processor applies them, interleaving the two queues, and
  * the model emits change events.
  *
+ * The message infrastructure owns the processor: it enqueues on both
+ * queues and decides when to call process. A controller holds only the
+ * model's read side and a LocalSend.
+ *
  * Each distributed data structure (DDS) defines its operations as a
  * discriminated union on type, and its own rules for how interleaving and
  * sequence numbers decide the result. There is no order common to every
@@ -74,6 +78,13 @@ export interface Operation {
 export type OperationContent<T extends Operation> =
     T extends Operation ? Omit<T, Exclude<keyof Operation, "type">> : never;
 
+/**
+ * How a controller changes a model: it sends each local operation it forms
+ * to the message infrastructure, which enqueues it on the processor's local
+ * queue before returning, and later calls process.
+ */
+export type LocalSend<TOp extends Operation> = (content: OperationContent<TOp>) => void;
+
 /** Where producers put operations. */
 export interface OperationSink<T> {
     enqueue(item: T): void;
@@ -96,9 +107,11 @@ export interface OperationSource<TOp extends Operation> extends EventEmitter<{ o
 
 /**
  * Applies operations to a data model: the only thing that changes it.
- * Controllers enqueue to local; the collaboration protocol enqueues to
- * remote, including the acknowledgments of local operations. The processor
- * holds the model's write side privately and exposes only the read side.
+ * The message infrastructure enqueues to local what controllers send
+ * through a LocalSend, and to remote what the collaboration protocol
+ * delivers, including the acknowledgments of local operations. The
+ * processor holds the model's write side privately and exposes only the
+ * read side.
  *
  * Rules marked @abstract are observable only through a DDS's semantics;
  * each DDS's processor refines them.
@@ -109,7 +122,8 @@ export interface OperationSource<TOp extends Operation> extends EventEmitter<{ o
  * an operation and enqueuing it in one synchronous turn means nothing is
  * applied in between.
  *
- * @requires formed-now  A controller enqueues each local operation in the same synchronous turn in which it read the model to form it.
+ * @requires formed-now  A controller sends each local operation in the same synchronous turn in which it read the model to form it.
+ * @requires infrastructure-only  Only the message infrastructure enqueues and calls process; controllers send through a LocalSend.
  * @requires remote-seq  Each remote operation has an assigned seq, greater than any earlier remote operation's.
  * @requires unique-identity  No two operations share a clientId and clientSeq, except a local operation and its acknowledgment.
  * @ensures stamps  enqueue on local makes the operation with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
@@ -132,7 +146,7 @@ export interface MessageProcessor<TR extends DataModelReader, TOp extends Operat
     /** The model's read side. */
     readonly model: TR;
 
-    /** Where controllers put operations they form. */
+    /** Where the infrastructure puts the operations controllers send. */
     readonly local: OperationSink<OperationContent<TOp>>;
 
     /** Where the collaboration protocol puts sequenced operations. */
@@ -140,9 +154,8 @@ export interface MessageProcessor<TR extends DataModelReader, TOp extends Operat
 
     /**
      * Applies the queued operations, interleaving local and remote, and
-     * emits the model's change events. Only the message processing
-     * infrastructure calls it, possibly from its own enqueue wrapper; it
-     * settles once the queues are empty.
+     * emits the model's change events. Only the message infrastructure
+     * calls it; it settles once the queues are empty.
      */
     process(): Promise<void>;
 }

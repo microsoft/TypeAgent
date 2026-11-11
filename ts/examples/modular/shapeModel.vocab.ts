@@ -6,9 +6,9 @@
  * @module
  */
 
-import type { Shape } from "./shape.ts";
+import type { Shape, ShapeId } from "./shape.ts";
 import type { Operation } from "./dataModel.ts";
-import type { AddShape, ClearShapes, RemoveShapes, ShapeId, ShapeOp } from "./shapeModel.ts";
+import type { AddShape, ClearShapes, RemoveShapes, ShapeOp } from "./shapeModel.ts";
 import { acknowledged, knew } from "./dataModel.vocab.ts";
 
 export * from "./shape.vocab.ts";

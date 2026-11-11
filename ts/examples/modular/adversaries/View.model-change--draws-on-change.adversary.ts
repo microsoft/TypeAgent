@@ -1,4 +1,4 @@
-// Adversary: A group change redraws at once, instead of in the next frame.
+// Adversary: A model change redraws at once, instead of in the next frame.
 import { shapeViewContract } from "../shapeView.contract.ts";
 import { makeTestView } from "./_view.ts";
 

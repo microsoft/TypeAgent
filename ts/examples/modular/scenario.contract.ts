@@ -5,9 +5,10 @@
 // shows. When given a reference, also runs random sequences of actions on
 // both and compares what the drawing shows on a grid of points after each.
 //
-// frames.complete (frames.ts): a fixture runs the frames the app asks for
-// after each action, as a display would, and throws, with the rule's ID in
-// its message, if those frames change the model. A test of that name runs
+// frames.complete (frames.ts): after each action a fixture processes what
+// the app sent and runs the frames the app asks for, as a display would,
+// then processes again, and throws, with the rule's ID in its message, if
+// the model changed after the first processing. A test of that name runs
 // random sequences of actions.
 
 import { describe, test } from "node:test";
@@ -21,8 +22,8 @@ import { deepEqual } from "./rules.ts";
 
 /** A running circles app, as a user sees it. */
 export interface AppFixture {
-  /** Does what the user does, with the app's controls, then runs the frames the app asks for. */
-  act(action: Action): void;
+  /** Does what the user does, with the app's controls, then processes what the app sent and runs the frames it asks for. */
+  act(action: Action): Promise<void>;
   /** What the drawing shows at p, in the drawing's coordinates. */
   painted(p: Point): Color;
   dispose(): void;
@@ -38,14 +39,14 @@ function colorNamed(settings: CirclesSettings, name: string): Color {
 }
 
 /** Runs one scenario on a fresh fixture; throws at the first step that fails. */
-export function runScenario(app: AppFixture, scenario: Scenario): void {
-  scenario.steps.forEach((step, i) => {
-    if ("act" in step) app.act(step);
+export async function runScenario(app: AppFixture, scenario: Scenario): Promise<void> {
+  for (const [i, step] of scenario.steps.entries()) {
+    if ("act" in step) await app.act(step);
     else {
       const where = `${scenario.id}, step ${i + 1}: ${JSON.stringify(step)}`;
       assert.deepEqual(app.painted(step.at), colorNamed(demoSettings, step.is), where);
     }
-  });
+  }
   app.dispose();
 }
 
@@ -72,22 +73,22 @@ export function scenarioContract(make: () => AppFixture, reference?: () => AppFi
       test(scenario.id, () => runScenario(make(), scenario));
     }
 
-    test("frames.complete", () => {
-      fc.assert(fc.property(fc.array(actionArb, { minLength: 1, maxLength: 25 }), (actions) => {
+    test("frames.complete", async () => {
+      await fc.assert(fc.asyncProperty(fc.array(actionArb, { minLength: 1, maxLength: 25 }), async (actions) => {
         const app = make();
-        for (const a of actions) app.act(a);
+        for (const a of actions) await app.act(a);
         app.dispose();
       }), { numRuns: 50 });
     });
 
     if (reference) {
-      test("Scenario.random", () => {
-        fc.assert(fc.property(fc.array(actionArb, { minLength: 1, maxLength: 25 }), (actions) => {
+      test("Scenario.random", async () => {
+        await fc.assert(fc.asyncProperty(fc.array(actionArb, { minLength: 1, maxLength: 25 }), async (actions) => {
           const app = make();
           const ref = reference();
           for (const a of actions) {
-            app.act(a);
-            ref.act(a);
+            await app.act(a);
+            await ref.act(a);
             assert.ok(grid.every((p) => deepEqual(app.painted(p), ref.painted(p))), `the drawings differ after ${JSON.stringify(a)}`);
           }
           app.dispose();

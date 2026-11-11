@@ -1,5 +1,5 @@
-// Adversary: off removes the earliest registration rather than the most recent.
-import { renderGroupContract } from "../renderGroup.contract.ts";
-import { TestGroup } from "./_group.ts";
+// Adversary: Off removes the earliest registration rather than the most recent.
+import { eventEmitterContract } from "../eventEmitter.contract.ts";
+import { makeTestEvents } from "./_events.ts";
 
-renderGroupContract(() => new TestGroup("off-removes-first"));
+eventEmitterContract(makeTestEvents("off-removes-first"));

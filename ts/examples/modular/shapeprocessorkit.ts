@@ -1,60 +1,14 @@
-// The reference shape model (shapeModel.ts): RefShapeWriter, a writer kept
-// in an array in z-order, and RefShapeProcessor, which applies ShapeOps to
-// one. helpers.check.ts runs their contracts against them.
+// The reference ShapeMessageProcessor (shapeModel.ts): RefShapeProcessor,
+// which stamps local operations as they are enqueued and applies both
+// queues to a writer when process is called. helpers.check.ts runs the
+// processor contracts against it.
 
-import type { Shape } from "./shape.ts";
 import type { OperationContent } from "./dataModel.ts";
-import type {
-  ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeId, ShapeMessageProcessor, ShapeOp,
-} from "./shapeModel.ts";
+import type { ShapeId } from "./shape.ts";
+import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
 import { compareOrder, knew } from "./shapeModel.vocab.ts";
 import { Events } from "./eventkit.ts";
-
-export class RefShapeWriter<S extends Shape = Shape> extends Events<ShapeCollectionEvents> implements ShapeCollectionWriter<S> {
-  private items: [ShapeId, S][] = [];
-
-  get size(): number {
-    return this.items.length;
-  }
-
-  get(id: ShapeId): S | undefined {
-    return this.items.find(([i]) => i === id)?.[1];
-  }
-
-  forEach(visit: (id: ShapeId, shape: S) => void): void {
-    for (const [id, shape] of [...this.items]) visit(id, shape);
-  }
-
-  compareZ(a: ShapeId, b: ShapeId): number {
-    return this.items.findIndex(([i]) => i === a) - this.items.findIndex(([i]) => i === b);
-  }
-
-  add(id: ShapeId, shape: S, below?: ShapeId): void {
-    const at = below === undefined ? this.items.length : this.items.findIndex(([i]) => i === below);
-    this.items.splice(at, 0, [id, shape]);
-    this.emit("change");
-  }
-
-  remove(ids: readonly ShapeId[]): number {
-    const before = this.items.length;
-    this.items = this.items.filter(([i]) => !ids.includes(i));
-    const removed = before - this.items.length;
-    if (removed > 0) this.emit("change");
-    return removed;
-  }
-}
-
-/** A read-only view of a writer: the facet a processor gives out. */
-export function readFacet<S extends Shape>(w: ShapeCollectionWriter<S>): ShapeCollection<S> {
-  return {
-    get: (id) => w.get(id),
-    get size() { return w.size; },
-    forEach: (visit) => w.forEach(visit),
-    compareZ: (a, b) => w.compareZ(a, b),
-    on(event, listener) { w.on(event, listener); return this; },
-    off(event, listener) { w.off(event, listener); return this; },
-  };
-}
+import { readFacet, RefShapeWriter } from "./shapewriterkit.ts";
 
 type Stamped = ShapeOp;
 
@@ -63,7 +17,7 @@ export class RefShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implement
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
   readonly remote = { enqueue: (op: ShapeOp) => void this.remoteQueue.push(op) };
-  private readonly writer = new RefShapeWriter();
+  private readonly writer: ShapeCollectionWriter;
   private readonly localQueue: Stamped[] = [];
   private readonly remoteQueue: ShapeOp[] = [];
   private clientSeq = 0;
@@ -74,9 +28,10 @@ export class RefShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implement
   // Local operations applied and not yet acknowledged, by clientSeq.
   private readonly pending = new Map<number, ShapeOp>();
 
-  constructor(clientId: string) {
+  constructor(clientId: string, writer: ShapeCollectionWriter = new RefShapeWriter()) {
     super();
     this.clientId = clientId;
+    this.writer = writer;
     this.model = readFacet(this.writer);
   }
 
