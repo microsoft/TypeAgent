@@ -112,6 +112,9 @@ function configuredGenerativeSettings(
                     "inputTokenTarget",
                     "concurrency",
                     "priorContextFraction",
+                    "priorDeltas",
+                    "compactIds",
+                    "frozenPreparation",
                 ].includes(key),
         )
     )
@@ -470,6 +473,7 @@ export function createTopicCompletion(
             {
                 ordinal,
                 callKind: call?.kind,
+                phase: call?.phase,
                 requestHash: request
                     ? viewHash(request.serializedRequest)
                     : undefined,

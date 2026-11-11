@@ -108,6 +108,40 @@ test("unchanged topic curation reuse is opt-in for both generation engines", () 
     ).toThrow("TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE");
 });
 
+test("frozen topic preparation is explicit and compatible with ordered watermarks", () => {
+    const options = getConfiguredMemoryViewOptions({
+        TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+        TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION: "true",
+        TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS: "true",
+        TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "true",
+    });
+    expect(options.topicCuration).toEqual({
+        concurrency: 2,
+        frozenPreparation: true,
+        priorDeltas: true,
+        compactIds: true,
+    });
+    expect(
+        () =>
+            new FileMemoryService("unused", {
+                ...options,
+                curatedTopics: true,
+                topicCurationReuse: true,
+                topicWatermark: true,
+            }),
+    ).not.toThrow();
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION: "true",
+        }),
+    ).toThrow("Invalid topic curation settings");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "maybe",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS");
+});
+
 test("generative and native execution families retain distinct capacities and reject conflicting activation", () => {
     expect(
         getConfiguredMemoryViewOptions({

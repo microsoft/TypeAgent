@@ -31,15 +31,31 @@ function curationSettings(
     const priorContextFraction = numeric(
         "TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION",
     );
+    const flags: Pick<
+        TopicCurationSettings,
+        "priorDeltas" | "compactIds" | "frozenPreparation"
+    > = {};
+    for (const [field, variable] of [
+        ["priorDeltas", "TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS"],
+        ["compactIds", "TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS"],
+        ["frozenPreparation", "TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION"],
+    ] as const)
+        if (environment[variable] !== undefined)
+            flags[field] = parseViewDraftCapability(
+                environment[variable],
+                variable,
+            );
     if (
         inputTokenTarget === undefined &&
         concurrency === undefined &&
-        priorContextFraction === undefined
+        priorContextFraction === undefined &&
+        Object.keys(flags).length === 0
     )
         return undefined;
     if (concurrency !== undefined && concurrency !== 1 && concurrency !== 2)
         throw new Error("Invalid TYPEAGENT_MEMORY_TOPIC_CONCURRENCY");
     const settings: TopicCurationSettings = {
+        ...flags,
         ...(inputTokenTarget !== undefined ? { inputTokenTarget } : {}),
         ...(concurrency !== undefined ? { concurrency } : {}),
         ...(priorContextFraction !== undefined ? { priorContextFraction } : {}),
