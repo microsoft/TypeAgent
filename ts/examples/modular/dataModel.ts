@@ -8,7 +8,8 @@
  *
  * The message infrastructure owns the processor: it enqueues on both
  * queues and decides when to call process. A controller holds only the
- * model's read side and a LocalSend.
+ * model's read side and a LocalSend. The infrastructure itself is not
+ * specified yet; LocalSend is the part of it that controllers see.
  *
  * Each distributed data structure (DDS) defines its operations as a
  * discriminated union on type, and its own rules for how interleaving and
@@ -91,7 +92,10 @@ export interface OperationSink<T> {
     enqueue(item: T): void;
 }
 
-/** A queue of operations, read by the processor. */
+/**
+ * A queue of operations, read by the processor. For the message
+ * infrastructure, which is not specified yet.
+ */
 export interface OperationQueue<T> extends OperationSink<T> {
     /** The oldest item, removed; undefined when the queue is empty. */
     dequeue(): T | undefined;

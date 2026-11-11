@@ -65,8 +65,8 @@ deferred.
   isn't accounted for.
 - **Coordinate spaces** (`geometry.ts`): canonical, window and view.
   Layout objects and distributed events are in window coordinates.
-- **Catalog:** 31 interfaces, 125 rules: 95 tested, 6 abstract, 1 budget,
-  3 deferred, 20 caller obligations.
+- **Catalog:** 31 interfaces, 127 rules: 95 tested, 6 abstract, 1 budget,
+  5 deferred, 20 caller obligations.
 - **Phase 2 has not run.** `node task.ts list` shows the tasks and waves:
   - wave 1: tasks 8, 9, 11, 12, 16 and 19;
   - wave 2: task 10, which needs tasks 8 and 9.
@@ -113,6 +113,11 @@ decision.
 - **Phase 1b** on the data model (round 4 as rewritten), and on rounds 5
   and 6 after the device-context discussion.
 - **Phase 2:** rounds 3 to 6, wave 1 then wave 2.
+- **The message infrastructure:** the interface that owns a processor,
+  with `localSend` (`LocalSend` is its agreed part) and `OperationQueue`.
+  `frames.processed-before-frame` is `@deferred` until it exists.
+- **View-only state** such as drags and wet ink (`ShapeView.view-state`
+  is `@deferred`); for now a ShapeView shows only the model.
 - **Collaboration:** the protocol that sequences operations, snapshots
   (`MessageProcessor.snapshot` is `@deferred`), and presence for
   view-only state such as drags and wet ink.

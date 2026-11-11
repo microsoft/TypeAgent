@@ -200,6 +200,7 @@ classDiagram
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `frames.complete` | ensures | Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model. | tested | 2 |
+| `frames.processed-before-frame` | deferred | The message infrastructure processes what an input event's handler sent before the next frame draws, so that frames.complete holds on every platform. | deferred: when the message infrastructure is specified. |  |
 | `frames.fraction-of-frame` | budget | Sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: not measured yet |  |
 
 ## EventEmitter
@@ -371,7 +372,7 @@ No rules of its own.
 
 ## OperationQueue
 
-`dataModel.ts`. A queue of operations, read by the processor.
+`dataModel.ts`. A queue of operations, read by the processor. For the message infrastructure, which is not specified yet.
 
 No rules of its own.
 
@@ -506,7 +507,8 @@ No rules of its own.
 |---|---|---|---|---|
 | `ShapeView.circles-only` | requires | Every shape in the model is a Circle; other kinds are outside the rules until their drawing is specified. | caller's obligation |  |
 | `ShapeView.first-frame` | ensures | Requests a frame when created, so that its first frame shows the model. | tested | 1 |
-| `ShapeView.frame.paints` | ensures | Afterward, each point of the surface that is on no circle's edge shows the circles containing it, composited bottom to top. | tested | 4 |
+| `ShapeView.view-state` | deferred | A view draws its own state, such as a drag in progress or wet ink, above the model's shapes, and paints then covers both. | deferred: when a ShapeView has state of its own (the first drag or wet-ink task). |  |
+| `ShapeView.frame.paints` | ensures | Afterward, each point of the surface that is on no circle's edge shows the model's circles containing it, composited bottom to top, and nothing else. | tested | 4 |
 
 ## LayoutObject
 
