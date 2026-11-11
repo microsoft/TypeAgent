@@ -241,8 +241,9 @@ h1 {
 .pill.caller { color: var(--muted); }
 .adversaries { color: var(--muted); font-variant-numeric: tabular-nums; }
 dialog.sheet {
+  --sheet-max: min(86vh, 920px);
   width: min(620px, calc(100vw - 32px));
-  max-height: min(86vh, 920px);
+  max-height: var(--sheet-max);
   margin: 0;
   top: 50%;
   bottom: auto;
@@ -264,8 +265,10 @@ dialog.sheet.left { left: 16px; right: auto; }
 dialog.sheet.right { left: auto; right: 16px; }
 /* Faint, because the point of the card is to read it against the map. */
 dialog.sheet::backdrop { background: rgb(8 12 20 / 0.18); }
-/* The dialog clips; the card scrolls inside it, so the close button stays put. */
-.sheet .card { border: 0; border-radius: 0; background: transparent; overflow-y: auto; padding: 18px 20px 20px; padding-right: 52px; }
+/* The dialog clips; the card scrolls inside it, so the close button stays put.
+   A grid item grows to its content, so the card needs the dialog's limit
+   itself (less the dialog's two border pixels) for its scroll bar to appear. */
+.sheet .card { border: 0; border-radius: 0; background: transparent; max-height: calc(var(--sheet-max) - 2px); overflow-y: auto; padding: 18px 20px 20px; padding-right: 52px; }
 .sheet-close {
   position: absolute;
   top: 10px;
