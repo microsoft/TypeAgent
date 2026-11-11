@@ -108,7 +108,7 @@ export async function recordWikiDiagnostics(
     maxCalls,
     work,
 ) {
-    const remaining = validateLiveAuthorization(authorization);
+    validateLiveAuthorization(authorization);
     assert.ok(
         Number.isSafeInteger(maxCalls) && maxCalls > 0 && maxCalls <= 100,
     );
@@ -149,25 +149,32 @@ export async function recordWikiDiagnostics(
             endpoint: endpoint ?? "default",
         },
         maxCalls,
-        timeoutMs: Math.min(remaining, 30 * 60_000),
+        timeoutMs: Math.min(
+            validateLiveAuthorization(authorization),
+            30 * 60_000,
+        ),
         authorizedLive: true,
     });
     const capturedModel = {
         completionSettings: model.completionSettings,
-        complete: (messages, options, schema, onChunk, signal) =>
-            tape.invoke(
+        complete: (messages, options, schema, onChunk, signal) => {
+            validateLiveAuthorization(authorization);
+            return tape.invoke(
                 "chat",
                 { messages, options, schema },
-                (effectiveSignal) =>
-                    model.complete(
+                (effectiveSignal) => {
+                    validateLiveAuthorization(authorization);
+                    return model.complete(
                         messages,
                         options,
                         schema,
                         onChunk,
                         effectiveSignal,
-                    ),
+                    );
+                },
                 signal,
-            ),
+            );
+        },
     };
     const adapter = createConfiguredViewSynthesisAdapter(
         endpoint,

@@ -324,6 +324,7 @@ export async function runBenchmarkQuestion(
     } catch (error) {
         if (
             controls.signal.aborted ||
+            controls.stage() === "lifecycle" ||
             error.syscall ||
             [
                 "EREPLAYMISS",

@@ -1450,19 +1450,20 @@ test("answer, judge and local readiness timeout failures do not abort later ques
     }
 });
 
-test("global cancellation, replay/cleanup guards and filesystem failures remain fatal", async () => {
+test("global cancellation, lifecycle, replay/cleanup and filesystem failures remain fatal", async () => {
     for (const kind of [
         "cancel",
         "EREPLAYMISS",
         "EREPLAYNONDETERMINISTIC",
         "EBENCHMARKCLEANUP",
         "filesystem",
+        "lifecycle",
     ]) {
         const controller = new AbortController();
         const failure = new Error("Controlled fatal failure");
         if (kind === "cancel") controller.abort(failure);
         else if (kind === "filesystem") failure.syscall = "write";
-        else failure.code = kind;
+        else if (kind !== "lifecycle") failure.code = kind;
         const state = { cases: { current: { status: "ingesting" } } };
         await assert.rejects(
             runBenchmarkQuestion(
@@ -1474,7 +1475,8 @@ test("global cancellation, replay/cleanup guards and filesystem failures remain 
                 },
                 {
                     signal: controller.signal,
-                    stage: () => "ingestion",
+                    stage: () =>
+                        kind === "lifecycle" ? "lifecycle" : "ingestion",
                     persist: async () =>
                         assert.fail("Fatal errors must not be swallowed"),
                     log: () =>

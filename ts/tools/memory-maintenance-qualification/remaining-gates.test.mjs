@@ -2,9 +2,13 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
     qualifyWikiPairs,
+    recordWikiDiagnostics,
     validateLiveAuthorization,
 } from "./wiki-consolidation-qualification.mjs";
 import { replayRealWikiInventory } from "./wiki-inventory-qualification.mjs";
@@ -36,6 +40,75 @@ test("live authorization cannot be reset, extended, inferred or used after its a
     assert.throws(() => validateLiveAuthorization(authorization, 999));
     assert.throws(() =>
         validateLiveAuthorization(authorization, authorization.deadlineEpochMs),
+    );
+});
+
+async function diagnosticProduct(t) {
+    const root = await mkdtemp(path.join(tmpdir(), "wiki-deadline-test-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await writeFile(path.join(root, "package.json"), '{"type":"module"}');
+    const modules = [
+        [["config"], "export function loadConfigSync() {}"],
+        [
+            ["aiclient"],
+            `export function initRuntimeConfigFromProcessEnv() {}
+             export const openai = { createChatModel: () => ({
+                 complete: async () => "authored-fixture-response"
+             }) };`,
+        ],
+        [
+            ["memory", "service"],
+            "export function createConfiguredViewSynthesisAdapter(_endpoint, _maximum, model) { return model; }",
+        ],
+    ];
+    for (const [name, source] of modules) {
+        const directory = path.join(root, "packages", ...name, "dist");
+        await mkdir(directory, { recursive: true });
+        await writeFile(
+            path.join(
+                directory,
+                name.at(-1) === "service" ? "viewSynthesis.js" : "index.js",
+            ),
+            source,
+        );
+    }
+    return root;
+}
+
+test("Wiki initialization consumes authorization time and each model call rechecks the deadline", async (t) => {
+    const product = await diagnosticProduct(t);
+    const startedEpochMs = Date.now() - 6 * 60 * 60_000 + 10_000;
+    const deadlineEpochMs = startedEpochMs + 6 * 60 * 60_000;
+    let reads = 0;
+    let clock = deadlineEpochMs - 7000;
+    t.mock.method(Date, "now", () =>
+        reads++ === 0 ? deadlineEpochMs - 10_000 : clock,
+    );
+    await recordWikiDiagnostics(
+        product,
+        "authored-input",
+        product,
+        {
+            authorizedByUser: true,
+            automaticFailedArmReruns: false,
+            totalWindowHours: 6,
+            startedEpochMs,
+            deadlineEpochMs,
+        },
+        2,
+        async (adapter, tape) => {
+            assert.equal(tape.budget.timeoutMs, 7000);
+            assert.equal(
+                await adapter.complete([{ role: "user", content: "fixture" }]),
+                "authored-fixture-response",
+            );
+            clock = deadlineEpochMs;
+            await assert.rejects(
+                async () => adapter.complete([]),
+                /Live authorization expired/,
+            );
+            assert.equal(tape.providerCalls, 1);
+        },
     );
 });
 

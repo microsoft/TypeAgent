@@ -132,7 +132,10 @@ compatible accepted partners through the native immutable history reader. Its
 live mode requires a new authorization file and captures exact model requests,
 responses and occurrence bindings. It records explicitly when the old rejected
 partner or old response bodies were not retained: a fresh scope assessment is not
-a reconstruction of that missing response. Consolidation comparison now receives
+a reconstruction of that missing response. Configuration/model initialization
+consumes the original authorization window; the remaining allowance is recomputed
+after initialization and the absolute deadline is checked before each model call.
+Consolidation comparison now receives
 both articles' original retrieval queries/aliases; mentioning sibling variants
 does not broaden a variant-specific reference.
 

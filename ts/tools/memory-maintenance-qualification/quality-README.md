@@ -289,6 +289,8 @@ after a clean close; failures already recorded are not replayed.
 Global cancellation/deadlines, startup/provenance/configuration failures,
 filesystem/persistence errors, unsupported cleanup and replay-integrity failures
 remain fatal. This policy does not bypass evidence checks or extend authorization.
+Indexing lifecycle verification also remains fatal, including ordinary
+restart/forget/clear assertion failures and close errors without an error code.
 Workers already running keep their previously loaded harness; do not hot-patch
 or restart a timed evaluation to adopt this policy.
 
