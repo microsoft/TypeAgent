@@ -264,6 +264,36 @@ it does not run the official model-based judge. Missing scores remain in the
 50-question diagnostic**, never official full-suite performance. Neither
 preparation nor unit tests establish that those 50 real questions were run.
 
+### Live LongMemEval failure isolation
+
+The native `longmemeval-live.mjs` runner records a question's ingestion,
+required-view/readiness, answer or judge failure and continues with the remaining
+unattempted questions. A blocked required view still fails that question: it is
+not declared ready, answered using invalid views, or assigned a fabricated judge
+label. Independent questions use their own corpora.
+
+Each failure is persisted in the case and attempt, with its stage, safe error
+diagnostic and failed required-view families, and emitted as a
+`benchmark-question-failed` JSON event. Completed and failed cases are skipped
+on subsequent invocations, not automatically retried. `--max-questions` bounds
+new attempts in that invocation, including failed attempts.
+
+An exhausted selection with failures has outcome
+`DIAGNOSTIC_SELECTION_COMPLETED_WITH_FAILURES` (or
+`FULL_500_COMPLETED_WITH_FAILURES` for the full schedule), exits nonzero, and
+retains failed/missing coverage in its scorecard. It is not a successful quality
+qualification. The campaign controller records `COMPLETE_WITH_FAILURES` without
+restarting that schedule. A partial invocation can continue unattempted cases
+after a clean close; failures already recorded are not replayed.
+
+Global cancellation/deadlines, startup/provenance/configuration failures,
+filesystem/persistence errors, unsupported cleanup and replay-integrity failures
+remain fatal. This policy does not bypass evidence checks or extend authorization.
+Indexing lifecycle verification also remains fatal, including ordinary
+restart/forget/clear assertion failures and close errors without an error code.
+Workers already running keep their previously loaded harness; do not hot-patch
+or restart a timed evaluation to adopt this policy.
+
 ## BenchmarkQED/AP-news: pinned preparation
 
 Verified public references at commit

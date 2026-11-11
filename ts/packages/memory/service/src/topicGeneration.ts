@@ -24,6 +24,7 @@ import {
     type TopicCurationSettings,
     type TopicCurationCall,
     type TopicCurationCompletion,
+    type TopicCurationOptions,
 } from "./topicCuration.js";
 import { viewHash } from "./viewMerge.js";
 import { TopicEvidenceIndex } from "./topicIndexes.js";
@@ -482,15 +483,23 @@ export function createTopicCompletion(
                 providerAttemptBreakdown: "unavailable",
             },
         );
+        recordSearchTiming(
+            `${stage}.response`,
+            0,
+            {
+                ordinal,
+                callKind: call?.kind,
+                aborted: signal.aborted,
+                outputBytes: result.success
+                    ? Buffer.byteLength(result.data)
+                    : undefined,
+                promptTokens: usage?.prompt_tokens,
+                completionTokens: usage?.completion_tokens,
+            },
+            result.success ? "success" : "error",
+        );
         signal.throwIfAborted();
         if (!result.success) throw new Error(result.message);
-        recordSearchTiming(`${stage}.response`, 0, {
-            ordinal,
-            callKind: call?.kind,
-            outputBytes: Buffer.byteLength(result.data),
-            promptTokens: usage?.prompt_tokens,
-            completionTokens: usage?.completion_tokens,
-        });
         return timeSearchStage(
             `${stage}.parse`,
             () => JSON.parse(result.data),
@@ -592,6 +601,33 @@ export function createConfiguredTopicConceptSummarizer(
     };
 }
 
+function topicPacketOptions(
+    input: ViewBuildSnapshot,
+    snapshot: TopicSnapshot,
+    decision: TopicDecisionOptions | undefined,
+): Pick<TopicCurationOptions, "onPacket" | "replayPackets"> {
+    if (input.topicInput?.packetReplay !== true) return {};
+    if (
+        decision ||
+        !input.topicInput.suppressionFingerprint ||
+        !input.topicInput.curationInputFingerprint
+    )
+        throw new Error(
+            "Topic watermark requires generative dependency witnesses",
+        );
+    snapshot.curationSuppressionFingerprint =
+        input.topicInput.suppressionFingerprint;
+    const reusable = input.topicInput.reusableCuration;
+    const packets = input.topicInput.reusableCurationPackets;
+    snapshot.curationPackets = structuredClone(reusable ? (packets ?? []) : []);
+    return {
+        ...(!reusable && packets ? { replayPackets: packets } : {}),
+        onPacket: (packet) => {
+            snapshot.curationPackets!.push(packet);
+        },
+    };
+}
+
 async function generateCuratedTopicSnapshot(
     snapshot: TopicSnapshot,
     input: ViewBuildSnapshot,
@@ -602,9 +638,24 @@ async function generateCuratedTopicSnapshot(
     settings?: TopicCurationSettings,
 ): Promise<void> {
     snapshot.recipe += `:${decision ? topicDecisionRecipe : topicCurationPolicy(true, settings)}`;
+    if (input.topicInput?.curationInputFingerprint)
+        snapshot.curationInputFingerprint =
+            input.topicInput.curationInputFingerprint;
     const evidenceIndex = new TopicEvidenceIndex(snapshot);
     const evidenceFor = (node: TopicNode) =>
         summaryEvidence(snapshot, node, evidenceIndex);
+    const reusable = input.topicInput?.reusableCuration;
+    const packetOptions = topicPacketOptions(input, snapshot, decision);
+    if (reusable) {
+        const processed = new Set([
+            ...reusable.concepts.flatMap((concept) => concept.memberIds),
+            ...reusable.deferred.map((entry) => entry.nodeId),
+            ...(reusable.pending?.map((entry) => entry.nodeId) ?? []),
+        ]);
+        // Preserve source-context limits even when no model call needs the node.
+        for (const node of snapshot.nodes)
+            if (processed.has(node.id)) evidenceFor(node);
+    }
     const completion = bindTopicCompletion(
         complete,
         signal,
@@ -636,6 +687,7 @@ async function generateCuratedTopicSnapshot(
               input.topicInput?.reusableCuration,
               {
                   ...settings,
+                  ...packetOptions,
                   ...(complete.inspectRequest
                       ? { inspectRequest: complete.inspectRequest }
                       : {}),

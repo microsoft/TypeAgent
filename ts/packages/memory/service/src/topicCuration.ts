@@ -10,6 +10,7 @@ import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type {
     TopicConcept,
     TopicCuration,
+    TopicCurationPacket,
     TopicNode,
     TopicPendingAssignment,
     TopicSnapshot,
@@ -69,6 +70,8 @@ export interface TopicCurationCall {
     signal: AbortSignal;
 }
 export interface TopicCurationOptions extends TopicCurationSettings {
+    replayPackets?: TopicCurationPacket[];
+    onPacket?: (packet: TopicCurationPacket) => void;
     inspectRequest?: (
         instructions: string,
         payload: unknown,
@@ -458,6 +461,53 @@ function prepareTopicPacket(
     };
 }
 
+function normalizedPacketResponse(
+    packet: ReturnType<typeof prepareTopicPacket>,
+    decisions: TopicCuration,
+): TopicCurationPacket["response"] {
+    const candidates = new Map<string, string>();
+    for (const node of packet.batch)
+        for (const member of node.memberIds ?? [node.id])
+            candidates.set(member, node.id);
+    const evidence = new Map(
+        packet.supplied.map((citation, index) => [
+            viewHash(citation),
+            `e${index}`,
+        ]),
+    );
+    const candidateId = (member: string) => {
+        const id = candidates.get(member);
+        if (!id)
+            throw new Error("Curation receipt contains unsupplied membership");
+        return id;
+    };
+    const deferred = new Map<string, string>();
+    for (const entry of decisions.deferred) {
+        const id = candidateId(entry.nodeId);
+        if (deferred.has(id) && deferred.get(id) !== entry.reason)
+            throw new Error("Curation receipt split a supplied candidate");
+        deferred.set(id, entry.reason);
+    }
+    return {
+        concepts: decisions.concepts.map((concept) => ({
+            label: concept.label,
+            scope: concept.scope,
+            purpose: concept.purpose,
+            memberIds: [...new Set(concept.memberIds.map(candidateId))],
+            evidenceIds: concept.citations.map((citation) => {
+                const id = evidence.get(viewHash(citation));
+                if (!id)
+                    throw new Error(
+                        "Curation receipt contains unsupplied evidence",
+                    );
+                return id;
+            }),
+            salience: concept.salience,
+        })),
+        deferred: [...deferred].map(([nodeId, reason]) => ({ nodeId, reason })),
+    };
+}
+
 export async function curateTopics(
     snapshot: TopicSnapshot,
     evidenceFor: (node: TopicNode) => ViewCitation[],
@@ -469,6 +519,13 @@ export async function curateTopics(
     options: TopicCurationOptions = {},
 ): Promise<TopicCuration> {
     validateTopicCurationSettings(options);
+    if (
+        (options.onPacket || options.replayPackets) &&
+        (!lazy || (options.concurrency ?? 1) !== 1)
+    )
+        throw new Error(
+            "Topic packet replay requires lazy generative curation with one ordered worker",
+        );
     options = { ...options };
     if (reusable?.pending?.length)
         throw new Error(
@@ -494,6 +551,7 @@ export async function curateTopics(
         lazy,
     );
     type Packet = ReturnType<typeof prepareTopicPacket>;
+    let replaying = options.replayPackets !== undefined;
     async function decide(packet: Packet, signal: AbortSignal) {
         signal.throwIfAborted();
         const { batch, supplied, payload, schema, ordinal } = packet;
@@ -503,6 +561,28 @@ export async function curateTopics(
             schema?: StructuredOutputJsonSchema,
             kind: TopicCurationCall["kind"] = "normal",
         ) => complete(rules, payload, schema, { ordinal, kind, signal });
+        if (replaying) {
+            const receipt = options.replayPackets?.[ordinal - 1];
+            if (
+                receipt?.fingerprint === packet.fingerprint &&
+                receipt.start === packet.start &&
+                receipt.end === packet.end
+            ) {
+                if (viewHash(receipt.response) !== receipt.responseFingerprint)
+                    throw new Error(
+                        "Topic curation packet response fingerprint mismatch",
+                    );
+                // Cached contracts must pass the production parser without repair calls.
+                const decisions = await parseBatch(receipt.response);
+                recordSearchTiming("topic.curation.packet.reuse", 0, {
+                    ordinal,
+                    fingerprint: packet.fingerprint,
+                    nodes: packet.end - packet.start,
+                });
+                return decisions;
+            }
+            replaying = false;
+        }
         return readDecisions();
         async function readDecisions(): Promise<TopicCuration> {
             try {
@@ -757,6 +837,16 @@ Each supplied node must appear EXACTLY once. Consolidate only when the original 
             nominations.replace(packet.reconsidered, decisions.concepts);
             result.deferred.push(...decisions.deferred);
             signal.throwIfAborted();
+            if (options.onPacket) {
+                const response = normalizedPacketResponse(packet, decisions);
+                options.onPacket({
+                    start: processed.size + packet.start,
+                    end: processed.size + packet.end,
+                    fingerprint: packet.fingerprint,
+                    responseFingerprint: viewHash(response),
+                    response,
+                });
+            }
             if (
                 checkpoint &&
                 (completed === 1 ||

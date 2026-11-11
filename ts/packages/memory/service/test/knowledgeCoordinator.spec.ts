@@ -11,6 +11,7 @@ import type {
     CorpusQuestionProposal,
     KnowledgeStatus,
 } from "../src/knowledgeTypes.js";
+import { createLatencyWikiJob } from "../src/latencyQualificationFixture.js";
 
 function fixture() {
     let state: KnowledgeStatus = {
@@ -98,6 +99,126 @@ function fixture() {
         },
     };
 }
+
+test("guarded target failure wakes only the early waiter while independent work drains", async () => {
+    const f = fixture();
+    f.host.enabledFamilies = () => ["wiki"];
+    f.sources([
+        {
+            sourceId: "source",
+            revisionId: "revision",
+            title: "Offline",
+            content: "The review remains open.",
+        },
+    ]);
+    let start!: () => void, finish!: () => void;
+    const started = new Promise<void>((resolve) => {
+        start = resolve;
+    });
+    const drain = new Promise<void>((resolve) => {
+        finish = resolve;
+    });
+    const job = createLatencyWikiJob();
+    f.host.maintain = async (checkpoint) => {
+        await f.host.write(checkpoint.corpusId, (status) => {
+            status.checkpoints
+                .find(
+                    (entry) => entry.checkpointId === checkpoint.checkpointId,
+                )!
+                .jobIds.push(job.jobId);
+        });
+        start();
+        await drain;
+        return {
+            state: "ready",
+            reasons: [],
+            jobIds: [job.jobId],
+            viewIds: [],
+        };
+    };
+    try {
+        const checkpoint = await f.coordinator.create({ corpusId: "offline" });
+        await started;
+        const request = {
+            corpusId: "offline",
+            checkpointId: checkpoint.checkpointId,
+        };
+        let ordinaryReturned = false;
+        const ordinary = f.coordinator.wait(request).then((value) => {
+            ordinaryReturned = true;
+            return value;
+        });
+        job.results[0].state = "blocked";
+        job.results[0].reason = "critical-distinction; scope-state";
+        await f.coordinator.observeBuildFailure({ ...job, jobId: "unrelated" });
+        expect(f.state().checkpoints[0].requiredFailures).toBeUndefined();
+        const unbound = structuredClone(job);
+        unbound.results[0].snapshot.inputs = [];
+        await f.coordinator.observeBuildFailure(unbound);
+        const outdated = structuredClone(job);
+        outdated.results[0].snapshot.inputs[0].revisionId = "outdated";
+        await f.coordinator.observeBuildFailure(outdated);
+        expect(f.state().checkpoints[0].requiredFailures).toBeUndefined();
+        await Promise.all([
+            f.coordinator.observeBuildFailure(job),
+            f.coordinator.observeBuildFailure(job),
+            f.coordinator.observeBuildFailure(job),
+        ]);
+        const early = await f.coordinator.wait({
+            ...request,
+            failOnRequiredFailure: true,
+        });
+        expect(early.state).toBe("running");
+        expect(early.requiredFailures).toHaveLength(1);
+        expect(early.requiredFailures![0].viewIds).toEqual(["candidate-0"]);
+        expect(ordinaryReturned).toBe(false);
+        finish();
+        expect((await ordinary).state).toBe("failed");
+    } finally {
+        finish();
+        await f.coordinator.close();
+    }
+});
+
+test("coarse checkpoint timing records discovery, maintenance and authoritative final state", async () => {
+    const previous = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+    const originalWarn = console.warn;
+    const logs: string[] = [];
+    console.warn = (line: unknown) => logs.push(String(line));
+    const f = fixture();
+    try {
+        const checkpoint = await f.coordinator.create({ corpusId: "corpus" });
+        const done = await f.coordinator.wait({
+            corpusId: "corpus",
+            checkpointId: checkpoint.checkpointId,
+        });
+        expect(done.state).toBe("ready");
+        const entries = logs.map((line) =>
+            JSON.parse(String(line).replace("[memory-search-timing] ", "")),
+        );
+        expect(entries.map((entry) => entry.stage)).toEqual(
+            expect.arrayContaining([
+                "knowledge.checkpoint.discovery",
+                "knowledge.checkpoint.maintenance",
+                "knowledge.checkpoint.finalize",
+            ]),
+        );
+        expect(
+            entries
+                .filter((entry) => entry.stage === "knowledge.checkpoint.state")
+                .at(-1)?.metadata.state,
+        ).toBe("ready");
+        expect(JSON.stringify(entries)).not.toContain("Morgan leads Harbor");
+        expect(f.maintenance()).toBe(1);
+    } finally {
+        await f.coordinator.close();
+        console.warn = originalWarn;
+        if (previous === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = previous;
+    }
+});
 
 test.each([0, 11])(
     "grounding repair reserves its own persisted hourly allowance after %s prior calls",

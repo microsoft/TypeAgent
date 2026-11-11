@@ -376,9 +376,15 @@ async function importHistory(service, construction, plan, record, controls) {
             retain,
         );
         if (cancellationErrors.length)
-            throw new AggregateError(
-                [signal.aborted ? signal.reason : error, ...cancellationErrors],
-                "Benchmark batch cancellation could not be retained",
+            throw Object.assign(
+                new AggregateError(
+                    [
+                        signal.aborted ? signal.reason : error,
+                        ...cancellationErrors,
+                    ],
+                    "Benchmark batch cancellation could not be retained",
+                ),
+                { code: "EBENCHMARKCLEANUP" },
             );
         throw signal.aborted ? signal.reason : error;
     }

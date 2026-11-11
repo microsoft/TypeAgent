@@ -49,7 +49,7 @@ import {
     unlockEditorialProtection,
 } from "./viewEditorial.js";
 import { reusableWikiAssessment } from "./wikiAdmission.js";
-import { assertWikiContribution } from "./wikiContribution.js";
+import { wikiContributionTargets } from "./wikiContribution.js";
 import {
     assertWikiRedirectCapacity,
     automaticallyConsolidatable,
@@ -107,6 +107,7 @@ interface ViewStoreState {
     wikiFamily?: WikiFamilyState;
     projectFamily?: WikiFamilyState;
     topics?: TopicSnapshot;
+    topicContinuation?: TopicSnapshot;
     topicFamily?: TopicFamilyState;
     maintenanceReceipts?: Record<
         string,
@@ -207,6 +208,61 @@ function eraseInformationalRetrieval(value: unknown, sourceId: string): void {
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
+    }
+}
+
+function forgottenTopicSnapshot(
+    snapshot: TopicSnapshot | undefined,
+    sourceId: string,
+    forgottenEvents: Set<string> | undefined,
+    clearingDerived: boolean,
+): boolean {
+    return (
+        clearingDerived ||
+        (forgottenEvents
+            ? snapshot?.influenceEvents?.some((event) =>
+                  forgottenEvents.has(event.eventId),
+              )
+            : snapshot?.influenceSources.some(
+                  (source) => source.sourceId === sourceId,
+              )) === true
+    );
+}
+
+function installTopicSnapshot(
+    state: ViewStoreState,
+    result: ViewBuildTargetResult,
+    snapshot: TopicSnapshot,
+    privateWatermark: boolean,
+) {
+    const generation =
+        privateWatermark && result.topicGeneration !== undefined
+            ? (state.topicContinuation?.generation ?? state.topics?.generation)
+            : state.topics?.generation;
+    if (
+        generation !==
+        (result.topicGeneration ?? result.snapshot.targetRevisionId)
+    )
+        throw new Error("Topic generation changed during build");
+    if (privateWatermark) {
+        state.topicContinuation = structuredClone(snapshot);
+        state.topicFamily = {
+            ...(state.topicFamily ?? { enabled: true }),
+            dirty: true,
+        };
+    } else {
+        state.topics = structuredClone(snapshot);
+        delete state.topicContinuation;
+        state.topicFamily = {
+            enabled: state.topicFamily?.enabled ?? true,
+            dirty: false,
+            ...(result.snapshot.topicInput?.indexGeneration
+                ? {
+                      indexGeneration:
+                          result.snapshot.topicInput.indexGeneration,
+                  }
+                : {}),
+        };
     }
 }
 
@@ -602,14 +658,20 @@ export class TypedViewStore {
     public async getTopicState(corpusId: string): Promise<{
         head: string | null;
         snapshot?: TopicSnapshot;
+        continuation?: TopicSnapshot;
         family: TopicFamilyState;
         building: boolean;
     }> {
         const { head, state } = await this.readSnapshot(corpusId);
         if (state.topics) validateTopicSnapshot(state.topics);
+        if (state.topicContinuation)
+            validateTopicSnapshot(state.topicContinuation);
         return structuredClone({
             head,
             ...(state.topics ? { snapshot: state.topics } : {}),
+            ...(state.topicContinuation
+                ? { continuation: state.topicContinuation }
+                : {}),
             family: state.topicFamily ?? { enabled: true, dirty: true },
             building: Object.values(state.builds ?? {}).some(
                 (job) =>
@@ -618,7 +680,10 @@ export class TypedViewStore {
                         (result) =>
                             result.snapshot.pipeline === "topics-v1" &&
                             result.state === "generating" &&
-                            result.topicGeneration === state.topics?.generation,
+                            (result.topicGeneration ===
+                                state.topics?.generation ||
+                                result.topicGeneration ===
+                                    state.topicContinuation?.generation),
                     ),
             ),
         });
@@ -690,6 +755,18 @@ export class TypedViewStore {
         );
     }
 
+    public async discardTopicContinuation(corpusId: string): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        if (!state.topicContinuation) return;
+        delete state.topicContinuation;
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Discard invalidated private topic watermark",
+        );
+    }
+
     public async saveTopicConceptSummary(
         corpusId: string,
         generation: string,
@@ -732,6 +809,7 @@ export class TypedViewStore {
         jobId: string,
         snapshot: TopicSnapshot,
         complete = true,
+        privateWatermark = false,
     ): Promise<void> {
         validateTopicSnapshot(snapshot);
         if (complete && snapshot.curationProgress)
@@ -754,25 +832,12 @@ export class TypedViewStore {
         validateTopicBuildOutput(result.snapshot, snapshot);
         if (result.state === "draft")
             throw new Error("Topic generation changed or already completed");
-        if (
-            (state.topics?.generation ?? undefined) !==
-            (result.topicGeneration ?? result.snapshot.targetRevisionId)
-        )
-            throw new Error("Topic generation changed during build");
-        state.topics = structuredClone(snapshot);
-        state.topicFamily = {
-            enabled: state.topicFamily?.enabled ?? true,
-            dirty: false,
-            ...(result.snapshot.topicInput?.indexGeneration
-                ? {
-                      indexGeneration:
-                          result.snapshot.topicInput.indexGeneration,
-                  }
-                : {}),
-        };
-        result.state = complete ? "draft" : "generating";
+        installTopicSnapshot(state, result, snapshot, privateWatermark);
+        result.state = complete && !privateWatermark ? "draft" : "generating";
         result.topicGeneration = snapshot.generation;
-        result.reason = `Complete topic snapshot ${snapshot.generation} committed and available for browsing; ${snapshot.curation ? `${snapshot.curation.concepts.length} admitted concepts; summaries generated on explicit detail requests` : `${snapshot.nodes.filter((node) => node.summaryState === "ready").length}/${snapshot.nodes.length} summaries ready`}; ${complete ? "generation finished" : "generation pending"}; not a Wiki article revision`;
+        result.reason = privateWatermark
+            ? `Private topic watermark ${snapshot.generation} checkpointed; not published or current; latest-input catch-up pending`
+            : `Complete topic snapshot ${snapshot.generation} committed and available for browsing; ${snapshot.curation ? `${snapshot.curation.concepts.length} admitted concepts; summaries generated on explicit detail requests` : `${snapshot.nodes.filter((node) => node.summaryState === "ready").length}/${snapshot.nodes.length} summaries ready`}; ${complete ? "generation finished" : "generation pending"}; not a Wiki article revision`;
         if (complete)
             result.missingEvidence = [
                 ...(snapshot.curation ? [] : snapshot.nodes)
@@ -1565,8 +1630,14 @@ export class TypedViewStore {
         if (!job || !result || job.state !== "running")
             throw new Error("Build is no longer eligible for materialization");
         const input = contribution?.input ?? result.snapshot;
-        if (contribution)
-            assertWikiContribution(result, contribution, conflicts.length > 0);
+        const contributionTargets = contribution
+            ? wikiContributionTargets(
+                  job.results,
+                  result,
+                  contribution,
+                  conflicts.length > 0,
+              )
+            : [];
         const targetId = input.definition.viewId;
         const current = viewVersions(state, targetId).at(-1);
         if (
@@ -1625,6 +1696,7 @@ export class TypedViewStore {
             result.missingEvidence = candidate.missingEvidence;
             if (merged.coverage) result.coverage = merged.coverage;
         }
+        this.copyWikiContributionResults(contributionTargets, result);
         job.updatedAt = timestamp();
         await this.commitBuildState(
             corpusId,
@@ -1633,6 +1705,27 @@ export class TypedViewStore {
             `Materialize draft build ${jobId}: ${viewId} ${result.state}`,
         );
         return result;
+    }
+
+    private copyWikiContributionResults(
+        targets: ViewBuildTargetResult[],
+        result: ViewBuildTargetResult,
+    ): void {
+        for (const target of targets) {
+            if (target === result) continue;
+            target.state = result.state;
+            target.reason = result.reason;
+            if (result.conflictId) target.conflictId = result.conflictId;
+            if (result.wikiContribution) {
+                target.wikiContribution = structuredClone(
+                    result.wikiContribution,
+                );
+                if (result.revisionId) target.revisionId = result.revisionId;
+                if (result.missingEvidence)
+                    target.missingEvidence = result.missingEvidence;
+                if (result.coverage) target.coverage = result.coverage;
+            }
+        }
     }
 
     public async acceptWikiConsolidation(
@@ -2101,15 +2194,21 @@ export class TypedViewStore {
             );
         }
         if (
-            clearingDerived ||
-            (forgottenEvents &&
-                state.topics?.influenceEvents?.some((event) =>
-                    forgottenEvents.has(event.eventId),
-                )) ||
-            (!forgottenEvents &&
-                state.topics?.influenceSources.some(
-                    (source) => source.sourceId === sourceId,
-                ))
+            forgottenTopicSnapshot(
+                state.topicContinuation,
+                sourceId,
+                forgottenEvents,
+                clearingDerived,
+            )
+        )
+            delete state.topicContinuation;
+        if (
+            forgottenTopicSnapshot(
+                state.topics,
+                sourceId,
+                forgottenEvents,
+                clearingDerived,
+            )
         ) {
             delete state.topics;
             state.topicFamily = {

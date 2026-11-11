@@ -14,13 +14,15 @@ import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { knowledgeBuildDiagnostics } from "../src/knowledgeDiagnostics.js";
 
 test.each([
-    { producerComplete: false, candidateCount: 45 },
-    { producerComplete: true, candidateCount: 45 },
-    { producerComplete: false, candidateCount: 49 },
-    { producerComplete: true, candidateCount: 49 },
+    { producerComplete: false, candidateCount: 45, coalesced: false },
+    { producerComplete: true, candidateCount: 45, coalesced: false },
+    { producerComplete: false, candidateCount: 49, coalesced: false },
+    { producerComplete: true, candidateCount: 49, coalesced: false },
+    { producerComplete: true, candidateCount: 49, coalesced: true },
+    { producerComplete: true, candidateCount: 97, coalesced: true },
 ])(
-    "producerComplete=$producerComplete controls $candidateCount subjects beyond three bounded passes",
-    async ({ producerComplete, candidateCount }) => {
+    "producerComplete=$producerComplete coalesced=$coalesced controls $candidateCount subjects beyond three bounded passes",
+    async ({ producerComplete, candidateCount, coalesced }) => {
         class PagedPurposeIndex extends FakeSemanticCorpusIndex {
             async listSubjects(offset: number, limit = 100) {
                 return {
@@ -71,6 +73,9 @@ test.each([
         const service = new FileMemoryService(root, {
             maintenanceMode: "manual",
             sourceSynopses: false,
+            ...(coalesced
+                ? { performanceExperiments: "wiki-coalesced-discovery" }
+                : {}),
             indexFactory: (_corpusId, directory) =>
                 new PagedPurposeIndex(directory),
             viewSynthesisAdapter: {

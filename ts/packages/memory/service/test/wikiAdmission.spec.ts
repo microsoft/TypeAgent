@@ -113,6 +113,39 @@ function page(viewId = "canonical"): ViewVersion {
     };
 }
 
+test("complete Wiki comparison retains tail witnesses without changing the legacy prefix", () => {
+    const current = page();
+    const tail = "The open review remains a restriction, not an approval.";
+    current.content.sections[0].body = "x".repeat(6100) + tail;
+    const legacy = nominateWikiPages(input(), [current], new Map());
+    const complete = nominateWikiPages(input(), [current], new Map(), true);
+    expect(legacy[0].prose).toHaveLength(6000);
+    expect(legacy[0].proseTruncated).toBe(true);
+    expect(complete[0].prose).toContain(tail);
+    expect(complete[0].proseTruncated).toBe(false);
+    const witness = wikiProseWitnesses(complete[0].prose).find((entry) =>
+        entry.text.includes(tail),
+    );
+    expect(witness).toBeDefined();
+    const bound = resolveWikiAssessmentWitnesses(
+        {
+            canonicalViewId: current.viewId,
+            essentialDistinctions: [
+                {
+                    fragmentId: "f0",
+                    statement: tail,
+                    canonicalExcerpt: "",
+                    canonicalWitnessId: witness!.id,
+                },
+            ],
+        },
+        complete,
+    );
+    expect(bound).toMatchObject({
+        essentialDistinctions: [{ canonicalExcerpt: witness!.text }],
+    });
+});
+
 test.each(["head", "exhausted", "other"] as const)(
     "paused consolidation draft edits handle %s conflicts without changing the original version",
     async (mode) => {

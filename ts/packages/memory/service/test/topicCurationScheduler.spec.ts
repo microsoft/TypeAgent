@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { runOrderedTopicBatches } from "../src/topicCurationScheduler.js";
+import { runWithSearchTiming } from "@typeagent/knowpro";
 
 function deferred() {
     let resolve!: () => void;
@@ -195,4 +196,111 @@ test("checkpoint publication failure drains speculative calls without publishing
     expect(drained).toBe(true);
     expect(calls).toBe(2);
     expect(commits).toEqual([0]);
+});
+
+describe("speculative work accounting", () => {
+    const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const originalWarn = console.warn;
+    let events: Array<{
+        stage: string;
+        metadata: { attempt?: number; aborted?: boolean };
+    }>;
+    beforeEach(() => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        events = [];
+        console.warn = (line: unknown) => {
+            const text = String(line);
+            if (text.startsWith("[memory-search-timing] "))
+                events.push(
+                    JSON.parse(text.slice("[memory-search-timing] ".length)),
+                );
+        };
+    });
+    afterEach(() => {
+        console.warn = originalWarn;
+        if (originalFlag === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
+    });
+
+    test("late post-abort completions remain measured and never become commits", async () => {
+        const both = deferred(),
+            stale = deferred(),
+            aborted = deferred();
+        let revision = 0,
+            calls = 0;
+        const run = runWithSearchTiming("accounting", "test", () =>
+            runOrderedTopicBatches(
+                2,
+                2,
+                new AbortController().signal,
+                (start) => ({
+                    start,
+                    end: start + 1,
+                    fingerprint: `${start}:${revision}`,
+                }),
+                async ({ start, fingerprint }, signal) => {
+                    if (++calls === 2) both.resolve();
+                    if (start === 0) await both.promise;
+                    if (fingerprint === "1:0") {
+                        signal.addEventListener("abort", aborted.resolve, {
+                            once: true,
+                        });
+                        await stale.promise;
+                    }
+                    return fingerprint;
+                },
+                async () => {
+                    revision++;
+                },
+            ),
+        );
+        await aborted.promise;
+        stale.resolve();
+        await run;
+        const at = (stage: string) =>
+            events.filter(
+                (event) =>
+                    event.stage === `topic.curation.speculation.${stage}`,
+            );
+        expect(at("proposed")).toHaveLength(3);
+        expect(at("started")).toHaveLength(3);
+        expect(at("completed")).toHaveLength(3);
+        expect(at("discard")).toHaveLength(1);
+        expect(at("abort")).toHaveLength(1);
+        expect(
+            at("completed").filter((event) => event.metadata.aborted),
+        ).toHaveLength(1);
+        expect(at("commit").map((event) => event.metadata.attempt)).toEqual([
+            1, 3,
+        ]);
+    });
+
+    test("failed publication has no success-shaped commit event", async () => {
+        await expect(
+            runWithSearchTiming("accounting", "test", () =>
+                runOrderedTopicBatches(
+                    1,
+                    1,
+                    new AbortController().signal,
+                    packet,
+                    async () => 1,
+                    async () => {
+                        throw new Error("Checkpoint publication failed");
+                    },
+                ),
+            ),
+        ).rejects.toThrow("Checkpoint publication failed");
+        expect(
+            events.filter(
+                (event) =>
+                    event.stage === "topic.curation.speculation.completed",
+            ),
+        ).toHaveLength(1);
+        expect(
+            events.filter(
+                (event) => event.stage === "topic.curation.speculation.commit",
+            ),
+        ).toHaveLength(0);
+    });
 });

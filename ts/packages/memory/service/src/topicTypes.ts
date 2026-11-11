@@ -45,6 +45,9 @@ export interface TopicSnapshot {
     corpusId: string;
     generation: string;
     inputFingerprint: string;
+    curationInputFingerprint?: string;
+    curationSuppressionFingerprint?: string;
+    curationPackets?: TopicCurationPacket[];
     recipe: string;
     generatedAt: string;
     occurrences: TopicOccurrence[];
@@ -97,6 +100,23 @@ export interface TopicCuration {
     deferred: Array<{ nodeId: string; reason: string }>;
     pending?: TopicPendingAssignment[];
 }
+export interface TopicCurationPacket {
+    start: number;
+    end: number;
+    fingerprint: string;
+    responseFingerprint: string;
+    response: {
+        concepts: Array<{
+            label: string;
+            scope: string;
+            purpose: string;
+            memberIds: string[];
+            evidenceIds: string[];
+            salience: number;
+        }>;
+        deferred: Array<{ nodeId: string; reason: string }>;
+    };
+}
 export interface TopicBuildInput {
     occurrences: TopicOccurrence[];
     authoredLabels?: Array<Pick<TopicNode, "id" | "label" | "aliases">>;
@@ -104,6 +124,10 @@ export interface TopicBuildInput {
         Pick<TopicNode, "id" | "summary" | "citations" | "limits">
     >;
     reusableCuration?: TopicCuration;
+    curationInputFingerprint?: string;
+    packetReplay?: boolean;
+    suppressionFingerprint?: string;
+    reusableCurationPackets?: TopicCurationPacket[];
     maintainClusters?: boolean;
     indexGeneration?: string;
 }

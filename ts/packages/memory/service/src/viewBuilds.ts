@@ -11,7 +11,9 @@ import type {
     ViewPublicationProof,
     WikiPagePurposeContext,
     WikiSubjectAssessment,
+    WikiContributionCandidate,
 } from "./viewTypes.js";
+import { WikiContributionCapacityError } from "./wikiContribution.js";
 import { parseWikiAssessment } from "./wikiAdmission.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
@@ -59,7 +61,17 @@ import {
     ViewExtensionDeferred,
 } from "./viewExtensions.js";
 import type { ViewEligibilityReceipt } from "./viewExtensionTypes.js";
+import type { KnowledgeFamily } from "./knowledgeTypes.js";
 import { createExtensionExecution } from "./viewExtensionExecution.js";
+
+const timingFamilies: Partial<
+    Record<ViewBuildSnapshot["pipeline"], KnowledgeFamily>
+> = {
+    "schema-defined-v1": "questions",
+    "informational-wiki-v1": "wiki",
+    "informational-project-summary-v1": "projects",
+    "topics-v1": "topics",
+};
 
 export class ViewBuildStaleError extends Error {}
 
@@ -76,12 +88,18 @@ type WikiPreparation =
 interface WikiPreparationTask {
     controller: AbortController;
     work: Promise<WikiPreparation>;
+    companions?: Array<{
+        result: ViewBuildTargetResult;
+        task: WikiPreparationTask;
+    }>;
 }
 
 interface ViewBuildRuntimeScope {
     corpusId: string;
     sources: Set<string>;
     events: Set<string>;
+    wikiPreparationInvalidated?: boolean;
+    groupedWikiTargets: Set<string>;
 }
 
 export interface ViewBuildOwner extends TopicBuildOwner {
@@ -108,6 +126,7 @@ export interface ViewBuildOwner extends TopicBuildOwner {
         assessment: WikiSubjectAssessment,
         pages: WikiPagePurposeContext[],
         signal: AbortSignal,
+        companions?: WikiContributionCandidate[],
     ): Promise<void>;
     resumeWikiContribution?(
         job: ViewBuildJob,
@@ -156,6 +175,9 @@ export class ViewBuildRunner {
         prioritizeShortBuilds = !reserveShortSlot,
         private readonly extensions?: ViewExtensionRegistry,
         private readonly modelScheduler?: MaintenanceModelScheduler,
+        private readonly wikiUtilityFirst = false,
+        private readonly parallelInformationalFamilies = false,
+        private readonly groupedWikiContributions = false,
     ) {
         if (
             !Number.isSafeInteger(wikiAssessmentConcurrency) ||
@@ -164,6 +186,13 @@ export class ViewBuildRunner {
         )
             throw new Error(
                 "Wiki assessment concurrency must be an integer from 1 to 4",
+            );
+        if (
+            groupedWikiContributions &&
+            (wikiAssessmentConcurrency < 2 || informationalLimits)
+        )
+            throw new Error(
+                "Grouped Wiki contributions require preparation concurrency at least two and no per-target request budget",
             );
         this.topicTimeoutMs = resolveTopicBuildTimeout(topicTimeoutMs);
         this.limit = createMaintenanceBuildScheduler(
@@ -183,6 +212,7 @@ export class ViewBuildRunner {
         const controller = new AbortController();
         const scope: ViewBuildRuntimeScope = {
             corpusId: job.corpusId,
+            groupedWikiTargets: new Set(),
             sources: new Set(
                 job.results.flatMap((result) => [
                     ...result.snapshot.definition.selector.sources.map(
@@ -206,7 +236,7 @@ export class ViewBuildRunner {
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });
-        const queuedAt = isSearchTimingEnabled()
+        const queuedAt = isSearchTimingEnabled("build.queue.wait")
             ? performance.now()
             : undefined;
         const task = this.limit(
@@ -233,7 +263,14 @@ export class ViewBuildRunner {
                 (result) => result.snapshot.pipeline === "topics-v1",
             )
                 ? `${job.corpusId}:topics`
-                : job.corpusId,
+                : this.parallelInformationalFamilies &&
+                    job.results.every(
+                        (result) =>
+                            result.snapshot.pipeline ===
+                            "informational-project-summary-v1",
+                    )
+                  ? `${job.corpusId}:projects`
+                  : job.corpusId,
         );
         const settled = task
             .catch((error: unknown) => {
@@ -246,6 +283,18 @@ export class ViewBuildRunner {
                 });
             })
             .finally(() => {
+                if (controller.signal.aborted)
+                    runWithSearchTiming(job.jobId, "memory.build", () =>
+                        recordSearchTiming(
+                            "build.job.cancelled",
+                            0,
+                            {
+                                corpusId: job.corpusId,
+                                buildId: job.jobId,
+                            },
+                            "error",
+                        ),
+                    );
                 this.controllers.delete(job.jobId);
                 this.tasks.delete(job.jobId);
             });
@@ -565,6 +614,7 @@ export class ViewBuildRunner {
                         result,
                         signal,
                         assessmentPreparation?.work,
+                        assessmentPreparation?.companions,
                     ),
                 ))
             )
@@ -851,31 +901,42 @@ export class ViewBuildRunner {
         signal: AbortSignal,
     ): Promise<ViewSynthesisOutput> {
         const report = await abortable(
-            this.adapter.validate(input, candidate, signal),
+            timeSearchStage("view.support.check", () =>
+                this.adapter.validate(input, candidate, signal),
+            ),
             signal,
         );
+        const repairSchemaAnswers = this.adapter.repairSchemaAnswers?.bind(
+            this.adapter,
+        );
         try {
-            validateSupport(candidate, report);
+            timeSearchStage("view.support.verify", () =>
+                validateSupport(candidate, report),
+            );
             return candidate;
         } catch (error) {
             if (
                 !(error instanceof ViewSupportRejection) ||
                 input.pipeline !== "schema-defined-v1" ||
-                !this.adapter.repairSchemaAnswers
+                !repairSchemaAnswers
             )
                 throw error;
         }
         const repaired = await abortable(
-            this.adapter.repairSchemaAnswers(input, candidate, report, signal),
+            timeSearchStage("view.support.repair", () =>
+                repairSchemaAnswers(input, candidate, report, signal),
+            ),
             signal,
         );
         validateConstructedGuide(input, repaired);
-        validateSupport(
-            repaired,
-            await abortable(
+        const repairedReport = await abortable(
+            timeSearchStage("view.support.recheck", () =>
                 this.adapter.validate(input, repaired, signal),
-                signal,
             ),
+            signal,
+        );
+        timeSearchStage("view.support.reverify", () =>
+            validateSupport(repaired, repairedReport),
         );
         return repaired;
     }
@@ -985,6 +1046,7 @@ export class ViewBuildRunner {
         result: ViewBuildTargetResult,
         signal: AbortSignal,
         prepared?: Promise<WikiPreparation>,
+        peers?: WikiPreparationTask["companions"],
     ): Promise<boolean> {
         if (
             !job.maintenancePlan ||
@@ -1027,6 +1089,8 @@ export class ViewBuildRunner {
             recordSearchTiming("wiki.assessment.speculation.discarded", 0, {
                 discarded: 1,
             });
+            const scope = this.controllers.get(job.jobId);
+            if (scope) scope.wikiPreparationInvalidated = true;
             value = await this.prepareWikiAssessment(job, result, signal);
             if (value.input.influenceSources)
                 result.snapshot.influenceSources = value.input.influenceSources;
@@ -1044,11 +1108,16 @@ export class ViewBuildRunner {
                 throw new Error(
                     "Wiki contribution requires guarded canonical materialization",
                 );
-            await this.owner.contributeWikiSubject(
+            const companions = await this.prepareWikiContributionCompanions(
                 job,
-                result,
-                assessment,
-                pages,
+                value,
+                peers,
+                signal,
+            );
+            await this.installWikiContributions(
+                job,
+                { result, assessment, pages },
+                companions,
                 signal,
             );
             return true;
@@ -1058,6 +1127,104 @@ export class ViewBuildRunner {
             assessment.disposition === "defer" ||
             assessment.disposition === "ambiguous"
         );
+    }
+
+    private async prepareWikiContributionCompanions(
+        job: ViewBuildJob,
+        primary: PreparedWikiAssessment,
+        peers: WikiPreparationTask["companions"],
+        signal: AbortSignal,
+    ): Promise<WikiContributionCandidate[]> {
+        const companions: WikiContributionCandidate[] = [];
+        for (const { result, task } of peers ?? []) {
+            const prepared = await abortable(task.work, signal);
+            if (!prepared.value || "error" in prepared) continue;
+            const { assessment, pages, input } = prepared.value;
+            if (
+                assessment.disposition !== "contribute" ||
+                assessment.canonicalViewId !==
+                    primary.assessment.canonicalViewId
+            )
+                continue;
+            if (input.influenceSources)
+                result.snapshot.influenceSources = input.influenceSources;
+            try {
+                await this.owner.recordWikiAssessment!(
+                    job,
+                    result,
+                    assessment,
+                    pages,
+                    signal,
+                );
+            } catch (error) {
+                if (!(error instanceof ViewBuildStaleError)) throw error;
+                recordSearchTiming("wiki.assessment.speculation.discarded", 0, {
+                    discarded: 1,
+                });
+                const scope = this.controllers.get(job.jobId);
+                if (scope) scope.wikiPreparationInvalidated = true;
+                continue;
+            }
+            companions.push({ result, assessment, pages });
+        }
+        return companions;
+    }
+
+    private async installWikiContributions(
+        job: ViewBuildJob,
+        primary: WikiContributionCandidate,
+        companions: WikiContributionCandidate[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        const contribute = () =>
+            this.owner.contributeWikiSubject!(
+                job,
+                primary.result,
+                primary.assessment,
+                primary.pages,
+                signal,
+                companions,
+            );
+        try {
+            try {
+                await contribute();
+            } catch (error) {
+                if (
+                    !(error instanceof WikiContributionCapacityError) ||
+                    !companions.length
+                )
+                    throw error;
+                console.warn(
+                    "Wiki contribution group exceeds the evidence/alias budget; splitting into individually guarded contributions",
+                );
+                recordSearchTiming("wiki.contribution.group.split", 0, {
+                    candidates: companions.length + 1,
+                });
+                companions = [];
+                await contribute();
+            }
+        } catch (error) {
+            if (!this.purged.has(job.jobId))
+                for (const companion of companions)
+                    await this.result(
+                        job,
+                        companion.result.viewId,
+                        failedTargetState(
+                            error,
+                            signal,
+                            this.controllers.get(job.jobId)?.controller
+                                .signal ?? signal,
+                            true,
+                        ),
+                        `Grouped canonical contribution failed: ${safeError(error)}`,
+                    );
+            throw error;
+        } finally {
+            for (const companion of companions)
+                this.controllers
+                    .get(job.jobId)
+                    ?.groupedWikiTargets.add(companion.result.viewId);
+        }
     }
 
     private async prepareWikiAssessment(
@@ -1071,8 +1238,47 @@ export class ViewBuildRunner {
             );
         const input = structuredClone(result.snapshot);
         signal.throwIfAborted();
-        const pages = await this.owner.wikiPages(input);
+        const utility =
+            this.wikiUtilityFirst && !input.wikiContribution
+                ? await timeSearchStage("wiki.utility.assess", () =>
+                      this.adapter.assessWikiSubject!(input, [], signal),
+                  )
+                : undefined;
+        if (
+            utility?.disposition === "defer" &&
+            utility.deferBasis === "evidence"
+        ) {
+            recordSearchTiming("wiki.admission.context", 0, {
+                pageCount: 0,
+                fragmentCount: input.inputs.reduce(
+                    (count, source) => count + (source.passages?.length ?? 0),
+                    0,
+                ),
+                utilityOnly: true,
+            });
+            return {
+                assessment: parseWikiAssessment(utility, []),
+                pages: [],
+                input,
+            };
+        }
+        const pages = await timeSearchStage("wiki.pages.nominate", () =>
+            this.owner.wikiPages!(input),
+        );
         signal.throwIfAborted();
+        recordSearchTiming("wiki.admission.context", 0, {
+            pageCount: pages.length,
+            fragmentCount: input.inputs.reduce(
+                (count, source) => count + (source.passages?.length ?? 0),
+                0,
+            ),
+            proseCharacters: pages.reduce(
+                (count, page) => count + page.prose.length,
+                0,
+            ),
+            truncatedPages: pages.filter((page) => page.proseTruncated).length,
+            utilityOnly: false,
+        });
         const sources = [
             ...new Map(
                 [
@@ -1087,11 +1293,12 @@ export class ViewBuildRunner {
         input.influenceSources = sources;
         const scope = this.controllers.get(job.jobId);
         for (const source of sources) scope?.sources.add(source.sourceId);
-        const value = await this.adapter.assessWikiSubject(
-            input,
-            pages,
-            signal,
-        );
+        const value =
+            utility?.disposition === "distinct" && !pages.length
+                ? utility
+                : await timeSearchStage("wiki.subject.compare", () =>
+                      this.adapter.assessWikiSubject!(input, pages, signal),
+                  );
         signal.throwIfAborted();
         const assessment = parseWikiAssessment(value, pages);
         return { assessment, pages, input };
@@ -1106,6 +1313,7 @@ export class ViewBuildRunner {
             if (
                 this.informationalLimits ||
                 this.wikiAssessmentConcurrency === 1 ||
+                this.controllers.get(job.jobId)?.wikiPreparationInvalidated ||
                 !job.maintenancePlan ||
                 !this.adapter.assessWikiSubject
             )
@@ -1152,12 +1360,31 @@ export class ViewBuildRunner {
         try {
             for (const [index, result] of job.results.entries()) {
                 if (
+                    this.controllers
+                        .get(job.jobId)
+                        ?.groupedWikiTargets.has(result.viewId)
+                )
+                    continue;
+                if (
                     result.snapshot.pipeline === "extension-v1" &&
                     result.state !== "pending"
                 )
                     continue;
                 if (index % this.wikiAssessmentConcurrency === 0)
                     prepare(index);
+                const preparation = prepared.get(result.viewId);
+                if (this.groupedWikiContributions && preparation) {
+                    const end =
+                        (Math.floor(index / this.wikiAssessmentConcurrency) +
+                            1) *
+                        this.wikiAssessmentConcurrency;
+                    preparation.companions = job.results
+                        .slice(index + 1, end)
+                        .flatMap((peer) => {
+                            const task = prepared.get(peer.viewId);
+                            return task ? [{ result: peer, task }] : [];
+                        });
+                }
                 const target = () =>
                     runWithSearchTiming(
                         undefined,
@@ -1168,11 +1395,17 @@ export class ViewBuildRunner {
                                     job,
                                     result,
                                     signal,
-                                    prepared.get(result.viewId),
+                                    preparation,
                                 );
                                 return { success };
                             }),
-                        { corpusId: job.corpusId },
+                        {
+                            corpusId: job.corpusId,
+                            buildId: job.jobId,
+                            targetIndex: index,
+                            pipeline: result.snapshot.pipeline,
+                            family: timingFamilies[result.snapshot.pipeline],
+                        },
                     );
                 if (
                     this.informationalLimits &&

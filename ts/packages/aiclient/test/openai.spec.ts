@@ -37,9 +37,14 @@ describe("createChatModel temperature compatibility", () => {
             import.meta.jest.restoreAllMocks();
         });
 
-        test.each([false, true])(
-            "large prompts warn without stdout or input truncation (stream=%s)",
-            async (stream) => {
+        test.each([
+            { stream: false, lineEnding: "\n", format: "JSON" },
+            { stream: true, lineEnding: "\n", format: "LF" },
+            { stream: true, lineEnding: "\r\n", format: "CRLF" },
+            { stream: true, lineEnding: "\r", format: "CR" },
+        ])(
+            "large prompts warn without stdout or input truncation (stream=$stream, format=$format)",
+            async ({ stream, lineEnding }) => {
                 const log = import.meta.jest
                     .spyOn(console, "log")
                     .mockImplementation(() => {});
@@ -60,7 +65,7 @@ describe("createChatModel temperature compatibility", () => {
                     };
                     return new Response(
                         stream
-                            ? `data: ${JSON.stringify({ choices: [{ index: 0, finish_reason: "stop", delta: { content: "Synthetic reply" } }] })}\n\ndata: [DONE]\n\n`
+                            ? `data: ${JSON.stringify({ choices: [{ index: 0, finish_reason: "stop", delta: { content: "Synthetic reply" } }] })}${lineEnding.repeat(2)}data: [DONE]${lineEnding.repeat(2)}`
                             : JSON.stringify({ choices: [choice] }),
                         {
                             headers: {

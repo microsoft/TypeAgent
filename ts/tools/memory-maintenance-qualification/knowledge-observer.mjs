@@ -49,6 +49,16 @@ export function knowledgeReadinessError(checkpoint) {
 
 function familyProgress(checkpoint, summary) {
     return (checkpoint.families ?? []).map((family) => {
+        const targetStates = new Map();
+        for (const diagnostic of checkpoint.diagnostics ?? [])
+            if (diagnostic.family === family)
+                targetStates.set(
+                    diagnostic.state,
+                    (targetStates.get(diagnostic.state) ?? 0) + 1,
+                );
+        const targetEvidence = targetStates.size
+            ? { targetStates: Object.fromEntries(targetStates) }
+            : {};
         const failures = checkpoint.requiredFailures?.filter(
             (failure) => failure.family === family,
         );
@@ -60,9 +70,15 @@ function familyProgress(checkpoint, summary) {
                 reason: failures
                     .flatMap((failure) => failure.reasons)
                     .join("; "),
+                ...targetEvidence,
             };
         if (checkpoint.state === "ready")
-            return { family, state: "complete", evidence: "checkpoint-ready" };
+            return {
+                family,
+                state: "complete",
+                evidence: "checkpoint-ready",
+                ...targetEvidence,
+            };
         const status =
             family === "wiki"
                 ? summary?.wikiFamily
@@ -70,7 +86,12 @@ function familyProgress(checkpoint, summary) {
                   ? summary?.projectFamily
                   : undefined;
         if (!status)
-            return { family, state: "unknown", evidence: "unavailable" };
+            return {
+                family,
+                state: "unknown",
+                evidence: "unavailable",
+                ...targetEvidence,
+            };
         return {
             family,
             state:
@@ -81,6 +102,7 @@ function familyProgress(checkpoint, summary) {
                       : "complete",
             evidence: "independent-family-status",
             ...(status.error ? { reason: status.error } : {}),
+            ...targetEvidence,
         };
     });
 }

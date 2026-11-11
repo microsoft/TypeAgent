@@ -77,6 +77,29 @@ function configuredDecisionExecution(
     return resolveTopicDecisionExecution(options);
 }
 
+function topicReuseOptions(
+    environment: Readonly<Record<string, string | undefined>>,
+) {
+    return {
+        ...(environment.TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE === undefined
+            ? {}
+            : {
+                  topicCurationReuse: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE,
+                      "TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE",
+                  ),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_TOPIC_WATERMARK === undefined
+            ? {}
+            : {
+                  topicWatermark: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_TOPIC_WATERMARK,
+                      "TYPEAGENT_MEMORY_TOPIC_WATERMARK",
+                  ),
+              }),
+    };
+}
+
 export function getConfiguredMemoryViewOptions(
     environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Pick<
@@ -89,6 +112,8 @@ export function getConfiguredMemoryViewOptions(
     | "decisionTopics"
     | "decisionTopicExecution"
     | "topicCuration"
+    | "topicCurationReuse"
+    | "topicWatermark"
     | "understanding"
     | "topicBuildTimeoutMs"
     | "maintenanceConcurrency"
@@ -188,6 +213,7 @@ export function getConfiguredMemoryViewOptions(
               }),
         ...(execution ? { decisionTopicExecution: execution } : {}),
         ...(topicCuration ? { topicCuration } : {}),
+        ...topicReuseOptions(environment),
         viewDrafts: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_VIEW_DRAFTS,
         ),

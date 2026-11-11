@@ -13,16 +13,26 @@ import {
     nominateWikiPages,
     parseWikiAssessment,
     wikiPageContext,
+    wikiAssessmentKey,
 } from "../src/wikiAdmission.js";
 import {
+    canonicalizeWikiEvidence,
     refreshWikiContributionInput,
     wikiContributionInput,
+    wikiContributionGroupInput,
+    wikiContributionTargets,
+    WikiContributionCapacityError,
 } from "../src/wikiContribution.js";
 import { viewSourceKey } from "../src/viewContent.js";
 import { derivedDefinitionInput } from "../src/viewRelationships.js";
-import { mergeView, recordViewEdits, viewHash } from "../src/viewMerge.js";
+import {
+    mergeView,
+    recordViewEdits,
+    viewHash,
+    viewBuildEvidenceFingerprint,
+} from "../src/viewMerge.js";
 import { mergeEditorialView } from "../src/viewEditorial.js";
-import { ViewBuildStaleError } from "../src/viewBuilds.js";
+import { ViewBuildStaleError, abortable } from "../src/viewBuilds.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import type { IndexedFragmentRequest, IndexedDocument } from "../src/types.js";
 import type {
@@ -37,11 +47,14 @@ const oldFact =
 const contrast =
     "Command execution can be short while a connection lease is long. Application work, transaction scope and delayed disposal can occupy pool slots; this is a proposed diagnostic distinction, not proof of a leak.";
 const text = `${oldFact}\n\n${contrast}`;
+const disposal =
+    "Prompt connection disposal releases the lease after application work finishes. Cancellation alone does not establish that disposal occurred.";
 
 class ContributionIndex extends FakeSemanticCorpusIndex {
     static includeCommand = false;
     static failDerived = false;
     static derivedBuilds = 0;
+    static reverseRead = false;
     override async rebuild(documents: IndexedDocument[]) {
         if (documents[0]?.source.sourceId !== "source")
             ContributionIndex.derivedBuilds++;
@@ -99,7 +112,13 @@ class ContributionIndex extends FakeSemanticCorpusIndex {
                 locator: `indexed:0:${document.revision.contentHash}:${start}-${start + snippet.length}`,
             };
         });
-        return { fragments, readChars: parts.join("").length, limited: false };
+        return {
+            fragments: ContributionIndex.reverseRead
+                ? fragments.reverse()
+                : fragments,
+            readChars: parts.join("").length,
+            limited: false,
+        };
     }
     async resolveIndexedLocator(
         sourceId: string,
@@ -117,6 +136,140 @@ class ContributionIndex extends FakeSemanticCorpusIndex {
         return document.content.slice(Number(match[2]), Number(match[3]));
     }
 }
+
+class GroupedContributionIndex extends ContributionIndex {
+    override async listSubjects(offset: number) {
+        const page = await super.listSubjects(offset);
+        if (!offset && ContributionIndex.includeCommand) {
+            page.items.push({
+                term: "connection disposal",
+                postingCount: 1,
+                sourceIds: ["source"],
+            });
+            page.total++;
+        }
+        return page;
+    }
+    override async readFragments(request: IndexedFragmentRequest) {
+        const selection = await super.readFragments(request);
+        if (request.terms.includes("connection disposal")) {
+            const document = this.documents.find(
+                (entry) => entry.source.sourceId === "source",
+            );
+            if (!document) throw new Error("Original grouped source missing");
+            const start = document.content.indexOf(disposal);
+            if (start < 0) throw new Error("Grouped disposal evidence missing");
+            selection.fragments.push({
+                sourceId: "source",
+                revisionId: document.revision.revisionId,
+                snippet: disposal,
+                score: 1,
+                locator: `indexed:0:${document.revision.contentHash}:${start}-${start + disposal.length}`,
+            });
+            selection.readChars += disposal.length;
+        }
+        return selection;
+    }
+}
+
+test.each([2, 3, 4])(
+    "group receipts for %s candidates bind independent evidence and remapped distinctions",
+    (groupSize) => {
+        const current = canonical();
+        const first = snapshot();
+        const second = snapshot();
+        second.definition.viewId = "second";
+        second.definition.wiki!.query = "connection disposal";
+        second.inputs[0].passages![0].excerpt = disposal;
+        second.inputs[0].passages![0].locator += "-disposal";
+        second.inputs[0].content = disposal;
+        const inputs = [
+            first,
+            ...Array.from({ length: groupSize - 1 }, (_, index) => {
+                const input = structuredClone(second);
+                input.definition.viewId = `second-${index}`;
+                return input;
+            }),
+        ];
+        const candidates = inputs.map((input) => {
+            const pages = [wikiPageContext(input, current, undefined, false)];
+            return {
+                input,
+                assessment: assessment(input, pages[0], "contribute"),
+                assessmentKey: wikiAssessmentKey(
+                    input,
+                    pages,
+                    "offline-group-policy",
+                ),
+            };
+        });
+        const input = canonicalizeWikiEvidence(
+            wikiContributionGroupInput(candidates, current),
+        );
+        const targets = candidates.map((candidate) => ({
+            viewId: candidate.input.definition.viewId,
+            snapshot: candidate.input,
+            state: "pending" as const,
+            reason: "Admitted",
+            wikiAssessmentKey: candidate.assessmentKey,
+            wikiAssessment: {
+                ...candidate.assessment,
+                canonicalRevisionId: current.revisionId,
+            },
+        }));
+        const verification = {
+            ...candidates[0].assessment,
+            disposition: "covered" as const,
+        };
+        const contribution = { input, verification };
+        expect(
+            wikiContributionTargets(targets, targets[0], contribution, false),
+        ).toEqual(targets);
+        expect(input.wikiContribution!.members).toHaveLength(groupSize);
+        expect(
+            input.inputs.flatMap((source) => source.passages ?? []),
+        ).toHaveLength(3);
+        const forged = structuredClone(targets);
+        forged[1].wikiAssessment.reason =
+            "Not the recorded independent assessment";
+        expect(() =>
+            wikiContributionTargets(forged, forged[0], contribution, false),
+        ).toThrow("unsupported");
+        const omitted = structuredClone(contribution);
+        omitted.input.wikiContribution!.essentialDistinctions =
+            omitted.input.wikiContribution!.essentialDistinctions.filter(
+                (entry) => entry.statement !== disposal,
+            );
+        expect(() =>
+            wikiContributionTargets(targets, targets[0], omitted, false),
+        ).toThrow("omitted a member distinction");
+        const changed = structuredClone(targets);
+        changed[1].snapshot.inputs[0].passages![0].excerpt +=
+            " Changed source.";
+        expect(() =>
+            wikiContributionTargets(changed, changed[0], contribution, false),
+        ).toThrow();
+        expect(() =>
+            wikiContributionGroupInput([candidates[0], candidates[0]], current),
+        ).toThrow("two to four");
+        const dense = candidates.slice(0, 2).map((candidate) => {
+            const value = structuredClone(candidate);
+            const passage = value.input.inputs[0].passages![0];
+            value.input.inputs[0].passages = Array.from(
+                { length: 12 },
+                (_, index) => ({
+                    ...passage,
+                    locator: `${passage.locator}-dense-${index}`,
+                    excerpt: `${passage.excerpt} Retained excerpt ${index}.`,
+                }),
+            );
+            return value;
+        });
+        expect(() => wikiContributionGroupInput(dense, current)).toThrow(
+            WikiContributionCapacityError,
+        );
+    },
+);
 
 function assessment(
     input: ViewBuildSnapshot,
@@ -190,6 +343,55 @@ function snapshot(): ViewBuildSnapshot {
         ],
     };
 }
+
+test("Wiki evidence ordering is stable and remaps exact contribution fragment identities", () => {
+    const incoming = snapshot();
+    const current = canonical();
+    const original = wikiContributionInput(
+        incoming,
+        current,
+        assessment(
+            incoming,
+            wikiPageContext(incoming, current, undefined, false),
+            "contribute",
+        ),
+    );
+    const frozen = structuredClone(original);
+    const permuted = structuredClone(original);
+    const previous = original.inputs.flatMap((source) => source.passages ?? []);
+    permuted.inputs.reverse();
+    for (const source of permuted.inputs) source.passages!.reverse();
+    const reordered = permuted.inputs.flatMap(
+        (source) => source.passages ?? [],
+    );
+    permuted.wikiContribution!.essentialDistinctions =
+        original.wikiContribution!.essentialDistinctions.map((distinction) => ({
+            ...distinction,
+            fragmentId: `f${reordered.findIndex(
+                (fragment) =>
+                    viewHash(fragment) ===
+                    viewHash(previous[Number(distinction.fragmentId.slice(1))]),
+            )}`,
+        }));
+    const left = canonicalizeWikiEvidence(original);
+    const right = canonicalizeWikiEvidence(permuted);
+    expect(left).toEqual(right);
+    expect(viewBuildEvidenceFingerprint(left)).toBe(
+        viewBuildEvidenceFingerprint(right),
+    );
+    expect(canonicalizeWikiEvidence(left)).toEqual(left);
+    expect(original).toEqual(frozen);
+    const changed = structuredClone(left);
+    changed.inputs[0].passages![0].excerpt += " Changed evidence.";
+    expect(
+        viewBuildEvidenceFingerprint(canonicalizeWikiEvidence(changed)),
+    ).not.toBe(viewBuildEvidenceFingerprint(left));
+    const invalid = structuredClone(original);
+    invalid.wikiContribution!.essentialDistinctions[0].fragmentId = "f99";
+    expect(() => canonicalizeWikiEvidence(invalid)).toThrow(
+        "lost a required fragment",
+    );
+});
 function canonical(): ViewVersion {
     const input = snapshot();
     input.definition.viewId = "canonical";
@@ -667,10 +869,12 @@ async function rehearsal(
         | "forget"
         | "binding-replay"
         | "replacement",
+    experimental = false,
 ) {
     ContributionIndex.includeCommand = false;
     ContributionIndex.failDerived = false;
     ContributionIndex.derivedBuilds = 0;
+    ContributionIndex.reverseRead = false;
     const root = await mkdtemp(path.join(os.tmpdir(), "wiki-contribution-"));
     let generated = 0,
         assessed = 0;
@@ -792,6 +996,13 @@ async function rehearsal(
     };
     const open = () =>
         new FileMemoryService(root, {
+            ...(experimental
+                ? {
+                      performanceExperiments:
+                          "wiki-full-context,wiki-stable-evidence,wiki-utility-first,wiki-coalesced-discovery",
+                      wikiAssessmentConcurrency: 2,
+                  }
+                : {}),
             indexFactory: (_id, directory) => new ContributionIndex(directory),
             eventIndexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
@@ -1022,6 +1233,9 @@ async function rehearsal(
             }
         }
         const before = [generated, assessed];
+        const indexedBefore = ContributionIndex.derivedBuilds;
+        if (experimental && mode === "success")
+            ContributionIndex.reverseRead = true;
         await service.close();
         service = open();
         const update = await maintainFamily(
@@ -1032,6 +1246,7 @@ async function rehearsal(
         );
         expect(update.job).toBeUndefined();
         expect([generated, assessed]).toEqual(before);
+        expect(ContributionIndex.derivedBuilds).toBe(indexedBefore);
         expect((await service.listViews(corpusId)).views).toHaveLength(1);
         expect((await service.listViews(corpusId)).wikiFamily?.pending).toBe(
             false,
@@ -1056,5 +1271,393 @@ test.each([
 ] as const)(
     "actual isolated service contribution: %s",
     async (mode) => rehearsal(mode),
+    30000,
+);
+
+test.each([
+    "success",
+    "missing",
+    "provider",
+    "stale",
+    "index",
+    "replacement",
+    "forget",
+    "conflict",
+    "competing",
+    "cancelled",
+] as const)(
+    "grouped canonical installation and recovery: %s",
+    async (mode) => {
+        ContributionIndex.includeCommand = false;
+        ContributionIndex.reverseRead = false;
+        ContributionIndex.failDerived = false;
+        ContributionIndex.derivedBuilds = 0;
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-grouped-contribution-"),
+        );
+        let generated = 0;
+        let release!: () => void, groupStarted!: () => void;
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            groupStarted = resolve;
+        });
+        const adapter = {
+            identity: "offline-grouped-contribution",
+            assessWikiSubject: async (
+                input: ViewBuildSnapshot,
+                pages: ReturnType<typeof nominateWikiPages>,
+            ) => {
+                if (!pages.length)
+                    return {
+                        disposition: "distinct" as const,
+                        purpose: "Useful scoped reference",
+                        reason: "Original evidence supports a substantive explanation",
+                        canonicalViewId: "",
+                        sharedFragmentIds: [],
+                        ambiguousViewIds: [],
+                        essentialDistinctions: [],
+                    };
+                expect(pages).toHaveLength(1);
+                return assessment(
+                    input,
+                    pages[0],
+                    input.wikiContribution ? "covered" : "contribute",
+                );
+            },
+            generate: async (input: ViewBuildSnapshot, signal: AbortSignal) => {
+                generated++;
+                if (input.wikiContribution?.members) {
+                    expect(input.wikiContribution.members).toHaveLength(2);
+                    groupStarted();
+                    await held;
+                    signal.throwIfAborted();
+                    if (mode === "provider")
+                        throw new Error("Controlled grouped provider failure");
+                }
+                const fragments = input.inputs.flatMap(
+                    (source) => source.passages ?? [],
+                );
+                return hydrateInformational(input, {
+                    title: "Connection lease",
+                    summary: "Grounded reference summary",
+                    status: "partial",
+                    limits: "Selected original evidence",
+                    prose:
+                        mode === "missing" && input.wikiContribution
+                            ? oldFact
+                            : mode === "conflict" && input.wikiContribution
+                              ? `${oldFact.replace("Connection lease acquisition", "Incompatible generated lease explanation")}\n\n${contrast}\n\n${disposal}`
+                              : fragments
+                                    .map((fragment) => fragment.excerpt)
+                                    .join("\n\n"),
+                    citationIds: fragments.map((_, index) => `f${index}`),
+                });
+            },
+            validate: async () => {
+                throw new Error("Unexpected generic support path");
+            },
+        };
+        const open = () =>
+            new FileMemoryService(root, {
+                maintenanceMode: "manual",
+                sourceSynopses: false,
+                performanceExperiments:
+                    "wiki-full-context,wiki-stable-evidence,wiki-utility-first,wiki-coalesced-discovery,wiki-grouped-contributions",
+                wikiAssessmentConcurrency: 2,
+                indexFactory: (_id, directory) =>
+                    new GroupedContributionIndex(directory),
+                viewSynthesisAdapter: adapter,
+            });
+        let service = open();
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Grouped canonical contributions",
+            );
+            for (const family of ["wiki", "projects"] as const)
+                await maintainFamily(service, corpusId, family, "pause");
+            const ingestion = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Lease source",
+                    text: `${text}\n\n${disposal}`,
+                },
+            });
+            expect(
+                (await waitForMemoryJob(service, ingestion.jobId)).state,
+            ).toBe("complete");
+            const seed = await maintainFamily(
+                service,
+                corpusId,
+                "wiki",
+                "resume",
+            );
+            expect((await terminal(service, seed.job)).state).toBe("complete");
+            await maintainFamily(service, corpusId, "wiki", "pause");
+            const original = (await service.listViews(corpusId)).views[0];
+            let competing: ViewVersion | undefined;
+            if (mode === "competing") {
+                const definition = derivedDefinitionInput(original);
+                definition.viewId = "competing-context";
+                const build = await service.buildViews({
+                    corpusId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    publication: false,
+                    targets: [{ definition, expectedVersion: 0 }],
+                });
+                expect((await terminal(service, build)).state).toBe("complete");
+                competing = (await service.listViews(corpusId)).views.find(
+                    (view) => view.viewId === definition.viewId,
+                );
+                if (!competing)
+                    throw new Error("Expected grounded competing page");
+                expect(
+                    (
+                        await service.getViewPublication({
+                            corpusId,
+                            viewId: competing.viewId,
+                        })
+                    ).publishedRevisionId,
+                ).toBeUndefined();
+            }
+            if (mode === "conflict") {
+                const content = structuredClone(original.content);
+                content.sections[0].body = content.sections[0].body.replace(
+                    "Connection lease acquisition",
+                    "Human incompatible lease explanation",
+                );
+                await service.saveViewDraft({
+                    corpusId,
+                    viewId: original.viewId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    expectedVersion: original.version,
+                    definition: derivedDefinitionInput(original),
+                    content,
+                    relationships: [],
+                });
+            }
+            const indexedBefore = ContributionIndex.derivedBuilds;
+            ContributionIndex.includeCommand = true;
+            const admitted = await maintainFamily(
+                service,
+                corpusId,
+                "wiki",
+                "resume",
+            );
+            try {
+                await abortable(started, AbortSignal.timeout(10000));
+            } catch (error) {
+                const builds = await service.listViewBuilds(corpusId);
+                throw new Error(
+                    JSON.stringify(
+                        builds.map((build) => ({
+                            state: build.state,
+                            results: build.results.map((target) => ({
+                                viewId: target.viewId,
+                                state: target.state,
+                                reason: target.reason,
+                                assessment: target.wikiAssessment,
+                            })),
+                        })),
+                    ) + `; ${String(error)}`,
+                );
+            }
+            if (mode === "stale") {
+                const content = structuredClone(original.content);
+                content.title = "Human protected canonical title";
+                await service.saveViewDraft({
+                    corpusId,
+                    viewId: original.viewId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    expectedVersion: original.version,
+                    definition: derivedDefinitionInput(original),
+                    content,
+                    relationships: [],
+                });
+            }
+            if (mode === "index") ContributionIndex.failDerived = true;
+            if (mode === "cancelled")
+                await service.cancelViewBuild({
+                    corpusId,
+                    jobId: admitted.job!.jobId,
+                });
+            if (mode === "competing") {
+                if (!competing)
+                    throw new Error("Expected frozen competing page");
+                const head = (await service.listViews(corpusId)).head;
+                if (!head) throw new Error("Expected persisted competing page");
+                const publication = await service.publishView({
+                    corpusId,
+                    viewId: competing.viewId,
+                    revisionId: competing.revisionId,
+                    expectedVersion: competing.version,
+                    expectedHead: head,
+                });
+                expect(publication.indexState).toBe("ready");
+            }
+            if (mode === "replacement") {
+                const replacement = await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        sourceId: "source",
+                        sourceType: "text",
+                        title: "Lease source",
+                        text: `${text}\n\n${disposal}\nA correction changes the exact source revision.`,
+                    },
+                });
+                release();
+                expect(
+                    (await waitForMemoryJob(service, replacement.jobId)).state,
+                ).toBe("complete");
+            } else if (mode === "forget") {
+                const preview = await service.previewForgetSource(
+                    corpusId,
+                    "source",
+                );
+                const forgotten = service.forgetSource({
+                    corpusId,
+                    sourceId: "source",
+                    confirmationToken: preview.confirmationToken,
+                });
+                release();
+                await forgotten;
+                expect((await service.listViews(corpusId)).views).toEqual([]);
+                expect(await service.listViewBuilds(corpusId)).toHaveLength(0);
+                return;
+            } else release();
+            const done = await terminal(service, admitted.job);
+            expect(done.results).toHaveLength(2);
+            expect(generated).toBe(mode === "competing" ? 3 : 2);
+            if (mode === "success" || mode === "index") {
+                const receipts = done.results.map(
+                    (target) => target.wikiContribution,
+                );
+                expect(
+                    receipts.every(
+                        (receipt) =>
+                            receipt?.input.wikiContribution?.members?.length ===
+                            2,
+                    ),
+                ).toBe(true);
+                expect(
+                    new Set(receipts.map((receipt) => receipt!.revisionId))
+                        .size,
+                ).toBe(1);
+                const current = (await service.listViews(corpusId)).views[0];
+                expect(current.version).toBe(2);
+                expect(
+                    current.content.sections
+                        .map((section) => section.body)
+                        .join("\n\n"),
+                ).toContain(disposal);
+                if (mode === "index") {
+                    expect(done.state).not.toBe("complete");
+                    expect(
+                        receipts.every(
+                            (receipt) => receipt?.state === "committed",
+                        ),
+                    ).toBe(true);
+                    ContributionIndex.failDerived = false;
+                    await service.close();
+                    service = open();
+                    const recovered = await terminal(
+                        service,
+                        await service.retryViewBuild({
+                            corpusId,
+                            jobId: done.jobId,
+                        }),
+                    );
+                    expect(recovered.state).toBe("complete");
+                    expect(
+                        recovered.results.every(
+                            (target) =>
+                                target.wikiContribution?.state === "bound",
+                        ),
+                    ).toBe(true);
+                    expect(generated).toBe(2);
+                } else {
+                    expect(done.state).toBe("complete");
+                    expect(
+                        receipts.every((receipt) => receipt?.state === "bound"),
+                    ).toBe(true);
+                    expect(
+                        ContributionIndex.derivedBuilds - indexedBefore,
+                    ).toBe(1);
+                }
+                const beforeReopen = ContributionIndex.derivedBuilds;
+                await service.close();
+                service = open();
+                const stable = await maintainFamily(
+                    service,
+                    corpusId,
+                    "wiki",
+                    "update",
+                );
+                expect(stable.job).toBeUndefined();
+                expect(generated).toBe(2);
+                expect(ContributionIndex.derivedBuilds).toBe(beforeReopen);
+            } else {
+                expect(done.state).not.toBe("complete");
+                expect(
+                    done.results.every(
+                        (target) => target.wikiContribution?.state !== "bound",
+                    ),
+                ).toBe(true);
+                if (mode === "stale" || mode === "competing") {
+                    expect(
+                        done.results.every(
+                            (target) => target.state === "stale",
+                        ),
+                    ).toBe(true);
+                    if (mode === "stale")
+                        expect(
+                            (await service.listViews(corpusId)).views[0].content
+                                .title,
+                        ).toBe("Human protected canonical title");
+                } else if (mode === "conflict") {
+                    expect(
+                        done.results.every(
+                            (target) => target.state === "conflicted",
+                        ),
+                    ).toBe(true);
+                    expect(
+                        (await service.listViews(corpusId)).views[0].content
+                            .sections[0].body,
+                    ).toContain("Human incompatible lease explanation");
+                    expect(ContributionIndex.derivedBuilds).toBe(indexedBefore);
+                } else if (mode !== "replacement") {
+                    expect(
+                        (await service.listViews(corpusId)).views[0].revisionId,
+                    ).toBe(original.revisionId);
+                    expect(ContributionIndex.derivedBuilds).toBe(indexedBefore);
+                }
+            }
+        } finally {
+            release();
+            ContributionIndex.failDerived = false;
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+    30000,
+);
+
+test.each([
+    "success",
+    "title-refresh",
+    "missing",
+    "provider",
+    "conflict",
+    "stale",
+    "index",
+    "forget",
+    "binding-replay",
+    "replacement",
+] as const)(
+    "experimental isolated service contribution and cold reopen: %s",
+    async (mode) => rehearsal(mode, true),
     30000,
 );

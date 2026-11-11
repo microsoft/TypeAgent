@@ -20,6 +20,24 @@ type SearchTimingContext = {
 
 const searchTiming = new AsyncLocalStorage<SearchTimingContext>();
 
+const coarseTimingPrefixes = [
+    "knowledge.",
+    "build.",
+    "view.synthesis.",
+    "view.support.",
+    "view.model.",
+    "view.editorial.",
+    "view.inventory.",
+    "view.current.",
+    "view.materialize",
+    "wiki.",
+    "topic.",
+    "synopsis.generate.",
+    "ingestion.phase.",
+    "ingestion.extraction.attempt",
+    "ingestion.embedding.attempt",
+];
+
 const curationTimingEnums: Readonly<Record<string, readonly string[]>> = {
     callKind: [
         "normal",
@@ -71,6 +89,24 @@ const curationTimingEnums: Readonly<Record<string, readonly string[]>> = {
     ],
     phase: ["retrieve", "initial", "refine", "direct", "module"],
     origin: ["initial", "follow-on", "module", "background"],
+    family: ["questions", "wiki", "projects", "topics"],
+    pipeline: [
+        "schema-defined-v1",
+        "informational-wiki-v1",
+        "informational-project-summary-v1",
+        "topics-v1",
+        "extension-v1",
+    ],
+    state: [
+        "pending",
+        "running",
+        "ready",
+        "partial",
+        "blocked",
+        "failed",
+        "cancelled",
+        "superseded",
+    ],
 };
 
 function safeFailure(error: unknown): SearchTimingAttributes {
@@ -101,14 +137,25 @@ function curationTimingAttribute(key: string, value: string): boolean {
     );
 }
 
-export function isSearchTimingEnabled(): boolean {
-    return process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1";
+export function isSearchTimingEnabled(stage?: string): boolean {
+    const mode = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    return (
+        mode === "1" ||
+        (mode === "coarse" &&
+            stage !== undefined &&
+            coarseTimingPrefixes.some((prefix) => stage.startsWith(prefix)))
+    );
+}
+
+function hasTimingContext(): boolean {
+    return (
+        isSearchTimingEnabled() ||
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "coarse"
+    );
 }
 
 export function currentSearchTraceId(): string | undefined {
-    return isSearchTimingEnabled()
-        ? searchTiming.getStore()?.traceId
-        : undefined;
+    return hasTimingContext() ? searchTiming.getStore()?.traceId : undefined;
 }
 
 export function runWithSearchTiming<T>(
@@ -117,16 +164,30 @@ export function runWithSearchTiming<T>(
     work: () => T,
     attributes?: SearchTimingAttributes,
 ): T {
-    if (!isSearchTimingEnabled()) return work();
+    if (!hasTimingContext()) return work();
+    const parent = searchTiming.getStore();
     return searchTiming.run(
         {
             traceId:
                 traceId ?? searchTiming.getStore()?.traceId ?? randomUUID(),
             scope,
             attributes: {
-                batchId: searchTiming.getStore()?.attributes?.batchId,
+                batchId: parent?.attributes?.batchId,
+                ...(traceId === undefined
+                    ? {
+                          corpusId: parent?.attributes?.corpusId,
+                          family: parent?.attributes?.family,
+                          pipeline: parent?.attributes?.pipeline,
+                      }
+                    : {}),
                 ...attributes,
             },
+            ...(traceId === undefined
+                ? {
+                      spanId: parent?.spanId,
+                      parentSpanId: parent?.parentSpanId,
+                  }
+                : {}),
         },
         work,
     );
@@ -154,6 +215,10 @@ function emitTiming(
                         "indexGeneration",
                         "operationId",
                     ].includes(key) ||
+                        (["checkpointId", "buildId"].includes(key) &&
+                            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                                value,
+                            )) ||
                         (key === "access" &&
                             ["read", "write"].includes(value)) ||
                         (key === "indexKind" &&
@@ -247,7 +312,7 @@ export function recordSearchTiming(
     attributes?: SearchTimingAttributes,
     status: "success" | "error" = "success",
 ): void {
-    if (!isSearchTimingEnabled()) return;
+    if (!isSearchTimingEnabled(stage)) return;
     const context = searchTiming.getStore();
     if (context)
         emitTiming(
@@ -269,7 +334,7 @@ export function timeSearchStage<T>(
     work: () => T,
     attributes?: SearchTimingAttributes,
 ): T {
-    if (!isSearchTimingEnabled()) return work();
+    if (!isSearchTimingEnabled(stage)) return work();
     const context = searchTiming.getStore();
     if (!context) return work();
     const span = {
@@ -302,10 +367,20 @@ export function timeSearchStage<T>(
                 },
             ) as T;
         }
+
         finish(resultStatus(result));
         return result;
     } catch (error) {
         finish("error", error);
         throw error;
     }
+}
+
+export function timeSearchPhase<T>(
+    stage: string,
+    work: () => T,
+    attributes?: SearchTimingAttributes,
+): T {
+    recordSearchTiming(`${stage}.start`, 0, attributes);
+    return timeSearchStage(stage, work, attributes);
 }

@@ -471,10 +471,14 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
                 })),
                 survivor: {
                     viewId: survivor.viewId,
+                    query: survivor.definition.wiki!.query,
+                    aliases: survivor.definition.wiki!.aliases,
                     content: survivor.content,
                 },
                 retiring: {
                     viewId: retiring.viewId,
+                    query: retiring.definition.wiki!.query,
+                    aliases: retiring.definition.wiki!.aliases,
                     content: retiring.content,
                 },
             };
@@ -1262,17 +1266,16 @@ export async function verifyOrRepairWikiConsolidation(
         signal.throwIfAborted();
         return verification;
     };
-    let verification = await check();
+    let verification = await timeSearchStage("wiki.consolidation.check", check);
     if (!verification.safe && adapter.repairWikiConsolidation) {
         console.warn(
             `Wiki consolidation requires original-evidence prose repair: ${verification.failures.join(", ")}`,
         );
-        const repaired = await adapter.repairWikiConsolidation(
-            input,
-            original,
-            assessment,
-            verification,
-            signal,
+        const repair = adapter.repairWikiConsolidation.bind(adapter);
+        const rejected = verification;
+        const repaired = await timeSearchStage(
+            "wiki.consolidation.repair",
+            () => repair(input, original, assessment, rejected, signal),
         );
         signal.throwIfAborted();
         output = applyConsolidationRepair(original, {
@@ -1286,7 +1289,10 @@ export async function verifyOrRepairWikiConsolidation(
             throw new ConsolidationRejection(
                 "Wiki consolidation rejected: changed-article-structure",
             );
-        verification = await check();
+        verification = await timeSearchStage(
+            "wiki.consolidation.recheck",
+            check,
+        );
     }
     assertEditorialAssessment(verification);
     return { output, verification };

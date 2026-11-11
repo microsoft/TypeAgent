@@ -311,17 +311,63 @@ function scopeInput() {
     ];
     return input;
 }
-function articles() {
+function articles(viewId = "article"): ViewVersion {
     return {
-        viewId: "article",
+        corpusId: "corpus",
+        viewId,
+        revisionId: `${viewId}-revision`,
+        version: 1,
+        state: "draft",
+        createdAt: "2031-04-09T14:00:00.000Z",
+        actor: "test",
+        definition: {
+            viewId,
+            revisionId: `${viewId}-definition`,
+            kind: "wiki",
+            selector: snapshot().definition.selector,
+            wiki: {
+                construction: "informational-wiki-v1",
+                query: `${viewId} branch chronology`,
+                aliases: [`${viewId} branch history`],
+                excludedSourceIds: [],
+            },
+        },
         content: {
             kind: "wiki",
+            construction: "informational-wiki-v1",
             title: "Branches",
+            index: [],
             sections: [],
             citations: [],
         },
-    } as unknown as ViewVersion;
+        relationships: [],
+        provenance: "generated",
+    };
 }
+
+test("wiki scope assessment retains each article's query and aliases", async () => {
+    const survivor = articles("survivor");
+    const retiring = articles("retiring");
+    const { adapter, calls } = controlledModel([validScope]);
+    await adapter.assessWikiConsolidation!(
+        scopeInput(),
+        survivor,
+        retiring,
+        new AbortController().signal,
+    );
+    expect(calls[0].input.survivor).toEqual({
+        viewId: survivor.viewId,
+        query: survivor.definition.wiki!.query,
+        aliases: survivor.definition.wiki!.aliases,
+        content: survivor.content,
+    });
+    expect(calls[0].input.retiring).toEqual({
+        viewId: retiring.viewId,
+        query: retiring.definition.wiki!.query,
+        aliases: retiring.definition.wiki!.aliases,
+        content: retiring.content,
+    });
+});
 
 test.each([
     [{ ...validScope, reason: "distinct-scope" }, "relation-reason"],

@@ -1357,8 +1357,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("ingestion.index.persist", () =>
-            memory.writeToFile(this.indexDirectory, indexBaseName, true),
+        await kp.timeSearchPhase("ingestion.phase.persist", () =>
+            kp.timeSearchStage("ingestion.index.persist", () =>
+                memory.writeToFile(this.indexDirectory, indexBaseName, true),
+            ),
         );
         this.memory = memory;
         this.refreshSourceMessages(memory);
@@ -1486,8 +1488,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("ingestion.index.persist", () =>
-            memory.writeToFile(this.indexDirectory, indexBaseName, true),
+        await kp.timeSearchPhase("ingestion.phase.persist", () =>
+            kp.timeSearchStage("ingestion.index.persist", () =>
+                memory.writeToFile(this.indexDirectory, indexBaseName, true),
+            ),
         );
         this.refreshSourceMessages(this.memory);
         for (const document of documents)
