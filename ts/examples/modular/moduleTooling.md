@@ -595,5 +595,23 @@ model, which is why no separate differential test is needed.
   `begin`, `extend` and `end` that ends by sending an add), if editing
   logic such as smoothing and chunking should be shared across platforms.
 - Presence: showing collaborators each client's view-only state, such as
-  a drag in progress or wet ink. Deferred with the collaboration protocol. `Tool` and
+  a drag in progress or wet ink. Deferred with the collaboration protocol.
+- Construction (raised 2026-11-11). Interfaces say nothing about how an
+  instance is made or what it is given: constructor signatures are in
+  `impl-specs.md`, factories in the contracts (`MakeShapeView`), and who
+  gets what in `driver.ts` (`AppMakers`, `CirclesParts`). Factory types in
+  the blueprint, with rules on them as `makeCircle` already has, could
+  state what interfaces can't: state at creation; ownership, enforced by
+  a factory that makes its own parts; what a part may use (views get a
+  reader, controllers a reader and a `LocalSend`, only the infrastructure
+  the processor), checked by the typecheck; dispose undoing everything
+  done to what the factory was given; requirements across instances, such
+  as distinct clientIds for `ShapeMessageProcessor.new-ids`; and, with
+  snapshots, creation by type through a registry. Deferred until phases
+  1b, 2 and 3 have run end to end. Collect evidence meanwhile: spec text
+  that falls back on "outside the rules" for ownership or initial state,
+  and phase 2 reports that ask how a part gets its collaborators.
+  Candidates so far: the writer belonging to its processor and the
+  locator to its collection (tasks 8 and 9), and `ShapeView.first-frame`,
+  a creation rule on the interface. `Tool` and
   `PointerSample` were removed because input events are platform-specific.
