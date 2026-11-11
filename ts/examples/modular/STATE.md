@@ -23,8 +23,8 @@ deferred.
   - The EventEmitter rules have their own contract
     (`eventEmitter.contract.ts`), run through the writer's change event.
   - Tasks 8, 9, 10 and 12 were rewritten; task 9 is `shapeProcessor.ts`.
-  - The observer tables have one new open row: `outgoing` on calls other
-    than `local.enqueue` (`observer-tables.md`).
+  - `local.enqueue` returns the stamped operation, and the
+    infrastructure's `localSend` sends it; there is no `outgoing` event.
 - **Layout, events and the app were simplified** (2026-11-10; the last
   entry under "Status" in `moduleTooling.md`):
   - The platforms define their events. `layout.ts` (`LayoutObject`,
@@ -65,13 +65,13 @@ deferred.
   isn't accounted for.
 - **Coordinate spaces** (`geometry.ts`): canonical, window and view.
   Layout objects and distributed events are in window coordinates.
-- **Catalog:** 31 interfaces, 126 rules: 96 tested, 6 abstract, 1 budget,
+- **Catalog:** 31 interfaces, 125 rules: 95 tested, 6 abstract, 1 budget,
   3 deferred, 20 caller obligations.
 - **Phase 2 has not run.** `node task.ts list` shows the tasks and waves:
   - wave 1: tasks 8, 9, 11, 12, 16 and 19;
   - wave 2: task 10, which needs tasks 8 and 9.
-- **Adversaries:** 140 in all, every one caught on seeds 1 to 3.
-  `node adversaries/helpers.check.ts` passes 279 tests. A full run takes
+- **Adversaries:** 139 in all, every one caught on seeds 1 to 3.
+  `node adversaries/helpers.check.ts` passes 277 tests. A full run takes
   about 25 seconds per seed.
 - **The EventDistributor observer table has one open row:** nothing says
   that reading `region` or calling `locate` leaves the registrations as

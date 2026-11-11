@@ -7,12 +7,11 @@ import type { OperationContent } from "./dataModel.ts";
 import type { ShapeId } from "./shape.ts";
 import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
 import { compareOrder, knew } from "./shapeModel.vocab.ts";
-import { Events } from "./eventkit.ts";
 import { readFacet, RefShapeWriter } from "./shapewriterkit.ts";
 
 type Stamped = ShapeOp;
 
-export class RefShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implements ShapeMessageProcessor {
+export class RefShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
@@ -29,7 +28,6 @@ export class RefShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implement
   private readonly pending = new Map<number, ShapeOp>();
 
   constructor(clientId: string, writer: ShapeCollectionWriter = new RefShapeWriter()) {
-    super();
     this.clientId = clientId;
     this.writer = writer;
     this.model = readFacet(this.writer);
@@ -46,10 +44,10 @@ export class RefShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implement
     for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
   }
 
-  private enqueueLocal(content: OperationContent<ShapeOp>): void {
+  private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {
     const op = { ...content, clientId: this.clientId, clientSeq: ++this.clientSeq, refSeq: this.lastSeq, seq: -1 } as ShapeOp;
     this.localQueue.push(op);
-    this.emit("outgoing", { ...op });
+    return { ...op };
   }
 
   private applyRemote(op: ShapeOp): void {

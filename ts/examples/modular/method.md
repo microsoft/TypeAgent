@@ -6,7 +6,7 @@ The full procedure, with its reasons, is in `moduleTooling.md`.
 ## 1. Agree (human and agent)
 
 - **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`.
-- **Members for tests are allowed.** When a rule can't be checked without seeing more, add the member or event that shows it rather than weakening the rule. Put it on its own small interface that the main one extends, where feasible, as `OperationSource` is in `dataModel.ts`.
+- **Members for tests are allowed.** When a rule can't be checked without seeing more, add the member or event that shows it rather than weakening the rule. Put it on its own small interface that the main one extends, where feasible. Better still, a return value that production code uses too: `LocalQueue.enqueue` in `dataModel.ts` returns the stamped operation, which the infrastructure sends and the tests check, where an earlier draft had an event for tests.
 - **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a test double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.
 - **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class.

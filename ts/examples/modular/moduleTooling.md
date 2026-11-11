@@ -557,7 +557,7 @@ model, which is why no separate differential test is needed.
     contracts and 60 adversaries went; the EventEmitter rules moved to
     their own contract. Task 9 is now `shapeProcessor.ts`. The adversary
     runner runs only each adversary's named test, in parallel: about 25
-    seconds per seed for 140 adversaries.
+    seconds per seed for 140 adversaries (139 after `local.enqueue` began returning the stamped operation).
 
 ## Acknowledgments
 

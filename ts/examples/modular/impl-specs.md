@@ -212,8 +212,8 @@ budget for model updates, a circle, and a canvas view that draws circles.
 - **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `events.ts`
 - **Approach:**
   - `local.enqueue` stamps the operation (`MessageProcessor.stamps`),
-    queues it, and emits `outgoing` with a copy. `remote.enqueue` queues.
-    Neither applies anything.
+    queues it, and returns a copy (`LocalQueue.enqueue.own-copy`).
+    `remote.enqueue` queues. Neither applies anything.
   - `process` applies what is queued, through the writer, and is the only
     thing that calls the writer's `add` and `remove`.
   - An add goes directly below the lowest present shape whose add comes
@@ -262,9 +262,9 @@ measured.
 
 Measure with a `ShapeProcessor` over a `MapShapeCollection` over a
 `QuadTreeLocator`, and a stand-in for the message infrastructure written
-in `bench.ts`: it sends with `local.enqueue`, gives each outgoing operation
-the next seq and enqueues it on `remote` as its acknowledgment, and calls
-`process`. Time, as a whole:
+in `bench.ts`: it sends with `local.enqueue`, gives the operation that
+returns the next seq and enqueues it on `remote` as its acknowledgment, and
+calls `process`. Time, as a whole:
 
 - **Finishing a stroke:** sending an add of one stroke, then processing
   until the add and its acknowledgment are applied.

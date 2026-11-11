@@ -8,8 +8,9 @@
 //
 // The fixture is also the message infrastructure (dataModel.ts) for one
 // client with no collaborators. It owns the processor: the app gets only
-// the model and a LocalSend. Each operation sent is enqueued at once, goes
-// out, gets the next seq and comes back as its acknowledgment. Only the
+// the model and a LocalSend. Each operation sent is enqueued at once, and
+// the stamped operation enqueue returns gets the next seq and comes back
+// as its acknowledgment. Only the
 // fixture calls process: after each action, and again after the frames.
 
 import type { Point, Rectangle } from "./geometry.ts";
@@ -79,8 +80,10 @@ export function makeFixture(makers: AppMakers, settings: CirclesSettings): AppFi
   const surface: LayoutObject = { region: { x: 0, y: controlsHeight, width, height } };
   const processor = makers.processor("local");
   let seq = 0;
-  processor.on("outgoing", (op) => processor.remote.enqueue({ ...op, seq: seq++ }));
-  const localSend: LocalSend<ShapeOp> = (content) => processor.local.enqueue(content);
+  const localSend: LocalSend<ShapeOp> = (content) => {
+    const op = processor.local.enqueue(content);
+    processor.remote.enqueue({ ...op, seq: seq++ });
+  };
   const newShapeId = () => processor.newShapeId();
   const scheduler = new ManualScheduler();
   const { view, painted } = makers.view(processor.model, scheduler, width, height);

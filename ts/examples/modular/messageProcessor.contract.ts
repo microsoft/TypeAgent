@@ -1,10 +1,11 @@
-// Contract tests for MessageProcessor and OperationSource (dataModel.ts),
+// Contract tests for MessageProcessor and LocalQueue (dataModel.ts),
 // with Operation's @valid rules checked on the operations a processor
 // stamps. Each DDS runs this suite through a ProcessorSubject. Test names
 // are rule IDs.
 //
 // A run plays a collaboration: three clients form operations from their
-// own models, a sequencer assigns seqs to their outgoing operations, one
+// own models, a sequencer assigns seqs to the stamped operations their
+// local enqueue returns, one
 // client's at a time and each client's in order, and delivers each to every
 // client's remote queue (to its own client, as the acknowledgment) and to
 // an observer that forms nothing. Each client's process is called at random
@@ -60,14 +61,12 @@ export interface Client<TR extends DataModelReader, TOp extends Operation> {
   readonly delivered: TOp[];
   /** Copies of the stamped operations waiting for the sequencer, oldest first. */
   readonly outbox: TOp[];
-  /** Each operation p emitted, with a copy taken when it was emitted. */
+  /** Each operation p's local enqueue returned, with a copy taken when it returned. */
   readonly sent: [TOp, TOp][];
   /** The seq of the last remote operation applied, or -1. */
   lastApplied: number;
   lastClientSeq: number;
   events: number;
-  outgoing: number;
-  enqueuing: boolean;
 }
 
 /** Per-operation checks a DDS's contract adds. */
@@ -102,7 +101,7 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   const newClient = (id: string): Client<TR, TOp> => {
     const c: Client<TR, TOp> = {
       id, p: subject.make(id), applied: [], enqueued: [], delivered: [], outbox: [], sent: [],
-      lastApplied: -1, lastClientSeq: -Infinity, events: 0, outgoing: 0, enqueuing: false,
+      lastApplied: -1, lastClientSeq: -Infinity, events: 0,
     };
     for (const e of subject.events) {
       c.p.model.on(e, () => {
@@ -110,25 +109,26 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
         hooks.event?.(c, violation);
       });
     }
-    c.p.on("outgoing", (op: TOp) => {
-      c.outgoing++;
-      const copy = copyOp(op);
-      c.sent.push([op, copy]);
-      if (!c.enqueuing) violation("OperationSource.outgoing-once", `${id} emitted outgoing outside enqueue`);
-      if (!(op.seq === -1 || (Number.isInteger(op.seq) && op.seq >= 0))) violation("Operation.seq-range", `seq ${op.seq}`);
-      if (!(Number.isInteger(op.clientSeq) && op.clientSeq >= 0)) violation("Operation.client-seq-range", `clientSeq ${op.clientSeq}`);
-      if (!((op.refSeq === -1 || (Number.isInteger(op.refSeq) && op.refSeq >= 0)) && (op.seq === -1 || op.refSeq < op.seq))) {
-        violation("Operation.ref-seq-range", `refSeq ${op.refSeq}, seq ${op.seq}`);
-      }
-      if (op.clientId !== id || op.seq !== -1 || !(op.clientSeq > c.lastClientSeq) || op.refSeq !== c.lastApplied) {
-        violation("MessageProcessor.stamps",
-          `${id} stamped clientId ${op.clientId}, seq ${op.seq}, clientSeq ${op.clientSeq} after ${c.lastClientSeq}, refSeq ${op.refSeq} with ${c.lastApplied} applied`);
-      }
-      c.lastClientSeq = op.clientSeq;
-      c.outbox.push(copyOp(copy));
-      c.enqueued.push(copyOp(copy));
-    });
     return c;
+  };
+
+  /** Checks the operation c's local enqueue returned, and queues it for the sequencer. */
+  const stamped = (c: Client<TR, TOp>, op: TOp) => {
+    const id = c.id;
+    const copy = copyOp(op);
+    c.sent.push([op, copy]);
+    if (!(op.seq === -1 || (Number.isInteger(op.seq) && op.seq >= 0))) violation("Operation.seq-range", `seq ${op.seq}`);
+    if (!(Number.isInteger(op.clientSeq) && op.clientSeq >= 0)) violation("Operation.client-seq-range", `clientSeq ${op.clientSeq}`);
+    if (!((op.refSeq === -1 || (Number.isInteger(op.refSeq) && op.refSeq >= 0)) && (op.seq === -1 || op.refSeq < op.seq))) {
+      violation("Operation.ref-seq-range", `refSeq ${op.refSeq}, seq ${op.seq}`);
+    }
+    if (op.clientId !== id || op.seq !== -1 || !(op.clientSeq > c.lastClientSeq) || op.refSeq !== c.lastApplied) {
+      violation("MessageProcessor.stamps",
+        `${id} stamped clientId ${op.clientId}, seq ${op.seq}, clientSeq ${op.clientSeq} after ${c.lastClientSeq}, refSeq ${op.refSeq} with ${c.lastApplied} applied`);
+    }
+    c.lastClientSeq = op.clientSeq;
+    c.outbox.push(copyOp(copy));
+    c.enqueued.push(copyOp(copy));
   };
 
   const clients = clientIds.map(newClient);
@@ -160,13 +160,11 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   const form = async (c: Client<TR, TOp>, pick: number) => {
     const content = subject.form(c.p, pick);
     hooks.formed?.(c, content, violation);
-    const outgoing = c.outgoing;
+    let op: TOp | undefined;
     await quietly("enqueue", () => {
-      c.enqueuing = true;
-      c.p.local.enqueue(content);
-      c.enqueuing = false;
+      op = c.p.local.enqueue(content);
     });
-    if (c.outgoing - outgoing !== 1) violation("OperationSource.outgoing-once", `${c.id} emitted outgoing ${c.outgoing - outgoing} times in one enqueue`);
+    stamped(c, op!);
   };
 
   const sequence = async (c: Client<TR, TOp>) => {
@@ -217,7 +215,7 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   }
   for (const c of everyone) {
     for (const [op, copy] of c.sent) {
-      if (!deepEqual(op, copy)) violation("OperationSource.outgoing-copy", `${c.id}'s emitted operation changed after it was emitted`);
+      if (!deepEqual(op, copy)) violation("LocalQueue.enqueue.own-copy", `${c.id}'s returned operation changed after enqueue returned`);
     }
   }
   hooks.end?.(everyone, violation);
@@ -304,7 +302,7 @@ export function messageProcessorContract<TR extends DataModelReader, TOp extends
   describe("MessageProcessor", () => {
     for (const id of [
       "Operation.seq-range", "Operation.client-seq-range", "Operation.ref-seq-range",
-      "OperationSource.outgoing-once", "OperationSource.outgoing-copy",
+      "LocalQueue.enqueue.own-copy",
       "MessageProcessor.stamps", "MessageProcessor.sole-writer", "MessageProcessor.enqueue-defers",
       "MessageProcessor.converges",
     ]) ruleTest(id, subject, hooks);

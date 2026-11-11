@@ -89,7 +89,8 @@ classDiagram
   class OperationQueue {
     dequeue
   }
-  class OperationSource {
+  class LocalQueue {
+    enqueue
   }
   class MessageProcessor {
     clientId
@@ -163,10 +164,9 @@ classDiagram
   EventEmitter <|-- DataModelReader
   DataModelReader ..> ModelChangeEvents
   OperationSink <|-- OperationQueue
-  EventEmitter <|-- OperationSource
-  OperationSource ..> Operation
-  OperationSource <|-- MessageProcessor
+  LocalQueue ..> Operation
   MessageProcessor ..> DataModelReader
+  MessageProcessor ..> LocalQueue
   MessageProcessor ..> Operation
   MessageProcessor ..> OperationSink
   DataModelReader <|-- ShapeCollection
@@ -375,14 +375,13 @@ No rules of its own.
 
 No rules of its own.
 
-## OperationSource
+## LocalQueue
 
-`dataModel.ts`. Gives out the local operations a processor has stamped, for sending to collaborators. Tests use it to play the collaboration protocol.
+`dataModel.ts`. A processor's local queue. enqueue stamps the operation and returns it, so that the infrastructure can send it to collaborators; that is the only way a local operation leaves the processor.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `OperationSource.outgoing-once` | ensures | enqueue on local emits outgoing once, before it returns, with the stamped operation. | tested | 1 |
-| `OperationSource.outgoing-copy` | ensures | The emitted operation is the listener's own: nothing the processor does later, such as acknowledging it, changes it. | tested | 1 |
+| `LocalQueue.enqueue.own-copy` | ensures | The returned operation is the caller's own: nothing the processor does later, such as acknowledging it, changes it. | tested | 1 |
 
 ## MessageProcessor
 
@@ -394,7 +393,7 @@ No rules of its own.
 | `MessageProcessor.infrastructure-only` | requires | Only the message infrastructure enqueues and calls process; controllers send through a LocalSend. | caller's obligation |  |
 | `MessageProcessor.remote-seq` | requires | Each remote operation has an assigned seq, greater than any earlier remote operation's. | caller's obligation |  |
 | `MessageProcessor.unique-identity` | requires | No two operations share a clientId and clientSeq, except a local operation and its acknowledgment. | caller's obligation |  |
-| `MessageProcessor.stamps` | ensures | enqueue on local makes the operation with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
+| `MessageProcessor.stamps` | ensures | enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
 | `MessageProcessor.snapshot` | deferred | A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
 | `MessageProcessor.sole-writer` | ensures | The model changes only during process: reading it, and enqueuing, change nothing and emit none of its events. | tested | 1 |
 | `MessageProcessor.passive` | ensures | Never calls process itself: until the infrastructure calls it, queued operations stay unapplied. | tested | 1 |

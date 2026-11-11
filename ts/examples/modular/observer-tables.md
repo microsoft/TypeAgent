@@ -49,27 +49,23 @@ Unspecified on purpose: `add` with an ID that is already indexed
 
 A processor (`dataModel.ts`) is checked by playing clients against a fake
 sequencer (`messageProcessor.contract.ts`). Its observables are the model
-(its shapes and their order), the model's change events, `outgoing`, and
-the stamps on later outgoing operations. Rule IDs without a prefix are
+(its shapes and their order), the model's change events, and the
+operations `local.enqueue` returns. Operations leave the processor only as
+that return value, so no other call can send one. Rule IDs without a prefix are
 `MessageProcessor`'s; `SMP.` is `ShapeMessageProcessor`.
 
-| Call | Model | Model change events | `outgoing` | Returns |
+| Call | Model | Model change events | Returns |
 |---|---|---|---|---|
-| `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | `OperationSource.outgoing-once`, `OperationSource.outgoing-copy`; stamps by `stamps` and `Operation.*` | nothing |
-| `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | open: nothing says it emits nothing | nothing |
-| `process` | `SMP.add-on-z`, `SMP.kept`, `SMP.remove-listed`, `SMP.clear-known`, `SMP.ack-keeps-z`; `converges` across clients | `SMP.one-change`, `SMP.ack-keeps-z` | open: nothing says it emits nothing | settles once the queues are empty (by its doc) |
-| `newShapeId` | `sole-writer` | `sole-writer` | open, as for `remote.enqueue` | `SMP.new-ids` |
-| Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | open, as for `remote.enqueue` | `SMP.read-facet` |
-| Nothing (time passing) | `passive` | `passive` | — | — |
+| `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | the stamped operation: `stamps`, `Operation.*`, `LocalQueue.enqueue.own-copy` |
+| `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | nothing |
+| `process` | `SMP.add-on-z`, `SMP.kept`, `SMP.remove-listed`, `SMP.clear-known`, `SMP.ack-keeps-z`; `converges` across clients | `SMP.one-change`, `SMP.ack-keeps-z` | settles once the queues are empty (by its doc) |
+| `newShapeId` | `sole-writer` | `sole-writer` | `SMP.new-ids` |
+| Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | `SMP.read-facet` |
+| Nothing (time passing) | `passive` | `passive` | — |
 
 Unspecified on purpose: operations that break `formed-now`, `remote-seq`,
 `unique-identity`, `SMP.fresh-add-id` or `SMP.in-range`; and calls from
 anything but the message infrastructure (`infrastructure-only`).
-
-Open for the human: `outgoing` on any call but `local.enqueue`. The
-contract's harness would see an extra outgoing operation only if it
-sequenced it; a rule such as "only `local.enqueue` emits `outgoing`" would
-close the column.
 
 ## ShapeView
 

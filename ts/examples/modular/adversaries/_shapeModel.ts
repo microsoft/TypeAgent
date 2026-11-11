@@ -123,8 +123,7 @@ export type ProcessorBug =
   | "pending-minus-two"   // stamps a pending seq of -2
   | "client-seq-from-minus-one" // clientSeq starts at -1
   | "refseq-minus-two"    // refSeq starts at -2 before any remote operation
-  | "emits-twice"         // emits outgoing twice per enqueue
-  | "shares-op"           // emits its own stamped operation, which acknowledging later changes
+  | "shares-op"           // returns its own stamped operation, which acknowledging later changes
   | "applies-at-once"     // enqueue on local applies the operation immediately
   | "applies-on-read"     // reading the model first applies whatever is queued
   | "self-schedules"      // enqueue schedules process itself
@@ -139,7 +138,7 @@ export type ProcessorBug =
   | "counter-ids"         // newShapeId uses a counter without the clientId
   | "exposes-writer";     // model is the writer itself
 
-export class TestShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implements ShapeMessageProcessor {
+export class TestShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
@@ -155,7 +154,6 @@ export class TestShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implemen
   private readonly bug: ProcessorBug;
 
   constructor(clientId: string, bug: ProcessorBug = "none") {
-    super();
     this.clientId = clientId;
     this.bug = bug;
     this.clientSeq = bug === "client-seq-from-minus-one" ? -2 : 0;
@@ -192,21 +190,20 @@ export class TestShapeProcessor extends Events<{ outgoing: [ShapeOp] }> implemen
     for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
   }
 
-  private enqueueLocal(content: OperationContent<ShapeOp>): void {
+  private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {
     const op = {
       ...content, clientId: this.clientId, clientSeq: ++this.clientSeq,
       refSeq: this.bug === "stale-refseq" ? -1 : this.lastSeq, seq: this.bug === "pending-minus-two" ? -2 : -1,
     } as ShapeOp;
     if (this.bug === "pending-minus-two") {
-      // Keeps -1 internally, so only the emitted operation is wrong.
+      // Keeps -1 internally, so only the returned operation is wrong.
       this.localQueue.push({ ...op, seq: -1 });
     } else {
       this.localQueue.push(op);
     }
-    this.emit("outgoing", this.bug === "shares-op" ? op : { ...op });
-    if (this.bug === "emits-twice") this.emit("outgoing", { ...op });
     if (this.bug === "applies-at-once") this.drain();
     if (this.bug === "self-schedules") setImmediate(() => void this.process());
+    return this.bug === "shares-op" ? op : { ...op };
   }
 
   private applyRemote(op: ShapeOp): void {

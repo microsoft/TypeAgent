@@ -80,8 +80,9 @@ export type OperationContent<T extends Operation> =
 
 /**
  * How a controller changes a model: it sends each local operation it forms
- * to the message infrastructure, which enqueues it on the processor's local
- * queue before returning, and later calls process.
+ * to the message infrastructure. The infrastructure enqueues it on the
+ * processor's local queue before returning, sends the stamped operation
+ * that enqueue returns to collaborators, and later calls process.
  */
 export type LocalSend<TOp extends Operation> = (content: OperationContent<TOp>) => void;
 
@@ -97,13 +98,19 @@ export interface OperationQueue<T> extends OperationSink<T> {
 }
 
 /**
- * Gives out the local operations a processor has stamped, for sending to
- * collaborators. Tests use it to play the collaboration protocol.
- *
- * @ensures outgoing-once  enqueue on local emits outgoing once, before it returns, with the stamped operation.
- * @ensures outgoing-copy  The emitted operation is the listener's own: nothing the processor does later, such as acknowledging it, changes it.
+ * A processor's local queue. enqueue stamps the operation and returns it,
+ * so that the infrastructure can send it to collaborators; that is the
+ * only way a local operation leaves the processor.
  */
-export interface OperationSource<TOp extends Operation> extends EventEmitter<{ outgoing: [TOp] }> {}
+export interface LocalQueue<TOp extends Operation> {
+    /**
+     * Stamps content (MessageProcessor.stamps), queues it, and returns the
+     * stamped operation.
+     *
+     * @ensures own-copy  The returned operation is the caller's own: nothing the processor does later, such as acknowledging it, changes it.
+     */
+    enqueue(content: OperationContent<TOp>): TOp;
+}
 
 /**
  * Applies operations to a data model: the only thing that changes it.
@@ -126,7 +133,7 @@ export interface OperationSource<TOp extends Operation> extends EventEmitter<{ o
  * @requires infrastructure-only  Only the message infrastructure enqueues and calls process; controllers send through a LocalSend.
  * @requires remote-seq  Each remote operation has an assigned seq, greater than any earlier remote operation's.
  * @requires unique-identity  No two operations share a clientId and clientSeq, except a local operation and its acknowledgment.
- * @ensures stamps  enqueue on local makes the operation with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
+ * @ensures stamps  enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
  * @deferred snapshot  A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules.
  *   when: the collaboration protocol, or saving and loading a model, is specified.
  *   how: the processor contract gains a factory that takes a snapshot; it checks that a processor loaded from a snapshot taken after some operations then reaches the same model as one that applied those operations, given the same later remote operations, and that stamps' refSeq starts at the snapshot's seq; with adversaries that start refSeq at -1 and that reuse a snapshot ID.
@@ -139,7 +146,7 @@ export interface OperationSource<TOp extends Operation> extends EventEmitter<{ o
  * @abstract atomic  A change listener never sees part of an operation's effect: each change event is emitted after the operation it reports is fully applied.
  * @ensures converges  Processors whose remote queues deliver the same operations in the same order reach equal models once each one's local operations are acknowledged and process has settled, whatever the interleaving of their local and remote queues.
  */
-export interface MessageProcessor<TR extends DataModelReader, TOp extends Operation> extends OperationSource<TOp> {
+export interface MessageProcessor<TR extends DataModelReader, TOp extends Operation> {
     /** The client whose local operations this processor applies. */
     readonly clientId: string;
 
@@ -147,7 +154,7 @@ export interface MessageProcessor<TR extends DataModelReader, TOp extends Operat
     readonly model: TR;
 
     /** Where the infrastructure puts the operations controllers send. */
-    readonly local: OperationSink<OperationContent<TOp>>;
+    readonly local: LocalQueue<TOp>;
 
     /** Where the collaboration protocol puts sequenced operations. */
     readonly remote: OperationSink<TOp>;

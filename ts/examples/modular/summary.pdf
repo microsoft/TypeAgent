@@ -209,7 +209,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 12 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 12 0 obj
-<< /Length 7774 >>
+<< /Length 7769 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 3 of 6) Tj ET
@@ -222,7 +222,7 @@ BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (Operation) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 95.46 475.28 Tm (dataModel.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (One change to a data model.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (AddShape, RemoveShapes, ClearShapes; OperationSource,) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (AddShape, RemoveShapes, ClearShapes; LocalQueue,) Tj ET
 BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 438.80 Tm (MessageProcessor \(page 5\).) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 426.80 Tm (readonly type: string) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 414.80 Tm (readonly clientId: string) Tj ET
@@ -303,21 +303,21 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 14 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 14 0 obj
-<< /Length 6867 >>
+<< /Length 6842 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 4 of 6) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 549.60 Tm (31 interfaces and 10 type aliases from 10 files, in 7 groups of related interfaces. Inherited members are listed under the interface that declares them. Generated) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 537.60 Tm (2026-11-11 by npm run summary.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 529.20 m 756.00 529.20 l S
-BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (FrameHandler group) Tj ET
+BT /HB 12.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 507.68 Tm (View group) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 495.20 Tm (Refers to Viewport \(page 1\); ShapeCollection \(page 6\).) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 475.28 Tm (EventEmitter) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 110.02 475.28 Tm (<Events extends EventMap>) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 262.80 475.28 Tm (events.ts) Tj ET
 BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 462.80 Tm (Something that emits events.) Tj ET
 BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 450.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (View; DataModelReader, OperationSource \(page 5\).) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 450.80 Tm (View; DataModelReader \(page 5\).) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 438.80 Tm (on<E extends keyof Events & string>\(event: E, listener:) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 60.00 426.80 Tm (\(...args: Events[E]\) => void\): this) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 414.80 Tm (Registers listener for event.) Tj ET
@@ -385,7 +385,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 16 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 16 0 obj
-<< /Length 8635 >>
+<< /Length 8289 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 5 of 6) Tj ET
@@ -429,59 +429,54 @@ BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 275.60 Tm (Extends) Tj ET
 BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 275.60 Tm (OperationSink.) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 263.60 Tm (dequeue\(\): T | undefined) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 251.60 Tm (The oldest item, removed; undefined when the queue is empty.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 229.68 Tm (OperationSource) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 133.36 229.68 Tm (<TOp extends Operation>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 274.14 229.68 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 51.00 217.20 Tm (EventEmitter<{ outgoing: [TOp] }>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 251.78 217.20 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 205.20 Tm (Gives out the local operations a processor has stamped, for sending to) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 193.20 Tm (collaborators.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 181.20 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 181.20 Tm (EventEmitter \(page 4\).) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 180.50 181.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 222.18 181.20 Tm (MessageProcessor.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 159.28 Tm (MessageProcessor) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 145.38 159.28 Tm (<TR extends DataModelReader, TOp) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 146.80 Tm (extends Operation>) Tj ET
-BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 161.78 146.80 Tm (extends) Tj ET
-BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 199.58 146.80 Tm (OperationSource<TOp>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 322.36 146.80 Tm (dataModel.ts) Tj ET
-BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 134.80 Tm (Applies operations to a data model: the only thing that changes it.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 122.80 Tm (Extends) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 122.80 Tm (OperationSource.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 158.83 122.80 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 200.51 122.80 Tm (ShapeMessageProcessor \(page 6\).) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 110.80 Tm (readonly clientId: string) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 98.80 Tm (The client whose local operations this processor applies.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 86.80 Tm (readonly model: TR) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 74.80 Tm (The model's read side.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 62.80 Tm (readonly local: OperationSink<OperationContent<TOp>>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 50.80 Tm (Where the infrastructure puts the operations controllers send.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 229.68 Tm (LocalQueue) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 104.69 229.68 Tm (<TOp extends Operation>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 245.47 229.68 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 217.20 Tm (A processor's local queue. enqueue stamps the operation and returns it, so) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 205.20 Tm (that the infrastructure can send it to collaborators; that is the only way a local) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 193.20 Tm (operation leaves the processor.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 181.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 181.20 Tm (MessageProcessor.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 169.20 Tm (enqueue\(content: OperationContent<TOp>\): TOp) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 157.20 Tm (Stamps content \(MessageProcessor.stamps\), queues it, and returns the) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 145.20 Tm (stamped operation.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 123.28 Tm (MessageProcessor) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 145.38 123.28 Tm (<TR extends DataModelReader, TOp) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 51.00 110.80 Tm (extends Operation>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 161.78 110.80 Tm (dataModel.ts) Tj ET
+BT /HO 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 36.00 98.80 Tm (Applies operations to a data model: the only thing that changes it.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 36.00 86.80 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 86.80 Tm (ShapeMessageProcessor \(page 6\).) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 74.80 Tm (readonly clientId: string) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 62.80 Tm (The client whose local operations this processor applies.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 50.80 Tm (readonly model: TR) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 38.80 Tm (The model's read side.) Tj ET
 BT /HB 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 408.00 509.60 Tm (MessageProcessor, continued) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (readonly remote: OperationSink<TOp>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Where the collaboration protocol puts sequenced operations.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 473.60 Tm (process\(\): Promise<void>) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (Applies the queued operations, interleaving local and remote, and emits) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 449.60 Tm (the model's change events.) Tj ET
-BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 427.68 Tm (Types) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 415.20 Tm (type OperationContent<T extends Operation> = T extends) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 403.20 Tm (Operation ? Omit<T, Exclude<keyof Operation, "type">>) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 391.20 Tm (: never) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 379.20 Tm (What a controller forms: an operation without the fields the processor) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 367.20 Tm (stamps on it.) Tj ET
-BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 355.20 Tm (Used by) Tj ET
-BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 355.20 Tm (MessageProcessor, LocalSend.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 343.20 Tm (type LocalSend<TOp extends Operation> = \(content:) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 331.20 Tm (OperationContent<TOp>\) => void) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 319.20 Tm (How a controller changes a model: it sends each local operation it forms) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 307.20 Tm (to the message infrastructure, which enqueues it on the processor's local) Tj ET
-BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 295.20 Tm (queue before returning, and later calls process.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 497.60 Tm (readonly local: LocalQueue<TOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 485.60 Tm (Where the infrastructure puts the operations controllers send.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 473.60 Tm (readonly remote: OperationSink<TOp>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 461.60 Tm (Where the collaboration protocol puts sequenced operations.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 449.60 Tm (process\(\): Promise<void>) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 437.60 Tm (Applies the queued operations, interleaving local and remote, and emits) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 425.60 Tm (the model's change events.) Tj ET
+BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 403.68 Tm (Types) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 391.20 Tm (type OperationContent<T extends Operation> = T extends) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 379.20 Tm (Operation ? Omit<T, Exclude<keyof Operation, "type">>) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 367.20 Tm (: never) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 355.20 Tm (What a controller forms: an operation without the fields the processor) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 343.20 Tm (stamps on it.) Tj ET
+BT /HB 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 426.00 331.20 Tm (Used by) Tj ET
+BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 467.68 331.20 Tm (LocalQueue, LocalSend.) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 319.20 Tm (type LocalSend<TOp extends Operation> = \(content:) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 432.00 307.20 Tm (OperationContent<TOp>\) => void) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 295.20 Tm (How a controller changes a model: it sends each local operation it forms) Tj ET
+BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 426.00 283.20 Tm (to the message infrastructure.) Tj ET
 0.8 0.82 0.86 RG 0.5 w 36.00 444.40 m 384.00 444.40 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 374.00 m 384.00 374.00 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 315.60 m 384.00 315.60 l S
 0.8 0.82 0.86 RG 0.5 w 36.00 245.20 m 384.00 245.20 l S
-0.8 0.82 0.86 RG 0.5 w 36.00 174.80 m 384.00 174.80 l S
-0.8 0.82 0.86 RG 0.5 w 408.00 443.20 m 756.00 443.20 l S
+0.8 0.82 0.86 RG 0.5 w 36.00 138.80 m 384.00 138.80 l S
+0.8 0.82 0.86 RG 0.5 w 408.00 419.20 m 756.00 419.20 l S
 endstream
 endobj
 17 0 obj
@@ -575,14 +570,14 @@ xref
 0000008588 00000 n 
 0000017213 00000 n 
 0000017369 00000 n 
-0000025196 00000 n 
-0000025352 00000 n 
-0000032272 00000 n 
-0000032428 00000 n 
-0000041116 00000 n 
-0000041272 00000 n 
+0000025191 00000 n 
+0000025347 00000 n 
+0000032242 00000 n 
+0000032398 00000 n 
+0000040740 00000 n 
+0000040896 00000 n 
 trailer
 << /Size 19 /Root 1 0 R >>
 startxref
-47754
+47378
 %%EOF
