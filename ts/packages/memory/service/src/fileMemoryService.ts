@@ -1488,10 +1488,11 @@ function configuredTopicWatermark(
         !options.topicCurationReuse ||
         !curated ||
         decision ||
-        (settings?.concurrency ?? 1) !== 1
+        ((settings?.concurrency ?? 1) !== 1 &&
+            settings?.frozenPreparation !== true)
     )
         throw new Error(
-            "Topic watermark requires curation reuse and single-worker generative curated topics",
+            "Topic watermark requires curation reuse and ordered generative curated topics; parallelism requires frozen preparation",
         );
     return true;
 }
@@ -11802,6 +11803,7 @@ export class FileMemoryService
         runtime: CorpusRuntime,
         request: Extract<ViewMaintenanceRequest, { family: string }>,
         automatic = false,
+        retryAdmission = true,
     ): Promise<ViewMaintenanceResult> {
         requireTopicIndex(runtime.index);
         if (!this.informationalWikiEnabled)
@@ -11883,6 +11885,14 @@ export class FileMemoryService
             input.topicInput.maintainClusters = true;
         if (this.deferBatchMaintenance(request.corpusId, automatic))
             return this.viewStore.recordViewMaintenance(plan);
+        const recaptured = await this.recaptureChangedTopicAdmission(
+            runtime,
+            request,
+            state.head,
+            automatic,
+            retryAdmission,
+        );
+        if (recaptured) return recaptured;
         const reservation = this.viewBuilds.reserve();
         try {
             const admitted = await this.viewStore.admitTopicBuild(
@@ -11895,6 +11905,31 @@ export class FileMemoryService
         } finally {
             reservation.release();
         }
+    }
+
+    private async recaptureChangedTopicAdmission(
+        runtime: CorpusRuntime,
+        request: Extract<ViewMaintenanceRequest, { family: string }>,
+        expectedHead: string | null,
+        automatic: boolean,
+        retryAllowed: boolean,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        if (!automatic) return undefined;
+        const latest = await this.viewStore.getTopicState(request.corpusId);
+        if (latest.head === expectedHead) return undefined;
+        if (!retryAllowed)
+            throw new ViewBuildStaleError(
+                "Topic history changed repeatedly during automatic admission",
+            );
+        recordSearchTiming("topic.admission.recapture", 0, {
+            reason: "history-changed-during-input-capture",
+        });
+        return this.maintainTopics(
+            runtime,
+            { ...request, expectedHead: latest.head },
+            true,
+            false,
+        );
     }
 
     private canContinueTopicWatermark(

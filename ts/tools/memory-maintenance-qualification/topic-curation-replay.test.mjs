@@ -2,14 +2,287 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { indexedTopicOccurrence } from "../../packages/memory/service/dist/topicIncidence.js";
-import { loadTopicReplay, runTopicReplay } from "./topic-curation-replay.mjs";
+import { createConfiguredTopicGenerator } from "../../packages/memory/service/dist/topicGeneration.js";
+import {
+    loadTopicReplay,
+    runTopicReplay,
+    topicReplaySettings,
+    topicReplayDeadline,
+    finalTopicCoverage,
+    inspectTopicReplayModelBinding,
+} from "./topic-curation-replay.mjs";
+import { ViewHistory } from "../../packages/memory/service/dist/viewHistory.js";
 import { writeSegmentedJson } from "../../packages/knowPro/dist/segmentedJson.js";
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+
+function syntheticModel(complete) {
+    return {
+        completionSettings: { response_format: { type: "json_object" } },
+        inspectRequest(messages, schema) {
+            return {
+                serializedRequest: JSON.stringify({ messages, schema }),
+                estimatedInputTokens: 100,
+                constraints: { outputTokens: 1000 },
+            };
+        },
+        complete,
+    };
+}
+
+function deferResponse(messages) {
+    const payload = JSON.parse(messages[1].content);
+    return {
+        success: true,
+        data: JSON.stringify({
+            concepts: [],
+            deferred: payload.nodes.map(({ id }) => ({
+                nodeId: id,
+                reason: "Synthetic fixture",
+            })),
+        }),
+    };
+}
+
+test("model binding contains only allowlisted metadata and normalized completion settings", () => {
+    const model = syntheticModel(() =>
+        assert.fail("Binding inspection invoked provider"),
+    );
+    model.completionSettings = {
+        temperature: 1,
+        n: 1,
+        top_p: 0.9,
+        response_format: { type: "json_object", credentials: "FORMAT_SECRET" },
+        apiKey: "COMPLETION_SECRET",
+        toJSON: () => assert.fail("Serialized complete completion settings"),
+    };
+    const settings = {
+        provider: "azure",
+        endpoint:
+            "https://user:PASSWORD@private-host.example/openai/deployments/gpt-6-luna/chat/completions?api-key=QUERY_SECRET",
+        modelName: "gpt-6-luna",
+        apiKey: "API_SECRET",
+        headers: { authorization: "HEADER_SECRET" },
+        requestConstraints: {
+            contextTokens: 1050000,
+            inputTokens: 922000,
+            outputTokens: 128000,
+            credentials: "LIMIT_SECRET",
+        },
+        toJSON: () => assert.fail("Serialized ApiSettings"),
+    };
+    const inspected = inspectTopicReplayModelBinding(
+        model,
+        "gpt-6-luna",
+        settings,
+    );
+    assert.deepEqual(inspected.binding, {
+        provider: "azure",
+        endpointAlias: "gpt-6-luna",
+        deployment: "gpt-6-luna",
+        modelName: "gpt-6-luna",
+        completionSettings: {
+            n: 1,
+            temperature: 1,
+            top_p: 0.9,
+            response_format: { type: "json_object" },
+        },
+        requestLimits: {
+            contextTokens: 1050000,
+            inputTokens: 922000,
+            outputTokens: 128000,
+        },
+    });
+    assert.match(inspected.hash, /^[a-f0-9]{64}$/);
+    assert.doesNotMatch(
+        JSON.stringify(inspected),
+        /SECRET|PASSWORD|private-host|apiKey|authorization|reasoning_effort/,
+    );
+    assert.equal(
+        inspectTopicReplayModelBinding(model, "gpt-6-luna", settings).hash,
+        inspected.hash,
+    );
+    assert.equal(model.completionSettings.reasoning_effort, undefined);
+    const queryOnly = inspectTopicReplayModelBinding(model, "gpt-6-luna", {
+        ...settings,
+        endpoint:
+            "https://private-host.example/chat?key=/deployments/QUERY_SECRET/",
+    });
+    assert.equal(queryOnly.binding.deployment, undefined);
+});
+
+test("expected model binding mismatch is fatal before any provider invocation", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-model-binding-mismatch-"),
+    );
+    try {
+        const input = await fixture(root);
+        const output = path.join(root, "mismatch");
+        let providerCalls = 0;
+        const model = syntheticModel(() => {
+            providerCalls++;
+            return { success: false };
+        });
+        await assert.rejects(
+            runTopicReplay(
+                {
+                    input,
+                    output,
+                    mode: "live",
+                    live: true,
+                    endpoint: "gpt-6-luna",
+                    "expected-model-binding": "0".repeat(64),
+                },
+                { initializeModel: () => model },
+            ),
+            /Replay model binding does not match/,
+        );
+        assert.equal(providerCalls, 0);
+        const binding = JSON.parse(
+            await readFile(path.join(output, "model-binding.json"), "utf8"),
+        );
+        assert.equal(
+            binding.hash,
+            inspectTopicReplayModelBinding(model, "gpt-6-luna").hash,
+        );
+        assert.equal(
+            JSON.parse(
+                await readFile(path.join(output, "failure.json"), "utf8"),
+            ).modelBindingHash,
+            binding.hash,
+        );
+        assert.deepEqual(
+            JSON.parse(await readFile(path.join(output, "calls.json"), "utf8")),
+            [],
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("binding is rechecked immediately before normal, repair and organization provider calls", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-model-binding-per-call-"),
+    );
+    try {
+        const input = await fixture(root);
+        for (const boundary of ["normal", "contract-repair", "organization"]) {
+            let providerCalls = 0;
+            let inspections = 0;
+            const model = syntheticModel((messages) => {
+                providerCalls++;
+                if (boundary === "organization") {
+                    const nodes = JSON.parse(messages[1].content).nodes;
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            concepts: [nodes.slice(0, 4), nodes.slice(4)].map(
+                                (group, index) => ({
+                                    label: `Synthetic concept ${index}`,
+                                    scope: "Fixture",
+                                    purpose: "A scoped fixture reference",
+                                    salience: 6,
+                                    memberIds: group.map(({ id }) => id),
+                                    evidenceIds: [
+                                        ...new Set(
+                                            group.flatMap(
+                                                (node) => node.evidenceIds,
+                                            ),
+                                        ),
+                                    ],
+                                }),
+                            ),
+                            deferred: [],
+                        }),
+                    };
+                }
+                const data = JSON.parse(deferResponse(messages).data);
+                data.deferred[1] = data.deferred[0];
+                return { success: true, data: JSON.stringify(data) };
+            });
+            const expected = inspectTopicReplayModelBinding(
+                model,
+                "gpt-6-luna",
+            ).hash;
+            const inspect = model.inspectRequest;
+            model.inspectRequest = (...args) => {
+                const result = inspect(...args);
+                inspections++;
+                if (
+                    (boundary === "organization" &&
+                        Array.isArray(JSON.parse(args[0][1].content))) ||
+                    (boundary !== "organization" &&
+                        inspections === (boundary === "normal" ? 1 : 2))
+                )
+                    model.completionSettings.temperature = 0.8;
+                return result;
+            };
+            const output = path.join(root, boundary);
+            await assert.rejects(
+                runTopicReplay(
+                    {
+                        input,
+                        output,
+                        mode: "live",
+                        live: true,
+                        endpoint: "gpt-6-luna",
+                        organize: boundary === "organization",
+                        "max-calls": "10",
+                        "expected-model-binding": expected,
+                    },
+                    { initializeModel: () => model },
+                ),
+                /Replay model binding does not match/,
+            );
+            assert.equal(providerCalls, boundary === "normal" ? 0 : 1);
+            const calls = JSON.parse(
+                await readFile(path.join(output, "calls.json"), "utf8"),
+            );
+            assert.equal(calls.at(-1).kind, boundary);
+            assert.notEqual(calls.at(-1).modelBindingHash, expected);
+        }
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("matching model binding is saved in result metrics and each provider receipt", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-model-binding-matching-"),
+    );
+    try {
+        const input = await fixture(root);
+        const model = syntheticModel(deferResponse);
+        const expected = inspectTopicReplayModelBinding(model, "gpt-6-luna");
+        const result = await runTopicReplay(
+            {
+                input,
+                output: path.join(root, "matched"),
+                mode: "live",
+                live: true,
+                endpoint: "gpt-6-luna",
+                "expected-model-binding": expected.hash.toUpperCase(),
+            },
+            { initializeModel: () => model },
+        );
+        assert.equal(result.observations.completed, true);
+        assert.equal(result.observations.providerCalls, 1);
+        assert.equal(result.observations.modelBindingHash, expected.hash);
+        assert.deepEqual(result.observations.modelBinding, expected.binding);
+        assert.equal(
+            result.observations.calls[0].modelBindingHash,
+            expected.hash,
+        );
+        assert.equal(result.identity.expectedModelBinding, expected.hash);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 async function fixture(root, count = 8) {
     const input = {
@@ -50,6 +323,462 @@ async function fixture(root, count = 8) {
     await writeFile(file, JSON.stringify(input));
     return file;
 }
+
+test("payload history reads the selected build at a pinned commit and never advances the source", async (t) => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-payload-history-"),
+    );
+    try {
+        const input = JSON.parse(await readFile(await fixture(root), "utf8"));
+        const directory = path.join(root, "store", "views");
+        const history = new ViewHistory(directory, () => ({}));
+        const state = {
+            padding: "Synthetic payload history. ".repeat(30000),
+            builds: { selected: { results: [{ snapshot: input }] } },
+            topics: { inputFingerprint: input.fingerprint },
+        };
+        const first = await history.commit(
+            null,
+            state,
+            {},
+            "offline",
+            "First input",
+        );
+        const head = await history.commit(
+            first,
+            {
+                ...state,
+                builds: {
+                    other: {
+                        results: [
+                            {
+                                snapshot: {
+                                    ...input,
+                                    fingerprint: "b".repeat(64),
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+            {},
+            "offline",
+            "Second input",
+        );
+        const gitdir = path.join(directory, "view-history.git");
+        const tree = execFileSync(
+            "git",
+            [`--git-dir=${gitdir}`, "ls-tree", "--name-only", first],
+            { encoding: "utf8" },
+        );
+        assert.match(tree, /state-payloads/);
+        assert.doesNotMatch(tree, /state\.json/);
+        const read = t.mock.method(ViewHistory.prototype, "readField");
+        const pinned = await loadTopicReplay({
+            history: gitdir,
+            commit: first,
+            job: "selected",
+        });
+        assert.equal(pinned.input.fingerprint, input.fingerprint);
+        assert.deepEqual(read.mock.calls[0].arguments, [
+            ["builds", "selected"],
+            first,
+        ]);
+        const latest = await loadTopicReplay({ history: gitdir, job: "other" });
+        assert.equal(latest.input.fingerprint, "b".repeat(64));
+        await assert.rejects(
+            loadTopicReplay({ history: gitdir, commit: first, job: "other" }),
+            /Select exactly one/,
+        );
+        assert.equal(await history.readHead(), head);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("effective topic replay settings preserve defaults and every explicit treatment", () => {
+    assert.deepEqual(topicReplaySettings({}), { concurrency: 1 });
+    assert.deepEqual(
+        topicReplaySettings({
+            concurrency: "2",
+            "input-tokens": "12000",
+            "prior-fraction": "0.25",
+            "prior-deltas": true,
+            "compact-ids": false,
+            "frozen-preparation": true,
+        }),
+        {
+            concurrency: 2,
+            inputTokenTarget: 12000,
+            priorContextFraction: 0.25,
+            priorDeltas: true,
+            compactIds: false,
+            frozenPreparation: true,
+        },
+    );
+    assert.throws(
+        () => topicReplaySettings({ "compact-ids": "false" }),
+        /Invalid compact-ids/,
+    );
+    assert.throws(
+        () => topicReplaySettings({ "prior-fraction": "0.25" }),
+        /Invalid topic curation settings/,
+    );
+});
+
+test("compact wire IDs retain raw counts and candidate capture saves effective production settings", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-settings-capture-"),
+    );
+    try {
+        const input = await fixture(root, 55);
+        const settings = {
+            "compact-ids": true,
+            "prior-deltas": true,
+            "frozen-preparation": true,
+            concurrency: "2",
+            "input-tokens": "24000",
+            "prior-fraction": "0.25",
+        };
+        const output = path.join(root, "capture");
+        const result = await runTopicReplay(
+            { input, output, ...settings },
+            {
+                initializeModel: () =>
+                    assert.fail("Capture initialized a provider"),
+            },
+        );
+        const binding = JSON.parse(
+            await readFile(path.join(output, "binding-1.json"), "utf8"),
+        );
+        assert.ok(
+            binding.payload.nodes.every(({ id }) => !id.startsWith("topic:")),
+        );
+        assert.equal(
+            result.observations.calls[0].rawNodes,
+            binding.payload.nodes.length,
+        );
+        assert.equal(result.observations.calls[0].priorConcepts, 0);
+        assert.equal(result.observations.providerCalls, 0);
+        assert.deepEqual(result.settings, topicReplaySettings(settings));
+        assert.deepEqual(result.identity.settings, result.settings);
+        assert.equal(result.observations.calls[0].phase, "preparation");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("absolute deadline cannot be extended by timeout and validates ISO timestamps", () => {
+    const now = Date.parse("2030-01-01T00:00:00Z");
+    const budget = topicReplayDeadline(
+        { deadline: "2030-01-01T00:00:01Z", "timeout-ms": "999999" },
+        () => now,
+    );
+    assert.equal(budget.deadline, now + 1000);
+    assert.equal(
+        topicReplayDeadline(
+            { deadline: "2030-01-01T01:00:00+00:00", "timeout-ms": "500" },
+            () => now,
+        ).deadline,
+        now + 500,
+    );
+    assert.throws(
+        () => topicReplayDeadline({ deadline: "tomorrow" }),
+        /Invalid --deadline/,
+    );
+});
+
+test("expired deadline rejects before initialization; initialization cannot reset it", async () => {
+    let initialized = 0;
+    await assert.rejects(
+        runTopicReplay(
+            {
+                mode: "live",
+                live: true,
+                deadline: "2000-01-01T00:00:00Z",
+            },
+            {
+                initializeModel: () => {
+                    initialized++;
+                },
+            },
+        ),
+        /Replay deadline exceeded/,
+    );
+    assert.equal(initialized, 0);
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-initialization-deadline-"),
+    );
+    try {
+        const input = await fixture(root);
+        let now = Date.parse("2030-01-01T00:00:00Z");
+        let invoked = 0;
+        const output = path.join(root, "cancelled");
+        const result = await runTopicReplay(
+            {
+                input,
+                output,
+                mode: "live",
+                live: true,
+                deadline: "2030-01-01T00:00:01Z",
+                "timeout-ms": "999999",
+            },
+            {
+                now: () => now,
+                initializeModel: () => {
+                    initialized++;
+                    now += 1001;
+                    return syntheticModel(() => {
+                        invoked++;
+                    });
+                },
+            },
+        );
+        assert.equal(initialized, 1);
+        assert.equal(invoked, 0);
+        assert.equal(result.observations.disposition, "deadline-incomplete");
+        assert.equal(
+            JSON.parse(
+                await readFile(path.join(output, "failure.json"), "utf8"),
+            ).status,
+            "cancelled",
+        );
+        assert.equal(
+            JSON.parse(await readFile(path.join(output, "result.json"), "utf8"))
+                .observations.providerCalls,
+            0,
+        );
+        assert.deepEqual(
+            JSON.parse(
+                await readFile(
+                    path.join(output, "partial-curation.json"),
+                    "utf8",
+                ),
+            ),
+            { concepts: [], deferred: [] },
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("deadline is checked immediately before every provider call, including repairs", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-per-call-deadline-"),
+    );
+    try {
+        const input = await fixture(root);
+        let now = Date.parse("2030-01-01T00:00:00Z");
+        let providerCalls = 0;
+        const model = syntheticModel((messages) => {
+            providerCalls++;
+            const response = deferResponse(messages);
+            const data = JSON.parse(response.data);
+            data.deferred[1] = data.deferred[0];
+            return { success: true, data: JSON.stringify(data) };
+        });
+        let inspections = 0;
+        const inspect = model.inspectRequest;
+        model.inspectRequest = (...args) => {
+            const result = inspect(...args);
+            if (++inspections === 2) now += 1001;
+            return result;
+        };
+        const output = path.join(root, "cancelled");
+        const result = await runTopicReplay(
+            {
+                input,
+                output,
+                mode: "live",
+                live: true,
+                "max-calls": "10",
+                deadline: "2030-01-01T00:00:01Z",
+                "timeout-ms": "999999",
+            },
+            { now: () => now, initializeModel: () => model },
+        );
+        assert.equal(providerCalls, 1);
+        assert.equal(result.observations.providerCalls, 1);
+        assert.equal(result.observations.disposition, "deadline-incomplete");
+        assert.equal(result.observations.calls[1].kind, "contract-repair");
+        assert.equal(result.observations.calls[1].status, "aborted");
+        assert.match(result.observations.calls[1].error.message, /deadline/);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("provider gets an abort signal and cancellation persists metrics and validated partial progress", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-provider-abort-"),
+    );
+    try {
+        const input = await fixture(root, 55);
+        let receivedSignal;
+        let calls = 0;
+        const output = path.join(root, "cancelled");
+        const result = await runTopicReplay(
+            {
+                input,
+                output,
+                mode: "live",
+                live: true,
+                "max-calls": "10",
+                "timeout-ms": "3000",
+            },
+            {
+                initializeModel: () =>
+                    syntheticModel(
+                        (messages, _usage, _schema, _log, signal) => {
+                            if (++calls === 1) return deferResponse(messages);
+                            receivedSignal = signal;
+                            return new Promise(() => {});
+                        },
+                    ),
+            },
+        );
+        assert.equal(receivedSignal.aborted, true);
+        assert.equal(result.observations.disposition, "deadline-incomplete");
+        assert.equal(result.observations.providerCalls, 2);
+        assert.ok(result.observations.coverage.deferredNodes > 0);
+        assert.ok(result.observations.coverage.unaccountedNodes > 0);
+        const progress = JSON.parse(
+            await readFile(path.join(output, "progress.json"), "utf8"),
+        );
+        const partial = JSON.parse(
+            await readFile(path.join(output, "partial-curation.json"), "utf8"),
+        );
+        assert.deepEqual(partial, progress.curation);
+        assert.equal(result.observations.calls[1].status, "aborted");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("organization shares the original deadline and cannot invoke a provider after expiry", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-organization-deadline-"),
+    );
+    try {
+        const input = await fixture(root);
+        let now = Date.parse("2030-01-01T00:00:00Z");
+        let providerCalls = 0;
+        const model = syntheticModel((messages) => {
+            providerCalls++;
+            const nodes = JSON.parse(messages[1].content).nodes;
+            return {
+                success: true,
+                data: JSON.stringify({
+                    concepts: [nodes.slice(0, 4), nodes.slice(4)].map(
+                        (group, index) => ({
+                            label: `Synthetic concept ${index}`,
+                            scope: "Fixture",
+                            purpose: "A scoped fixture reference",
+                            salience: 6,
+                            memberIds: group.map(({ id }) => id),
+                            evidenceIds: [
+                                ...new Set(
+                                    group.flatMap((node) => node.evidenceIds),
+                                ),
+                            ],
+                        }),
+                    ),
+                    deferred: [],
+                }),
+            };
+        });
+        const inspect = model.inspectRequest;
+        model.inspectRequest = (...args) => {
+            const result = inspect(...args);
+            if (Array.isArray(JSON.parse(args[0][1].content))) now += 1001;
+            return result;
+        };
+        const output = path.join(root, "cancelled");
+        const result = await runTopicReplay(
+            {
+                input,
+                output,
+                mode: "live",
+                live: true,
+                organize: true,
+                "max-calls": "10",
+                deadline: "2030-01-01T00:00:01Z",
+                "timeout-ms": "999999",
+            },
+            { now: () => now, initializeModel: () => model },
+        );
+        assert.equal(providerCalls, 1);
+        assert.equal(result.observations.disposition, "deadline-incomplete");
+        assert.equal(result.observations.coverage.admittedNodes, 8);
+        assert.equal(result.observations.coverage.unaccountedNodes, 0);
+        assert.ok(
+            JSON.parse(
+                await readFile(path.join(output, "curation.json"), "utf8"),
+            ),
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("structural coverage reports actual memberships without semantic quality claims", () => {
+    const coverage = finalTopicCoverage({
+        nodes: [
+            { id: "a", occurrenceIds: ["o1", "o2"] },
+            { id: "b", occurrenceIds: ["o3"] },
+            { id: "c", occurrenceIds: ["o4"] },
+        ],
+        curation: {
+            concepts: [{ memberIds: ["a"] }],
+            deferred: [{ nodeId: "b" }],
+        },
+    });
+    assert.equal(coverage.admittedNodes, 1);
+    assert.equal(coverage.deferredNodes, 1);
+    assert.equal(coverage.unaccountedNodes, 1);
+    assert.equal(coverage.representedOccurrences, 2);
+    assert.equal(coverage.selectedOccurrences, 4);
+    assert.equal(coverage.semanticQualityAssessed, false);
+});
+
+test("cancellation does not downgrade artifact persistence errors", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-cancellation-persistence-"),
+    );
+    try {
+        const input = await fixture(root);
+        const output = path.join(root, "cancelled");
+        let now = Date.parse("2030-01-01T00:00:00Z");
+        await assert.rejects(
+            runTopicReplay(
+                {
+                    input,
+                    output,
+                    mode: "live",
+                    live: true,
+                    deadline: "2030-01-01T00:00:01Z",
+                    "timeout-ms": "999999",
+                },
+                {
+                    now: () => now,
+                    initializeModel: async () => {
+                        await mkdir(path.join(output, "calls.json"));
+                        now += 1001;
+                        return syntheticModel(() =>
+                            assert.fail("Expired replay invoked provider"),
+                        );
+                    },
+                },
+            ),
+            (error) => ["EEXIST", "EISDIR", "EPERM"].includes(error.code),
+        );
+        await assert.rejects(readFile(path.join(output, "result.json")), {
+            code: "ENOENT",
+        });
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("capture, indexed parity and recorded parser replay require no provider", async () => {
     const root = await mkdtemp(path.join(testDirectory, "topic-replay-test-"));
@@ -429,6 +1158,113 @@ test("completed curation resumes through the real organization generator without
             mode: "recorded",
             responses: captured,
             output: curated,
+        });
+
+        await test("frozen replay organizes captured watermark input without claiming native packet receipts", async () => {
+            const root = await mkdtemp(
+                path.join(testDirectory, "topic-watermark-organize-"),
+            );
+            const originalFetch = globalThis.fetch;
+            globalThis.fetch = () =>
+                assert.fail("Diagnostic replay invoked network");
+            try {
+                const input = await fixture(root);
+                const captured = JSON.parse(await readFile(input, "utf8"));
+                Object.assign(captured.topicInput, {
+                    packetReplay: true,
+                    curationInputFingerprint: "a".repeat(64),
+                    suppressionFingerprint: "b".repeat(64),
+                    reusableCurationPackets: [],
+                });
+                const capturedText = JSON.stringify(captured);
+                await writeFile(input, capturedText);
+                const model = syntheticModel((messages) => {
+                    const payload = JSON.parse(messages[1].content);
+                    return {
+                        success: true,
+                        data: JSON.stringify(
+                            Array.isArray(payload)
+                                ? { parents: [], related: [] }
+                                : {
+                                      concepts: payload.nodes.map((node) => ({
+                                          label: node.label,
+                                          scope: node.scope,
+                                          purpose:
+                                              "Synthetic evidence-grounded topic",
+                                          salience: 6,
+                                          memberIds: [node.id],
+                                          evidenceIds: node.evidenceIds,
+                                      })),
+                                      deferred: [],
+                                  },
+                        ),
+                    };
+                });
+                const inspect = model.inspectRequest;
+                model.inspectRequest = (...args) => ({
+                    ...inspect(...args),
+                    constraints: {
+                        inputTokens: 922000,
+                        outputTokens: 128000,
+                        contextTokens: 1050000,
+                        metadata: "configured",
+                    },
+                });
+                const output = path.join(root, "organized");
+                const result = await runTopicReplay(
+                    {
+                        input,
+                        output,
+                        mode: "live",
+                        live: true,
+                        organize: true,
+                        concurrency: "2",
+                        "input-tokens": "24000",
+                        "prior-fraction": "0.25",
+                        "prior-deltas": true,
+                        "compact-ids": true,
+                        "frozen-preparation": true,
+                        "max-calls": "10",
+                    },
+                    { initializeModel: () => model },
+                );
+                assert.equal(result.observations.completed, true);
+                assert.equal(result.observations.accountedNodes, 8);
+                assert.equal(result.observations.organization.concepts, 8);
+                assert.deepEqual(
+                    result.observations.calls.map(
+                        ({ phase, kind }) => phase ?? kind,
+                    ),
+                    ["preparation", "reconciliation", "organization"],
+                );
+                const snapshot = JSON.parse(
+                    await readFile(path.join(output, "snapshot.json"), "utf8"),
+                );
+                assert.equal(snapshot.curationPackets, undefined);
+                const nativeInput = structuredClone(captured);
+                nativeInput.topicInput.reusableCuration = snapshot.curation;
+                await assert.rejects(
+                    createConfiguredTopicGenerator({
+                        model,
+                        mode: {
+                            kind: "generative",
+                            settings: {
+                                concurrency: 2,
+                                inputTokenTarget: 24000,
+                                priorContextFraction: 0.25,
+                                priorDeltas: true,
+                                compactIds: true,
+                                frozenPreparation: true,
+                            },
+                        },
+                    })(nativeInput, new AbortController().signal),
+                    /Topic curation packet prefix does not match checkpoint coverage/,
+                );
+                assert.equal(await readFile(input, "utf8"), capturedText);
+            } finally {
+                globalThis.fetch = originalFetch;
+                await rm(root, { recursive: true, force: true });
+            }
         });
         const progress = path.join(curated, "progress.json");
         const organizationCapture = path.join(root, "organization-capture");

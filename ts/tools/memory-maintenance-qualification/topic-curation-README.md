@@ -5,6 +5,12 @@ compare indexed host work with reference scans, replay exact saved responses,
 measure disposable persistence, or run explicitly authorized bounded inference.
 It does not establish native readiness, answer accuracy or human-rated quality.
 
+Organization runs against the validated replay curation. The diagnostic handoff
+does not carry captured native watermark flags or packet receipts: those belong
+to the captured build, not the replay's new curation. The final diagnostic
+snapshot therefore does not certify native watermark continuation or
+installation. Native receipt validation remains unchanged.
+
 The LLM driver remains an LLM engine adapter. The separate
 [`topic-decision-replay.mjs`](./topic-decision-replay.mjs) uses the existing
 Decision generator and its native scheduling, not the LLM speculative scheduler.
@@ -35,6 +41,35 @@ into the following settings; programmatic callers can use `topicCuration` on
 Invalid settings fail explicitly. Experimental settings change policy/input
 identity. Unset the variables to retain defaults.
 
+The generative replay CLI accepts `--input-tokens`, `--prior-fraction` and
+`--concurrency` for those same production settings. It also passes these opt-in
+production treatments through unchanged:
+
+| CLI flag               | `TopicCurationSettings` field |
+| ---------------------- | ----------------------------- |
+| `--prior-deltas`       | `priorDeltas: true`           |
+| `--compact-ids`        | `compactIds: true`            |
+| `--frozen-preparation` | `frozenPreparation: true`     |
+
+Omitted treatments remain unset, preserving production defaults. Negative
+forms (`--no-prior-deltas`, `--no-compact-ids`, `--no-frozen-preparation`) record
+explicit false settings. Production validates combinations; frozen preparation
+requires concurrency 2. Effective settings are saved in both result and replay
+identity, so recordings/checkpoints from different policies cannot be mixed.
+
+Frozen preparation prepares two raw-only packets concurrently, then serially
+reconciles their proposed groups and every deferred raw candidate against the
+current prior concepts. Only validated reconciliation installs decisions
+atomically, with one final fingerprinted receipt per window. It is not two
+concurrent canonical commits. Prior deltas make unchanged prior concepts
+read-only context that can be omitted from responses; compact IDs change only
+wire node identifiers and schema enums, preserving factual fields and host IDs.
+The host equivalents are `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`,
+`TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`, and
+`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` (explicit booleans, default unset).
+Unchanged prior objects, including audited summaries, also survive receipt
+replay without being reconstructed as new pending concepts.
+
 `TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE=true` (programmatic option
 `topicCurationReuse: true`) separately opts into whole-input curation reuse for
 both engines. Complete topic incidence, represented source revisions,
@@ -49,8 +84,9 @@ curated by this first treatment.
 
 `TYPEAGENT_MEMORY_TOPIC_WATERMARK=true` (programmatic `topicWatermark: true`)
 adds private pinned-generation checkpoints and exact packet-prefix replay.
-It requires curation reuse and single-worker generative curated topics; native
-Decision and speculative two-worker execution reject this option. Defaults
+It requires curation reuse and ordered generative curated topics: either one
+worker or explicit frozen preparation with two workers. Native Decision and
+ordinary speculative two-worker execution still reject this option. Defaults
 remain unchanged.
 
 Source additions may leave one old build running while the existing maintenance
@@ -62,8 +98,9 @@ prefix. Instructions, payload, schema and hidden original membership must match;
 the first changed ordering, packet boundary, qualification or nomination ends
 replay. Cached responses pass the production parser without provider repairs.
 Receipts store packet-local candidate/evidence IDs rather than repeated expanded
-concept membership. Existing first/every-eighth/final checkpoint frequency stays
-unchanged.
+concept membership. Legacy first/every-eighth/final checkpoint frequency stays unchanged.
+Frozen preparation checkpoints every completed reconciliation window; partially
+prepared windows never become resumable installed decisions.
 
 Source removal/replacement, suppression, events and model identity changes fail
 the continuation checks. Invalidated private state is discarded; source/event
@@ -202,14 +239,115 @@ across machines when provider capacity is shared.
 - `--organize` runs the actual configured organization stage after complete-input
   curation and saves a validated snapshot. Only live/recorded modes support it;
   it cannot combine with `--nodes`. Calls/deadlines also bound organization.
+- History input supports both legacy `state.json` and incremental `state-payloads`
+  through the maintained `ViewHistory.readField` reader. `--job` selects the build;
+  `--commit` pins a history commit. Without `--commit`, the current history head is
+  resolved once and all selected fields are read at that same commit.
+- `--deadline <ISO timestamp>` is an absolute wall-clock cutoff, including model
+  initialization. An already expired deadline fails before initialization.
+  `--timeout-ms` (default 180000) starts at replay entry and can shorten, never
+  extend, that cutoff. Initialization occurs only in authorized live mode.
+  The original deadline and abort signal apply to every actual provider call,
+  including contract/omission repairs, reconciliation and organization.
 - `--mode index-storage --index-file <corpus_data.json>` measures the production
   segmented backend without extraction or embeddings. Writes use disposable
   stores and check payload parity and unchanged artifact reuse.
 
-Partial call-limited live/recorded runs retain validated progress and exit 2;
+Partial call-limited or deadline-cancelled live/recorded runs retain validated
+progress and exit 2;
 other failures exit 1; validated completion exits 0. Private `--progress` files
 from older schemas or changed implementations fail closed. Explicit `--resume`
 from a history state remains a recovery workload, not fresh qualification.
+
+Deadline cancellation saves `result.json`, `calls.json`, `failure.json` and
+`partial-curation.json`, plus any already committed `progress.json` and captured
+requests/responses. The partial curation contains only validated decisions; an
+unfinished provider response is not a successful decision. Signal-ignoring calls
+cannot keep the harness waiting beyond its cutoff. Infrastructure, provenance
+and artifact/checkpoint persistence failures remain fatal, not successful or
+budget-limited qualification.
+
+Call receipts count model-method attempts separately from captured request
+boundaries; they do not count hidden HTTP transport retries. Wire raw/prior
+counts do not depend on long identifier prefixes;
+production phase/candidate counts are retained when supplied, including
+`proposalConcepts` during reconciliation. Structural `coverage` reports admitted,
+deferred, pending, missing, duplicate and unknown node accounting, concept count,
+and admitted/selected occurrence coverage. These are structural measurements,
+not semantic quality, usefulness, equivalence or answer-quality passes.
+
+### Pinning the configured model without inference
+
+`inspectConfiguredTopicReplayModelBinding(endpoint)` is an exported async
+preflight helper. It uses the replay's existing configuration/model initialization
+flow but never invokes completion. It returns `{ binding, hash }`, with a SHA256
+over an allowlisted metadata-only binding: provider, endpoint alias, deployment
+and model name when available, normalized completion settings, and configured
+input/output/context limits. Credentials, headers, host URLs and whole
+`ApiSettings` objects are never serialized. Absent reasoning settings remain
+absent; preflight does not set reasoning effort.
+
+`inspectTopicReplayModelBinding(model, endpoint, settings?)` is the synchronous
+inspection helper. Models initialized by the replay already have their settings
+associated privately; callers inspecting an independently initialized model can
+pass its API settings, which are projected onto the same allowlist.
+
+Pass `--endpoint <explicit alias> --expected-model-binding <64-character SHA256>`
+on both live arms. The harness verifies the expected binding after initialization
+and immediately before every actual provider invocation, including organization
+and repairs. A mismatch is fatal, not an incomplete deadline result. Safe metadata
+and its hash are saved in `model-binding.json`, successful/partial result metrics,
+and per-provider receipt hashes. The expected hash is part of replay identity.
+This pins configured metadata, not a provider's unannounced backend revision or
+semantic equivalence to the retained input's model label.
+
+The model-binding hash does not include HTTP timeout/retry settings. Record and
+match those controls separately for paired trials. For Azure, the existing
+process-local `AZURE_OPENAI_MAX_TIMEOUT` override controls the request timeout,
+not the shared campaign deadline; increasing it does not extend `--deadline`.
+Changing a request budget between attempts creates a different trial condition.
+Do not combine partial timings across those conditions as a fresh matched pair.
+
+### A shared elapsed-time cap for paired live trials
+
+After offline gates and explicit authorization, use one absolute deadline for
+both sequential conditions. Run from `ts` with an explicitly preflighted endpoint;
+omitting `--endpoint` selects the runtime default and does not prove a match to
+the retained model. Never reset `$deadline` between
+conditions. Each arm below also has a three-hour relative cap, and both together
+are bounded by six elapsed hours. Use a new private parent directory outside the
+source store; neither command modifies the retained history.
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$tool = '.\tools\memory-maintenance-qualification\topic-curation-replay.mjs'
+$endpoint = 'gpt-6-luna'
+$modelBinding = node --input-type=module -e `
+    'import { inspectConfiguredTopicReplayModelBinding } from "./tools/memory-maintenance-qualification/topic-curation-replay.mjs"; console.log(JSON.stringify(await inspectConfiguredTopicReplayModelBinding("gpt-6-luna")));' |
+    ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $modelBinding.hash) { throw 'Model preflight failed' }
+$deadline = [DateTimeOffset]::UtcNow.AddHours(6).ToString('o')
+# Set these to the retained history, exact commit, selected build and new outputs:
+$common = @('--mode', 'live', '--live', '--history', $history,
+    '--commit', $commit, '--job', $job, '--deadline', $deadline,
+    '--endpoint', $endpoint, '--expected-model-binding', $modelBinding.hash,
+    '--timeout-ms', '10800000', '--max-calls', '10000', '--organize')
+node $tool @common --output $newBaselineDirectory
+node $tool @common --output $newCandidateDirectory `
+    --concurrency 2 --input-tokens 24000 --prior-fraction 0.25 `
+    --prior-deltas --compact-ids --frozen-preparation
+```
+
+The candidate changes multiple policies; it is a paired treatment, not an
+attribution experiment for individual flags. An incomplete arm is reported as
+incomplete even if structural coverage is high. No live trial is part of the
+offline regression tests:
+
+```powershell
+node --test .\tools\memory-maintenance-qualification\topic-curation-replay.test.mjs `
+    .\tools\memory-maintenance-qualification\topic-decision-replay.test.mjs `
+    .\tools\memory-maintenance-qualification\topic-curation-options.test.mjs
+```
 
 All scratch stores are created inside the new artifact directory and removed
 after parity checks. Neither storage mode writes the source history/index.

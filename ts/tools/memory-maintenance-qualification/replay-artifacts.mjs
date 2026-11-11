@@ -13,6 +13,7 @@ import {
     writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { ViewHistory } from "../../packages/memory/service/dist/viewHistory.js";
 
 export const hashBytes = (value) =>
     createHash("sha256").update(value).digest("hex");
@@ -65,22 +66,42 @@ export async function loadCapturedTopicInput(values) {
                 /^[a-f0-9]{8,40}$/i.test(revision),
             "Use a commit hash or the history head",
         );
-        state = JSON.parse(
-            execFileSync(
-                "git",
-                [
-                    "--no-pager",
-                    `--git-dir=${path.resolve(values.history)}`,
-                    "show",
-                    `${revision}:state.json`,
-                ],
-                { maxBuffer: 256 * 1024 * 1024 },
-            ),
+        const history = new ViewHistory(
+            path.dirname(path.resolve(values.history)),
+            () => ({}),
         );
+        const head =
+            revision === "refs/heads/typeagent-history"
+                ? await history.readHead()
+                : execFileSync(
+                      "git",
+                      [
+                          "--no-pager",
+                          `--git-dir=${path.resolve(values.history)}`,
+                          "rev-parse",
+                          `${revision}^{commit}`,
+                      ],
+                      { encoding: "utf8" },
+                  ).trim();
+        assert.ok(head, "Captured history has no head");
+        if (values.mode === "storage" || values.mode === "cpu") {
+            state = (await history.readField([], head)).value;
+        } else {
+            const builds = (
+                await history.readField(
+                    values.job ? ["builds", values.job] : ["builds"],
+                    head,
+                )
+            ).value;
+            state = {
+                builds: values.job ? { [values.job]: builds } : builds,
+                topics: (await history.readField(["topics"], head)).value,
+            };
+        }
         const targets = Object.entries(state.builds ?? {})
             .filter(([id]) => !values.job || id === values.job)
             .flatMap(([, job]) =>
-                job.results.filter(
+                (job?.results ?? []).filter(
                     (result) => result.snapshot.pipeline === "topics-v1",
                 ),
             );

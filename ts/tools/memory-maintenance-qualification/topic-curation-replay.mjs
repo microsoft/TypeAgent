@@ -59,6 +59,209 @@ const diagnosticConstraints = {
 };
 class CaptureComplete extends Error {}
 class CallLimit extends Error {}
+const replayModelSettings = new WeakMap();
+
+export function inspectTopicReplayModelBinding(
+    model,
+    endpoint,
+    settings = replayModelSettings.get(model) ?? {},
+) {
+    const completionSettings = {};
+    for (const field of ["n", "temperature", "seed", "top_p"]) {
+        const value = model.completionSettings?.[field];
+        if (value !== undefined) {
+            assert.ok(
+                typeof value === "number" && Number.isFinite(value),
+                `Invalid model binding ${field}`,
+            );
+            completionSettings[field] = value;
+        }
+    }
+    for (const field of ["reasoning_effort", "verbosity"]) {
+        const value = model.completionSettings?.[field];
+        if (value !== undefined) {
+            assert.ok(
+                typeof value === "string",
+                `Invalid model binding ${field}`,
+            );
+            completionSettings[field] = value;
+        }
+    }
+    const format = model.completionSettings?.response_format?.type;
+    if (format !== undefined) {
+        assert.ok(
+            typeof format === "string",
+            "Invalid model binding response format",
+        );
+        completionSettings.response_format = { type: format };
+    }
+    const requestLimits = {};
+    for (const field of ["contextTokens", "inputTokens", "outputTokens"]) {
+        const value = settings.requestConstraints?.[field];
+        if (value !== undefined) {
+            assert.ok(
+                Number.isSafeInteger(value) && value > 0,
+                `Invalid model binding ${field}`,
+            );
+            requestLimits[field] = value;
+        }
+    }
+    let deployment;
+    if (typeof settings.endpoint === "string") {
+        deployment = /\/deployments\/([^/]+)(?:\/|$)/i.exec(
+            new URL(settings.endpoint).pathname,
+        )?.[1];
+    }
+    const binding = {
+        provider:
+            typeof settings.provider === "string" ? settings.provider : null,
+        endpointAlias: endpoint ?? null,
+        ...(deployment ? { deployment } : {}),
+        ...(typeof settings.modelName === "string"
+            ? { modelName: settings.modelName }
+            : {}),
+        completionSettings,
+        requestLimits,
+    };
+    assert.ok(
+        binding.endpointAlias === null ||
+            typeof binding.endpointAlias === "string",
+        "Invalid model binding endpoint alias",
+    );
+    return { binding, hash: hash(JSON.stringify(binding)) };
+}
+
+export async function inspectConfiguredTopicReplayModelBinding(endpoint) {
+    const model = await initializeReplayModel({ endpoint });
+    return inspectTopicReplayModelBinding(model, endpoint);
+}
+
+export function topicReplaySettings(values) {
+    const settings = {
+        ...(values["input-tokens"] !== undefined
+            ? {
+                  inputTokenTarget: integer(
+                      values["input-tokens"],
+                      undefined,
+                      "input-tokens",
+                  ),
+              }
+            : {}),
+        concurrency: integer(values.concurrency, 1, "concurrency"),
+        ...(values["prior-fraction"] !== undefined
+            ? { priorContextFraction: Number(values["prior-fraction"]) }
+            : {}),
+    };
+    for (const [option, field] of [
+        ["prior-deltas", "priorDeltas"],
+        ["compact-ids", "compactIds"],
+        ["frozen-preparation", "frozenPreparation"],
+    ]) {
+        if (values[option] !== undefined) {
+            assert.ok(typeof values[option] === "boolean", `Invalid ${option}`);
+            settings[field] = values[option];
+        }
+    }
+    validateTopicCurationSettings(settings);
+    return settings;
+}
+
+export function topicReplayDeadline(values, now = Date.now) {
+    const started = now();
+    const timeout = integer(values["timeout-ms"], 180000, "timeout-ms");
+    assert.ok(
+        timeout <= 2147483647,
+        "Replay timeout exceeds supported timer range",
+    );
+    let absolute = Infinity;
+    if (values.deadline !== undefined) {
+        assert.match(
+            values.deadline,
+            /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/,
+            "Invalid --deadline ISO timestamp",
+        );
+        absolute = Date.parse(values.deadline);
+        assert.ok(
+            Number.isFinite(absolute),
+            "Invalid --deadline ISO timestamp",
+        );
+    }
+    const deadline = Math.min(absolute, started + timeout);
+    const controller = new AbortController();
+    const check = () => {
+        if (now() >= deadline && !controller.signal.aborted)
+            controller.abort(new Error("Replay deadline exceeded"));
+        controller.signal.throwIfAborted();
+    };
+    check();
+    return {
+        deadline,
+        controller,
+        check,
+        remaining: () => Math.max(0, deadline - now()),
+    };
+}
+
+export async function initializeReplayModel(values) {
+    const config = await import("../../packages/config/dist/index.js");
+    config.loadConfigSync();
+    initRuntimeConfigFromProcessEnv();
+    const model = openai.createChatModel(values.endpoint, {
+        temperature: 0,
+        response_format: { type: "json_object" },
+    });
+    replayModelSettings.set(
+        model,
+        openai.getChatModelSettings(values.endpoint),
+    );
+    return model;
+}
+
+async function abortable(work, signal) {
+    signal.throwIfAborted();
+    let onAbort;
+    const aborted = new Promise((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+        return await Promise.race([work(), aborted]);
+    } finally {
+        signal.removeEventListener("abort", onAbort);
+    }
+}
+
+export function finalTopicCoverage(snapshot) {
+    const curation = snapshot.curation ?? snapshot.curationProgress;
+    const selected = new Set(snapshot.nodes.map((node) => node.id));
+    const admitted =
+        curation?.concepts.flatMap((concept) => concept.memberIds) ?? [];
+    const deferred = curation?.deferred.map((entry) => entry.nodeId) ?? [];
+    const pending = curation?.pending?.map((entry) => entry.nodeId) ?? [];
+    const accounted = [...admitted, ...deferred, ...pending];
+    const distinct = new Set(accounted);
+    const admittedSet = new Set(admitted);
+    return {
+        selectedNodes: selected.size,
+        admittedNodes: admittedSet.size,
+        deferredNodes: new Set(deferred).size,
+        pendingNodes: new Set(pending).size,
+        unaccountedNodes: [...selected].filter((id) => !distinct.has(id))
+            .length,
+        duplicateAssignments: accounted.length - distinct.size,
+        unknownNodes: [...distinct].filter((id) => !selected.has(id)).length,
+        representedOccurrences: new Set(
+            snapshot.nodes
+                .filter((node) => admittedSet.has(node.id))
+                .flatMap((node) => node.occurrenceIds),
+        ).size,
+        selectedOccurrences: new Set(
+            snapshot.nodes.flatMap((node) => node.occurrenceIds),
+        ).size,
+        concepts: curation?.concepts.length ?? 0,
+        semanticQualityAssessed: false,
+    };
+}
 
 export async function loadTopicReplay(values) {
     const { input, state, inputHash, retainedCurationHash } =
@@ -336,7 +539,38 @@ async function indexStorageReplay(file, samples, output) {
     };
 }
 
-async function callReplay(values, snapshot, settings, output, identity, input) {
+async function writeCancelledTopicReplay(output, cancellation, snapshot) {
+    await writeFile(
+        path.join(output, "failure.json"),
+        JSON.stringify({
+            status: "cancelled",
+            ...cancellation,
+        }),
+        { flag: "wx" },
+    );
+    await writeFile(
+        path.join(output, "partial-curation.json"),
+        JSON.stringify(
+            snapshot.curation ??
+                snapshot.curationProgress ?? {
+                    concepts: [],
+                    deferred: [],
+                },
+        ),
+        { flag: "wx" },
+    );
+}
+
+async function callReplay(
+    values,
+    snapshot,
+    settings,
+    output,
+    identity,
+    input,
+    budget,
+    initializeModel,
+) {
     const live = values.mode === "live";
     const recorded = values.mode === "recorded";
     assert.ok(!live || values.live, "Live inference requires --live");
@@ -346,46 +580,40 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
         "Recorded mode requires --responses",
     );
     assert.ok(
-        values.mode !== "capture" || settings.concurrency === 1,
-        "Capture mode inspects one boundary; use concurrency 1",
+        values.mode !== "capture" ||
+            settings.concurrency === 1 ||
+            settings.frozenPreparation,
+        "Capture mode requires concurrency 1 unless frozen preparation is enabled",
     );
     const maxCalls = integer(values["max-calls"], 1, "max-calls");
-    const timeout = integer(values["timeout-ms"], 180000, "timeout-ms");
-    const controller = new AbortController();
+    const { controller } = budget;
     let model;
-    if (live) {
-        const config = await import("../../packages/config/dist/index.js");
-        config.loadConfigSync();
-        initRuntimeConfigFromProcessEnv();
-        model = openai.createChatModel(values.endpoint, {
-            temperature: 0,
-            response_format: { type: "json_object" },
-        });
-        assert.ok(
-            model.inspectRequest,
-            "Selected model must expose exact request inspection",
-        );
-    }
+    let modelBinding;
     const timer = setTimeout(
         () => controller.abort(new Error("Replay deadline exceeded")),
-        timeout,
+        budget.remaining(),
     );
-    const inspect = model
-        ? (rules, payload, schema) =>
-              model.inspectRequest(
+    const inspect = (rules, payload, schema) =>
+        model
+            ? model.inspectRequest(
                   [
                       { role: "system", content: rules },
                       { role: "user", content: JSON.stringify(payload) },
                   ],
                   schema,
               )
-        : offlineInspection;
+            : offlineInspection(rules, payload, schema);
     const index = new TopicEvidenceIndex(snapshot);
     const calls = [];
     let disposition = "complete";
     let organization;
+    let providerCalls = 0;
+    let cancellation;
+    let persistenceError;
     const started = performance.now();
     const complete = async (rules, payload, schema, context) => {
+        budget.check();
+        context.signal.throwIfAborted();
         if (calls.length >= maxCalls)
             throw new CallLimit("Replay call limit reached");
         const request = inspect(rules, payload, schema);
@@ -393,16 +621,24 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
             ordinal: calls.length + 1,
             batchOrdinal: context.ordinal,
             kind: context.kind,
+            ...(context.phase ? { phase: context.phase } : {}),
             requestHash: hash(request.serializedRequest),
             inputTokens: request.estimatedInputTokens,
             serializedBytes: Buffer.byteLength(request.serializedRequest),
             outputReservation: request.constraints.outputTokens,
-            rawNodes: (payload.nodes ?? []).filter((node) =>
-                node.id.startsWith("topic:"),
-            ).length,
-            priorConcepts: (payload.nodes ?? []).filter((node) =>
-                node.id.startsWith("concept:"),
-            ).length,
+            rawNodes:
+                context.rawNodes ??
+                (payload.nodes ?? []).filter(
+                    (node) => !Object.hasOwn(node, "purpose"),
+                ).length,
+            priorConcepts:
+                context.priorConcepts ??
+                (payload.nodes ?? []).filter((node) =>
+                    Object.hasOwn(node, "purpose"),
+                ).length,
+            ...(context.proposalConcepts === undefined
+                ? {}
+                : { proposalConcepts: context.proposalConcepts }),
         };
         calls.push(receipt);
         await writeFile(
@@ -444,30 +680,52 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
             throw new CaptureComplete(
                 "Packet captured without provider initialization",
             );
-        let usage;
         const callStarted = performance.now();
         let result;
         try {
-            result = await model.complete(
-                [
-                    { role: "system", content: rules },
-                    { role: "user", content: JSON.stringify(payload) },
-                ],
-                (value) => {
-                    usage = value;
-                },
-                schema,
-                undefined,
-                context.signal,
+            budget.check();
+            const signal = AbortSignal.any([controller.signal, context.signal]);
+            signal.throwIfAborted();
+            const currentBinding = inspectTopicReplayModelBinding(
+                model,
+                values.endpoint,
             );
+            receipt.modelBindingHash = currentBinding.hash;
+            if (values["expected-model-binding"])
+                assert.equal(
+                    currentBinding.hash,
+                    values["expected-model-binding"].toLowerCase(),
+                    "Replay model binding does not match --expected-model-binding",
+                );
+            providerCalls++;
+            result = await abortable(
+                () =>
+                    model.complete(
+                        [
+                            { role: "system", content: rules },
+                            { role: "user", content: JSON.stringify(payload) },
+                        ],
+                        (value) => {
+                            receipt.usage = value;
+                        },
+                        schema,
+                        undefined,
+                        signal,
+                    ),
+                signal,
+            );
+            budget.check();
+            signal.throwIfAborted();
             receipt.status = result.success ? "complete" : "failed";
+        } catch (error) {
+            receipt.error = { name: error.name, message: error.message };
+            throw error;
         } finally {
             receipt.elapsedMs = performance.now() - callStarted;
             receipt.status ??= context.signal.aborted ? "aborted" : "failed";
         }
         assert.ok(result.success, result.success ? undefined : result.message);
         receipt.outputBytes = Buffer.byteLength(result.data);
-        receipt.usage = usage;
         await writeFile(
             path.join(output, `response-${receipt.ordinal}.json`),
             result.data,
@@ -476,6 +734,33 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
         return JSON.parse(result.data);
     };
     try {
+        budget.check();
+        if (live) {
+            model = await abortable(
+                () => initializeModel(values),
+                controller.signal,
+            );
+            budget.check();
+            assert.ok(
+                model.inspectRequest,
+                "Selected model must expose exact request inspection",
+            );
+            modelBinding = inspectTopicReplayModelBinding(
+                model,
+                values.endpoint,
+            );
+            await writeFile(
+                path.join(output, "model-binding.json"),
+                JSON.stringify(modelBinding, null, 2),
+                { flag: "wx" },
+            );
+            if (values["expected-model-binding"])
+                assert.equal(
+                    modelBinding.hash,
+                    values["expected-model-binding"].toLowerCase(),
+                    "Replay model binding does not match --expected-model-binding",
+                );
+        }
         snapshot.curation = await curateTopics(
             snapshot,
             (node) => index.evidence(node),
@@ -484,13 +769,13 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
             true,
             async (curation) => {
                 const file = path.join(output, "progress.json");
-                await writeReplayProgress(
-                    file,
-                    identity,
-                    curation,
-                    {},
-                    controller.signal,
-                );
+                try {
+                    await writeReplayProgress(file, identity, curation);
+                    snapshot.curationProgress = structuredClone(curation);
+                } catch (error) {
+                    persistenceError = error;
+                    throw error;
+                }
             },
             snapshot.curationProgress,
             { ...settings, inspectRequest: inspect },
@@ -505,6 +790,9 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
         if (values.organize) {
             const organizationInput = structuredClone(input);
             organizationInput.topicInput.reusableCuration = snapshot.curation;
+            // This diagnostic handoff has validated curation, not native watermark receipts.
+            delete organizationInput.topicInput.packetReplay;
+            delete organizationInput.topicInput.reusableCurationPackets;
             const parts = (prompt) => {
                 assert.ok(
                     Array.isArray(prompt) &&
@@ -553,13 +841,24 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
         if (error instanceof CaptureComplete) disposition = "capture-only";
         else if (error instanceof CallLimit)
             disposition = "call-limit-incomplete";
-        else {
+        else if (
+            controller.signal.aborted &&
+            error === controller.signal.reason &&
+            !persistenceError
+        ) {
+            disposition = "deadline-incomplete";
+            cancellation = { name: error.name, message: error.message };
+            await writeCancelledTopicReplay(output, cancellation, snapshot);
+        } else {
             await writeFile(
                 path.join(output, "failure.json"),
                 JSON.stringify({
                     status: "failed",
                     name: error.name,
                     message: error.message,
+                    ...(modelBinding
+                        ? { modelBindingHash: modelBinding.hash }
+                        : {}),
                 }),
                 { flag: "wx" },
             );
@@ -577,7 +876,15 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
     return {
         disposition,
         completed: disposition === "complete",
-        providerCalls: live ? calls.length : 0,
+        providerCalls,
+        ...(modelBinding
+            ? {
+                  modelBinding: modelBinding.binding,
+                  modelBindingHash: modelBinding.hash,
+              }
+            : {}),
+        deadline: new Date(budget.deadline).toISOString(),
+        ...(cancellation ? { error: cancellation } : {}),
         elapsedMs: performance.now() - started,
         calls,
         accountedNodes: snapshot.curation
@@ -587,6 +894,7 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
               ) + snapshot.curation.deferred.length
             : null,
         concepts: snapshot.curation?.concepts.length ?? null,
+        coverage: finalTopicCoverage(snapshot),
         ...(organization ? { organization } : {}),
         limitation: live
             ? `Frozen curation${values.organize ? " and organization" : " only"}; no native readiness, answer scores or human quality qualification.`
@@ -594,7 +902,7 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
     };
 }
 
-async function implementationIdentity() {
+export async function implementationIdentity() {
     const identity = {
         commit: execFileSync("git", ["--no-pager", "rev-parse", "HEAD"], {
             cwd: productRoot,
@@ -609,6 +917,8 @@ async function implementationIdentity() {
             "topicLookup",
             "topicCurationScheduler",
             "topicGeneration",
+            "topicCurationTransport",
+            "topicFrozenPreparation",
         ].map((file) => `packages/memory/service/dist/${file}.js`),
         ...["openai", "requestConstraints"].map(
             (file) => `packages/aiclient/dist/${file}.js`,
@@ -640,7 +950,17 @@ async function implementationIdentity() {
     return identity;
 }
 
-export async function runTopicReplay(values) {
+export async function runTopicReplay(
+    values,
+    { initializeModel = initializeReplayModel, now = Date.now } = {},
+) {
+    const budget = topicReplayDeadline(values, now);
+    if (values["expected-model-binding"] !== undefined)
+        assert.match(
+            values["expected-model-binding"],
+            /^[a-f0-9]{64}$/i,
+            "Invalid --expected-model-binding SHA256",
+        );
     const mode = values.mode ?? "capture";
     assert.ok(
         [
@@ -659,23 +979,7 @@ export async function runTopicReplay(values) {
             (["live", "recorded"].includes(mode) && !values.nodes),
         "--organize requires complete input in live or recorded mode, not --nodes",
     );
-    /** @type {import("../../packages/memory/service/dist/index.js").TopicCurationSettings} */
-    const settings = {
-        ...(values["input-tokens"]
-            ? {
-                  inputTokenTarget: integer(
-                      values["input-tokens"],
-                      undefined,
-                      "input-tokens",
-                  ),
-              }
-            : {}),
-        concurrency: integer(values.concurrency, 1, "concurrency"),
-        ...(values["prior-fraction"] !== undefined
-            ? { priorContextFraction: Number(values["prior-fraction"]) }
-            : {}),
-    };
-    validateTopicCurationSettings(settings);
+    const settings = topicReplaySettings(values);
     assert.ok(
         values.output,
         "--output must name a new private artifact directory",
@@ -700,6 +1004,8 @@ export async function runTopicReplay(values) {
         ),
         settings,
         endpoint: values.endpoint ?? null,
+        expectedModelBinding:
+            values["expected-model-binding"]?.toLowerCase() ?? null,
     };
     if (values.progress) {
         assert.ok(!values.resume, "--progress and --resume cannot be combined");
@@ -753,6 +1059,8 @@ export async function runTopicReplay(values) {
                                   output,
                                   identity,
                                   input,
+                                  budget,
+                                  initializeModel,
                               ),
                       ),
     };
@@ -783,6 +1091,7 @@ if (
     import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
     const { values } = parseArgs({
+        allowNegative: true,
         options: {
             input: { type: "string" },
             history: { type: "string" },
@@ -798,9 +1107,14 @@ if (
             "input-tokens": { type: "string" },
             concurrency: { type: "string" },
             "prior-fraction": { type: "string" },
+            "prior-deltas": { type: "boolean" },
+            "compact-ids": { type: "boolean" },
+            "frozen-preparation": { type: "boolean" },
             "max-calls": { type: "string" },
             "timeout-ms": { type: "string" },
+            deadline: { type: "string" },
             endpoint: { type: "string" },
+            "expected-model-binding": { type: "string" },
             responses: { type: "string" },
             progress: { type: "string" },
             "index-file": { type: "string" },

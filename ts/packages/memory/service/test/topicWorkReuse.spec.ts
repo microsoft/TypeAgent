@@ -684,9 +684,13 @@ test("packet receipts compact prior concept membership and replay exact consolid
     expect(candidate.curation).toEqual(control.curation);
 });
 
-test.each(["append", "correction", "forget", "staged-correction"] as const)(
-    "production private watermark is durable, unpublished, and fails closed for %s",
-    async (change) => {
+test.each(
+    (["append", "correction", "forget", "staged-correction"] as const).flatMap(
+        (change) => [[change, false] as const, [change, true] as const],
+    ),
+)(
+    "production private watermark is durable, unpublished, and fails closed for %s (frozen: %s)",
+    async (change, frozen) => {
         const directory = await mkdtemp(
             path.join(os.tmpdir(), "topic-watermark-"),
         );
@@ -717,7 +721,19 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                ...(frozen
+                    ? {
+                          settings: {
+                              concurrency: 2,
+                              frozenPreparation: true,
+                              priorDeltas: true,
+                              compactIds: true,
+                          },
+                      }
+                    : {}),
+            },
         });
         const adapter: ViewSynthesisAdapter = {
             identity: "offline-watermark",
@@ -805,12 +821,14 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                 corpusId,
             );
             if (change !== "correction") {
-                expect(state.continuation?.curationPackets).toHaveLength(2);
+                expect(state.continuation?.curationPackets).toHaveLength(
+                    frozen ? 1 : 2,
+                );
                 expect(state.snapshot?.curationProgress?.deferred).toHaveLength(
-                    24,
+                    frozen ? 48 : 24,
                 );
                 expect(state.family.dirty).toBe(true);
-                expect(calls).toBe(2);
+                expect(calls).toBe(frozen ? 4 : 2);
                 if (change === "forget") {
                     const preview = await service.previewForgetSource(
                         corpusId,
@@ -852,7 +870,7 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                             corpusId,
                         )
                     ).continuation?.curationPackets?.length ?? 0,
-                ).toBe(change === "append" ? 2 : 0);
+                ).toBe(change === "append" ? (frozen ? 1 : 2) : 0);
             } else expect(state.continuation).toBeUndefined();
             const before = calls;
             if (change === "append") {
@@ -880,12 +898,19 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                         )
                     ).state,
                 ).toBe("complete");
-            expect(calls - before).toBe(
+            const expectedCalls =
                 change === "staged-correction"
                     ? 3
                     : change === "correction"
                       ? 2
-                      : 1,
+                      : 1;
+            expect(calls - before).toBe(
+                // Custom adapters cannot certify a different host curation policy.
+                frozen && change === "append"
+                    ? 6
+                    : frozen
+                      ? expectedCalls * 2
+                      : expectedCalls,
             );
             const page = await service.queryTopics({ corpusId, pageSize: 100 });
             expect(page.totalNodes).toBe(
