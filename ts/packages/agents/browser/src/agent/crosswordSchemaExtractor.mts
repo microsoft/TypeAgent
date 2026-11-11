@@ -59,7 +59,7 @@ function createModel() {
     const apiSettings = ai.azureApiSettingsFromEnv(
         ai.ModelType.Chat,
         undefined,
-        "GPT_5_MINI",
+        ai.GPT_6_LUNA,
     );
     const model = ai.createChatModel(
         apiSettings,

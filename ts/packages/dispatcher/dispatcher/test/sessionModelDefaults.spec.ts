@@ -45,7 +45,7 @@ describe("translation model fallback", () => {
         setRuntimeConfig(originalConfig);
     });
 
-    test("omits reasoning effort when GPT-6 falls back to GPT-4.1", () => {
+    test("fails clearly rather than falling back from Luna to GPT-4.1", () => {
         setRuntimeConfig(
             configFromEnvRecord({
                 AZURE_OPENAI_ENDPOINT_GPT_4_1_EASTUS: "https://gpt-4-1",
@@ -53,8 +53,35 @@ describe("translation model fallback", () => {
             }),
         );
 
-        expect(
+        expect(() =>
             resolveTranslationModelSettings(openai.GPT_6_LUNA, "medium"),
+        ).toThrow(/GPT-6 Luna endpoint/);
+    });
+
+    test("falls back to Luna and preserves reasoning when a requested endpoint is missing", () => {
+        setRuntimeConfig(
+            configFromEnvRecord({
+                AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: "https://gpt-6-luna",
+                AZURE_OPENAI_API_KEY_GPT_6_LUNA_EASTUS: "identity",
+            }),
+        );
+        expect(
+            resolveTranslationModelSettings("UNAVAILABLE_MODEL", "medium"),
+        ).toEqual({
+            model: openai.GPT_6_LUNA,
+            reasoningEffort: "medium",
+        });
+    });
+
+    test("preserves an explicitly selected available older model", () => {
+        setRuntimeConfig(
+            configFromEnvRecord({
+                AZURE_OPENAI_ENDPOINT_GPT_4_1_EASTUS: "https://gpt-4-1",
+                AZURE_OPENAI_API_KEY_GPT_4_1_EASTUS: "identity",
+            }),
+        );
+        expect(
+            resolveTranslationModelSettings(openai.GPT_4_1, undefined),
         ).toEqual({
             model: openai.GPT_4_1,
             reasoningEffort: undefined,

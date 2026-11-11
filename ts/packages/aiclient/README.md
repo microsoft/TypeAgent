@@ -67,6 +67,16 @@ fails rather than falling back to the bare endpoint. Use explicit `azure` to
 select that bare endpoint, or an explicit legacy name for compatibility.
 Configured non-Azure provider defaults and explicit API settings remain honored.
 
+When configuration synthesizes a bare Azure chat endpoint, it uses only the
+named Luna deployment. Other deployments remain available through explicit
+selectors but are not automatic chat defaults.
+
+Copilot also defaults to `gpt-6-luna`. An unavailable GPT-6-family request
+can fall back only to Luna, ignoring configured fallback lists for that request.
+If Luna is missing or disabled, the call fails rather than selecting an older
+GPT model or another family. Explicitly requested, available models are still
+honored; fallback configuration for other requests remains supported.
+
 Pools are discovered from env-var naming. For a model `GPT_6_LUNA`, aiclient scans:
 
 ```

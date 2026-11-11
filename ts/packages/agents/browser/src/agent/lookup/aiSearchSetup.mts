@@ -17,8 +17,8 @@
 //   (auth: identity / DefaultAzureCredential by default; set
 //    AZURE_AI_SEARCH_API_KEY or AZURE_AI_SEARCH_BEARER_TOKEN to override)
 //   AZURE_AI_SEARCH_AOAI_ENDPOINT       https://<aoai>.openai.azure.com
-//   AZURE_AI_SEARCH_AOAI_DEPLOYMENT     deployment id (e.g. gpt-4.1-mini)
-//   AZURE_AI_SEARCH_AOAI_MODEL          model name (e.g. gpt-4.1-mini)
+//   AZURE_AI_SEARCH_AOAI_DEPLOYMENT     deployment id (e.g. gpt-6-luna)
+//   AZURE_AI_SEARCH_AOAI_MODEL          model name (e.g. gpt-6-luna)
 //   AZURE_AI_SEARCH_AOAI_API_KEY        (optional) Azure OpenAI key; omit to use
 //                                       the search service's managed identity
 // Optional:

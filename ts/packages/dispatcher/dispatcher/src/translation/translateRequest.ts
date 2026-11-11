@@ -91,7 +91,7 @@ import {
 const debugTranslate = registerDebug("typeagent:translate");
 const debugTranslateInfo = registerDebug("typeagent:translate:info");
 
-const TRANSLATION_MODEL_FALLBACK = ai.GPT_4_1;
+const TRANSLATION_MODEL_FALLBACK = ai.GPT_6_LUNA;
 
 function resolveTranslationModel(model: string): string {
     if (ai.hasChatModelEndpoint(model)) {
@@ -103,7 +103,9 @@ function resolveTranslationModel(model: string): string {
         );
         return TRANSLATION_MODEL_FALLBACK;
     }
-    return model;
+    throw new Error(
+        `Translation model '${model}' has no endpoint and '${TRANSLATION_MODEL_FALLBACK}' is unavailable. Configure a GPT-6 Luna endpoint.`,
+    );
 }
 
 export function resolveTranslationModelSettings(
@@ -118,10 +120,7 @@ export function resolveTranslationModelSettings(
     const resolvedModel = resolveTranslationModel(model);
     return {
         model: resolvedModel,
-        // The fallback may not support reasoning parameters (for example,
-        // GPT-4.1 in smoke-test environments). Keep effort only when the
-        // configured model itself is available.
-        reasoningEffort: resolvedModel === model ? reasoningEffort : undefined,
+        reasoningEffort,
     };
 }
 

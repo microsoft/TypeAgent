@@ -1963,7 +1963,7 @@ async function executeBrowserActionImpl(
                             ) => {
                                 const agent =
                                     await createDiscoveryPageTranslator(
-                                        "GPT_5_2",
+                                        "GPT_6_LUNA",
                                     );
                                 const htmlFragments =
                                     await adHocBrowser.getHtmlFragments();
@@ -2278,7 +2278,7 @@ async function summarizeSearchResults(
         context,
     );
 
-    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+    const model = openai.createJsonChatModel("GPT_6_LUNA", [
         "SearchPageSummary",
     ]);
     hookModelTokenUsage(model);
@@ -2451,9 +2451,9 @@ async function lookup(
         `Generating the answer for '${action.parameters.originalRequest}'`,
         context,
     );
-    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+    const model = openai.createJsonChatModel("GPT_6_LUNA", [
         "InternetLookupAnswerGenerator",
-    ]); // TODO: GPT_5_MINI/NANO?
+    ]);
     hookModelTokenUsage(model);
     const answerResult = await generateAnswer(
         action.parameters.originalRequest,

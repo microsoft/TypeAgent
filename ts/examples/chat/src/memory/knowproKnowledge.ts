@@ -26,9 +26,7 @@ export type LLMKnowledgeExtractor = {
 
 export type LLMKnowledgeExtractors = {
     extractor?: LLMKnowledgeExtractor | undefined;
-    extractor35?: LLMKnowledgeExtractor | undefined;
-    extractor41?: LLMKnowledgeExtractor | undefined;
-    extractor41Mini?: LLMKnowledgeExtractor | undefined;
+    extractorLuna?: LLMKnowledgeExtractor | undefined;
 };
 
 export type KnowProKnowledgeContext = {
@@ -56,7 +54,7 @@ export async function createKnowproKnowledgeCommands(
             description: "Extract knowledge",
             options: {
                 text: arg("Extract from this text OR from this filePath"),
-                model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+                model: arg("Model: default | luna", "default"),
                 v2: argBool("Run version 2", false),
                 search: argBool("Run knowledge search", false),
             },
@@ -97,7 +95,7 @@ export async function createKnowproKnowledgeCommands(
                 "Compare inverse actions from v1 and v2 of knowledge extraction",
             options: {
                 text: arg("Extract from this text OR from this filePath"),
-                model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+                model: arg("Model: default | luna", "default"),
                 type: arg("text | podcast", "text"),
             },
         };
@@ -215,13 +213,10 @@ export async function createKnowproKnowledgeCommands(
                 extractor = extractors.extractor;
                 break;
             case "41":
-                extractor = extractors.extractor41;
-                break;
             case "41m":
-                extractor = extractors.extractor41Mini;
-                break;
             case "35":
-                extractor = extractors.extractor35;
+            case "luna":
+                extractor = extractors.extractorLuna;
                 break;
         }
 
@@ -280,41 +275,18 @@ export async function createKnowproKnowledgeCommands(
             ),
             model: {
                 model: kpContext.knowledgeModel,
-                modelName: "4o",
+                modelName: "default",
             },
         };
-        const models41 = kpTest.createGpt41Models();
-        if (models41.gpt41) {
-            extractors.extractor41 = {
-                extractor: kpLib.createKnowledgeExtractor(
-                    models41.gpt41.model,
-                    settings,
-                    translator,
-                ),
-                model: models41.gpt41,
-            };
-        }
-        if (models41.gpt41Mini) {
-            extractors.extractor41Mini = {
-                extractor: kpLib.createKnowledgeExtractor(
-                    models41.gpt41Mini.model,
-                    settings,
-                    translator,
-                ),
-                model: models41.gpt41Mini,
-            };
-        }
-        const model35 = kpTest.create35Model();
-        if (model35) {
-            extractors.extractor35 = {
-                extractor: kpLib.createKnowledgeExtractor(
-                    model35.model,
-                    settings,
-                    translator,
-                ),
-                model: model35,
-            };
-        }
+        const luna = kpTest.createLunaModel();
+        extractors.extractorLuna = {
+            extractor: kpLib.createKnowledgeExtractor(
+                luna.model,
+                settings,
+                translator,
+            ),
+            model: luna,
+        };
         return extractors;
     }
 

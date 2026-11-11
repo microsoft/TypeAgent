@@ -66,11 +66,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
 const DEFAULT_COPILOT_MODEL = "gpt-6-luna";
-const DEFAULT_COPILOT_FALLBACK_MODELS = [
-    "gpt-5.4-mini",
-    "gpt-5-mini",
-    "gpt-5.4",
-];
+const DEFAULT_COPILOT_FALLBACK_MODELS = [DEFAULT_COPILOT_MODEL];
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 function arg(name, fallback) {

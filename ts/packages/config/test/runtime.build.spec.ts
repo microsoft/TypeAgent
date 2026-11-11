@@ -91,6 +91,38 @@ describe("buildConfig: Copilot", () => {
 });
 
 describe("buildConfig: Azure OpenAI defaults", () => {
+    test("synthesizes the default chat endpoint only from Luna", () => {
+        const config = buildConfig({
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://legacy",
+            AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: "https://luna",
+        });
+        expect(config.azureOpenAI.defaultChat?.endpoint).toBe("https://luna");
+    });
+
+    test.each(["GPT_4_O", "GPT_4_1", "GPT_5", "CUSTOM", "EMBEDDING"])(
+        "does not synthesize default chat from %s when Luna is missing",
+        (deployment) => {
+            const config = buildConfig({
+                [`AZURE_OPENAI_ENDPOINT_${deployment}_EASTUS`]:
+                    "https://not-luna",
+            });
+            expect(config.azureOpenAI.defaultChat).toBeUndefined();
+            expect(
+                config.azureOpenAI.deployments.get(deployment.toLowerCase()),
+            ).toBeDefined();
+        },
+    );
+
+    test("preserves an explicitly configured bare chat endpoint", () => {
+        const config = buildConfig({
+            AZURE_OPENAI_ENDPOINT: "https://explicit",
+            AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: "https://luna",
+        });
+        expect(config.azureOpenAI.defaultChat?.endpoint).toBe(
+            "https://explicit",
+        );
+    });
+
     test("default tuning knobs come from constants when env is empty", () => {
         const config = buildConfig({});
         expect(config.azureOpenAI.maxConcurrency).toBe(4);

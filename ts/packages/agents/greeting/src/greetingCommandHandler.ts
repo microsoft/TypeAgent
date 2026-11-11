@@ -228,7 +228,7 @@ export class GreetingCommandHandler implements CommandHandler {
                 apiSettings = openai.localOpenAIApiSettingsFromEnv(
                     openai.ModelType.Chat,
                     undefined,
-                    "GPT_35_TURBO",
+                    openai.GPT_6_LUNA,
                     ["greeting"],
                 );
             } else {

@@ -15,6 +15,10 @@ import { otel } from "@typeagent/telemetry";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
+import {
+    DEFAULT_COPILOT_MODEL,
+    DEFAULT_COPILOT_FALLBACK_MODELS,
+} from "../src/copilotModelDefaults.js";
 
 function makeSettings(modelName = "gpt-5-mini"): CopilotApiSettings {
     return {
@@ -273,6 +277,11 @@ describe("Copilot session fallback", () => {
 });
 
 describe("selectCopilotModel", () => {
+    test("defaults to Luna without older-model fallback candidates", () => {
+        expect(DEFAULT_COPILOT_MODEL).toBe("gpt-6-luna");
+        expect(DEFAULT_COPILOT_FALLBACK_MODELS).toEqual(["gpt-6-luna"]);
+    });
+
     test("uses the requested model when it is available", () => {
         const selected = selectCopilotModel(
             "gpt-6-luna",
@@ -286,20 +295,19 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("gpt-6-luna");
     });
 
-    test.each([
-        ["gpt-6-luna", "luna"],
-        ["gpt-6-sol", "sol"],
-        ["gpt-6.1-sol", "sol"],
-        ["gpt-6.1-terra", "terra"],
-    ])(
-        "uses GPT-5.6 %s tier before generic fallbacks when unavailable",
-        (requested, tier) => {
+    test.each(["gpt-6-sol", "gpt-6.1-sol", "gpt-6.1-terra"])(
+        "uses only Luna when requested %s is unavailable",
+        (requested) => {
             const selected = selectCopilotModel(
                 requested,
                 ["gpt-5.4-mini"],
-                [makeModel("gpt-5.4-mini"), makeModel(`gpt-5.6-${tier}`)],
+                [
+                    makeModel("gpt-5.4-mini"),
+                    makeModel("gpt-5.6-sol"),
+                    makeModel("gpt-6-luna"),
+                ],
             );
-            expect(selected?.id).toBe(`gpt-5.6-${tier}`);
+            expect(selected?.id).toBe("gpt-6-luna");
         },
     );
 
@@ -321,16 +329,35 @@ describe("selectCopilotModel", () => {
         },
     );
 
-    test("skips a disabled GPT-5.6 tier fallback", () => {
-        const selected = selectCopilotModel(
-            "gpt-6-luna",
-            ["gpt-5.4-mini"],
-            [
-                makeModel("gpt-5.6-luna", { policy: "disabled" }),
-                makeModel("gpt-5.4-mini"),
-            ],
-        );
-        expect(selected?.id).toBe("gpt-5.4-mini");
+    test.each(["gpt-6-luna", "gpt-6.1-terra"])(
+        "does not substitute any other model for %s when Luna is missing",
+        (requested) => {
+            expect(
+                selectCopilotModel(
+                    requested,
+                    ["gpt-5.4-mini", "gpt-6.1-sol"],
+                    [
+                        makeModel("gpt-5.6-luna"),
+                        makeModel("gpt-5.4-mini"),
+                        makeModel("gpt-6.1-sol"),
+                        makeModel("claude-sonnet-6"),
+                    ],
+                ),
+            ).toBeUndefined();
+        },
+    );
+
+    test("does not substitute another model when Luna is disabled", () => {
+        expect(
+            selectCopilotModel(
+                "gpt-6-luna",
+                ["gpt-5.4-mini"],
+                [
+                    makeModel("gpt-6-luna", { policy: "disabled" }),
+                    makeModel("gpt-5.4-mini"),
+                ],
+            ),
+        ).toBeUndefined();
     });
 
     test("uses the first configured concrete fallback", () => {
