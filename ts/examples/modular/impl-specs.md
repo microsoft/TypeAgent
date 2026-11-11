@@ -1,8 +1,9 @@
 # Implementation specs: round 1
 
 Each implementation satisfies an interface in the interface files
-(`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `frames.ts`, `view.ts`,
-`shapeView.ts` and `layout.ts`), including
+(`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`,
+`shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`),
+including
 every rule (`@requires`, `@ensures`, `@invariant`, `@valid`, `@abstract`,
 `@budget`, `@deferred`) written there. `@budget` and `@deferred` rules bind
 the implementation like any other: a budget is measured instead of tested,
@@ -168,87 +169,121 @@ code. `bench.ts` may print whatever ratios the headers need.
 # Implementation specs: round 4
 
 The rules for every implementation above still apply. Round 4 builds the
-view–model relationship: a collection and a group that indexes its shapes
-and emits change when it changes, a benchmark budget for model updates, a
-circle, and a canvas view that draws circles.
+model–view relationship: a shape collection writer that indexes its
+shapes, the processor that is the only thing that changes it, a benchmark
+budget for model updates, a circle, and a canvas view that draws circles.
 
 ## 8. `mapShapeCollection.ts`
 
-- **Exports:** `export class MapShapeCollection<S extends Shape = Shape> implements ShapeCollection<S>`
-  with a constructor that takes no arguments.
-- **Imports:** `shape.ts`
-- **Approach:** the simplest correct implementation that keeps these costs:
-  `add`, `remove`, `get`, `size` and `compareZ` take constant time;
-  `removeMultiple` takes time in proportion to the number of IDs listed;
+- **Exports:** `export class MapShapeCollection<S extends Shape = Shape> implements ShapeCollectionWriter<S>`
+  with the constructor `constructor(locator: ShapeLocator)`.
+- **Hidden:** `shapewriterkit.ts`, `adversaries/_shapeModel.ts`
+- **Imports:** `geometry.ts`, `shape.ts`, `shapeModel.ts`, `events.ts`
+- **Approach:** keep the shapes in a map by ID, and their z-order in a
+  structure that supports adding directly below a present shape. Index
+  each present shape in `locator` under its ID, and answer `inRect` and
+  `atPoint` with the locator's queries. The locator starts empty and
+  belongs to the collection from then on; anything else is outside the
+  rules.
+- **Costs:** `get` and `size` take constant time; `add` and `compareZ`
+  take constant or logarithmic time (amortized is fine); `remove` takes
+  time in proportion to the number of IDs listed, plus the locator's;
   `forEach` in proportion to the number of shapes.
-- **Left to the implementer:** how IDs are made, and how z-order is stored.
-- **Contract:** `shapeCollection.contract.ts`, wired in
-  `mapShapeCollection.test.ts`.
+- **Decided behavior:**
+  - `add` has the locator's `in-range` requirement, as its own rule says,
+    so it need not handle a locator that rejects a shape.
+  - `on` and `off` follow `events.ts`; change is emitted as
+    `ShapeCollectionWriter.notifies` says. A listener that throws is
+    outside the rules.
+- **Left to the implementer:** how z-order is stored (for example order
+  keys renumbered when they run out, or a balanced tree), as long as the
+  costs hold.
+- **Contract:** `shapeModel.contract.ts` (`shapeCollectionWriterContract`,
+  which also runs `eventEmitter.contract.ts` on the change event), wired in
+  `mapShapeCollection.test.ts` over `ListIndex` (`modelkit.ts`).
+  `shapeModel.integration.test.ts`, which is not part of this task, runs it
+  over `ListLocator` and `QuadTreeLocator`.
 
-## 9. `shapeGroup.ts`
+## 9. `shapeProcessor.ts`
 
-- **Exports:** `export class ShapeGroup<S extends Shape = Shape> implements RenderGroup<S>`
-  with the constructor `constructor(shapes: ShapeCollection<S>, locator: ShapeLocator)`,
-  plus the edits `add(shape: S): ItemId`, `remove(id: ItemId): boolean` and
-  `removeMultiple(ids: readonly ItemId[]): number`. With `S` as `Shape`
-  it is a `DrawingGroup` (`shapeView.ts`), whose rules the edits follow.
-  `on` and `off` come from `EventEmitter` (`events.ts`).
-- **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `events.ts`, `shapeView.ts`
-- **Approach:** a group presenting `shapes`, with each shape as its own
-  item and its own region. The edits change `shapes` and `locator`
-  together, as `ShapeCollection`'s `add`, `remove` and `removeMultiple` do,
-  and then emit change. Storage and z-order are delegated to `shapes`
-  and queries to `locator`, using the collection's IDs as the locator's
-  IDs. An item's ID is its shape's ID, converted with a cast. Both
-  arguments start empty and belong to the group from then on; anything else
-  is outside the rules.
-- **Decided behavior:** `add` has the locator's `in-range` requirement: a
-  shape whose bounding box goes beyond ±1e300 is outside the rules, so the
-  group need not handle a locator that rejects one after the collection has
-  taken it.
-  A listener that throws is outside the rules too (see `events.ts`).
-- **Left to the implementer:** nothing beyond the storage layout. If you
-  find a choice the rules leave open, describe it under
-  AdditionalSemantics.
-- **Contract:** `renderGroup.contract.ts`, wired in `shapeGroup.test.ts` over the
-  test doubles in `modelkit.ts`. `shapeGroup.integration.test.ts`, which is
-  not part of this task, runs it over `MapShapeCollection` with both
-  `ListLocator` and `QuadTreeLocator`. The contract checks
-  the group, not the edits: that `add` puts the shape on top and the
-  removals follow `ShapeCollection`'s rules is part of the approach above,
-  and is checked only as far as the group shows it.
+- **Exports:** `export class ShapeProcessor implements ShapeMessageProcessor`
+  with the constructor `constructor(clientId: string, writer: ShapeCollectionWriter)`.
+- **Hidden:** `shapeprocessorkit.ts`, `scenariokit.ts`, `adversaries/_shapeModel.ts`
+- **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `events.ts`
+- **Approach:**
+  - `local.enqueue` stamps the operation (`MessageProcessor.stamps`),
+    queues it, and emits `outgoing` with a copy. `remote.enqueue` queues.
+    Neither applies anything.
+  - `process` applies what is queued, through the writer, and is the only
+    thing that calls the writer's `add` and `remove`.
+  - An add goes directly below the lowest present shape whose add comes
+    later in the order `ShapeMessageProcessor` describes (acknowledged
+    adds by seq, then pending local adds by clientSeq), or on top if none
+    does. A remove calls the writer's `remove` once with the listed IDs.
+    A clear removes, in one call, the present shapes whose adds it knew.
+  - The acknowledgment of a local operation that has been applied records
+    its seq and applies nothing.
+  - `model` is a read-only facet of the writer: an object with only
+    `ShapeCollection`'s members, delegating to the writer. Never the writer
+    itself.
+  - The writer starts empty and belongs to the processor from then on.
+- **Decided behavior:**
+  - `newShapeId` returns IDs that include the `clientId`, so that IDs from
+    different clients never collide.
+  - `process` never schedules itself, and nothing else in the class does
+    (`MessageProcessor.passive`).
+- **Left to the implementer:** how pending operations and each shape's add
+  are kept, and the order in which `process` takes the two queues, as long
+  as a local operation whose acknowledgment arrives in the same call is
+  applied once.
+- **Contract:** `shapeModel.contract.ts` (`shapeMessageProcessorContract`,
+  which also runs `messageProcessor.contract.ts`), wired in
+  `shapeProcessor.test.ts` over `RefShapeWriter` (`shapewriterkit.ts`). The
+  same file runs the scenarios (`scenarios.ts`) with this processor and
+  test doubles for every other part. `shapeModel.integration.test.ts`, which
+  is not part of this task, runs it over `MapShapeCollection`.
 
 ## 10. A budget for model updates in `bench.ts`
 
-- **Outputs:** `bench.ts`, `shapeGroup.ts` (header only)
-- **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `listLocator.ts`,
-  `quadTreeLocator.ts`, `inkStroke.ts`, `mapShapeCollection.ts`,
-  `shapeGroup.ts`, and Node built-ins
+- **Outputs:** `bench.ts`, `shapeProcessor.ts` (header only)
+- **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`,
+  `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`,
+  `mapShapeCollection.ts`, `shapeProcessor.ts`, and Node built-ins
 - **Binds:** node
 
-Each input event updates the model completely, within a small fraction of a
-frame (the `@budget` rule `frames.fraction-of-frame` in `frames.ts`). Add a
-measurement to `bench.ts` that checks the budget: **a move's model update
-takes under 5% of a 120 Hz frame (about 0.42 ms)**, with 10,000 strokes in
-the document group. Label the printed results with the rule's ID,
-`frames.fraction-of-frame`; `npm run catalog` looks for that ID in
-`bench.ts` to show the budget as measured. Measure, using `ShapeGroup` over
-`MapShapeCollection` and `QuadTreeLocator`:
+Each input event's operations are sent, and processed, within a small
+fraction of a frame (the `@budget` rule `frames.fraction-of-frame` in
+`frames.ts`). Add a measurement to `bench.ts` that checks the budget:
+**sending and processing a move's operations takes under 5% of a 120 Hz
+frame (about 0.42 ms)**, with 10,000 strokes in the model. Label the
+printed results with the rule's ID, `frames.fraction-of-frame`;
+`npm run catalog` looks for that ID in `bench.ts` to show the budget as
+measured.
 
-- **Drawing:** one pen move, which appends one small stroke chunk to a
-  wet-ink group and replaces a tail group's one shape (`remove` then
-  `add`; there is no replace edit).
-- **Erasing:** one eraser move, which runs an `inRect` query for the
-  eraser's swept rectangle on the document group, followed by a
-  `removeMultiple` of what it hit.
+Measure with a `ShapeProcessor` over a `MapShapeCollection` over a
+`QuadTreeLocator`, and a stand-in for the message infrastructure written
+in `bench.ts`: it sends with `local.enqueue`, gives each outgoing operation
+the next seq and enqueues it on `remote` as its acknowledgment, and calls
+`process`. Time, as a whole:
 
-The budget is per move, not per operation: time each move as a whole, and
-print its median time as a fraction of the budget, marking any move that
-exceeds it. Record the results in the Cost fields as "Measured numbers"
-describes. Exceeding the budget isn't a test failure; report it.
+- **Finishing a stroke:** sending an add of one stroke, then processing
+  until the add and its acknowledgment are applied.
+- **An eraser move:** an `inRect` query on the model for the eraser's swept
+  rectangle, sending a remove of what it hit, then processing until the
+  remove and its acknowledgment are applied.
 
-- **Left to the implementer:** the shapes used for the chunks, the tail and
-  the eraser, and how the 10,000 strokes are laid out, as long as they are
+Ink still being drawn is the view's alone (`view.ts`), so a pen move
+before the stroke ends sends nothing and isn't measured.
+
+Print each measurement's median time as a fraction of the budget, marking
+any that exceeds it. Record the results in the Cost fields as "Measured
+numbers" describes. Exceeding the budget isn't a test failure; report it.
+
+`ShapeId` is now a string (`shape.ts`); the locator measurements must use
+string IDs too, and otherwise stay as they are.
+
+- **Left to the implementer:** the shapes used for the strokes and the
+  eraser, and how the 10,000 strokes are laid out, as long as they are
   stated in the output.
 
 ## 11. `circle.ts`
@@ -270,18 +305,18 @@ describes. Exceeding the budget isn't a test failure; report it.
 ## 12. `canvasShapeView.ts`
 
 - **Exports:** `export class CanvasShapeView implements ShapeView` with the
-  constructor `constructor(scene: Scene<Shape>, context: DrawingContext, scheduler: FrameScheduler)`.
-- **Hidden:** `shapeviewkit.ts`, `scenariokit.ts`
-- **Imports:** `geometry.ts`, `shape.ts`, `view.ts`, `frames.ts`,
-  `shapeView.ts`, `canvas.ts`, `events.ts`. `canvas.ts` is a platform
-  subset (see `method.md`): use only its members, with no casts. The tests
-  pass a context that throws on any other member.
-- **Approach:** in the constructor, add one change listener to each group
-  of the scene, and request a frame. The change listener requests a frame
-  and does nothing else. `frame()` clears the whole canvas with one
-  `clearRect`, then draws the groups bottom to top, and each group's items
-  in `forEach` order. It finds items with `forEach`, not queries, since
-  without a viewport the whole scene is visible.
+  constructor `constructor(model: ShapeCollection, context: DrawingContext, scheduler: FrameScheduler)`.
+- **Hidden:** `shapeviewkit.ts`, `scenariokit.ts`, `adversaries/_view.ts`
+- **Imports:** `geometry.ts`, `shape.ts`, `shapeModel.ts`, `view.ts`,
+  `frames.ts`, `shapeView.ts`, `canvas.ts`, `events.ts`. `canvas.ts` is a
+  platform subset (see `method.md`): use only its members, with no casts.
+  The tests pass a context that throws on any other member.
+- **Approach:** in the constructor, add one change listener to the model,
+  and request a frame. The change listener requests a frame and does
+  nothing else. `frame()` clears the whole canvas with one `clearRect`,
+  then draws the model's shapes in `forEach` order, bottom to top. It
+  finds shapes with `forEach`, not queries, since without a viewport the
+  whole model is visible.
 - **Decided behavior:**
   - Each circle is drawn as `beginPath()`, one `arc(center.x, center.y, radius, 0, 2 * Math.PI)`,
     then `fill()`, with `fillStyle` set first to
@@ -292,7 +327,7 @@ describes. Exceeding the budget isn't a test failure; report it.
     setting another value is outside the rules for now, so ignore it too.
   - `on` and `off` for the `viewport` event follow `events.ts`;
     `viewport` is never emitted yet.
-  - `dispose()` removes the listener from every group. After it, `frame()`
+  - `dispose()` removes the listener from the model. After it, `frame()`
     returns at once, including a frame requested before dispose, and
     nothing is emitted.
 - **Left to the implementer:** nothing beyond the layout of the class. If
@@ -311,7 +346,9 @@ shows. Each platform writes a fixture (`AppFixture` in
 `scenario.contract.ts`) that does the scenarios' actions with its controls.
 On the test platform (`driver.ts`) the controls are methods, and the
 reference app (`circleskit.ts`) is a controller that gets taps from an
-EventDistributor with the view's surface as their target. No task yet: the
+EventDistributor with the view's surface as their target. A controller
+holds the model's read side and a `LocalSend` (`dataModel.ts`); the
+fixture is the message infrastructure, and the only caller of `process`. No task yet: the
 web app waits until the DOM subset (`dom.ts`) is revisited. The earlier
 chrome, renderer and wiring tasks (13 to 15) were removed with `chrome.ts`,
 `ui.ts` and `app.ts`.

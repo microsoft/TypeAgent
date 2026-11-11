@@ -27,7 +27,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 
 /** The blueprint's interface files, and platform subsets: imported with import type only. */
-export const interfaceFiles = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "frames.ts", "view.ts", "shapeView.ts", "layout.ts", "canvas.ts", "dom.ts"];
+export const interfaceFiles = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "dataModel.ts", "shapeModel.ts", "frames.ts", "view.ts", "shapeView.ts", "layout.ts", "canvas.ts", "dom.ts"];
 
 /** Commands a task's agent may run. */
 const commands = ["npm test", "npm run typecheck", "npm run check"];
