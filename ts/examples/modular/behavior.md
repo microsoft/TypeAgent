@@ -51,8 +51,8 @@ visual.
 |---|---|
 | `scenarios.ts` | The behavior: `Action` (tap, color, radius, mode, clear), `Step` (an action, or "painted at p is a color"), `CirclesSettings` and `demoSettings` (palette, radius range, initial radius, drawing size), and the scenarios themselves |
 | `scenario.contract.ts` | `AppFixture`, the only thing a platform writes for these tests (`act`, `painted`, `dispose`). Runs each scenario under its ID, `frames.complete` on random actions, and `Scenario.random` against a reference |
-| `driver.ts` | The test platform's fixture. Its controls are methods (`TestCirclesApp`), and a tap is an event given to an `EventDistributor` for the window, at the drawing's offset (48 units down, where a platform would put its controls). After each action it runs the frames anything asks for, and throws if they change the model (`frames.complete`) |
-| `circleskit.ts` | The reference controller: registers with the distributor, with the view's surface as its target, and converts taps from window to view coordinates (canonical too, since ShapeView's viewport is the identity) |
+| `driver.ts` | The test platform's fixture. Its controls are methods (`TestCirclesApp`), and a tap is an event given to an `EventDistributor` for the window, at the drawing's offset (48 units down, where a platform would put its controls). It is also the message infrastructure: it owns the processor, gives the controller the model's read side and a `LocalSend`, sequences each sent operation and returns its acknowledgment. After each action it processes what was sent, runs the frames anything asks for, processes again, and throws if the model changed after the first processing (`frames.complete`) |
+| `circleskit.ts` | The reference controller: registers with the distributor, with the view's surface as its target, and converts taps from window to view coordinates (canonical too, since ShapeView's viewport is the identity). It sends an add to draw, finds the top circle at the point with `atPoint` and sends a remove to erase, and sends a clear |
 | `scenariokit.ts` | The reference assembly, every part a double. `kitFixture({ part: … })` swaps one part |
 | `adversaries/_circles.ts` | The reference controller with switchable bugs, for scenario adversaries |
 
@@ -87,8 +87,8 @@ The scenarios, as of 2026-11-10: `starts`, `draw-one`, `color-and-radius`,
   fixture can read what the view's surface shows at a point. The test
   platform does it through `RecordingContext`. A browser fixture could
   read the canvas; mobile fixtures need their own way. The alternative is
-  to check the drawing group's circles, which tests the model instead of
-  the core visual.
+  to check the model's circles, which tests the model instead of the core
+  visual.
 - **The web app.** No phase 2 task yet. It needs a platform fixture that
   does the actions with real widgets, the DOM members those widgets use
   added to `dom.ts`, and a recording document for them (the old

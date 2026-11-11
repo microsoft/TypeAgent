@@ -3,7 +3,7 @@
  * interface with its extends clause, its file, a one-line description, the
  * interfaces it extends and those that extend or use it (with their pages), and
  * each member's typed signature with a one-line description. Each group
- * ends with the type aliases its interfaces mention (EventMap, ItemId and
+ * ends with the type aliases its interfaces mention (EventMap, ShapeId and
  * so on), each listed once, with what uses it. Inherited
  * members are not repeated; the extends clause in each heading says where
  * they come from. No text is smaller than 10 pt; the summary takes as many

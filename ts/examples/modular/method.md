@@ -5,7 +5,7 @@ The full procedure, with its reasons, is in `moduleTooling.md`.
 
 ## 1. Agree (human and agent)
 
-- **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`. Drafts under discussion: `dataModel.ts` and `shapeModel.ts`.
+- **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`.
 - **Members for tests are allowed.** When a rule can't be checked without seeing more, add the member or event that shows it rather than weakening the rule. Put it on its own small interface that the main one extends, where feasible, as `OperationSource` is in `dataModel.ts`.
 - **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a test double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.

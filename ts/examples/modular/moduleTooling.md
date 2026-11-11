@@ -36,13 +36,13 @@ it reads the spec the way a future implementer will.
 | `<file>.vocab.ts` | The vocabulary of rule expressions about an interface file's domain: ghost state such as `indexed(locator)` and `painted(view, p)`, and reference functions such as `rectContains` and `over`. Each re-exports `rules.ts` and the vocabulary of the files its interface file imports, and imports nothing else |
 | `testkit.ts` | Shared test helpers: fast-check seeding (`FC_SEED`), `prevDouble`, test shapes, and `coverage`, which checks that generators reach each input class |
 | `eventkit.ts` | `Events`, an EventEmitter with `emit` and `listenerCount`, for test doubles |
-| `driver.ts` | The test platform's app fixture: assembles a circles app from any mix of real parts and doubles, does the scenarios' actions with its controls (methods), taps through an EventDistributor at the drawing's offset, and reads what the view shows |
+| `driver.ts` | The test platform's app fixture: assembles a circles app from any mix of real parts and doubles, does the scenarios' actions with its controls (methods), taps through an EventDistributor at the drawing's offset, and reads what the view shows. It is also the message infrastructure for one client: it owns the processor, gives the app a `LocalSend`, and is the only caller of `process` |
 | `scenarios.ts` | Scenarios as data: named stories of actions (what the user does, not which control) and what the drawing then shows, and the demo's settings |
 | `scenario.contract.ts` | `AppFixture`, which each platform writes; runs each scenario by ID, `frames.complete`, and random sequences compared against the reference assembly |
 | `scenariokit.ts` | The reference assembly: every part a test double |
-| `shapeviewkit.ts`, `distributorkit.ts`, `circleskit.ts` | The reference ShapeView, EventDistributor and circles controller, one per file, so that each task can be kept from reading the reference for its own part |
-| `modelkit.ts` | Test doubles for the shape model: `ListCollection` and `ListIndex`, so that contracts for things built on them depend on no generated implementation. Checked by `helpers.check.ts` |
-| `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler`, `ListGroup` and `testCircle`. Checked by `helpers.check.ts` |
+| `shapewriterkit.ts`, `shapeprocessorkit.ts`, `shapeviewkit.ts`, `distributorkit.ts`, `circleskit.ts` | The reference ShapeCollectionWriter (with `readFacet`), ShapeMessageProcessor, ShapeView, EventDistributor and circles controller, one per file, so that each task can be kept from reading the reference for its own part |
+| `modelkit.ts` | A test double for the shape model: `ListIndex`, a locator, so that contracts for things built on one depend on no generated implementation. Checked by `helpers.check.ts` |
+| `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler` and `testCircle`. Checked by `helpers.check.ts` |
 | `behavior.md` | How the app's behavior is specified: the orientation, the files, adding a behavior, open questions |
 | `observer-tables.md` | For each stateful interface, every call against every observer, with the rules that settle each cell |
 | `<interface>.contract.ts` | A contract suite for each interface, a function taking a factory. Test names are rule IDs. `shape.contract.ts` holds the rules every Shape has, which each shape type's contract runs |
@@ -99,7 +99,8 @@ and the interface file's `.vocab.ts`.
 - A rule's ID comes from where it sits, for example
   `ShapeLocatorQueries.inRect.exact`. The test that checks it has that name. A
   rule inherited from another interface keeps its original ID, so a
-  `RenderGroup`'s contract runs tests named `ShapeLocatorQueries.inRect.exact`.
+  `ShapeCollectionWriter`'s contract runs tests named
+  `ShapeLocatorQueries.inRect.exact`.
 - A rule with an expression is tested by generating inputs. A rule with
   only a headline needs a hand-written test.
 - **Outside the rules.** When a caller breaks a `@requires` rule, or passes
@@ -540,6 +541,23 @@ model, which is why no separate differential test is needed.
     contract or implementation. "Shapes are immutable values" became
     `Shape.immutable` (`@invariant`), tested on every shape type, with
     an adversary that caches a query on the circle.
+  - The data model (2026-11-11). `dataModel.ts`: a model has a read side
+    (`DataModelReader`) and a write side (`DataModel`) that only its
+    `MessageProcessor` holds; operations are pure data stamped with
+    `clientId`, `clientSeq`, `refSeq` and `seq` (-1 until acknowledged);
+    the message infrastructure enqueues on the local and remote queues and
+    is the only caller of `process`; controllers hold the read side and a
+    `LocalSend`. `shapeModel.ts`: the read-only `ShapeCollection` (with
+    the location queries), `ShapeCollectionWriter`, `ShapeOp` and
+    `ShapeMessageProcessor`, whose z-order puts acknowledged adds by seq
+    below pending local adds by clientSeq, and whose clear removes only
+    what its client knew. `RenderGroup`, `Scene`, `ItemId`, `DrawingGroup`
+    and the old mutable `ShapeCollection` were removed: a view renders one
+    model's read side, and drag and wet ink are view-only state. Their
+    contracts and 60 adversaries went; the EventEmitter rules moved to
+    their own contract. Task 9 is now `shapeProcessor.ts`. The adversary
+    runner runs only each adversary's named test, in parallel: about 25
+    seconds per seed for 140 adversaries.
 
 ## Acknowledgments
 
@@ -562,15 +580,9 @@ model, which is why no separate differential test is needed.
   tested rules, `@deferred` rules with `when:` and `how:`) move into a
   compiler for the blueprint, and the catalog only presents its results.
 - Translucent wet ink drawn as chunks blends twice where chunks overlap,
-  whether drawn incrementally or not. Options include a group opacity, with
-  each chunk drawn opaque, or a view that draws the group's coverage with
-  max blending.
-- A conversion contract between a source and the group that presents it:
-  that the group's items, IDs and regions are the right ones for the
-  source. The RenderGroup contract checks the group on its own, so for
-  `ShapeGroup` the edits are checked only as far as the group shows them.
-  It should also require that an item's region never changes while its ID
-  stays the same; otherwise caching by ID silently breaks.
+  whether drawn incrementally or not. Wet ink is now the view's own state,
+  so this is a question for the view: draw the stroke's coverage once, or
+  draw it opaque and apply its opacity once.
 - Snapshots for collaboration: caching a collection and its locator in a
   snapshot favors persistent (structure-sharing) or copy-on-write versions
   of both, which would change `ShapeLocator`'s mutating `add` and `remove`.
@@ -580,6 +592,8 @@ model, which is why no separate differential test is needed.
   the composition root that makes the real parts for a browser window and
   connects them.
 - An editing interface in model terms (for example a stroke builder with
-  `begin`, `extend` and `end` that edits groups), if editing logic such as
-  smoothing and chunking should be shared across platforms. `Tool` and
+  `begin`, `extend` and `end` that ends by sending an add), if editing
+  logic such as smoothing and chunking should be shared across platforms.
+- Presence: showing collaborators each client's view-only state, such as
+  a drag in progress or wet ink. Deferred with the collaboration protocol. `Tool` and
   `PointerSample` were removed because input events are platform-specific.

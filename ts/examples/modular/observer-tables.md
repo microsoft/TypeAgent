@@ -10,18 +10,28 @@ rule. Phase 1 fills these tables, and phase 1b checks them (see
 "Others" means shapes or IDs other than the ones the call names. Rule IDs
 leave out the interface name when it is the table's own.
 
-## ShapeCollection
+## ShapeCollectionWriter and ShapeCollection
 
-| Call | get | size | forEach (entries, order) | compareZ | Returns |
+The writer (`shapeModel.ts`) is the collection's only mutator, held by its
+processor. `ShapeCollection`, the read side, is the writer without `add`
+and `remove`; its own rows are the last one. The queries are about the
+present shapes (`indexed(this)` is what `forEach` visits), so the
+`ShapeLocatorQueries` rules apply to them. The EventEmitter rules
+(`events.ts`) are checked through the change event. Rule IDs without a
+prefix are `ShapeCollectionWriter`'s; `SC.` is `ShapeCollection`, `SLQ.`
+is `ShapeLocatorQueries`.
+
+| Call | get, size, forEach, compareZ | inRect, atPoint results | Earlier `out` arrays | Change listeners | Returns |
 |---|---|---|---|---|---|
-| `add` | `add.gettable` for the new shape; `add.others-kept` for others; `get-agrees` for unknown IDs | `size` | `add.others-kept`, `add.on-top`, `z-order` | `add.on-top`, `z-order` | `add.fresh-id` |
-| `remove` | `remove.gone`; `remove.others-kept`; `get-agrees` for unknown IDs | `size` | `remove.others-kept` | `z-order` | `remove.result` |
-| `removeMultiple` | `removeMultiple.gone`; others by `removeMultiple.same-as-remove` | `size` | `removeMultiple.same-as-remove` | `z-order` | `removeMultiple.count` |
-| `get`, `size`, `forEach`, `compareZ` | `observers-read-only` | `observers-read-only` | `observers-read-only` | `observers-read-only` | `get-agrees`, `size`, `z-order`, `compareZ.zero-iff-same`, `compareZ.antisymmetric` |
+| `add` | `add.placed`; `SC.size`, `SC.z-order`, `SC.get-agrees` | `SLQ.*.exact` | `SLQ.no-retain` | `notifies`; `EventEmitter.*` | nothing |
+| `remove` | `remove.removed`; `SC.size`, `SC.z-order`, `SC.get-agrees` | `SLQ.*.exact` | `SLQ.no-retain` | `notifies` (none if nothing was removed) | `remove.removed` |
+| `get`, `size`, `forEach`, `compareZ`, `inRect`, `atPoint`, `on`, `off` | `SC.read-only` | `SC.read-only`, `SLQ.read-only` | `SLQ.*.append`, `SLQ.no-retain` | `SC.read-only` (emits nothing); `on`, `off` by `EventEmitter.*` | `SC.get-agrees`, `SC.size`, `SC.z-order`, `SC.compareZ.*`, `SLQ.*.count`, `SLQ.*.once`, `SLQ.*.exact`; `this` for `on` and `off`, by type |
 
-Unspecified on purpose: `compareZ` on an ID that isn't present
-(`compareZ.present` is a `@requires`), and a `forEach` visitor that changes
-the collection.
+Unspecified on purpose: `add` with an ID that is present (`add.new-id`),
+below a shape that isn't (`add.below-present`), or with a shape outside
+±1e300 (`add.in-range`); `compareZ` on an ID that isn't present
+(`SC.compareZ.present`); a `forEach` visitor or a change listener that
+changes the collection, or throws.
 
 ## ShapeLocatorQueries and ShapeLocator
 
@@ -35,49 +45,45 @@ the collection.
 Unspecified on purpose: `add` with an ID that is already indexed
 (`add.new-id`), and shapes outside ±1e300 (`add.in-range`).
 
-## RenderGroup
+## MessageProcessor and ShapeMessageProcessor
 
-A RenderGroup (`view.ts`) is read-only: its changes come from edits to its
-source. Its table has those edits as calls, as the contract's fixture makes
-them, and the group's own observers, `on` and `off`. The EventEmitter rules
-(`events.ts`) are checked through the group's change event.
+A processor (`dataModel.ts`) is checked by playing clients against a fake
+sequencer (`messageProcessor.contract.ts`). Its observables are the model
+(its shapes and their order), the model's change events, `outgoing`, and
+the stamps on later outgoing operations. Rule IDs without a prefix are
+`MessageProcessor`'s; `SMP.` is `ShapeMessageProcessor`.
 
-| Call | get, size, forEach, compareZ | inRect, atPoint results | Earlier `out` arrays | Listener calls | Returns |
-|---|---|---|---|---|---|
-| An edit that changes the items | `size`, `z-order`, `get-agrees`, `stable`, `no-reuse` | `*.exact` over `regions` | `no-retain` | `notifies`, `EventEmitter.on.notified`, `EventEmitter.off.removes-one`, `EventEmitter.order`, `EventEmitter.snapshot` | deferred† |
-| An edit that changes nothing | `read-only`\* | `*.exact` | `no-retain` | `quiet` | deferred† |
-| `get`, `size`, `forEach`, `compareZ` | `read-only`, `compareZ.zero-iff-same`, `compareZ.antisymmetric` | `read-only` | `no-retain` | `quiet` | `get-agrees`, `size`, `z-order`, `compareZ.*` |
-| `inRect`, `atPoint` | `read-only` | `read-only`; results by `*.exact`, `*.once`, `*.count` | `*.append`, `no-retain` | `quiet` | `*.count` |
-| `on`, `off` | `read-only` | `read-only` | `no-retain` | `EventEmitter.on.notified`, `EventEmitter.off.removes-one`, `quiet` | `this`, by type |
+| Call | Model | Model change events | `outgoing` | Returns |
+|---|---|---|---|---|
+| `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | `OperationSource.outgoing-once`, `OperationSource.outgoing-copy`; stamps by `stamps` and `Operation.*` | nothing |
+| `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | open: nothing says it emits nothing | nothing |
+| `process` | `SMP.add-on-z`, `SMP.kept`, `SMP.remove-listed`, `SMP.clear-known`, `SMP.ack-keeps-z`; `converges` across clients | `SMP.one-change`, `SMP.ack-keeps-z` | open: nothing says it emits nothing | settles once the queues are empty (by its doc) |
+| `newShapeId` | `sole-writer` | `sole-writer` | open, as for `remote.enqueue` | `SMP.new-ids` |
+| Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | open, as for `remote.enqueue` | `SMP.read-facet` |
+| Nothing (time passing) | `passive` | `passive` | — | — |
 
-\* An edit that changes nothing leaves the items as they were by
-definition; `read-only` covers reads made by listeners during an edit.
+Unspecified on purpose: operations that break `formed-now`, `remote-seq`,
+`unique-identity`, `SMP.fresh-add-id` or `SMP.in-range`; and calls from
+anything but the message infrastructure (`infrastructure-only`).
 
-† Edits belong to the source, not the group, so what they return is the
-source's business. For `ShapeGroup` they follow `ShapeCollection`'s rules,
-which the conversion contract below will check.
-
-Unspecified on purpose: a listener that changes the source while it is
-being called, or throws. A listener that adds or removes listeners is
-covered by `EventEmitter.snapshot`. Not yet covered: whether the
-group's items are the right ones for its source. That belongs to a
-conversion contract between a source and its group, which is deferred; for
-`ShapeGroup` the fixture's edits are checked only as far as the group
-shows them.
+Open for the human: `outgoing` on any call but `local.enqueue`. The
+contract's harness would see an extra outgoing operation only if it
+sequenced it; a rule such as "only `local.enqueue` emits `outgoing`" would
+close the column.
 
 ## ShapeView
 
 A ShapeView (`shapeView.ts`) is checked with its View rules (`view.ts`).
 Its observables are what its surface shows (`painted`), its frame requests
-(through a `ManualScheduler`), and its listeners on the scene's groups.
+(through a `ManualScheduler`), and its listeners on the model.
 Rule IDs without a prefix are `View`'s.
 
-| Call | What the surface shows | Frame requests | Listeners on groups | Returns |
+| Call | What the surface shows | Frame requests | Listeners on the model | Returns |
 |---|---|---|---|---|
-| Creating the view | unspecified until the first frame | `ShapeView.first-frame` | one listener per group (`one-listener`) | — |
-| A group change | `group-change` (unchanged until a frame) | `group-change` | `one-listener` | — |
+| Creating the view | unspecified until the first frame | `ShapeView.first-frame` | `one-listener` | — |
+| A model change | `model-change` (unchanged until a frame) | `model-change` | `one-listener` | — |
 | `frame()` | `ShapeView.frame.paints` | `idle` | `one-listener` | nothing |
-| Reading `scene`, `viewport` | `read-only` | `read-only` | `read-only` | `viewport` is the identity, by the ShapeView doc§ |
+| Reading `model`, `viewport` | `read-only` | `read-only` | `read-only` | `viewport` is the identity, by the ShapeView doc§ |
 | `dispose()`, and anything after it | `dispose.inert` | `dispose.detaches` | `dispose.detaches` | nothing |
 | Setting `viewport` | outside the rules for ShapeView | outside the rules | outside the rules | — |
 | `on`, `off` (viewport) | — | — | — | the EventEmitter rules apply; `viewport` is never emitted yet |
