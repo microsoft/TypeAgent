@@ -19,6 +19,154 @@ Tests use authored fixtures, real SQLite stores and owned child processes. They
 make no provider calls and establish no LongMemEval accuracy or live speedup.
 Private temporary test directories are removed after the test.
 
+## Experimental native embedding batches
+
+The native agent-server memory host retains embedding batches of 64 by default.
+`TYPEAGENT_MEMORY_EMBEDDING_BATCH_SIZE=256` opts into the investigated larger
+batch for both related terms and message text. Only exact values `64` and `256`
+are accepted; other explicit values fail. The larger treatment requires both
+configured embedding models to declare capacity of at least 256. Model identity,
+extraction batch size 8, cache size 64, evidence checks and readiness gates are
+unchanged. The host captures the choice when creating the service.
+
+This is a qualification treatment, not a promoted default. Frozen extraction
+and vector replay must conserve actual persisted vectors, their dimensions,
+embedding identities and index locations. Repeated live embedding responses can
+differ numerically; graph equality alone does not establish vector or retrieval
+equivalence. Record provider variability, request counts, actual source phase
+latency, retrieval/answer quality and full-history readiness independently.
+Broader corpus aggregate-token limits remain a qualification concern; a declared
+item-count limit is not proof of every possible batch's token admissibility.
+
+## Low-volume maintenance timing
+
+`TYPEAGENT_MEMORY_SEARCH_TRACE=coarse` enables checkpoint discovery,
+maintenance/currentness/finalization, joined-build waits, family target work,
+build queues, generation, support validation/repair/reverification and
+cancellation timing. Fine per-fragment operations are excluded before clocks,
+span allocation or serialization. `1` retains full tracing; unset/`0` disables
+tracing. Correlation includes opaque checkpoint/build IDs and bounded
+family/pipeline/state values, never source text, questions or error bodies.
+
+Measure source-job phases and provider attempts alongside these timings. Nested
+spans are non-additive, callback success is not readiness, and state/start/finish
+events are counters rather than zero-latency work. Target-state diagnostics are
+progress only: searchable question targets do not establish aggregate question
+or checkpoint readiness. Keep interrupted elapsed separate from returned work;
+starts without settled work remain censored.
+
+The supervised five-case campaign uses coarse mode equally for control and
+candidate. A verified exited control readiness timeout or admitted-work watchdog
+timeout permits one fresh candidate, without rerunning control or changing
+evidence/readiness gates. Startup, unrelated failures and unconfirmed worker
+exit still require review. Candidate admission uses the original remaining
+authorization budget; an exhausted global deadline prevents launch. The
+failed control remains failed, even if the candidate completes, and reports
+retain each arm's independent outcomes and readiness-wait duration.
+
+This continuation policy belongs to the supervised campaign controller, not
+every invocation of the generic indexing driver. Preserve the controller,
+supervisor and report source with each fresh run's private provenance.
+
+## Consolidated offline latency experiments
+
+After building, run ten alternating pairs without enabling any live provider:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$output = Join-Path $env:LOCALAPPDATA 'TypeAgent\consolidated-offline.json'
+node tools\memory-maintenance-qualification\consolidated-latency-benchmark.mjs --samples 10 --output $output
+```
+
+The output parent must exist; existing output files are never overwritten.
+Source patch and compiled/tool hashes must remain unchanged during measurement.
+Network requests fail rather than falling back to a provider. The extraction
+track is a synthetic virtual-clock DAG at 24/536 parts, concurrency at most eight
+and serial two-source-group boundaries, **not** a production scheduler or replay
+of the live history. The Wiki track exercises the existing runner at concurrency
+one/two on twelve authored deferred decisions, with stable and changing guarded
+witnesses. After a stale prepared receipt, the runner stops opening new speculative
+windows for that job. Existing in-flight work drains and is still revalidated.
+This bounds discarded preparations to the first stale window (at most concurrency
+minus one) rather than repeating waste throughout a changing inventory. A new job
+may prepare in parallel again; default concurrency remains one.
+The native derivative prototype deliberately tests removing semantic
+extraction; failed alias/semantic parity rejects that treatment. Embeddings are
+disabled there. Continuous-topic replay compares eight quiescent append waves
+using real capture/curation with authored model responses. None establishes live
+quality, published readiness, vector parity or an end-to-end speedup.
+
+The compiled `topicWorkReuse.spec` suite separately drives the actual file
+service through three successive in-flight evidence cuts, six appends, a cold
+reopen and quiescent catch-up with reuse off/on. It asserts exact model work:
+6 versus 5 requests and 126 versus 60 processed node occurrences. Private work
+stays unqueryable until current, and both arms finish with all 54 nodes.
+Correction, forget, staged correction and cancellation/reopen guards remain
+separate production-service regression cases.
+
+Coarse tracing also includes four whole-index phase start/end pairs:
+`ingestion.phase.extraction`, `relatedEmbedding`, `messageEmbedding` and
+`persist`, plus one synchronous `ingestion.phase.localIndexes` span: at most nine
+events per ordinary rebuild/append. Persistence covers conversation-file writes,
+not the entire manifest/publication transaction. Extraction includes ordered
+semantic-reference application; local indexes cover transient secondary indexes.
+Prepared-indexing treatments may have different/overlapping work and need separate
+attribution. Existing progress callbacks are unchanged and remain cumulative,
+not exclusive phase boundaries. Consolidation adds separate
+`wiki.consolidation.check`, `repair` and `recheck` spans; completed checks are not
+proof that the returned assessment was safe.
+
+The default-off `TYPEAGENT_MEMORY_PERF_EXPERIMENTS` switches
+`synopsis-checkpoint-priority` and `early-required-failure` are independent probes.
+The former defers new synopsis work for the checkpoint's corpus for at most
+30 seconds; active generation drains, then pending synopses are rescanned on
+release or checkpoint completion. A one-second cooldown prevents back-to-back
+checkpoints from continuously renewing the hold. The latter notifies existing
+`failOnRequiredFailure` waiters after a guarded required-target failure, without
+cancelling independent targets or marking the checkpoint ready.
+
+### Remaining-gate qualification tools
+
+`wiki-consolidation-qualification.mjs` freezes a retained blocked target and all
+compatible accepted partners through the native immutable history reader. Its
+live mode requires a new authorization file and captures exact model requests,
+responses and occurrence bindings. It records explicitly when the old rejected
+partner or old response bodies were not retained: a fresh scope assessment is not
+a reconstruction of that missing response. Configuration/model initialization
+consumes the original authorization window; the remaining allowance is recomputed
+after initialization and the absolute deadline is checked before each model call.
+Consolidation comparison now receives
+both articles' original retrieval queries/aliases; mentioning sibling variants
+does not broaden a variant-specific reference.
+
+`wiki-inventory-qualification.mjs` captures six real target snapshots and two
+retained page inventories, then records actual model assessments. Only targets
+with recorded non-generative decisions in both inventories enter guarded replay;
+all captured decisions remain available, including excluded targets. Ten
+alternating replays at concurrency one/two/four compare exact receipt sequences.
+The one inventory transition is scripted; 0.005-scaled delays and replay wall
+times are not live maintenance latency or publication qualification.
+
+`native-extraction-capture.mjs` captures the complete authorized 45-source,
+536-part `4f54b7c9` history using the ordinary native index, batch eight, embedding
+batch 64 and serial two-source ingestion groups. An append-only journal retains
+started, settled and failed request occurrences; an absolute authorization check
+and bounded work signal prevent a new paid capture outside its window.
+`native-extraction-replay.mjs` replays captured responses only, comparing native
+eight-location batches against fixed 16-location windows with eight provider
+slots using the actual durable-memory host configuration around its recorded
+provider boundary. It checks exact temporal request bindings, semantic graph and persisted
+index/vector state plus cold reopen. Only the validated host `lastIndexed`
+timestamp is excluded from cross-arm equality. The virtual-clock comparison uses
+observed per-request durations and the same fixed-window policy; it is not new
+provider latency or a sliding-window implementation. The host defaults to eight;
+`TYPEAGENT_MEMORY_EXTRACTION_WINDOW_SIZE=16` explicitly enables fixed sixteen-location
+windows with a shared eight-call limiter per index across both extractor methods.
+Only `8` and `16` are accepted. Embedding settings, temporal-owner sequencing and
+ordered semantic application are unchanged. This experiment is independent of
+the embedding-batch treatment and is not a promoted default.
+These tools refuse existing output directories.
+
 ## Freeze data and execution identity
 
 Obtain the pinned `longmemeval_s_cleaned.json` and official judge source through

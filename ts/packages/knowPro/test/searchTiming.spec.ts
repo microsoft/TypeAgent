@@ -3,9 +3,11 @@
 
 import {
     currentSearchTraceId,
+    isSearchTimingEnabled,
     recordSearchTiming,
     runWithSearchTiming,
     timeSearchStage,
+    timeSearchPhase,
 } from "../src/searchTiming.js";
 
 describe("search timing", () => {
@@ -27,6 +29,129 @@ describe("search timing", () => {
             process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
         }
         console.warn = originalWarn;
+    });
+
+    test("whole-group phases emit eight events including awaited work, not progress callbacks", async () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+        const originalClock = performance.now;
+        let clock = 0;
+        performance.now = () => clock;
+        try {
+            await runWithSearchTiming("phases", "test", async () => {
+                for (const phase of [
+                    "extraction",
+                    "relatedEmbedding",
+                    "messageEmbedding",
+                    "persist",
+                ]) {
+                    await timeSearchPhase(
+                        `ingestion.phase.${phase}`,
+                        async () => {
+                            clock += 2;
+                            await Promise.resolve();
+                            clock += 8;
+                        },
+                    );
+                }
+            });
+            const entries = logs.map((line) =>
+                JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(entries).toHaveLength(8);
+            expect(entries.map((entry) => entry.elapsedMs)).toEqual([
+                0, 10, 0, 10, 0, 10, 0, 10,
+            ]);
+            expect(entries.every((entry) => entry.status === "success")).toBe(
+                true,
+            );
+        } finally {
+            performance.now = originalClock;
+        }
+    });
+
+    test("phase failures preserve rejection and disabled phases preserve promise identity", async () => {
+        const failure = new Error("private response");
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+        await expect(
+            runWithSearchTiming("phases", "test", () =>
+                timeSearchPhase("ingestion.phase.extraction", async () => {
+                    throw failure;
+                }),
+            ),
+        ).rejects.toBe(failure);
+        expect(logs).toHaveLength(2);
+        expect(
+            JSON.parse(logs[1].replace("[memory-search-timing] ", "")).status,
+        ).toBe("error");
+        expect(logs.join("")).not.toContain("private response");
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "0";
+        const promise = Promise.resolve(7);
+        expect(
+            timeSearchPhase("ingestion.phase.extraction", () => promise),
+        ).toBe(promise);
+    });
+
+    test("coarse mode skips 5000 fine operations without clocks, logs or promise replacement", async () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+        const clock = performance.now;
+        let calls = 0;
+        performance.now = () => {
+            calls++;
+            return clock.call(performance);
+        };
+        try {
+            const promise = Promise.resolve(42);
+            runWithSearchTiming("coarse", "test", () => {
+                expect(currentSearchTraceId()).toBe("coarse");
+                expect(isSearchTimingEnabled()).toBe(false);
+                expect(isSearchTimingEnabled("view.support.repair")).toBe(true);
+                for (let i = 0; i < 5000; i++) {
+                    expect(
+                        timeSearchStage("index.fragment.add", () => promise),
+                    ).toBe(promise);
+                    recordSearchTiming("index.fragment.add", 0);
+                }
+            });
+            expect(await promise).toBe(42);
+            expect(calls).toBe(0);
+            expect(logs).toHaveLength(0);
+        } finally {
+            performance.now = clock;
+        }
+    });
+
+    test("coarse stages retain family, pipeline and parent spans without source text", async () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+        const failure = new TypeError("private evidence");
+        await expect(
+            runWithSearchTiming(
+                "coarse",
+                "outer",
+                () =>
+                    timeSearchStage("build.target.total", () =>
+                        runWithSearchTiming(undefined, "model", () =>
+                            timeSearchStage("view.support.repair", async () => {
+                                throw failure;
+                            }),
+                        ),
+                    ),
+                {
+                    corpusId: "corpus",
+                    family: "questions",
+                    pipeline: "schema-defined-v1",
+                    query: "private evidence",
+                },
+            ),
+        ).rejects.toBe(failure);
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        expect(entries).toHaveLength(2);
+        expect(entries[0].parentSpanId).toBe(entries[1].spanId);
+        expect(entries[0].metadata.family).toBe("questions");
+        expect(entries[0].metadata.pipeline).toBe("schema-defined-v1");
+        expect(entries[0].status).toBe("error");
+        expect(logs.join("")).not.toContain("private evidence");
     });
 
     test("nested stage IDs retain parent relationships without logging exception text", async () => {

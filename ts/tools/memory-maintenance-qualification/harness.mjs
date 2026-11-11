@@ -955,9 +955,12 @@ export const phases = [
 ];
 
 export async function writeJson(file, value) {
+    const { retryFilesystemPublication } = await import(
+        "../../packages/memory/service/dist/filesystemPublication.js"
+    );
     const temporary = `${file}.${process.pid}.tmp`;
     await writeFile(temporary, JSON.stringify(value, null, 2));
-    await rename(temporary, file);
+    await retryFilesystemPublication(() => rename(temporary, file));
 }
 
 export function validateSpec(spec) {

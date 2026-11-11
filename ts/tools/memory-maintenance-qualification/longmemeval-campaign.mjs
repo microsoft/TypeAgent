@@ -32,6 +32,15 @@ export function campaignDecision(
     if (benchmark?.outcome === "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL")
         return "COMPLETE";
     if (
+        [
+            "FULL_500_COMPLETED_WITH_FAILURES",
+            "DIAGNOSTIC_SELECTION_COMPLETED_WITH_FAILURES",
+        ].includes(benchmark?.outcome)
+    )
+        return benchmark.attempts.at(-1)?.supportedClose === "COMPLETE"
+            ? "COMPLETE_WITH_FAILURES"
+            : "STOP_UNCLEAN_CLOSE";
+    if (
         benchmark &&
         !["PARTIAL_BOUNDED_WORK", "PARTIAL_QUESTION_LIMIT"].includes(
             benchmark.outcome,
@@ -154,7 +163,7 @@ async function invoke(args, state, persist) {
         (total, entry) =>
             total +
             entry.operations.length +
-            (entry.status === "complete" ? 1 : 0),
+            (["complete", "failed"].includes(entry.status) ? 1 : 0),
         0,
     );
     state.invocations.push({
@@ -305,7 +314,11 @@ export async function main(args = process.argv.slice(2)) {
                 invocations: state.invocations.length,
             }) + "\n",
         );
-        process.exitCode = state.outcome.startsWith("STOP_") ? 1 : 0;
+        process.exitCode =
+            state.outcome.startsWith("STOP_") ||
+            state.outcome === "COMPLETE_WITH_FAILURES"
+                ? 1
+                : 0;
     });
 }
 

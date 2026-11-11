@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import {
+    recordSearchTiming,
+    runWithSearchTiming,
+    timeSearchStage,
+} from "@typeagent/knowpro";
 import type {
     CorpusQuestionInput,
     CorpusQuestionProposal,
@@ -19,6 +24,7 @@ import type {
 } from "./knowledgeTypes.js";
 import { knowledgeLimits } from "./knowledgeTypes.js";
 import { abortable } from "./viewBuilds.js";
+import type { ViewBuildJob } from "./viewTypes.js";
 
 export interface KnowledgeDocument extends KnowledgeSource {
     title: string;
@@ -111,6 +117,52 @@ export class KnowledgeCoordinator {
     private closed = false;
 
     public constructor(private readonly host: KnowledgeHost) {}
+
+    public async observeBuildFailure(job: ViewBuildJob): Promise<void> {
+        const status = await this.host.read(job.corpusId);
+        const families: Partial<Record<string, KnowledgeFamily>> = {
+            "schema-defined-v1": "questions",
+            "informational-wiki-v1": "wiki",
+            "informational-project-summary-v1": "projects",
+            "topics-v1": "topics",
+        };
+        for (const checkpoint of status.checkpoints) {
+            if (terminal(checkpoint) || !checkpoint.jobIds.includes(job.jobId))
+                continue;
+            for (const result of job.results) {
+                const family = families[result.snapshot.pipeline];
+                if (!family || !["failed", "blocked"].includes(result.state))
+                    continue;
+                if (
+                    result.snapshot.inputs.length === 0 ||
+                    !result.snapshot.inputs.every((input) =>
+                        checkpoint.sources.some(
+                            (source) =>
+                                source.sourceId === input.sourceId &&
+                                source.revisionId === input.revisionId,
+                        ),
+                    )
+                )
+                    continue;
+                if (
+                    checkpoint.requiredFailures?.some(
+                        (failure) =>
+                            failure.family === family &&
+                            failure.jobIds.includes(job.jobId) &&
+                            failure.viewIds.includes(result.viewId),
+                    )
+                )
+                    continue;
+                await this.requiredFailure(checkpoint, {
+                    family,
+                    state: result.state === "blocked" ? "blocked" : "failed",
+                    reasons: [result.reason],
+                    jobIds: [job.jobId],
+                    viewIds: [result.viewId],
+                });
+            }
+        }
+    }
 
     public schedule(corpusId: string): void {
         if (
@@ -529,7 +581,18 @@ export class KnowledgeCoordinator {
             promise: failure,
             resolve: notifyFailure,
         });
-        const work = this.runCheckpoint(checkpoint, sources, timeoutMs);
+        const work = runWithSearchTiming(
+            checkpoint.checkpointId,
+            "memory.knowledge.checkpoint",
+            () =>
+                timeSearchStage("knowledge.checkpoint.total", () =>
+                    this.runCheckpoint(checkpoint, sources, timeoutMs),
+                ),
+            {
+                corpusId: checkpoint.corpusId,
+                checkpointId: checkpoint.checkpointId,
+            },
+        );
         this.checkpoints.set(checkpoint.checkpointId, work);
         const finished = () => {
             this.checkpoints.delete(checkpoint.checkpointId);
@@ -587,10 +650,15 @@ export class KnowledgeCoordinator {
                 });
                 return;
             }
-            const discoveryErrors = await this.discoverForCheckpoint(
-                checkpoint,
-                sources,
-                controller.signal,
+            recordSearchTiming("knowledge.checkpoint.discovery.start", 0);
+            const discoveryErrors = await timeSearchStage(
+                "knowledge.checkpoint.discovery",
+                () =>
+                    this.discoverForCheckpoint(
+                        checkpoint,
+                        sources,
+                        controller.signal,
+                    ),
             );
             controller.signal.throwIfAborted();
             if (!(await this.current(checkpoint))) {
@@ -627,58 +695,69 @@ export class KnowledgeCoordinator {
                     viewIds: [],
                     jobIds: [],
                 });
-            const result = await this.host.maintain(
-                checkpoint,
-                controller.signal,
-                (failure) => this.requiredFailure(checkpoint, failure),
+            recordSearchTiming("knowledge.checkpoint.maintenance.start", 0);
+            const result = await timeSearchStage(
+                "knowledge.checkpoint.maintenance",
+                () =>
+                    this.host.maintain(
+                        checkpoint,
+                        controller.signal,
+                        (failure) => this.requiredFailure(checkpoint, failure),
+                    ),
             );
-            const stillCurrent = await this.current(checkpoint);
-            await this.change(checkpoint, {
-                ...result,
-                state: !stillCurrent
-                    ? "superseded"
-                    : discoveryErrors.length
-                      ? "failed"
-                      : result.state === "ready" && discovery.limited
-                        ? "partial"
-                        : result.state,
-                reasons: [
-                    ...result.reasons,
-                    ...discoveryErrors,
-                    ...discovery.reasons,
-                    ...(!stillCurrent ? ["Captured evidence changed"] : []),
-                ],
-                diagnostics: [
-                    ...(result.diagnostics ?? []),
-                    ...(discoveryErrors.length
-                        ? [
-                              {
-                                  phase: "discovery" as const,
-                                  state: "failed" as const,
-                                  code: "discovery-failed" as const,
-                              },
-                          ]
-                        : []),
-                    ...(discovery.limited
-                        ? [
-                              {
-                                  phase: "discovery" as const,
-                                  state: "partial" as const,
-                                  code: "discovery-incomplete" as const,
-                              },
-                          ]
-                        : []),
-                    ...(!stillCurrent
-                        ? [
-                              {
-                                  phase: "checkpoint" as const,
-                                  state: "superseded" as const,
-                                  code: "evidence-changed" as const,
-                              },
-                          ]
-                        : []),
-                ],
-            });
+            const stillCurrent = await timeSearchStage(
+                "knowledge.checkpoint.current",
+                () => this.current(checkpoint),
+            );
+            recordSearchTiming("knowledge.checkpoint.finalize.start", 0);
+            await timeSearchStage("knowledge.checkpoint.finalize", () =>
+                this.change(checkpoint, {
+                    ...result,
+                    state: !stillCurrent
+                        ? "superseded"
+                        : discoveryErrors.length
+                          ? "failed"
+                          : result.state === "ready" && discovery.limited
+                            ? "partial"
+                            : result.state,
+                    reasons: [
+                        ...result.reasons,
+                        ...discoveryErrors,
+                        ...discovery.reasons,
+                        ...(!stillCurrent ? ["Captured evidence changed"] : []),
+                    ],
+                    diagnostics: [
+                        ...(result.diagnostics ?? []),
+                        ...(discoveryErrors.length
+                            ? [
+                                  {
+                                      phase: "discovery" as const,
+                                      state: "failed" as const,
+                                      code: "discovery-failed" as const,
+                                  },
+                              ]
+                            : []),
+                        ...(discovery.limited
+                            ? [
+                                  {
+                                      phase: "discovery" as const,
+                                      state: "partial" as const,
+                                      code: "discovery-incomplete" as const,
+                                  },
+                              ]
+                            : []),
+                        ...(!stillCurrent
+                            ? [
+                                  {
+                                      phase: "checkpoint" as const,
+                                      state: "superseded" as const,
+                                      code: "evidence-changed" as const,
+                                  },
+                              ]
+                            : []),
+                    ],
+                }),
+            );
         } catch (error) {
             await this.change(checkpoint, {
                 state: this.closed ? "cancelled" : "failed",
@@ -696,6 +775,9 @@ export class KnowledgeCoordinator {
                 ],
             });
         } finally {
+            recordSearchTiming("knowledge.checkpoint.finished", 0, {
+                cancelled: controller.signal.aborted,
+            });
             this.host.end?.(checkpoint.corpusId);
             clearTimeout(timer);
             this.controllers.delete(controller);
@@ -804,6 +886,20 @@ export class KnowledgeCoordinator {
             );
             if (!stored) throw new Error("Knowledge checkpoint was removed");
             if (stored.state === "superseded") return;
+            if (
+                stored.requiredFailures?.some(
+                    (existing) =>
+                        existing.family === failure.family &&
+                        existing.state === failure.state &&
+                        JSON.stringify(existing.jobIds) ===
+                            JSON.stringify(failure.jobIds) &&
+                        JSON.stringify(existing.viewIds) ===
+                            JSON.stringify(failure.viewIds) &&
+                        JSON.stringify(existing.reasons) ===
+                            JSON.stringify(failure.reasons),
+                )
+            )
+                return;
             (stored.requiredFailures ??= []).push({
                 ...structuredClone(failure),
                 observedAt: new Date().toISOString(),
@@ -846,6 +942,17 @@ export class KnowledgeCoordinator {
             Object.assign(stored, update, {
                 updatedAt: new Date().toISOString(),
             });
+            recordSearchTiming(
+                "knowledge.checkpoint.state",
+                0,
+                {
+                    state: stored.state,
+                    requiredFailures: stored.requiredFailures?.length ?? 0,
+                },
+                stored.state === "failed" || stored.state === "cancelled"
+                    ? "error"
+                    : "success",
+            );
         });
     }
 
