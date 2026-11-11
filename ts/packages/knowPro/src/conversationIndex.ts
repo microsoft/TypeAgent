@@ -35,6 +35,7 @@ import {
     validateEmbeddingVector,
 } from "@typeagent/aiclient";
 import { extractKnowledgeWithTemporalContext } from "./temporalKnowledge.js";
+import { timeSearchPhase } from "./searchTiming.js";
 import { facetValueToString } from "./knowledgeLib.js";
 import { createKnowledgeExtractor } from "./knowledge.js";
 import {
@@ -1060,29 +1061,30 @@ export async function addToSemanticRefIndex(
     eventHandler?: IndexingEventHandlers,
     termsAdded?: Set<string>,
 ): Promise<TextIndexingResult> {
-    beginIndexing(conversation);
-
-    const knowledgeExtractor =
-        settings.knowledgeExtractor ?? createKnowledgeExtractor();
-    let indexingResult: TextIndexingResult | undefined;
-    for (const textLocationBatch of getMessageChunkBatch(
-        conversation.messages,
-        messageOrdinalStartAt,
-        settings.batchSize,
-    )) {
-        indexingResult = await addBatchToSemanticRefIndex(
-            conversation,
-            textLocationBatch,
-            knowledgeExtractor,
-            settings.knowledgeValidator,
-            eventHandler,
-            termsAdded,
-        );
-        if (indexingResult.error !== undefined) {
-            break;
+    return timeSearchPhase("ingestion.phase.extraction", async () => {
+        beginIndexing(conversation);
+        const knowledgeExtractor =
+            settings.knowledgeExtractor ?? createKnowledgeExtractor();
+        let indexingResult: TextIndexingResult | undefined;
+        for (const textLocationBatch of getMessageChunkBatch(
+            conversation.messages,
+            messageOrdinalStartAt,
+            settings.batchSize,
+        )) {
+            indexingResult = await addBatchToSemanticRefIndex(
+                conversation,
+                textLocationBatch,
+                knowledgeExtractor,
+                settings.knowledgeValidator,
+                eventHandler,
+                termsAdded,
+            );
+            if (indexingResult.error !== undefined) {
+                break;
+            }
         }
-    }
-    return indexingResult ?? {};
+        return indexingResult ?? {};
+    });
 }
 
 /**

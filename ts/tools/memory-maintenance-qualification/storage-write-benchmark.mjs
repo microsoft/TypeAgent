@@ -19,6 +19,7 @@ import {
 } from "../../packages/knowPro/dist/segmentedJson.js";
 import { waitForMemoryJob } from "../../packages/memory/service/dist/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "../../packages/memory/service/dist/test/fakeSemanticCorpusIndex.js";
+import { resolveIngestionCommitPolicy } from "../../packages/memory/service/dist/batchImport.js";
 
 const copyDirectory = fs.cp;
 let onIndexCopy;
@@ -105,7 +106,9 @@ async function workload(root, count, samples) {
                 },
                 pipeline: { updatePolicy: "replaceActiveRevision" },
             });
-            const job = await waitForMemoryJob(service, accepted.jobId);
+            const job = await waitForMemoryJob(service, accepted.jobId, {
+                pollIntervalMs: 5,
+            });
             assert.equal(job.state, "complete", job.error);
         }
         for (let i = 0; i < count; i++) await ingest(`source-${i}`, "seed");
@@ -146,7 +149,7 @@ async function workload(root, count, samples) {
     }
 }
 
-async function batchWorkload(root, samples) {
+async function batchWorkload(root, samples, groupSize, memberCount) {
     const observations = [];
     for (let sample = 0; sample < samples; sample++) {
         const counters = {
@@ -171,6 +174,7 @@ async function batchWorkload(root, samples) {
             viewDrafts: false,
             informationalViews: false,
             sourceSynopses: false,
+            ingestionCommitPolicy: { maxDocuments: groupSize },
             indexFactory: (_, indexDirectory) =>
                 new CountingIndex(indexDirectory),
         });
@@ -214,33 +218,57 @@ async function batchWorkload(root, samples) {
             );
             measuring = true;
             const start = performance.now();
-            let batch = await service.startBatchImport({
-                corpusId,
-                idempotencyKey: "fixed-batch",
-                documents: Array.from({ length: 8 }, (_, i) => ({
-                    source: {
-                        sourceId: `member-${i}`,
-                        sourceType: "text",
-                        title: `member-${i}`,
-                        text: `${"offline acquired text ".repeat(500)}unique member ${i}`,
-                    },
-                })),
-            });
-            while (batch.state === "running") {
-                await new Promise((resolve) => setTimeout(resolve, 5));
-                batch = await service.getBatchImport(batch.batchId);
+            let firstMemberReadyMs;
+            let expectedGroups = 0;
+            // The public batch API admits at most 50 members per request.
+            for (let offset = 0; offset < memberCount; offset += 50) {
+                const count = Math.min(50, memberCount - offset);
+                expectedGroups += Math.ceil(count / groupSize);
+                let batch = await service.startBatchImport({
+                    corpusId,
+                    idempotencyKey: `fixed-batch-${offset}`,
+                    documents: Array.from({ length: count }, (_, ordinal) => {
+                        const i = offset + ordinal;
+                        return {
+                            source: {
+                                sourceId: `member-${i}`,
+                                sourceType: "text",
+                                title: `member-${i}`,
+                                text: `${"offline acquired text ".repeat(500)}unique member ${i}`,
+                            },
+                        };
+                    }),
+                });
+                while (batch.state === "running") {
+                    if (
+                        firstMemberReadyMs === undefined &&
+                        batch.members[0]?.state === "complete"
+                    )
+                        firstMemberReadyMs = performance.now() - start;
+                    await new Promise((resolve) => setTimeout(resolve, 5));
+                    batch = await service.getBatchImport(batch.batchId);
+                }
+                if (firstMemberReadyMs === undefined)
+                    firstMemberReadyMs = performance.now() - start;
+                assert.equal(batch.state, "complete", JSON.stringify(batch));
+                assert.equal(batch.members.length, count);
+                assert.ok(
+                    batch.members.every(
+                        (member) => member.state === "complete" && member.jobId,
+                    ),
+                );
             }
             const elapsedMs = performance.now() - start;
             measuring = false;
-            assert.equal(batch.state, "complete", JSON.stringify(batch));
-            assert.equal(batch.members.length, 8);
-            assert.ok(
-                batch.members.every(
-                    (member) => member.state === "complete" && member.jobId,
-                ),
+            assert.equal(counters.indexCopies, expectedGroups);
+            assert.equal(counters.manifestWrites, expectedGroups);
+            assert.equal(counters.providerBatches, expectedGroups);
+            assert.equal(counters.providerDocuments, memberCount);
+            assert.equal(
+                (await service.listSources(corpusId)).length,
+                memberCount + 1,
             );
-            assert.equal((await service.listSources(corpusId)).length, 9);
-            for (let i = 0; i < 8; i++)
+            for (let i = 0; i < memberCount; i++)
                 assert.ok(
                     (
                         await service.getSourceContent({
@@ -250,7 +278,7 @@ async function batchWorkload(root, samples) {
                         })
                     ).content.includes(`unique member ${i}`),
                 );
-            observations.push({ elapsedMs, ...counters });
+            observations.push({ elapsedMs, firstMemberReadyMs, ...counters });
         } finally {
             measuring = false;
             fs.writeFile = writeFile;
@@ -260,7 +288,9 @@ async function batchWorkload(root, samples) {
         }
     }
     return {
-        memberCount: 8,
+        memberCount,
+        groupSize,
+        batchRequestCount: Math.ceil(memberCount / 50),
         retainedSourceCount: 1,
         observations,
         elapsedMs: summary(observations.map((sample) => sample.elapsedMs)),
@@ -339,7 +369,9 @@ async function deltaWorkload(root, samples, delta) {
                 },
                 pipeline: { updatePolicy: "retainRevisionHistory" },
             });
-            const job = await waitForMemoryJob(service, accepted.jobId);
+            const job = await waitForMemoryJob(service, accepted.jobId, {
+                pollIntervalMs: 5,
+            });
             assert.equal(job.state, "complete", job.error);
         };
         for (let i = 0; i < 8; i++) await ingest(`source-${i}`, "seed");
@@ -462,7 +494,33 @@ async function segmentWorkload(root, samples, recordCount) {
     };
 }
 
-export async function runStorageWriteBenchmark(samples, kind = "replace") {
+export async function runStorageWriteBenchmark(
+    samples,
+    kind = "replace",
+    options = {},
+) {
+    assert.ok(
+        Number.isSafeInteger(samples) && samples > 0 && samples <= 100,
+        "Samples must be 1-100",
+    );
+    assert.ok(
+        ["replace", "batch", "delta"].includes(kind),
+        "Invalid storage workload",
+    );
+    assert.ok(
+        kind === "batch" || Object.keys(options).length === 0,
+        "Group options require the batch workload",
+    );
+    const groupSize = resolveIngestionCommitPolicy({
+        maxDocuments: options.groupSize ?? 2,
+    }).maxDocuments;
+    const memberCount = options.memberCount ?? 8;
+    assert.ok(
+        Number.isSafeInteger(memberCount) &&
+            memberCount > 0 &&
+            memberCount <= 512,
+        "Batch member count must be 1-512",
+    );
     const root = await fs.mkdtemp(
         path.join(os.tmpdir(), "typeagent-storage-write-"),
     );
@@ -488,10 +546,11 @@ export async function runStorageWriteBenchmark(samples, kind = "replace") {
                         records,
                     );
         } else if (kind === "batch")
-            workloads["batch-eight-new-sources"] = await batchWorkload(
-                root,
-                samples,
-            );
+            workloads[
+                memberCount === 8
+                    ? "batch-eight-new-sources"
+                    : `batch-${memberCount}-new-sources`
+            ] = await batchWorkload(root, samples, groupSize, memberCount);
         else
             for (const count of [8, 64])
                 workloads[`replace-one-of-${count}`] = await workload(
@@ -539,6 +598,8 @@ export async function runStorageWriteBenchmark(samples, kind = "replace") {
                 workload: kind,
                 provider: "offline-stubs",
                 seed: "fixed",
+                observerPollIntervalMs: 5,
+                ...(kind === "batch" ? { groupSize, memberCount } : {}),
             },
             cpuMicros: process.cpuUsage(cpu),
             peakRssBytes: process.resourceUsage().maxRSS * 1024,
@@ -558,14 +619,29 @@ if (
             samples: { type: "string", default: "5" },
             workload: { type: "string", default: "replace" },
             output: { type: "string" },
+            "group-size": { type: "string" },
+            members: { type: "string" },
         },
     });
     const samples = Number(values.samples);
     assert.ok(Number.isSafeInteger(samples) && samples > 0 && samples <= 100);
     assert.ok(["replace", "batch", "delta"].includes(values.workload));
+    assert.ok(
+        values.workload === "batch" ||
+            (values["group-size"] === undefined &&
+                values.members === undefined),
+        "--group-size and --members require --workload batch",
+    );
     const result =
         JSON.stringify(
-            await runStorageWriteBenchmark(samples, values.workload),
+            await runStorageWriteBenchmark(samples, values.workload, {
+                ...(values["group-size"] === undefined
+                    ? {}
+                    : { groupSize: Number(values["group-size"]) }),
+                ...(values.members === undefined
+                    ? {}
+                    : { memberCount: Number(values.members) }),
+            }),
             null,
             2,
         ) + "\n";

@@ -538,6 +538,52 @@ These are opt-in experiments, not recommended production defaults. Set
 from `evidence-leases` through `lazy-collections`. Indexing experiments are
 selected separately.
 
+Two additional independent, default-off maintenance probes are available:
+`synopsis-checkpoint-priority` holds new optional synopsis work for the checkpoint
+corpus for at most 30 seconds, without cancelling active generation. Release and
+checkpoint completion rescan pending synopses, with a one-second cooldown before
+another hold so back-to-back checkpoints cannot continuously renew the hold.
+`early-required-failure` forwards
+guarded failed/blocked targets from attached, current-source builds to required
+checkpoint waiters; ordinary waiters and independent targets still drain.
+Neither switch changes readiness or publication requirements, and neither is
+included in `p2`, `p3` or `indexing-parallel`. See the
+[offline latency experiments](../../../tools/memory-maintenance-qualification/indexing-README.md#consolidated-offline-latency-experiments)
+before interpreting fixture timings as provider or end-to-end improvements.
+
+Six default-off Wiki/readiness switches support the next latency qualification:
+
+- `wiki-full-context` supplies complete prose for nominated canonical pages,
+  retaining the eight-page nomination bound and exact coverage checks.
+- `wiki-stable-evidence` orders retained sources/passages deterministically and
+  remaps contribution fragment IDs. Retrieval limits and selected evidence remain
+  part of the guarded input.
+- `wiki-utility-first` first assesses standalone utility without canonical prose.
+  Only an explicit evidence-only deferral bypasses canonical comparison; useful
+  candidates still compare nominated pages. Prepare at concurrency two with
+  `TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY=2`.
+- `wiki-coalesced-discovery` drains subject discovery before bounded explicit
+  maintenance passes. This coalesces discovery/sweep order, not multiple canonical
+  contributions into a single write. Automatic maintenance limits remain intact.
+- `wiki-grouped-contributions` combines two to four compatible candidates within
+  one preparation window against the same current canonical page. Every member
+  keeps its own frozen-input, assessment and context proof. Complete old/new
+  coverage precedes one draft/index installation; all committed member receipts
+  are atomic, and binding waits for the current derivative index. Evidence/alias
+  limits are unchanged; oversized groups explicitly split into guarded individual
+  contributions. Source/context changes, conflicts and cancellation never count as
+  successful binding. Explicit retry after an indexing failure can recover the
+  committed revision without regenerating it. This requires `wiki-full-context`,
+  assessment concurrency two to four and no per-target request-budget override.
+- `family-frozen-preparation` overlaps Wiki, project and topic work after questions.
+  It requires `TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY` of at least three. Project
+  preparation has a separate lane; installation retains serialized owner writes
+  and exact source/target/policy revalidation. Same-family exclusion remains.
+
+These switches do not alter models or relax required readiness, publication,
+editorial, correction or forgetting checks. They are not included in the existing
+experiment aliases. A combined treatment is not an isolated-factor measurement.
+
 | Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments.                                                                                                                                                                     |
@@ -947,11 +993,11 @@ The deadline includes time paused at checkpoints; yielding does not reset it.
 
 Scheduling options:
 
-| Option                             | Environment                                    | Default and behavior                                                                                               |
-| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `maintenanceShortBuildPriority`    | `TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY`        | `true` unless reservation is explicitly enabled; work-conserving short priority with safe native checkpoint yields |
-| `maintenanceShortBuildReservation` | `TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION`     | `false`; reserves one build slot from native topic jobs when there is more than one slot                           |
-| `wikiAssessmentConcurrency`        | `TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY` | `1`, integer 1..4; prepares Wiki purpose assessments concurrently, then applies guarded results in target order    |
+| Option                             | Environment                                    | Default and behavior                                                                                                                                                                                                                                |
+| ---------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maintenanceShortBuildPriority`    | `TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY`        | `true` unless reservation is explicitly enabled; work-conserving short priority with safe native checkpoint yields                                                                                                                                  |
+| `maintenanceShortBuildReservation` | `TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION`     | `false`; reserves one build slot from native topic jobs when there is more than one slot                                                                                                                                                            |
+| `wikiAssessmentConcurrency`        | `TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY` | `1`, integer 1..4; prepares Wiki purpose assessments concurrently, then applies guarded results in target order; falls back to serial preparation for the current job execution after a stale receipt; the fallback is not persisted across restart |
 
 Priority uses all build slots for native work when short work is absent. Jobs
 containing any `topics-v1` target are native-class; other jobs are short-class,

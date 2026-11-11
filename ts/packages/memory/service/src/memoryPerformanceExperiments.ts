@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { timeSearchStage } from "@typeagent/knowpro";
+import type { MaintenanceScheduler } from "./maintenanceScheduler.js";
 export const memoryPerformanceExperimentNames = [
     "fast-models",
     "brief-reader",
@@ -16,11 +17,42 @@ export const memoryPerformanceExperimentNames = [
     "topic-parallel",
     "synopsis-parallel",
     "embedding-parallel",
+    "synopsis-checkpoint-priority",
+    "early-required-failure",
+    "wiki-full-context",
+    "wiki-stable-evidence",
+    "wiki-utility-first",
+    "wiki-coalesced-discovery",
+    "wiki-grouped-contributions",
+    "family-frozen-preparation",
 ] as const;
 
 export type MemoryPerformanceExperiment =
     (typeof memoryPerformanceExperimentNames)[number];
 
+export function deferSynopsisForCheckpoint(
+    scheduler: Pick<MaintenanceScheduler, "deferFamily">,
+    corpusId: string,
+    resume: () => void,
+    maximumMs = 30_000,
+): () => void {
+    if (!Number.isSafeInteger(maximumMs) || maximumMs < 1 || maximumMs > 30_000)
+        throw new Error(
+            "Synopsis priority hold must be 1 to 30000 milliseconds",
+        );
+    const release = scheduler.deferFamily(corpusId, "synopsis");
+    let active = true;
+    const finish = () => {
+        if (!active) return;
+        active = false;
+        clearTimeout(timer);
+        release();
+        resume();
+    };
+    const timer = setTimeout(finish, maximumMs);
+    timer.unref();
+    return finish;
+}
 export function resolveInitialReaderModelEndpoint(
     configured: string | undefined,
     fastEndpoint: string | undefined,

@@ -108,6 +108,7 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
         readerProvenance:
             "Opt-in public diagnostics identify actual indexed reader fragments and selection; citations identify supplied evidence, not independent entailment.",
         answerLimit: "product-default",
+        questionFailurePolicy: "log-failed-case-and-continue-unattempted-v1",
         knowledgeTimeoutMs: state.knowledgeTimeoutMs ?? 600000,
         preliminarySearch: false,
         readerDate:
@@ -308,6 +309,56 @@ export function recordBenchmarkAttemptFailure(
     }
 }
 
+export async function runBenchmarkQuestion(
+    state,
+    attempt,
+    questionId,
+    work,
+    controls,
+) {
+    const record = state.cases[questionId];
+    assert.ok(record, "Question startup must persist a case before execution");
+    if (["complete", "failed"].includes(record.status)) return;
+    try {
+        await work();
+    } catch (error) {
+        if (
+            controls.signal.aborted ||
+            error.syscall ||
+            [
+                "EREPLAYMISS",
+                "EREPLAYNONDETERMINISTIC",
+                "EBENCHMARKCLEANUP",
+            ].includes(error.code)
+        )
+            throw error;
+        const event = {
+            kind: "benchmark-question-failed",
+            questionId,
+            stage: controls.stage(),
+            observedEpochMs: Date.now(),
+            requiredViewFamilies: [
+                ...new Set(
+                    (record.knowledgeCheckpoint?.requiredFailures ?? []).map(
+                        (failure) => failure.family,
+                    ),
+                ),
+            ],
+            error: benchmarkFailure(error),
+        };
+        record.status = "failed";
+        record.failureStage = event.stage;
+        record.failedEpochMs = event.observedEpochMs;
+        record.error = event.error;
+        (attempt.caseFailures ??= []).push(event);
+        await controls.persist();
+        (
+            controls.log ??
+            ((entry) => process.stderr.write(JSON.stringify(entry) + "\n"))
+        )(event);
+    }
+}
+
 export function createBenchmarkStateWriter(file, state, write = writeJson) {
     let tail = Promise.resolve();
     return () => {
@@ -438,7 +489,17 @@ export function selectConstructionCases(construction, selection) {
         : construction.filter((entry) => selection.includes(entry.id));
 }
 
-function completedOutcome(constructionCases, state, selection) {
+export function completedOutcome(constructionCases, state, selection) {
+    const statuses = constructionCases.map(
+        (entry) => state.cases[entry.id]?.status,
+    );
+    if (
+        statuses.includes("failed") &&
+        statuses.every((status) => ["complete", "failed"].includes(status))
+    )
+        return selection === undefined
+            ? "FULL_500_COMPLETED_WITH_FAILURES"
+            : "DIAGNOSTIC_SELECTION_COMPLETED_WITH_FAILURES";
     if (
         !constructionCases.every(
             (entry) => state.cases[entry.id]?.status === "complete",
@@ -675,6 +736,7 @@ async function runWorker(spec) {
                 ? null
                 : spec.spawnedEpochMs + spec.workAllowanceMs,
         maximumCompletedQuestions: spec.maximumCompletedQuestions,
+        maximumAttemptedQuestions: spec.maximumCompletedQuestions,
     };
     state.attempts.push(attempt);
     state.outcome = "IN_PROGRESS";
@@ -799,7 +861,7 @@ async function runWorker(spec) {
                 row,
             ]),
         );
-        let completedThisBatch = 0;
+        let attemptedThisBatch = 0;
         for (const construction of constructionCases) {
             activeQuestionId = undefined;
             signal.throwIfAborted();
@@ -812,12 +874,8 @@ async function runWorker(spec) {
             )
                 break;
             const id = construction.id;
-            if (state.cases[id]?.status === "complete") continue;
-            assert.notEqual(
-                state.cases[id]?.status,
-                "failed",
-                "A real benchmark failure requires review before retry",
-            );
+            if (["complete", "failed"].includes(state.cases[id]?.status))
+                continue;
             state.currentQuestionId = id;
             activeQuestionId = id;
             role = `case-startup:${id}`;
@@ -846,35 +904,48 @@ async function runWorker(spec) {
                 storeDirectory: path.relative(spec.runDirectory, serviceStore),
             });
             await persist();
-            await measureIndexingCase(record, spec.indexingPilot, () =>
-                executeMemoryCase(
-                    service,
-                    construction,
-                    readers.get(id),
-                    references.get(id),
-                    record,
-                    {
-                        persist,
+            await runBenchmarkQuestion(
+                state,
+                attempt,
+                id,
+                async () => {
+                    await measureIndexingCase(record, spec.indexingPilot, () =>
+                        executeMemoryCase(
+                            service,
+                            construction,
+                            readers.get(id),
+                            references.get(id),
+                            record,
+                            {
+                                persist,
+                                signal,
+                                waitForMemoryJob,
+                                judge,
+                                role: (value) => {
+                                    role = value;
+                                },
+                                knowledgeTimeoutMs: state.knowledgeTimeoutMs,
+                            },
+                        ),
+                    );
+                    if (spec.indexingPilot) role = `lifecycle:${id}`;
+                    service = await finishIndexingCase(service, {
+                        enabled: spec.indexingPilot,
+                        store: serviceStore,
+                        runDirectory: spec.runDirectory,
+                        open: openService,
+                        record,
+                        question: readers.get(id).question,
                         signal,
-                        waitForMemoryJob,
-                        judge,
-                        role: (value) => {
-                            role = value;
-                        },
-                        knowledgeTimeoutMs: state.knowledgeTimeoutMs,
-                    },
-                ),
+                        persist,
+                    });
+                },
+                {
+                    signal,
+                    persist,
+                    stage: () => role.split(":")[0],
+                },
             );
-            service = await finishIndexingCase(service, {
-                enabled: spec.indexingPilot,
-                store: serviceStore,
-                runDirectory: spec.runDirectory,
-                open: openService,
-                record,
-                question: readers.get(id).question,
-                signal,
-                persist,
-            });
             if (
                 await acknowledgeStopAfterQuestion(
                     spec.runDirectory,
@@ -883,7 +954,7 @@ async function runWorker(spec) {
                 )
             )
                 break;
-            if (++completedThisBatch >= spec.maximumCompletedQuestions) break;
+            if (++attemptedThisBatch >= spec.maximumCompletedQuestions) break;
         }
         state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
@@ -972,7 +1043,7 @@ export async function main(args = process.argv.slice(2)) {
         const outcome = await runWorker(spec);
         process.stdout.write(JSON.stringify({ outcome }) + "\n");
         process.exitCode =
-            outcome.startsWith("FULL_500_") ||
+            outcome === "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL" ||
             outcome === "DIAGNOSTIC_SELECTION_COMPLETED" ||
             outcome === "PARTIAL_STOP_AFTER_QUESTION" ||
             outcome === "PARTIAL_QUESTION_LIMIT"

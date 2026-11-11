@@ -9,7 +9,7 @@ import type {
     TopicQueryRequest,
     TopicSnapshot,
 } from "./topicTypes.js";
-import { assertViewIdentifier } from "./viewContent.js";
+import { assertViewIdentifier, viewHash } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
 import { TopicEvidenceIndex, topicSourceKey } from "./topicLookup.js";
 import {
@@ -204,10 +204,58 @@ function validateEdges(
             throw new Error("Invalid related topic edge");
 }
 
+function validateTopicPacketReceipts(snapshot: TopicSnapshot): void {
+    if (snapshot.curationPackets !== undefined) {
+        if (
+            !snapshot.curationInputFingerprint ||
+            !/^[0-9a-f]{64}$/.test(
+                snapshot.curationSuppressionFingerprint ?? "",
+            ) ||
+            !Array.isArray(snapshot.curationPackets)
+        )
+            throw new Error(
+                "Topic curation packets require dependency witnesses",
+            );
+        let end = 0;
+        for (const packet of snapshot.curationPackets) {
+            if (
+                !packet ||
+                !packet.response ||
+                !Array.isArray(packet.response.concepts) ||
+                !Array.isArray(packet.response.deferred) ||
+                packet.start !== end ||
+                !Number.isInteger(packet.end) ||
+                packet.end <= packet.start ||
+                packet.end > snapshot.nodes.length ||
+                !/^[0-9a-f]{64}$/.test(packet.fingerprint) ||
+                packet.responseFingerprint !== viewHash(packet.response)
+            )
+                throw new Error("Invalid topic curation packet receipt");
+            end = packet.end;
+        }
+        const curation = snapshot.curation ?? snapshot.curationProgress;
+        const processed =
+            (curation?.concepts.reduce(
+                (count, concept) => count + concept.memberIds.length,
+                0,
+            ) ?? 0) + (curation?.deferred.length ?? 0);
+        if (end !== processed)
+            throw new Error(
+                "Topic curation packet prefix does not match checkpoint coverage",
+            );
+    }
+}
+
 export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
     if (snapshot.schemaVersion !== 1)
         throw new Error("Unsupported topic snapshot schema");
+    if (
+        snapshot.curationInputFingerprint !== undefined &&
+        !/^[0-9a-f]{64}$/.test(snapshot.curationInputFingerprint)
+    )
+        throw new Error("Invalid topic curation input fingerprint");
     assertViewIdentifier("corpus ID", snapshot.corpusId);
+    validateTopicPacketReceipts(snapshot);
     assertViewIdentifier("topic generation", snapshot.generation);
     const eventIds = new Set<string>();
     for (const event of snapshot.influenceEvents ?? []) {

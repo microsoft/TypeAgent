@@ -35,6 +35,105 @@ into the following settings; programmatic callers can use `topicCuration` on
 Invalid settings fail explicitly. Experimental settings change policy/input
 identity. Unset the variables to retain defaults.
 
+`TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE=true` (programmatic option
+`topicCurationReuse: true`) separately opts into whole-input curation reuse for
+both engines. Complete topic incidence, represented source revisions,
+qualifications, suppression state, event influences and model/recipe must match.
+Only physical index generation and sources with no topic occurrences may differ.
+Older snapshots without a dependency witness retain exact-input-only resume.
+Only the configured curated generator issues that witness; creating a raw
+snapshot or returning arbitrary custom curation does not certify this closure.
+Current-generation eligibility, authorization and publication checks remain in
+force; obsolete jobs still abort. Relevant new evidence is not incrementally
+curated by this first treatment.
+
+`TYPEAGENT_MEMORY_TOPIC_WATERMARK=true` (programmatic `topicWatermark: true`)
+adds private pinned-generation checkpoints and exact packet-prefix replay.
+It requires curation reuse and single-worker generative curated topics; native
+Decision and speculative two-worker execution reject this option. Defaults
+remain unchanged.
+
+Source additions may leave one old build running while the existing maintenance
+scheduler coalesces one latest topic demand. Old curation checkpoints are durable
+but private: they cannot satisfy public freshness or readiness. The final old
+target is explicitly stale, not successful current publication. A catch-up build
+reconstructs current packets in canonical order, reusing only the exact unchanged
+prefix. Instructions, payload, schema and hidden original membership must match;
+the first changed ordering, packet boundary, qualification or nomination ends
+replay. Cached responses pass the production parser without provider repairs.
+Receipts store packet-local candidate/evidence IDs rather than repeated expanded
+concept membership. Existing first/every-eighth/final checkpoint frequency stays
+unchanged.
+
+Source removal/replacement, suppression, events and model identity changes fail
+the continuation checks. Invalidated private state is discarded; source/event
+forget also purges it from history. Current publication clears the private state.
+Manifest state and dirty-family reconciliation reconstruct latest demand on reopen;
+there is no additional persistent job queue. Arbitrary custom generators do not
+certify packet receipts. Relevant evidence is reconsidered wherever the actual
+packet changes; this is not general per-node reverse-dependency maintenance.
+
+Tracing also records `topic.curation.packet.reuse`, `topic.watermark.stage`
+(`published: false`) and superseded raw incidence withholding. Private commits
+are not counted as current completion.
+
+Validated cluster receipts and maintenance priorities are rebound to the new
+physical fingerprint only after validating the old snapshot. Completed concepts,
+audited lazy summaries and deferred decisions survive unchanged input; an
+unfinished packet is still rerun. The flag is not a readiness or latency
+qualification result.
+
+With `TYPEAGENT_MEMORY_SEARCH_TRACE=1`, existing search timing records proposal,
+provider start/completion/failure, abort, discard and successful commit separately.
+Attempts identify individual executions within a trace. A signal-ignoring
+provider's late completion remains recorded with `aborted: true`; a failed
+checkpoint cannot produce a successful speculation commit.
+
+### Offline work-avoidance and group-size measurements
+
+The paired work benchmark exercises production capture and generative curation
+with 55 authored nodes and synthetic deferred decisions. Each pair uses fresh
+baseline/candidate snapshots; order alternates. It records compiled implementation,
+dirty patch and fixture hashes, exact output parity, attempts, completions and
+host-stage timings. It does not measure ingestion/publication readiness or model
+latency and does not qualify semantic quality or foreground p95.
+
+```powershell
+node .\tools\memory-maintenance-qualification\topic-work-benchmark.mjs `
+    --samples 20 --output (Join-Path $newPrivateDirectory 'topic-work.json')
+
+node .\tools\memory-maintenance-qualification\topic-work-benchmark.mjs `
+    --watermark --samples 20 `
+    --output (Join-Path $newPrivateDirectory 'topic-packet-work.json')
+
+node .\tools\memory-maintenance-qualification\storage-write-benchmark.mjs `
+    --workload batch --samples 5 --group-size 2 --members 8 `
+    --output (Join-Path $newPrivateDirectory 'group-two.json')
+node .\tools\memory-maintenance-qualification\storage-write-benchmark.mjs `
+    --workload batch --samples 5 --group-size 8 --members 8 `
+    --output (Join-Path $newPrivateDirectory 'group-eight.json')
+
+node --test .\tools\memory-maintenance-qualification\topic-work-benchmark.test.mjs `
+    .\tools\memory-maintenance-qualification\storage-write-benchmark.test.mjs
+```
+
+The watermark benchmark separately compares against whole-input reuse on 55
+existing nodes plus one appended topic. It reports actual provider calls and
+replayed packets/nodes with exact latest-output parity. It measures host
+capture/curation work only, not continuous-ingestion drain, model latency,
+foreground p95 or semantic quality.
+
+Run measurement commands sequentially without competing builds or tests. Outputs
+are exclusive new files. Batch `--members` accepts 1-512 and splits imports into
+requests of at most 50 members; `--group-size` uses the existing product commit
+policy and accepts 1-100. The fake-index workload asserts actual provider batches,
+copies, manifest publications and final source content, and observes first-member
+readiness with 5 ms polling. Neither switch changes a product default.
+
+First-member responsiveness must be evaluated separately from total batch time.
+The initial eight-member screen reduced copies/publications from four to one,
+but worsened first-member readiness, so it does not justify promoting group eight.
+
 Token estimates do not replace the client's conservative byte-based provider
 admission guard. Packing also checks an experimental output estimate of
 `256 + 2048 * suppliedNodes` for lazy curation (`3072` per node otherwise).

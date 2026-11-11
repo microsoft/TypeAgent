@@ -35,6 +35,8 @@ import {
     createBenchmarkStateWriter,
     engineIdentity,
     recordBenchmarkAttemptFailure,
+    runBenchmarkQuestion,
+    completedOutcome,
     main,
 } from "./longmemeval-live.mjs";
 
@@ -1289,7 +1291,7 @@ test("missing durable batch support never falls back to independent admissions",
     assert.equal(f.calls.ingestion.length, 0);
 });
 
-test("a failed required question stops the benchmark while slow independent topics still run", async () => {
+test("a failed required question blocks its case while slow independent topics still run", async () => {
     const f = fixture();
     const topic = Promise.withResolvers();
     const failure = {
@@ -1329,6 +1331,216 @@ test("a failed required question stops the benchmark while slow independent topi
     assert.equal(f.calls.judge.length, 0);
     assert.equal(f.record.knowledgeObservation.active, false);
     topic.resolve({ ...checkpoint, state: "failed" });
+});
+
+test("a failed view construction is logged and retained while a later question is answered and judged", async () => {
+    const blocked = fixture();
+    const healthy = fixture();
+    const checkpoint = {
+        checkpointId: "blocked-checkpoint",
+        state: "failed",
+        reasons: [],
+        requiredFailures: [
+            {
+                family: "wiki",
+                state: "failed",
+                reasons: ["Controlled view construction failure"],
+                jobIds: ["blocked-job"],
+                viewIds: ["blocked-view"],
+            },
+        ],
+    };
+    blocked.service.createKnowledgeCheckpoint = async () => checkpoint;
+    blocked.service.waitForKnowledgeCheckpoint = async () => checkpoint;
+    const state = {
+        cases: { blocked: blocked.record, healthy: healthy.record },
+    };
+    const attempt = {};
+    const events = [];
+    const writes = [];
+    const controls = {
+        signal: new AbortController().signal,
+        stage: () => "knowledge",
+        persist: async () => writes.push(structuredClone(state)),
+        log: (event) => events.push(event),
+    };
+    for (const [id, f] of [
+        ["blocked", blocked],
+        ["healthy", healthy],
+    ]) {
+        await runBenchmarkQuestion(
+            state,
+            attempt,
+            id,
+            () =>
+                executeMemoryCase(
+                    f.service,
+                    construction,
+                    reader,
+                    reference,
+                    f.record,
+                    f.controls,
+                ),
+            controls,
+        );
+    }
+    assert.equal(blocked.record.status, "failed");
+    assert.equal(blocked.record.failureStage, "knowledge");
+    assert.equal(blocked.calls.answer.length, 0);
+    assert.equal(blocked.calls.judge.length, 0);
+    assert.equal(healthy.record.status, "complete");
+    assert.equal(healthy.calls.answer.length, 1);
+    assert.equal(healthy.calls.judge.length, 1);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].cases.blocked.status, "failed");
+    assert.equal(events.length, 1);
+    assert.equal(events[0].questionId, "blocked");
+    assert.equal(events[0].error.category, "KNOWLEDGE_NOT_READY");
+    assert.deepEqual(events[0].requiredViewFamilies, ["wiki"]);
+    assert.deepEqual(attempt.caseFailures, events);
+    await runBenchmarkQuestion(
+        state,
+        attempt,
+        "blocked",
+        async () => {
+            assert.fail("Failed questions must not be retried");
+        },
+        controls,
+    );
+});
+
+test("answer, judge and local readiness timeout failures do not abort later questions", async () => {
+    for (const stage of ["answer", "judge", "knowledge"]) {
+        const state = {
+            cases: { bad: { status: stage }, good: { status: "ingesting" } },
+        };
+        const events = [];
+        const failure =
+            stage === "knowledge"
+                ? new DOMException("Local readiness limit", "TimeoutError")
+                : new Error("Controlled case failure");
+        const controls = {
+            signal: new AbortController().signal,
+            stage: () => stage,
+            persist: async () => {},
+            log: (event) => events.push(event),
+        };
+        await runBenchmarkQuestion(
+            state,
+            {},
+            "bad",
+            async () => {
+                throw failure;
+            },
+            controls,
+        );
+        await runBenchmarkQuestion(
+            state,
+            {},
+            "good",
+            async () => {
+                state.cases.good.status = "complete";
+            },
+            controls,
+        );
+        assert.equal(state.cases.bad.status, "failed");
+        assert.equal(state.cases.bad.failureStage, stage);
+        assert.equal(state.cases.good.status, "complete");
+        assert.equal(events.length, 1);
+    }
+});
+
+test("global cancellation, replay/cleanup guards and filesystem failures remain fatal", async () => {
+    for (const kind of [
+        "cancel",
+        "EREPLAYMISS",
+        "EREPLAYNONDETERMINISTIC",
+        "EBENCHMARKCLEANUP",
+        "filesystem",
+    ]) {
+        const controller = new AbortController();
+        const failure = new Error("Controlled fatal failure");
+        if (kind === "cancel") controller.abort(failure);
+        else if (kind === "filesystem") failure.syscall = "write";
+        else failure.code = kind;
+        const state = { cases: { current: { status: "ingesting" } } };
+        await assert.rejects(
+            runBenchmarkQuestion(
+                state,
+                {},
+                "current",
+                async () => {
+                    throw failure;
+                },
+                {
+                    signal: controller.signal,
+                    stage: () => "ingestion",
+                    persist: async () =>
+                        assert.fail("Fatal errors must not be swallowed"),
+                    log: () =>
+                        assert.fail(
+                            "Fatal errors must reach the attempt handler",
+                        ),
+                },
+            ),
+            (error) => error === failure,
+        );
+        assert.equal(state.cases.current.status, "ingesting");
+    }
+});
+
+test("failure persistence errors stop continuation rather than losing a failed case", async () => {
+    const writerFailure = new Error("Controlled writer failure");
+    const state = { cases: { current: { status: "answering" } } };
+    const attempt = {};
+    await assert.rejects(
+        runBenchmarkQuestion(
+            state,
+            attempt,
+            "current",
+            async () => {
+                throw new Error("Controlled answer failure");
+            },
+            {
+                signal: new AbortController().signal,
+                stage: () => "answer",
+                persist: async () => {
+                    throw writerFailure;
+                },
+                log: () =>
+                    assert.fail(
+                        "Must not report durable failure before it is saved",
+                    ),
+            },
+        ),
+        (error) => error === writerFailure,
+    );
+    assert.equal(attempt.caseFailures.length, 1);
+});
+
+test("completed selections with failures are distinct from success and interrupted work", () => {
+    const cases = [{ id: "one" }, { id: "two" }];
+    const state = {
+        cases: { one: { status: "failed" }, two: { status: "complete" } },
+    };
+    assert.equal(
+        completedOutcome(cases, state, ["one", "two"]),
+        "DIAGNOSTIC_SELECTION_COMPLETED_WITH_FAILURES",
+    );
+    assert.equal(
+        completedOutcome(cases, state),
+        "FULL_500_COMPLETED_WITH_FAILURES",
+    );
+    state.cases.one.status = "complete";
+    assert.equal(
+        completedOutcome(cases, state, ["one", "two"]),
+        "DIAGNOSTIC_SELECTION_COMPLETED",
+    );
+    state.cases.one.status = "interrupted";
+    assert.equal(
+        completedOutcome(cases, state, ["one", "two"]),
+        "PARTIAL_QUESTION_LIMIT",
+    );
 });
 
 test("a later wait timeout retains the original durable required-family cause", async () => {

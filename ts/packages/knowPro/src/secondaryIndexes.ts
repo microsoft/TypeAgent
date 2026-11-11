@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { IConversationThreadData } from "./conversationThread.js";
+import { timeSearchPhase, timeSearchStage } from "./searchTiming.js";
 import { ConversationSettings } from "./conversation.js";
 import {
     IConversation,
@@ -45,20 +46,29 @@ export async function buildSecondaryIndexes(
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
         conversationSettings,
     );
-    const result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
-        conversation,
-        conversationSettings,
+    const result: SecondaryIndexingResults = timeSearchStage(
+        "ingestion.phase.localIndexes",
+        () =>
+            buildTransientSecondaryIndexes(conversation, conversationSettings),
     );
-    result.relatedTerms = await buildRelatedTermsIndex(
-        conversation,
-        conversationSettings.relatedTermIndexSettings,
-        eventHandler,
+    result.relatedTerms = await timeSearchPhase(
+        "ingestion.phase.relatedEmbedding",
+        () =>
+            buildRelatedTermsIndex(
+                conversation,
+                conversationSettings.relatedTermIndexSettings,
+                eventHandler,
+            ),
     );
     if (!result.relatedTerms?.error) {
-        result.message = await buildMessageIndex(
-            conversation,
-            conversationSettings.messageTextIndexSettings,
-            eventHandler,
+        result.message = await timeSearchPhase(
+            "ingestion.phase.messageEmbedding",
+            () =>
+                buildMessageIndex(
+                    conversation,
+                    conversationSettings.messageTextIndexSettings,
+                    eventHandler,
+                ),
         );
     }
 
@@ -76,23 +86,35 @@ export async function addToSecondaryIndexes(
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
         conversationSettings,
     );
-    const result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
-        conversation,
-        conversationSettings,
-        messageOrdinalStartAt,
-        semanticRefOrdinalStartAt,
+    const result: SecondaryIndexingResults = timeSearchStage(
+        "ingestion.phase.localIndexes",
+        () =>
+            addToTransientSecondaryIndexes(
+                conversation,
+                conversationSettings,
+                messageOrdinalStartAt,
+                semanticRefOrdinalStartAt,
+            ),
     );
-    result.relatedTerms = await addToRelatedTermsIndex(
-        conversation,
-        conversationSettings.relatedTermIndexSettings,
-        relatedTerms,
-        eventHandler,
+    result.relatedTerms = await timeSearchPhase(
+        "ingestion.phase.relatedEmbedding",
+        () =>
+            addToRelatedTermsIndex(
+                conversation,
+                conversationSettings.relatedTermIndexSettings,
+                relatedTerms,
+                eventHandler,
+            ),
     );
-    result.message = await addToMessageIndex(
-        conversation,
-        conversationSettings.messageTextIndexSettings,
-        messageOrdinalStartAt,
-        eventHandler,
+    result.message = await timeSearchPhase(
+        "ingestion.phase.messageEmbedding",
+        () =>
+            addToMessageIndex(
+                conversation,
+                conversationSettings.messageTextIndexSettings,
+                messageOrdinalStartAt,
+                eventHandler,
+            ),
     );
     return result;
 }

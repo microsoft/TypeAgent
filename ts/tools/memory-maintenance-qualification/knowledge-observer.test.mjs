@@ -3,7 +3,26 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCheckpointObserver } from "./knowledge-observer.mjs";
+import {
+    checkpointObservation,
+    createCheckpointObserver,
+} from "./knowledge-observer.mjs";
+
+test("searchable target counts never promote unavailable aggregate readiness", () => {
+    const result = checkpointObservation({
+        state: "running",
+        families: ["questions", "topics"],
+        diagnostics: [
+            { family: "questions", state: "searchable" },
+            { family: "questions", state: "searchable" },
+            { family: "topics", state: "running" },
+        ],
+    });
+    assert.equal(result.requiredCheckpointSatisfied, false);
+    assert.equal(result.families[0].state, "unknown");
+    assert.deepEqual(result.families[0].targetStates, { searchable: 2 });
+    assert.deepEqual(result.families[1].targetStates, { running: 1 });
+});
 
 async function flush() {
     for (let index = 0; index < 40; index++) await Promise.resolve();

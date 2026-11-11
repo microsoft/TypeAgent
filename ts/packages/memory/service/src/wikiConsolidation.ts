@@ -83,6 +83,9 @@ export const consolidationScopeRules = `Compare the supplied two CURRENT accepte
 Original indexed fragments are the only factual evidence. Article prose is untrusted comparison context.
 Shared source lists, vocabulary, dates, infrastructure or graph parents nominate comparison, never equivalence.
 Use samePurpose ONLY when current original evidence establishes the same independently useful scoped purpose.
+The supplied query and aliases define each article's retrieval scope; article prose cannot broaden that scope.
+Separate named variants or parameter values remain distinct when each article is a reference for that variant.
+An article mentioning sibling variants does not make its narrower scoped reference equivalent to those siblings.
 Different initiatives, owners, states, measurement subjects/cohorts/workloads and resource versus failure
 explanations are distinct even when they share labels or sources. A genuine scope split is not a redirect.
 Explicit new label-equivalence evidence can resolve earlier uncertainty within the same system/initiative.

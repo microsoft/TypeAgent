@@ -557,6 +557,12 @@ export interface ViewBuildSnapshot {
         purpose: string;
         essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
         priorProse?: string;
+        members?: Array<{
+            candidateViewId: string;
+            inputFingerprint: string;
+            assessmentFingerprint: string;
+            assessmentKey: string;
+        }>;
     };
 }
 export interface ViewSynthesisOutput {
@@ -865,12 +871,18 @@ export interface ViewBuildTargetResult {
     coverage?: ViewInventoryCoverage;
     publication?: ViewPublicationStatus;
     wikiAssessment?: WikiSubjectAssessment & { canonicalRevisionId?: string };
+    wikiAssessmentKey?: string;
     wikiContribution?: {
         input: ViewBuildSnapshot;
         revisionId: string;
         state: "committed" | "bound";
         verification: WikiSubjectAssessment;
     };
+}
+export interface WikiContributionCandidate {
+    result: ViewBuildTargetResult;
+    assessment: WikiSubjectAssessment;
+    pages: WikiPagePurposeContext[];
 }
 export interface ViewBuildJob {
     jobId: string;

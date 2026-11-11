@@ -169,6 +169,7 @@ export function nominateWikiPages(
     input: ViewBuildSnapshot,
     views: ViewVersion[],
     identities: Map<string, IndexedSubjectIdentity | undefined>,
+    completeContext = false,
 ): WikiPagePurposeContext[] {
     const identity = identities.get(input.definition.viewId);
     return views
@@ -187,7 +188,12 @@ export function nominateWikiPages(
             );
         })
         .map((view) => ({
-            ...wikiPageContext(input, view, identities.get(view.viewId)),
+            ...wikiPageContext(
+                input,
+                view,
+                identities.get(view.viewId),
+                !completeContext,
+            ),
             ...(identity ? { candidateIdentity: identity } : {}),
         }))
         .filter(

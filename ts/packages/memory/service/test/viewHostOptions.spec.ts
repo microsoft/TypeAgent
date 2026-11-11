@@ -74,6 +74,7 @@ test("topic experiments are opt-in and reject invalid host settings", () => {
         concurrency: 2,
         priorContextFraction: 0.25,
     });
+
     for (const environment of [
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "" },
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "NaN" },
@@ -82,6 +83,29 @@ test("topic experiments are opt-in and reject invalid host settings", () => {
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "-1" },
     ])
         expect(() => getConfiguredMemoryViewOptions(environment)).toThrow();
+});
+
+test("unchanged topic curation reuse is opt-in for both generation engines", () => {
+    expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
+        "topicCurationReuse",
+    );
+    for (const [raw, enabled] of [
+        ["true", true],
+        ["false", false],
+        ["1", true],
+        ["0", false],
+    ] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE: raw,
+                TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+            }).topicCurationReuse,
+        ).toBe(enabled);
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE: "maybe",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE");
 });
 
 test("generative and native execution families retain distinct capacities and reject conflicting activation", () => {
@@ -94,6 +118,7 @@ test("generative and native execution families retain distinct capacities and re
         decisionTopicExecution: { concurrency: 24 },
         topicCuration: { concurrency: 2 },
     });
+
     expect(() =>
         getConfiguredMemoryViewOptions({
             TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
@@ -108,6 +133,42 @@ test("generative and native execution families retain distinct capacities and re
                     topicCuration: { concurrency: 2 },
                 }),
         ).toThrow("Generative topic settings require");
+});
+
+test("private topic watermark requires explicit single-worker generative reuse", () => {
+    expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
+        "topicWatermark",
+    );
+    for (const [raw, enabled] of [
+        ["true", true],
+        ["false", false],
+        ["1", true],
+        ["0", false],
+    ] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_WATERMARK: raw,
+            }).topicWatermark,
+        ).toBe(enabled);
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_WATERMARK: "maybe",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_TOPIC_WATERMARK");
+    for (const options of [
+        { topicCurationReuse: false },
+        { decisionTopics: true },
+        { curatedTopics: false },
+        { topicCuration: { concurrency: 2 as const } },
+    ])
+        expect(
+            () =>
+                new FileMemoryService("unused", {
+                    topicWatermark: true,
+                    topicCurationReuse: true,
+                    ...options,
+                }),
+        ).toThrow("Topic watermark requires");
 });
 
 class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {

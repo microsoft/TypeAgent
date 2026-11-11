@@ -10,6 +10,7 @@ import {
 } from "@typeagent/conversation-memory";
 import {
     memoryPerformanceExperiments,
+    deferSynopsisForCheckpoint,
     resolveInitialReaderModelEndpoint,
     type MemoryPerformanceExperiment,
 } from "./memoryPerformanceExperiments.js";
@@ -39,7 +40,10 @@ import type {
     ViewBuildSummary,
     ViewPublicationBatchRequest,
 } from "./inventoryTypes.js";
-import type { IndexedFragmentRequest } from "./types.js";
+import type {
+    IndexedFragmentRequest,
+    IndexedFragmentSelection,
+} from "./types.js";
 import type {
     GraphSupport,
     GraphSupportPage,
@@ -312,6 +316,7 @@ import {
     supportsTopicIndex,
     topicInputFingerprint,
     reconcileTopicFamily,
+    topicSourceClosurePreserved,
 } from "./topicCapture.js";
 import {
     createConfiguredTopicGenerator,
@@ -434,8 +439,10 @@ import {
     evidenceOnlyWikiDeferral,
 } from "./wikiAdmission.js";
 import {
+    canonicalizeWikiEvidence,
     refreshWikiContributionInput,
     wikiContributionInput,
+    wikiContributionGroupInput,
 } from "./wikiContribution.js";
 import {
     automaticallyConsolidatable,
@@ -450,6 +457,7 @@ import { viewSourceKey } from "./viewContent.js";
 import type {
     WikiPagePurposeContext,
     WikiSubjectAssessment,
+    WikiContributionCandidate,
     ViewBuildTargetResult,
 } from "./viewTypes.js";
 import {
@@ -786,6 +794,9 @@ export interface FileMemoryServiceOptions {
     decisionTopicExecution?: TopicDecisionExecutionOptions;
     /** Opt-in generative curation settings, independent of native Decision execution. */
     topicCuration?: TopicCurationSettings;
+    /** Reuse curation across generations only with identical complete semantic input. */
+    topicCurationReuse?: boolean;
+    topicWatermark?: boolean;
     onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
     indexSettingsFactory?: () => DocMemorySettings;
@@ -1466,6 +1477,25 @@ function defaultCapabilities(): MemoryServiceCapabilities {
     };
 }
 
+function configuredTopicWatermark(
+    options: FileMemoryServiceOptions,
+    curated: boolean,
+    decision: boolean,
+    settings: TopicCurationSettings | undefined,
+): boolean {
+    if (options.topicWatermark !== true) return false;
+    if (
+        !options.topicCurationReuse ||
+        !curated ||
+        decision ||
+        (settings?.concurrency ?? 1) !== 1
+    )
+        throw new Error(
+            "Topic watermark requires curation reuse and single-worker generative curated topics",
+        );
+    return true;
+}
+
 export class FileMemoryService
     implements MemoryService, MemoryViewService, MemoryTopicService
 {
@@ -1481,6 +1511,8 @@ export class FileMemoryService
     private readonly curatedTopics: boolean;
     private readonly decisionTopics: boolean;
     private readonly topicCuration: TopicCurationSettings | undefined;
+    private readonly topicCurationReuse: boolean;
+    private readonly topicWatermark: boolean;
     private readonly topicPolicy: string;
     private readonly decisionTopicExecution: ReturnType<
         typeof resolveTopicDecisionExecution
@@ -1889,6 +1921,8 @@ export class FileMemoryService
         seed: IntegratedAnswerSeed;
     }>();
     private readonly sourceSynopsesEnabled: boolean;
+    private readonly synopsisCheckpointHolds = new Map<string, () => void>();
+    private readonly synopsisPriorityCooldowns = new Map<string, number>();
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
     private readonly textStores = new Map<string, RevisionTextStore>();
@@ -1915,6 +1949,7 @@ export class FileMemoryService
         const maintenanceConcurrency = resolveMaintenanceConcurrency(
             options.maintenanceConcurrency,
         );
+        this.assertMaintenanceExperiments(maintenanceConcurrency.builds);
         this.concurrentKnowledgeTopics = maintenanceConcurrency.builds > 1;
         const prioritizeShortBuilds = resolveMaintenanceBuildPriority(
             options.maintenanceShortBuildReservation,
@@ -1994,11 +2029,18 @@ export class FileMemoryService
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
         this.decisionTopics = decisionTopicsEnabled(options);
+        this.topicCurationReuse = options.topicCurationReuse === true;
         this.topicCuration = configuredTopicCuration(
             options,
             this.decisionTopics,
             this.curatedTopics,
             this.experiments.has("topic-parallel"),
+        );
+        this.topicWatermark = configuredTopicWatermark(
+            options,
+            this.curatedTopics,
+            this.decisionTopics,
+            this.topicCuration,
         );
         this.topicPolicy = topicCurationPolicy(
             this.curatedTopics,
@@ -2032,12 +2074,9 @@ export class FileMemoryService
             adapter,
             this.maintenanceModels,
         );
-        this.admissionPolicy = hashContent(
-            JSON.stringify([
-                "bounded-admission-v1",
-                options.maintenanceLimits,
-                adapter.identity,
-            ]),
+        this.admissionPolicy = this.wikiAdmissionPolicy(
+            options.maintenanceLimits,
+            adapter.identity,
         );
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
@@ -2057,6 +2096,7 @@ export class FileMemoryService
                     assessment,
                     pages,
                     signal,
+                    companions,
                 ) =>
                     this.contributeWikiSubject(
                         job,
@@ -2064,6 +2104,7 @@ export class FileMemoryService
                         assessment,
                         pages,
                         signal,
+                        companions,
                     ),
                 resumeWikiContribution: (job, result, signal) =>
                     this.resumeWikiContribution(job, result, signal),
@@ -2082,7 +2123,7 @@ export class FileMemoryService
                         signal,
                     ),
                 update: async (corpusId, jobId, update) => {
-                    return this.enqueueWrite(corpusId, async () => {
+                    const job = await this.enqueueWrite(corpusId, async () => {
                         const job = await this.viewStore.updateViewBuild(
                             corpusId,
                             jobId,
@@ -2092,6 +2133,16 @@ export class FileMemoryService
                         await this.checkpointTopics(job);
                         return job;
                     });
+                    if (
+                        this.experiments.has("early-required-failure") &&
+                        job.results.some(
+                            (result) =>
+                                result.state === "failed" ||
+                                result.state === "blocked",
+                        )
+                    )
+                        await this.knowledge.observeBuildFailure(job);
+                    return job;
                 },
                 materializeTopicIncidence: (job, result, snapshot, signal) =>
                     this.writeTopics(job, result, snapshot, signal, false),
@@ -2209,6 +2260,9 @@ export class FileMemoryService
             prioritizeShortBuilds,
             this.extensionProviders,
             this.maintenanceModels,
+            this.experiments.has("wiki-utility-first"),
+            this.experiments.has("family-frozen-preparation"),
+            this.experiments.has("wiki-grouped-contributions"),
         );
         this.viewIndexes = new ViewIndexPool(this.indexFactory);
         this.viewWarmup = new IndexWarmupScheduler(
@@ -2263,6 +2317,26 @@ export class FileMemoryService
             automaticDiscovery: options.automaticKnowledgeDiscovery,
             begin: async (corpusId) => {
                 this.knowledgeMaintenance.add(corpusId);
+                if (
+                    this.experiments.has("synopsis-checkpoint-priority") &&
+                    !this.synopsisCheckpointHolds.has(corpusId) &&
+                    Date.now() >=
+                        (this.synopsisPriorityCooldowns.get(corpusId) ?? 0)
+                )
+                    this.synopsisCheckpointHolds.set(
+                        corpusId,
+                        deferSynopsisForCheckpoint(
+                            this.maintenance,
+                            corpusId,
+                            () => {
+                                this.synopsisPriorityCooldowns.set(
+                                    corpusId,
+                                    Date.now() + 1000,
+                                );
+                                this.scheduleSourceSynopses(corpusId);
+                            },
+                        ),
+                    );
                 const schemaTimer = this.schemaTimers.get(corpusId);
                 if (schemaTimer) clearTimeout(schemaTimer);
                 this.schemaTimers.delete(corpusId);
@@ -2273,6 +2347,8 @@ export class FileMemoryService
             },
             end: (corpusId) => {
                 this.knowledgeMaintenance.delete(corpusId);
+                this.synopsisCheckpointHolds.get(corpusId)?.();
+                this.synopsisCheckpointHolds.delete(corpusId);
                 this.scheduleSchemaMaintenance(corpusId);
                 const runtime = this.corpora.get(corpusId);
                 if (runtime) {
@@ -2428,6 +2504,41 @@ export class FileMemoryService
                 (sessionModel ??= configuredAgentSessionModel(
                     options.viewModelEndpoint,
                 )),
+        );
+    }
+
+    private assertMaintenanceExperiments(builds: number): void {
+        if (this.experiments.has("family-frozen-preparation") && builds < 3)
+            throw new Error(
+                "Frozen family preparation requires at least three maintenance build slots",
+            );
+        if (
+            this.experiments.has("wiki-grouped-contributions") &&
+            !this.experiments.has("wiki-full-context")
+        )
+            throw new Error(
+                "Grouped Wiki contributions require complete canonical context",
+            );
+    }
+
+    private wikiAdmissionPolicy(
+        limits: FileMemoryServiceOptions["maintenanceLimits"],
+        identity: string,
+    ): string {
+        const experiments = [...this.experiments]
+            .filter(
+                (name) =>
+                    name.startsWith("wiki-") ||
+                    name === "family-frozen-preparation",
+            )
+            .sort();
+        return hashContent(
+            JSON.stringify([
+                "bounded-admission-v1",
+                limits,
+                identity,
+                ...(experiments.length ? [experiments] : []),
+            ]),
         );
     }
 
@@ -6797,6 +6908,8 @@ export class FileMemoryService
                 },
             ),
         );
+        if (this.experiments.has("early-required-failure"))
+            await this.knowledge.observeBuildFailure(job);
         if (job.state === "running") {
             await this.viewBuilds.wait(job.jobId, signal);
             const current = await this.getViewBuild(job);
@@ -6865,10 +6978,14 @@ export class FileMemoryService
                                 (result) => result.viewId === "topic-snapshot",
                             )))
                 ) {
-                    const finished = await this.waitKnowledgeBuild(
-                        job,
-                        signal,
-                        checkpoint,
+                    recordSearchTiming("knowledge.maintenance.join.start", 0, {
+                        buildId: job.jobId,
+                        targetCount: job.results.length,
+                    });
+                    const finished = await timeSearchStage(
+                        "knowledge.maintenance.join",
+                        () => this.waitKnowledgeBuild(job, signal, checkpoint),
+                        { buildId: job.jobId },
                     );
                     if (
                         finished.results.every(
@@ -6905,10 +7022,16 @@ export class FileMemoryService
                 for (const view of questions) {
                     await retainResult(
                         "questions",
-                        await this.maintainKnowledgeQuestion(
+                        await this.timeKnowledgeTarget(
                             checkpoint,
-                            view,
+                            "questions",
                             signal,
+                            () =>
+                                this.maintainKnowledgeQuestion(
+                                    checkpoint,
+                                    view,
+                                    signal,
+                                ),
                         ),
                     );
                 }
@@ -6918,10 +7041,16 @@ export class FileMemoryService
                     if (family === "wiki" || family === "projects")
                         await retainResult(
                             family,
-                            await this.maintainKnowledgeFamily(
+                            await this.timeKnowledgeTarget(
                                 checkpoint,
                                 family,
                                 signal,
+                                () =>
+                                    this.maintainKnowledgeFamily(
+                                        checkpoint,
+                                        family,
+                                        signal,
+                                    ),
                             ),
                         );
             };
@@ -6929,14 +7058,56 @@ export class FileMemoryService
                 if (checkpoint.families.includes("topics"))
                     await retainResult(
                         "topics",
-                        await this.maintainKnowledgeFamily(
+                        await this.timeKnowledgeTarget(
                             checkpoint,
                             "topics",
                             signal,
+                            () =>
+                                this.maintainKnowledgeFamily(
+                                    checkpoint,
+                                    "topics",
+                                    signal,
+                                ),
                         ),
                     );
             };
-            if (this.concurrentKnowledgeTopics) {
+            if (this.experiments.has("family-frozen-preparation")) {
+                const settled = await Promise.allSettled(
+                    checkpoint.families
+                        .filter(
+                            (
+                                family,
+                            ): family is Exclude<
+                                KnowledgeFamily,
+                                "questions"
+                            > => family !== "questions",
+                        )
+                        .map(async (family) =>
+                            retainResult(
+                                family,
+                                await this.timeKnowledgeTarget(
+                                    checkpoint,
+                                    family,
+                                    signal,
+                                    () =>
+                                        this.maintainKnowledgeFamily(
+                                            checkpoint,
+                                            family,
+                                            signal,
+                                        ),
+                                ),
+                            ),
+                        ),
+                );
+                const errors = settled.flatMap((entry) =>
+                    entry.status === "rejected" ? [entry.reason] : [],
+                );
+                if (errors.length)
+                    throw new AggregateError(
+                        errors,
+                        "Frozen knowledge family preparation failed",
+                    );
+            } else if (this.concurrentKnowledgeTopics) {
                 const settled = await Promise.allSettled([
                     maintainPages(),
                     maintainTopics(),
@@ -6954,10 +7125,16 @@ export class FileMemoryService
                     if (family !== "questions")
                         await retainResult(
                             family,
-                            await this.maintainKnowledgeFamily(
+                            await this.timeKnowledgeTarget(
                                 checkpoint,
                                 family,
                                 signal,
+                                () =>
+                                    this.maintainKnowledgeFamily(
+                                        checkpoint,
+                                        family,
+                                        signal,
+                                    ),
                             ),
                         );
             }
@@ -6970,6 +7147,56 @@ export class FileMemoryService
         } finally {
             this.knowledgeMaintenance.delete(corpusId);
         }
+    }
+
+    private timeKnowledgeTarget(
+        checkpoint: KnowledgeCheckpoint,
+        family: KnowledgeFamily,
+        signal: AbortSignal,
+        work: () => Promise<KnowledgeMaintenanceResult>,
+    ): Promise<KnowledgeMaintenanceResult> {
+        return runWithSearchTiming(
+            undefined,
+            "memory.knowledge.family",
+            () => {
+                recordSearchTiming("knowledge.family.target.start", 0);
+                return timeSearchStage(
+                    "knowledge.family.target.work",
+                    async () => {
+                        try {
+                            const result = await work();
+                            recordSearchTiming(
+                                "knowledge.family.target.result",
+                                0,
+                                {
+                                    state: result.state,
+                                    jobCount: result.jobIds.length,
+                                    viewCount: result.viewIds.length,
+                                },
+                                result.state === "failed" ||
+                                    result.state === "blocked"
+                                    ? "error"
+                                    : "success",
+                            );
+                            return result;
+                        } finally {
+                            recordSearchTiming(
+                                "knowledge.family.target.finished",
+                                0,
+                                {
+                                    cancelled: signal.aborted,
+                                },
+                            );
+                        }
+                    },
+                );
+            },
+            {
+                corpusId: checkpoint.corpusId,
+                checkpointId: checkpoint.checkpointId,
+                family,
+            },
+        );
     }
 
     private async maintainKnowledgeQuestion(
@@ -8712,6 +8939,7 @@ export class FileMemoryService
             throw new Error(
                 "Host does not support bounded informational wiki retrieval",
             );
+        const readFragments = runtime.index.readFragments.bind(runtime.index);
         const selected = retrieval
             ? retrieval.sources.map((source) => ({ ...source }))
             : target.definition.selector.sources.length
@@ -8753,9 +8981,11 @@ export class FileMemoryService
                     (sourceId) => !wiki.excludedSourceIds.includes(sourceId),
                 ),
         };
-        const selection = await (detachedRetrieval
-            ? this.detachedInformationalFragments(runtime, request)
-            : runtime.index.readFragments(request));
+        const selection = await timeSearchStage("wiki.evidence.retrieve", () =>
+            detachedRetrieval
+                ? this.detachedInformationalFragments(runtime, request)
+                : readFragments(request),
+        );
         if (!selection.fragments.length)
             throw new Error(
                 "No substantive indexed fragments matched this wiki selector",
@@ -8829,11 +9059,10 @@ export class FileMemoryService
             ...(editorial ? { editorial } : {}),
             inputs,
             ...(context ? { informationalRetrieval: context } : {}),
-            selectionFingerprint: viewHash({
-                readChars: selection.readChars,
-                limited: selection.limited,
-                fragments: selection.fragments,
-            }),
+            selectionFingerprint: this.informationalSelectionFingerprint(
+                selection,
+                target.definition.kind === "wiki",
+            ),
             pipeline: target.definition.projectSummary
                 ? ("informational-project-summary-v1" as const)
                 : ("informational-wiki-v1" as const),
@@ -8857,7 +9086,7 @@ export class FileMemoryService
             throw new ViewBuildStaleError(
                 "Wiki contribution refresh has suppressed evidence; reconcile eligibility before synthesis",
             );
-        return refreshWikiContributionInput(
+        const refreshed = refreshWikiContributionInput(
             frozen,
             current,
             new Set(
@@ -8877,6 +9106,29 @@ export class FileMemoryService
                 ),
             ),
         );
+        return this.stableWikiInput(refreshed);
+    }
+
+    private stableWikiInput(input: ViewBuildSnapshot): ViewBuildSnapshot {
+        return this.experiments.has("wiki-stable-evidence")
+            ? canonicalizeWikiEvidence(input)
+            : input;
+    }
+
+    private informationalSelectionFingerprint(
+        selection: IndexedFragmentSelection,
+        wiki: boolean,
+    ): string {
+        return viewHash({
+            readChars: selection.readChars,
+            limited: selection.limited,
+            fragments:
+                wiki && this.experiments.has("wiki-stable-evidence")
+                    ? [...selection.fragments].sort((left, right) =>
+                          viewHash(left).localeCompare(viewHash(right), "en"),
+                      )
+                    : selection.fragments,
+        });
     }
 
     private informationalFollowSources(
@@ -9006,6 +9258,7 @@ export class FileMemoryService
                     descriptor.identity,
                 ]),
             ),
+            this.experiments.has("wiki-full-context"),
         );
     }
 
@@ -9509,6 +9762,7 @@ export class FileMemoryService
         assessment: WikiSubjectAssessment,
         pages: WikiPagePurposeContext[],
         signal: AbortSignal,
+        companions: WikiContributionCandidate[] = [],
     ): Promise<void> {
         const nominated = pages.find(
             (page) => page.viewId === assessment.canonicalViewId,
@@ -9525,11 +9779,32 @@ export class FileMemoryService
             job.jobId,
             current.generation!.input!,
         );
-        const input = wikiContributionInput(
-            result.snapshot,
-            current,
-            assessment,
+        const candidates = [{ result, assessment, pages }, ...companions];
+        if (companions.length)
+            await this.recheckWikiContributionCandidates(candidates);
+        const input = this.stableWikiInput(
+            companions.length
+                ? wikiContributionGroupInput(
+                      candidates.map((candidate) => ({
+                          input: candidate.result.snapshot,
+                          assessment: candidate.assessment,
+                          assessmentKey: wikiAssessmentKey(
+                              candidate.result.snapshot,
+                              candidate.pages,
+                              this.wikiAdmissionContext([]),
+                          ),
+                      })),
+                      current,
+                  )
+                : wikiContributionInput(result.snapshot, current, assessment),
         );
+        recordSearchTiming("wiki.contribution.group", 0, {
+            candidates: candidates.length,
+            fragments: input.inputs.reduce(
+                (count, source) => count + (source.passages?.length ?? 0),
+                0,
+            ),
+        });
         this.viewBuilds.trackContribution(job.jobId, input);
         await this.checkWikiContributionInput(input);
         signal.throwIfAborted();
@@ -9560,6 +9835,8 @@ export class FileMemoryService
         await this.enqueueWrite(job.corpusId, async () => {
             signal.throwIfAborted();
             await this.recheckViewInput(result.snapshot);
+            if (companions.length)
+                await this.recheckWikiContributionCandidates(candidates);
             await this.checkWikiContributionInput(input);
             const saved = await this.viewStore.materializeViewBuild(
                 job.corpusId,
@@ -9583,6 +9860,33 @@ export class FileMemoryService
         });
     }
 
+    private async recheckWikiContributionCandidates(
+        candidates: WikiContributionCandidate[],
+    ): Promise<void> {
+        for (const candidate of candidates) {
+            await this.recheckViewInput(candidate.result.snapshot);
+            const currentPages = await this.wikiAdmissionPages(
+                candidate.result.snapshot,
+            );
+            const policy = this.wikiAdmissionContext([]);
+            if (
+                wikiAssessmentKey(
+                    candidate.result.snapshot,
+                    candidate.pages,
+                    policy,
+                ) !==
+                wikiAssessmentKey(
+                    candidate.result.snapshot,
+                    currentPages,
+                    policy,
+                )
+            )
+                throw new ViewBuildStaleError(
+                    "Grouped Wiki contribution canonical context changed during preparation",
+                );
+        }
+    }
+
     private async bindWikiContribution(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -9590,7 +9894,27 @@ export class FileMemoryService
         signal: AbortSignal,
     ): Promise<void> {
         signal.throwIfAborted();
-        await this.recheckViewInput(result.snapshot);
+        const memberIds = new Set(
+            contribution.input.wikiContribution?.members?.map(
+                (member) => member.candidateViewId,
+            ) ?? [result.viewId],
+        );
+        const persisted = await this.viewStore.getViewBuild(
+            job.corpusId,
+            job.jobId,
+        );
+        const targets = (persisted?.results ?? []).filter(
+            (target) =>
+                memberIds.has(target.viewId) &&
+                target.wikiContribution?.input.fingerprint ===
+                    contribution.input.fingerprint,
+        );
+        if (!targets.some((target) => target.viewId === result.viewId))
+            throw new Error(
+                "Wiki contribution binding target is not a group member",
+            );
+        for (const target of targets)
+            await this.recheckViewInput(target.snapshot);
         await this.checkWikiContributionInput(contribution.input, false);
         const canonical = await this.viewStore.getView({
             corpusId: job.corpusId,
@@ -9630,7 +9954,8 @@ export class FileMemoryService
         )
             publication = await this.indexViewLocked(canonical, signal);
         signal.throwIfAborted();
-        await this.recheckViewInput(result.snapshot);
+        for (const target of targets)
+            await this.recheckViewInput(target.snapshot);
         await this.checkWikiContributionInput(contribution.input, false);
         const currentCanonical = await this.viewStore.getView({
             corpusId: job.corpusId,
@@ -9653,22 +9978,29 @@ export class FileMemoryService
             job.corpusId,
             job.jobId,
             (current) => {
-                const target = current.results.find(
-                    (entry) => entry.viewId === result.viewId,
-                );
-                if (
-                    !target ||
-                    current.state !== "running" ||
-                    target.wikiAssessment?.disposition !== "contribute"
-                )
-                    throw new ViewBuildStaleError(
-                        "Wiki contribution candidate is no longer active",
+                for (const member of targets) {
+                    const target = current.results.find(
+                        (entry) => entry.viewId === member.viewId,
                     );
-                target.wikiContribution = { ...contribution, state: "bound" };
-                target.wikiAssessment.canonicalRevisionId =
-                    canonical.revisionId;
-                target.state = "skipped";
-                target.reason = `Essential distinctions contributed to canonical ${canonical.viewId}; current publication/index binding complete`;
+                    if (
+                        !target ||
+                        current.state !== "running" ||
+                        target.wikiAssessment?.disposition !== "contribute" ||
+                        target.wikiAssessment.canonicalViewId !==
+                            canonical.viewId
+                    )
+                        throw new ViewBuildStaleError(
+                            "Wiki contribution candidate is no longer active",
+                        );
+                    target.wikiContribution = {
+                        ...contribution,
+                        state: "bound",
+                    };
+                    target.wikiAssessment.canonicalRevisionId =
+                        canonical.revisionId;
+                    target.state = "skipped";
+                    target.reason = `Essential distinctions contributed to canonical ${canonical.viewId}; current publication/index binding complete`;
+                }
             },
         );
     }
@@ -9819,6 +10151,7 @@ export class FileMemoryService
                                 ? { canonicalRevisionId: canonical.revisionId }
                                 : {}),
                         };
+                        target.wikiAssessmentKey = assessmentKey;
                         if (result.snapshot.influenceSources)
                             target.snapshot.influenceSources = structuredClone(
                                 result.snapshot.influenceSources,
@@ -10265,6 +10598,20 @@ export class FileMemoryService
         }
     }
 
+    private independentKnowledgePipeline(
+        pipeline: string,
+        family: "wiki" | "projects",
+    ): boolean {
+        return (
+            (this.concurrentKnowledgeTopics && pipeline === "topics-v1") ||
+            (this.experiments.has("family-frozen-preparation") &&
+                pipeline ===
+                    (family === "wiki"
+                        ? "informational-project-summary-v1"
+                        : "informational-wiki-v1"))
+        );
+    }
+
     private async maintainWikiFamily(
         runtime: CorpusRuntime,
         request: Extract<
@@ -10296,11 +10643,12 @@ export class FileMemoryService
                 (job) =>
                     job.state === "running" &&
                     !(
-                        this.concurrentKnowledgeTopics &&
                         this.knowledgeMaintenance.has(corpusId) &&
-                        job.results.every(
-                            (result) =>
-                                result.snapshot.pipeline === "topics-v1",
+                        job.results.every((result) =>
+                            this.independentKnowledgePipeline(
+                                result.snapshot.pipeline,
+                                kind,
+                            ),
                         )
                     ),
             )
@@ -10340,13 +10688,15 @@ export class FileMemoryService
         )
             return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(corpusId, runtime);
-        const page = await runtime.index.listSubjects(
+        const eligibleIds = new Set(eligible.map((source) => source.sourceId));
+        const page = await this.readInformationalSubjects(
+            runtime,
             family.cursor,
-            48,
-            new Set(eligible.map((source) => source.sourceId)),
+            eligibleIds,
+            automatic,
         );
-        const subjects = await runtime.index.getKnowledgeGraph(
-            new Set(eligible.map((source) => source.sourceId)),
+        const subjects = await timeSearchStage("wiki.discovery.graph", () =>
+            runtime.index.getKnowledgeGraph(eligibleIds),
         );
         const subjectNames = new Set(
             [
@@ -10377,15 +10727,19 @@ export class FileMemoryService
         const familyVersion = viewHash(
             await this.viewStore.getWikiFamily(corpusId, kind),
         );
-        const { targets, snapshots } = await this.prepareWikiTargets(
-            corpusId,
-            family,
-            snapshot.views,
-            eligible,
-            request.operation === "rebuild",
-            plan,
-            kind,
-            automatic,
+        const { targets, snapshots } = await timeSearchStage(
+            "wiki.plan.targets",
+            () =>
+                this.prepareWikiTargets(
+                    corpusId,
+                    family,
+                    snapshot.views,
+                    eligible,
+                    request.operation === "rebuild",
+                    plan,
+                    kind,
+                    automatic,
+                ),
         );
         await this.assertWikiPlanCurrent(
             corpusId,
@@ -10447,6 +10801,44 @@ export class FileMemoryService
         } finally {
             reservation.release();
         }
+    }
+
+    private async readInformationalSubjects(
+        runtime: CorpusRuntime,
+        offset: number,
+        eligibleIds: Set<string>,
+        automatic: boolean,
+    ) {
+        if (!runtime.index.listSubjects)
+            throw new Error("Host does not support indexed Wiki discovery");
+        const listSubjects = runtime.index.listSubjects.bind(runtime.index);
+        let page = await timeSearchStage("wiki.discovery.page", () =>
+            listSubjects(offset, 48, eligibleIds),
+        );
+        if (automatic || !this.experiments.has("wiki-coalesced-discovery"))
+            return page;
+        const visited = new Set([offset]);
+        while (page.nextContinuationToken !== undefined) {
+            const cursor = Number(page.nextContinuationToken);
+            if (
+                !Number.isSafeInteger(cursor) ||
+                cursor < 0 ||
+                visited.has(cursor)
+            )
+                throw new Error(
+                    "Wiki discovery returned a repeated or invalid cursor",
+                );
+            visited.add(cursor);
+            const next = await timeSearchStage("wiki.discovery.page", () =>
+                listSubjects(cursor, 48, eligibleIds),
+            );
+            page = { ...next, items: [...page.items, ...next.items] };
+        }
+        recordSearchTiming("wiki.discovery.coalesced", 0, {
+            pages: visited.size,
+            subjects: page.items.length,
+        });
+        return page;
     }
 
     private stageWikiFamilyAdmission(
@@ -10610,7 +11002,12 @@ export class FileMemoryService
                     : receipt.assessmentKey !==
                       wikiAssessmentKey(
                           result.snapshot,
-                          nominateWikiPages(result.snapshot, views, identities),
+                          nominateWikiPages(
+                              result.snapshot,
+                              views,
+                              identities,
+                              this.experiments.has("wiki-full-context"),
+                          ),
                           this.wikiAdmissionContext([]),
                       )
             ) {
@@ -11466,6 +11863,11 @@ export class FileMemoryService
                 : this.curatedTopics
                   ? this.topicPolicy
                   : "curated-lazy-v6",
+            topicCurationReuse: this.topicCurationReuse,
+            topicWatermark: this.topicWatermark,
+            ...(this.topicWatermark && state.continuation
+                ? { continuation: state.continuation }
+                : {}),
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
@@ -11495,6 +11897,29 @@ export class FileMemoryService
         }
     }
 
+    private canContinueTopicWatermark(
+        input: ViewBuildSnapshot,
+        runtime: CorpusRuntime,
+    ): boolean {
+        return (
+            this.topicWatermark &&
+            input.topicInput?.packetReplay === true &&
+            input.model === this.topicModelIdentity() &&
+            input.topicInput.suppressionFingerprint ===
+                viewHash(runtime.manifest.knowledgeSuppressions ?? []) &&
+            topicSourceClosurePreserved(
+                {
+                    influenceSources: input.influenceSources ?? [],
+                    ...(input.influenceEvents
+                        ? { influenceEvents: input.influenceEvents }
+                        : {}),
+                },
+                this.topicSources(runtime),
+                this.topicEvents(runtime),
+            )
+        );
+    }
+
     private writeTopics(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -11506,16 +11931,45 @@ export class FileMemoryService
             signal.throwIfAborted();
             await this.assertInfluenceEligible(result.snapshot);
             const runtime = await this.getCorpusRuntime(job.corpusId);
-            if (result.snapshot.fingerprint !== this.topicFingerprint(runtime))
+            const privateWatermark =
+                result.snapshot.fingerprint !== this.topicFingerprint(runtime);
+            if (
+                privateWatermark &&
+                !this.canContinueTopicWatermark(result.snapshot, runtime)
+            )
                 throw new ViewBuildStaleError(
                     "Topic source/index eligibility changed during generation",
                 );
+            if (privateWatermark && !snapshot.curationInputFingerprint) {
+                recordSearchTiming("topic.watermark.incidence-withheld", 0, {
+                    complete,
+                    nodes: snapshot.nodes.length,
+                    published: false,
+                });
+                if (complete)
+                    throw new ViewBuildStaleError(
+                        "Superseded topic output has no curated continuation witness",
+                    );
+                return;
+            }
             await this.viewStore.materializeTopicBuild(
                 job.corpusId,
                 job.jobId,
                 snapshot,
                 complete,
+                privateWatermark,
             );
+            if (privateWatermark)
+                recordSearchTiming("topic.watermark.stage", 0, {
+                    complete,
+                    nodes: snapshot.nodes.length,
+                    packets: snapshot.curationPackets?.length ?? 0,
+                    published: false,
+                });
+            if (privateWatermark && complete)
+                throw new ViewBuildStaleError(
+                    "Private topic watermark staged; latest-input catch-up required",
+                );
         });
     }
 
@@ -15674,6 +16128,25 @@ export class FileMemoryService
             this.informationalWikiEnabled &&
             supportsTopicIndex(runtime.index)
         ) {
+            if (this.topicWatermark) {
+                const { continuation } =
+                    await this.viewStore.getTopicState(corpusId);
+                if (
+                    continuation &&
+                    (continuation.recipe !==
+                        `${this.topicModelIdentity()}:editorial-v1:${this.topicPolicy}` ||
+                        continuation.curationSuppressionFingerprint !==
+                            viewHash(
+                                runtime.manifest.knowledgeSuppressions ?? [],
+                            ) ||
+                        !topicSourceClosurePreserved(
+                            continuation,
+                            this.topicSources(runtime),
+                            this.topicEvents(runtime),
+                        ))
+                )
+                    await this.viewStore.discardTopicContinuation(corpusId);
+            }
             const fingerprint = this.topicFingerprint(runtime);
             for (const job of await this.viewStore.listViewBuilds(corpusId))
                 if (
@@ -15681,7 +16154,11 @@ export class FileMemoryService
                     job.results.some(
                         (result) =>
                             result.snapshot.pipeline === "topics-v1" &&
-                            result.snapshot.fingerprint !== fingerprint,
+                            result.snapshot.fingerprint !== fingerprint &&
+                            !this.canContinueTopicWatermark(
+                                result.snapshot,
+                                runtime,
+                            ),
                     )
                 )
                     this.viewBuilds.cancel(
@@ -16253,11 +16730,12 @@ export class FileMemoryService
         corpusId: string,
         sourceId: string,
     ): Promise<void> {
-        if (this.maintenance.isDeferred(corpusId)) return;
+        if (this.maintenance.isDeferred(corpusId, "synopsis")) return;
         const capture = await this.enqueueWrite(
             corpusId,
             async () => {
-                if (this.maintenance.isDeferred(corpusId)) return undefined;
+                if (this.maintenance.isDeferred(corpusId, "synopsis"))
+                    return undefined;
                 const current = await this.getCorpusRuntime(corpusId, true);
                 if (current.manifest.authorizedSourceRemoval) return undefined;
                 const candidate = structuredClone(current.manifest);
@@ -18256,6 +18734,9 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        for (const release of this.synopsisCheckpointHolds.values()) release();
+        this.synopsisCheckpointHolds.clear();
+        this.synopsisPriorityCooldowns.clear();
         this.translationCache.close();
         const warmupClosure = this.viewWarmup.close();
         this.understanding?.close();

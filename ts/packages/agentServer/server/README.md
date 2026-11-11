@@ -29,6 +29,16 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --conf
 
 Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAgentServer()`.
 
+### Experimental memory extraction scheduling
+
+`TYPEAGENT_MEMORY_EXTRACTION_WINDOW_SIZE` accepts `8` (default) or `16`.
+The explicit sixteen-location treatment uses fixed windows, with at most eight
+active extractor calls per index shared across ordinary and retrying extraction.
+Temporal-owner dependencies and ordered semantic application remain unchanged.
+Embedding batches remain independently configured; this treatment does not
+enable larger embedding batches. Invalid values fail service creation.
+The experimental window is not a promoted default.
+
 ### Network exposure
 
 The listener binds loopback (`127.0.0.1`), so only this machine can reach it,

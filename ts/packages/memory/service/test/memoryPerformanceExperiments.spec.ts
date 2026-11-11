@@ -21,6 +21,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { MaintenanceScheduler } from "../src/maintenanceScheduler.js";
 import {
     boundedSupportMap,
+    deferSynopsisForCheckpoint,
     memoryPerformanceExperiments,
     resolveInitialReaderModelEndpoint,
 } from "../src/memoryPerformanceExperiments.js";
@@ -37,6 +38,68 @@ function deferred() {
     });
     return { promise, resolve };
 }
+
+test("synopsis priority holds are corpus/family scoped, bounded and released once", async () => {
+    const scheduler = new MaintenanceScheduler(() => false);
+    let resumes = 0;
+    const release = deferSynopsisForCheckpoint(
+        scheduler,
+        "corpus",
+        () => {
+            resumes++;
+        },
+        10,
+    );
+    expect(scheduler.isDeferred("corpus", "synopsis")).toBe(true);
+    expect(scheduler.isDeferred("corpus", "wiki")).toBe(false);
+    expect(scheduler.isDeferred("other", "synopsis")).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    release();
+    expect(resumes).toBe(1);
+    expect(scheduler.isDeferred("corpus", "synopsis")).toBe(false);
+    await scheduler.close();
+});
+
+test("synopsis priority completion releases before the age bound", () => {
+    let holds = 0,
+        resumes = 0;
+    const release = deferSynopsisForCheckpoint(
+        {
+            deferFamily: (corpus, family) => {
+                expect([corpus, family]).toEqual(["corpus", "synopsis"]);
+                holds++;
+                return () => {
+                    holds--;
+                };
+            },
+        },
+        "corpus",
+        () => {
+            resumes++;
+        },
+    );
+    release();
+    release();
+    expect(holds).toBe(0);
+    expect(resumes).toBe(1);
+    expect(() =>
+        deferSynopsisForCheckpoint(
+            { deferFamily: () => () => {} },
+            "corpus",
+            () => {},
+            0,
+        ),
+    ).toThrow();
+    expect(
+        memoryPerformanceExperiments(
+            "synopsis-checkpoint-priority,early-required-failure",
+        ).size,
+    ).toBe(2);
+    expect(memoryPerformanceExperiments("")).not.toContain(
+        "early-required-failure",
+    );
+});
 
 describe("bounded serving experiments", () => {
     test.each([

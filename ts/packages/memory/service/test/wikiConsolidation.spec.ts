@@ -38,6 +38,7 @@ import {
     verifyOrRepairWikiConsolidation,
 } from "../src/viewSynthesis.js";
 import type { ChatModel } from "@typeagent/aiclient";
+import { runWithSearchTiming } from "@typeagent/knowpro";
 
 function input(
     viewId: string,
@@ -196,6 +197,70 @@ function repairFixture() {
     return { snapshot, original, repair, assessment };
 }
 
+test("coarse timing retains the rejected scope-state check/repair/recheck sequence", async () => {
+    const { snapshot, original, repair, assessment } = repairFixture();
+    const before = structuredClone(original);
+    const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const warn = console.warn;
+    const lines: string[] = [];
+    let checks = 0,
+        repairs = 0;
+    console.warn = (line: unknown) => {
+        lines.push(String(line));
+    };
+    process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "coarse";
+    try {
+        await expect(
+            runWithSearchTiming("rejection", "fixture", () =>
+                verifyOrRepairWikiConsolidation(
+                    {
+                        identity: "offline",
+                        generate: async () => original,
+                        validate: async () => {
+                            throw new Error("Unused");
+                        },
+                        checkWikiConsolidation: async () => {
+                            checks++;
+                            return {
+                                safe: false,
+                                failures: ["scope-state"],
+                            };
+                        },
+                        repairWikiConsolidation: async () => {
+                            repairs++;
+                            return applyConsolidationRepair(original, repair);
+                        },
+                    },
+                    snapshot,
+                    original,
+                    assessment,
+                    new AbortController().signal,
+                ),
+            ),
+        ).rejects.toThrow("critical-distinction; scope-state");
+        expect(checks).toBe(2);
+        expect(repairs).toBe(1);
+        expect(original).toEqual(before);
+        const stages = lines
+            .filter((line) => line.startsWith("[memory-search-timing] "))
+            .map(
+                (line) =>
+                    JSON.parse(line.replace("[memory-search-timing] ", ""))
+                        .stage,
+            );
+        expect(stages).toEqual([
+            "wiki.consolidation.check",
+            "wiki.consolidation.repair",
+            "wiki.consolidation.recheck",
+        ]);
+    } finally {
+        console.warn = warn;
+        if (flag === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = flag;
+    }
+});
+
 test("consolidation corrects a quantity once and independently rechecks actual prose without changing anchors", async () => {
     const { snapshot, original, repair, assessment } = repairFixture();
     const retained = structuredClone(original);
@@ -307,6 +372,61 @@ test.each([
         expect(repairs).toBe(expectedRepairs);
     },
 );
+
+test("configured scope comparison binds each article's query and aliases independently", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "wiki-scoped-pair-"));
+    try {
+        const { survivor, retiring, receipt } = await preparedStore(root);
+        survivor.definition.wiki!.query = "L";
+        survivor.definition.wiki!.aliases = ["large variant"];
+        retiring.definition.wiki!.query = "S";
+        retiring.definition.wiki!.aliases = ["small variant"];
+        const distinct: WikiConsolidationScope = {
+            relation: "distinct",
+            reason: "distinct-scope",
+            scope: {
+                system: "App component",
+                initiative: "",
+                purpose: "Separate size-specific references",
+            },
+            criticalDistinctions: [],
+        };
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (messages) => {
+                if (typeof messages === "string")
+                    throw new Error("Expected structured scope messages");
+                const payload = JSON.parse(String(messages[1].content));
+                expect(payload.survivor.query).toBe("L");
+                expect(payload.survivor.aliases).toEqual(["large variant"]);
+                expect(payload.retiring.query).toBe("S");
+                expect(payload.retiring.aliases).toEqual(["small variant"]);
+                expect(String(messages[0].content)).toContain(
+                    "article prose cannot broaden that scope",
+                );
+                expect(String(messages[0].content)).toContain(
+                    "Separate named variants or parameter values remain distinct",
+                );
+                return { success: true, data: JSON.stringify(distinct) };
+            },
+        };
+        const adapter = createConfiguredViewSynthesisAdapter(
+            undefined,
+            4000,
+            model,
+        );
+        expect(
+            await adapter.assessWikiConsolidation!(
+                receipt.input,
+                survivor,
+                retiring,
+                new AbortController().signal,
+            ),
+        ).toEqual(distinct);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("configured consolidation repair uses unchanged originals and checks preservation against unrepaired prose", async () => {
     const { snapshot, original, repair, assessment } = repairFixture();

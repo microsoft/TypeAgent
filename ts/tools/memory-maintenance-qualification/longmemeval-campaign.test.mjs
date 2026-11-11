@@ -84,6 +84,24 @@ test("overall allowance and disk reserve stop before launching another supervise
     );
 });
 
+test("finished schedules with case failures are terminal failures, not retries or successful completion", () => {
+    for (const outcome of [
+        "FULL_500_COMPLETED_WITH_FAILURES",
+        "DIAGNOSTIC_SELECTION_COMPLETED_WITH_FAILURES",
+    ]) {
+        const state = { outcome, attempts: [{ supportedClose: "COMPLETE" }] };
+        assert.equal(
+            campaignDecision(state, 600000, 1000, 100),
+            "COMPLETE_WITH_FAILURES",
+        );
+        state.attempts[0].supportedClose = "failed";
+        assert.equal(
+            campaignDecision(state, 600000, 1000, 100),
+            "STOP_UNCLEAN_CLOSE",
+        );
+    }
+});
+
 test("controller preserves frozen runner flags and reserves cleanup time", () => {
     const args = ["--authorized-live-benchmark", "--max-questions", "1"];
     assert.deepEqual(invocationArguments(args, "D:\\owned\\run", 10 * 60000), [

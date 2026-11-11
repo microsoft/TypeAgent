@@ -159,6 +159,66 @@ test.each([true, false])(
     },
 );
 
+test("late provider responses are accounted before cancellation prevents parsing", async () => {
+    const entered = deferred<void>(),
+        release = deferred<void>();
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async () => {
+            entered.resolve();
+            await release.promise;
+            return { success: true, data: '{"accepted":true}' };
+        },
+    };
+    const oldFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const logs: string[] = [];
+    const warn = import.meta.jest
+        .spyOn(console, "warn")
+        .mockImplementation((line: unknown) => logs.push(String(line)));
+    process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+    try {
+        const controller = new AbortController();
+        const result = runWithSearchTiming("late-provider", "test", () =>
+            createTopicCompletion(undefined, model)(
+                "Synthetic instructions",
+                {},
+                controller.signal,
+                "topic.test.model",
+            ),
+        );
+        const rejected = expect(result).rejects.toThrow(
+            "Canceled after provider start",
+        );
+        await entered.promise;
+        controller.abort(new Error("Canceled after provider start"));
+        release.resolve();
+        await rejected;
+        const events = logs.map(
+            (line) =>
+                JSON.parse(line.slice("[memory-search-timing] ".length)) as {
+                    stage: string;
+                    metadata: { aborted?: boolean; outputBytes?: number };
+                },
+        );
+        expect(
+            events.find((event) => event.stage === "topic.test.model.response")
+                ?.metadata,
+        ).toMatchObject({
+            aborted: true,
+            outputBytes: 17,
+        });
+        expect(
+            events.some((event) => event.stage === "topic.test.model.parse"),
+        ).toBe(false);
+    } finally {
+        release.resolve();
+        warn.mockRestore();
+        if (oldFlag === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = oldFlag;
+    }
+});
+
 test("legacy models remain usable but context-aware packing explicitly requires inspection", async () => {
     const model: ChatModel = {
         completionSettings: {},
