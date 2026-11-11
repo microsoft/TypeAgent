@@ -21,6 +21,35 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
+test("view-build polling reports a missing receipt explicitly", async () => {
+    await expect(
+        waitForViewBuild(
+            { getViewBuild: async () => undefined },
+            { corpusId: "corpus", jobId: "missing" },
+        ),
+    ).rejects.toThrow("Missing durable view build 'missing'");
+});
+
+test("view-build polling bounds a transport read that never returns", async () => {
+    const clock = import.meta.jest;
+    clock.useFakeTimers();
+    try {
+        const waiting = waitForViewBuild(
+            { getViewBuild: () => new Promise<never>(() => {}) },
+            { corpusId: "corpus", jobId: "stuck" },
+        );
+        const assertion = expect(waiting).rejects.toThrow(
+            "View build corpus/stuck did not settle",
+        );
+        await clock.advanceTimersByTimeAsync(30_000);
+        await assertion;
+        expect(clock.getTimerCount()).toBe(0);
+    } finally {
+        clock.useRealTimers();
+    }
+});
 const {
     FakeSemanticCorpusIndex,
 }: typeof import("../../service/dist/test/fakeSemanticCorpusIndex.js") =
@@ -310,13 +339,7 @@ test("authenticated MCP installs, builds and reopens provider content with scope
             targets: [{ expectedVersion: 0, definition }],
         };
         let job = await client.buildViews(request);
-        while (job.state === "running") {
-            await new Promise<void>((resolve) => setTimeout(resolve, 20));
-            job = (await client.getViewBuild({
-                corpusId: corpus.corpusId,
-                jobId: job.jobId,
-            }))!;
-        }
+        job = await waitForViewBuild(client, job);
         expect(job.state).toBe("complete");
         expect(job.results[0].providerCheckpoints).toEqual(
             expect.arrayContaining([
@@ -457,13 +480,7 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
             publication: false as const,
         };
         let job = await client.buildViews(request);
-        while (job.state === "running") {
-            await new Promise<void>((resolve) => setTimeout(resolve, 20));
-            job = (await client.getViewBuild({
-                corpusId: corpus.corpusId,
-                jobId: job.jobId,
-            }))!;
-        }
+        job = await waitForViewBuild(client, job);
         expect(job.state).toBe("complete");
         const usage = await client.getSourceViewUsage({
             corpusId: corpus.corpusId,

@@ -64,6 +64,15 @@
 #     fork-PR note above). Optionally add an Approvals & checks gate on
 #     $(azureSubscription) for defense in depth.
 
+parameters:
+  - name: smokeBuildScope
+    displayName: Smoke build coverage (full is the production default)
+    type: string
+    default: full
+    values:
+      - full
+      - smoke-closure
+
 trigger:
   branches:
     include:
@@ -211,8 +220,18 @@ jobs:
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         workingDirectory: $(buildDirectory)/packages/shell
 
-      - script: |
-          npm run build
+      - pwsh: |
+          $watch = [System.Diagnostics.Stopwatch]::StartNew()
+          Write-Output 'Smoke build scope=${{ parameters.smokeBuildScope }}'
+          if ('${{ parameters.smokeBuildScope }}' -eq 'full') {
+            pnpm run build --timer --logtime
+          } else {
+            pnpm exec fluid-build '^(agent-cli|agent-shell)$' -t build --dep --timer --logtime
+          }
+          $status = $LASTEXITCODE
+          node tools/scripts/ciProfile.mjs record smoke-build $watch.ElapsedMilliseconds $status
+          if ($LASTEXITCODE -ne 0) { throw 'Smoke-build measurement could not be recorded.' }
+          exit $status
         displayName: Build
         workingDirectory: $(buildDirectory)
 

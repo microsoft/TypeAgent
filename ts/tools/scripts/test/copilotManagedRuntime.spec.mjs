@@ -2,12 +2,11 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
     copilotPlatformPackage,
     createCopilotRuntimeManifest,
@@ -23,9 +22,98 @@ import {
     transientNpmrcContent,
 } from "../copilotRuntime.mjs";
 import { listedEntryState } from "../../installers/common/register-plugin.mjs";
+import { bundleEntry } from "../bundleUtils.mjs";
+import { runTestCommand } from "../lib/testProcess.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(testDir, "..", "..", "..");
+
+test("runtime CLI executes through filesystem aliases without running on import", async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ta-runtime-entry-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const bundled = path.join(root, "bundled", "copilotRuntime.mjs");
+    await bundleEntry({
+        entryPoint: path.join(testDir, "..", "copilotRuntime.mjs"),
+        outfile: bundled,
+        runtimeRootFromOutput: "../",
+    });
+
+    for (const script of [
+        path.join(testDir, "..", "copilotRuntime.mjs"),
+        bundled,
+    ]) {
+        const alias = path.join(
+            root,
+            `alias-${path.basename(path.dirname(script))}`,
+        );
+        fs.symlinkSync(
+            path.dirname(script),
+            alias,
+            process.platform === "win32" ? "junction" : "dir",
+        );
+        for (const entry of [script, path.join(alias, path.basename(script))]) {
+            await t.test(`help and errors execute at ${entry}`, () => {
+                const help = runTestCommand(
+                    process.execPath,
+                    [entry, "--help"],
+                    {
+                        stage: "managed-runtime fixture: help",
+                        timeout: 30000,
+                    },
+                );
+                assert.match(help.stdout, /Usage: node copilotRuntime.mjs/);
+
+                const invalid = runTestCommand(
+                    process.execPath,
+                    [entry, "--unknown-option"],
+                    {
+                        stage: "managed-runtime fixture: invalid argument",
+                        expectedStatus: 1,
+                        timeout: 30000,
+                    },
+                );
+                assert.match(
+                    invalid.stderr,
+                    /Unknown argument: --unknown-option/,
+                );
+            });
+        }
+        await t.test(`preserved symlink entry executes ${script}`, () => {
+            const result = runTestCommand(
+                process.execPath,
+                [
+                    "--preserve-symlinks-main",
+                    path.join(alias, path.basename(script)),
+                    "--help",
+                ],
+                {
+                    stage: "managed-runtime fixture: preserved symlink entry",
+                    timeout: 30000,
+                },
+            );
+            assert.match(result.stdout, /Usage: node copilotRuntime.mjs/);
+        });
+        await t.test(`import does not execute ${script}`, () => {
+            for (const argv of [[], ["nonexistent-entry.mjs"]]) {
+                const result = runTestCommand(
+                    process.execPath,
+                    [
+                        "--input-type=module",
+                        "--eval",
+                        `await import(${JSON.stringify(pathToFileURL(script).href)}); console.log("import-only");`,
+                        ...argv,
+                    ],
+                    {
+                        stage: "managed-runtime fixture: import",
+                        timeout: 30000,
+                    },
+                );
+                assert.equal(result.stdout.trim(), "import-only");
+                assert.equal(result.stderr, "");
+            }
+        });
+    }
+});
 
 test("manifest records the resolved SDK-compatible Windows runtime", () => {
     const manifest = createCopilotRuntimeManifest({
@@ -279,12 +367,14 @@ test("deployed launcher dispatches the Copilot setup command", () => {
         "scripts",
         "typeagent-serve.mjs",
     );
-    const result = spawnSync(
+    const result = runTestCommand(
         process.execPath,
         [launcher, "setup", "--provider", "invalid"],
-        { encoding: "utf8" },
+        {
+            stage: "managed-runtime fixture: deployed launcher",
+            expectedStatus: 1,
+        },
     );
-    assert.equal(result.status, 1);
     assert.match(
         result.stderr,
         /Setup currently supports only '--provider copilot'/,

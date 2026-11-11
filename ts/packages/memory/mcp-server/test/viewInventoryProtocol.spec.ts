@@ -11,6 +11,7 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
+import { waitForViewBuild } from "./viewBuildTestWait.js";
 
 const {
     FakeSemanticCorpusIndex,
@@ -262,20 +263,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                     },
                 ],
             });
-            for (
-                let tries = 0;
-                job.state === "running" && tries < 1000;
-                tries++
-            ) {
-                await new Promise<void>((resolve) => setTimeout(resolve, 10));
-                const current = await client.getViewBuild({
-                    corpusId: corpus.corpusId,
-                    jobId: job.jobId,
-                });
-                if (!current)
-                    throw new Error("Missing durable MCP inventory receipt");
-                job = current;
-            }
+            job = await waitForViewBuild(client, job);
             expect(job.results[0]).toMatchObject({
                 state: kind === "projectBrief" ? "draft" : "searchable",
             });
@@ -437,19 +425,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                         },
                     ],
                 });
-                for (
-                    let tries = 0;
-                    eventJob.state === "running" && tries < 1000;
-                    tries++
-                ) {
-                    await new Promise<void>((resolve) =>
-                        setTimeout(resolve, 10),
-                    );
-                    eventJob = (await client.getViewBuild({
-                        corpusId: corpus.corpusId,
-                        jobId: eventJob.jobId,
-                    }))!;
-                }
+                eventJob = await waitForViewBuild(client, eventJob);
                 expect(eventJob.results[0].state).toBe("draft");
                 const eventView = (await client.getView({
                     corpusId: corpus.corpusId,
@@ -586,19 +562,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                         },
                     ],
                 });
-                for (
-                    let tries = 0;
-                    job.state === "running" && tries < 1000;
-                    tries++
-                ) {
-                    await new Promise<void>((resolve) =>
-                        setTimeout(resolve, 10),
-                    );
-                    job = (await client.getViewBuild({
-                        corpusId: corpus.corpusId,
-                        jobId: job.jobId,
-                    }))!;
-                }
+                job = await waitForViewBuild(client, job);
                 expect(job.results[0]).toMatchObject({ state: "searchable" });
                 expect(job.results[0].snapshot.publicationPolicy).toMatchObject(
                     { autoPublish: true, origin: "build" },

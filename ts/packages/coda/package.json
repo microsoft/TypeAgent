@@ -31,7 +31,7 @@
     "pretest": "pnpm run build",
     "test-compile": "tsc -p src",
     "test:full": "vscode-test",
-    "test:local": "tsc -p src/test && node --test \"dist-test/test/*.spec.js\"",
+    "test:local": "tsc -p src/test && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../tools/scripts/nodeTestFailureReporter.mjs --test-reporter-destination=stdout \"dist-test/test/*.spec.js\"",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"
   },

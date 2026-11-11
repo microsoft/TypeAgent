@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CorpusAccess } from "../src/corpusAccess.js";
@@ -213,13 +215,7 @@ describe("detached view index preparation", () => {
         return pending;
     }
     async function wait(job: ViewBuildJob): Promise<ViewBuildJob> {
-        for (let attempt = 0; attempt < 500; attempt++) {
-            const current = await service.getViewBuild(job);
-            if (!current) throw new Error("Missing build");
-            if (current.state !== "running") return current;
-            await new Promise<void>((resolve) => setTimeout(resolve, 10));
-        }
-        throw new Error("Build did not finish");
+        return waitForViewBuild(service, job);
     }
     async function publicationRequest(): Promise<ViewPublishRequest> {
         const snapshot = await service.listViews(corpusId);

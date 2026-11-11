@@ -10,7 +10,12 @@ $scratch = Join-Path $root 'compiler'
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $env:TEMP = $scratch
 $env:TMP = $scratch
+function Write-StartupPhase([string]$Phase) {
+    @{ phase=$Phase; serverPid=$PID; observedAtMs=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } |
+        ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $root 'startup.jsonl') -Encoding UTF8
+}
 try {
+Write-StartupPhase 'compiling-pipe-helper'
 Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
@@ -79,6 +84,7 @@ public sealed class NativeHookPipe : IDisposable {
     public void Dispose() { pipe.Dispose(); }
 }
 '@
+Write-StartupPhase 'pipe-helper-compiled'
 function Identity($process) {
     if (-not $process -or [string]::IsNullOrWhiteSpace($process.ExecutablePath) -or
         [string]::IsNullOrWhiteSpace($process.CommandLine)) { throw 'OS hook identity incomplete' }
@@ -92,11 +98,13 @@ function Identity($process) {
 }
 $index = 0
 while ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() -lt $DeadlineMs -and $index -lt 32) {
+    if ($index -eq 0) { Write-StartupPhase 'creating-pipe' }
     $pipe = New-Object NativeHookPipe($PipeName)
     try {
         if ($index -eq 0) {
             @{ serverPid=$PID; pipe=$PipeName; api='GetNamedPipeClientProcessId/SafePipeHandle' } |
                 ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $root 'ready.json')
+            Write-StartupPhase 'ready'
         }
         $remaining = [int][Math]::Min(300000, $DeadlineMs - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
         $peerId = $pipe.Accept($remaining)

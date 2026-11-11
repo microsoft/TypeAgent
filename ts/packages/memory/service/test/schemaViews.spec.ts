@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -596,18 +598,11 @@ describe("ordinary-source schema lifecycle", () => {
         }
     });
     async function settled(job: ViewBuildJob) {
-        for (let count = 0; count < 1000; count++) {
-            const current = (await service.getViewBuild(job))!;
-            if (current.state !== "running") {
-                expect(
-                    current.results.map((result) => result.reason).join("\n"),
-                ).not.toMatch(/failed|unsupported|conflict/i);
-                expect(current.state).toBe("complete");
-                return;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        throw new Error("Schema build timed out");
+        const current = await waitForViewBuild(service, job);
+        expect(
+            current.results.map((result) => result.reason).join("\n"),
+        ).not.toMatch(/failed|unsupported|conflict/i);
+        expect(current.state).toBe("complete");
     }
 
     async function overlappingFixture() {
