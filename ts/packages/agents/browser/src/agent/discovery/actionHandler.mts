@@ -1391,7 +1391,7 @@ export async function handleSchemaDiscoveryAction(
     }
 
     const browser: BrowserControl = context.agentContext.browserControl;
-    const agent = await createDiscoveryPageTranslator("GPT_5_2");
+    const agent = await createDiscoveryPageTranslator("GPT_6_LUNA");
 
     const discoveryContext: DiscoveryActionHandlerContext = {
         browser,

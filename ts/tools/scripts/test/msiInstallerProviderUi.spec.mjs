@@ -423,10 +423,7 @@ test("generated Copilot config passes strict loading with local embeddings when 
             strict: true,
         });
         assert.equal(loaded.env.TYPEAGENT_MODEL_PROVIDER, "copilot");
-        assert.equal(
-            loaded.env.COPILOT_FALLBACK_MODELS,
-            '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
-        );
+        assert.equal(loaded.env.COPILOT_FALLBACK_MODELS, '["gpt-6-luna"]');
         assert.equal(
             loaded.env.TYPEAGENT_DEFAULT_EMBEDDING_MODEL,
             "local-minilm",

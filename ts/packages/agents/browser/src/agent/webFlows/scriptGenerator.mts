@@ -15,7 +15,7 @@ import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 
 const debug = registerDebug("typeagent:browser:webflows:scriptgen");
 
-const SCRIPT_GEN_MODEL = "GPT_5_2";
+const SCRIPT_GEN_MODEL = ai.GPT_6_LUNA;
 
 export interface ScriptGenerationOptions {
     description?: string;

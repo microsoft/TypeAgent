@@ -47,6 +47,7 @@ import {
     type ModelRequest,
     type ProviderAdapter,
 } from "./wireApiProvider/index.js";
+import { DEFAULT_COPILOT_MODEL } from "./copilotModelDefaults.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -536,12 +537,9 @@ export function selectCopilotModel(
     const requestedModel = byId.get(requested);
     if (requestedModel !== undefined) return requestedModel;
 
-    const previousTier = /^gpt-6(?:\.\d+)?-(luna|sol|terra)$/.exec(
-        requested,
-    )?.[1];
-    if (previousTier !== undefined) {
-        const previousModel = byId.get(`gpt-5.6-${previousTier}`);
-        if (previousModel !== undefined) return previousModel;
+    // GPT-6 requests must not silently downgrade or switch away from Luna.
+    if (/^gpt-6(?:[.-]|$)/i.test(requested)) {
+        return byId.get(DEFAULT_COPILOT_MODEL);
     }
 
     for (const fallback of fallbackModels) {

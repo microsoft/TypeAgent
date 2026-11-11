@@ -620,7 +620,7 @@ async function handleEmailAction(
                 const query = action.parameters.genContent.bodySearchQuery;
                 if (query) {
                     const chatModel = openai.createChatModel(
-                        "GPT_35_TURBO",
+                        openai.GPT_6_LUNA,
                         undefined,
                         undefined,
                         ["emailActionHandler"],

@@ -290,19 +290,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
         }
         return undefined;
     };
-    // For chat we additionally fall back to *any* configured deployment if
-    // none of the conventional names match — so a YAML that only defines
-    // exotic deployment names still yields a usable bare default endpoint.
-    const synthAnyChat = (): DeploymentEndpoint | undefined => {
-        for (const dep of deployments.values()) {
-            if (dep.endpoints.length > 0) return dep.endpoints[0];
-        }
-        return undefined;
-    };
-    const finalDefaultChat =
-        defaultChat ??
-        synthDefault(["gpt_6_luna", "gpt_4_o", "gpt_4_1", "gpt_5"]) ??
-        synthAnyChat();
+    const finalDefaultChat = defaultChat ?? synthDefault(["gpt_6_luna"]);
     const finalDefaultEmbedding =
         defaultEmbedding ?? synthDefault(["embedding", "embedding_3_large"]);
     const finalDefaultImage = defaultImage ?? synthDefault(["gpt_image_1_5"]);

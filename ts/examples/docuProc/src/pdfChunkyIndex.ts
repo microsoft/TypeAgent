@@ -29,7 +29,7 @@ export type NamedIndex = [IndexType, knowLib.TextIndex<string, ChunkId>];
 // A bundle of object stores and indexes etc.
 export class ChunkyIndex {
     chatModel: ChatModel;
-    miniModel: ChatModel; // E.g. gpt-3.5-turbo or gpt-4-mini or o1-mini.
+    miniModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: PdfFileDocumenter;
     queryMaker: TypeChatJsonTranslator<QuerySpecs>;
@@ -44,7 +44,7 @@ export class ChunkyIndex {
     private constructor() {
         this.chatModel = openai.createJsonChatModel("GPT_6_LUNA", ["DocuProc"]);
         this.miniModel = openai.createChatModel(
-            "GPT_35_TURBO",
+            "GPT_6_LUNA",
             undefined,
             undefined,
             ["DocuProcMini"],

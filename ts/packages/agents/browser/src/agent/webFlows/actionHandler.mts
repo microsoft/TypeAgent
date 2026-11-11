@@ -115,7 +115,7 @@ function createExtractComponentFn(
         const { createDiscoveryPageTranslator } = await import(
             "../discovery/translator.mjs"
         );
-        const agent = await createDiscoveryPageTranslator("GPT_5_2");
+        const agent = await createDiscoveryPageTranslator("GPT_6_LUNA");
         const browser = getBrowserControl(context.agentContext);
         const htmlFragments = await browser.getHtmlFragments();
 
