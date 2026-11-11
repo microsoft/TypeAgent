@@ -42,8 +42,8 @@ export interface DataModel {
 }
 
 /**
- * One change to a data model. A DDS's operations form a discriminated union
- * on type.
+ * One change to a data model. Each distributed data structure (DDS) has
+ * operations that form a discriminated union on type.
  *
  * clientId and clientSeq identify the operation: the client that made it,
  * and its place among that client's operations. seq is its place in the
@@ -124,8 +124,8 @@ export interface LocalQueue<TOp extends Operation> {
  * processor holds the model's write side privately and exposes only the
  * read side.
  *
- * Rules marked @abstract are observable only through a DDS's semantics;
- * each DDS's processor refines them.
+ * Rules marked @abstract are observable only through the semantics of a
+ * distributed data structure (DDS); each DDS's processor refines them.
  *
  * A local operation's contents are relative to the model as its controller
  * read it, so the processor stamps it when it is enqueued, and sending it to

@@ -356,7 +356,7 @@ No rules of its own.
 
 ## Operation
 
-`dataModel.ts`. One change to a data model. A DDS's operations form a discriminated union on type.
+`dataModel.ts`. One change to a data model. Each distributed data structure (DDS) has operations that form a discriminated union on type.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
