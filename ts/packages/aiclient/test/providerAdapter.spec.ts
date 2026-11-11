@@ -294,6 +294,36 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
 describe("MessagesWireApiProvider", () => {
     const adapter = adapterFor("messages");
 
+    test.each([false, true])(
+        "stream reports provider errors (partial text: %s)",
+        (partialText) => {
+            const decoder = adapter.createStreamDecoder!(
+                makeRequest({ stream: true }),
+            );
+            if (partialText) {
+                expect(
+                    decoder.push(
+                        JSON.stringify({
+                            type: "content_block_delta",
+                            index: 0,
+                            delta: { type: "text_delta", text: "Partial answer" },
+                        }),
+                    ).text,
+                ).toBe("Partial answer");
+            }
+            const piece = decoder.push(
+                JSON.stringify({
+                    type: "error",
+                    error: { type: "overloaded_error", message: "Overloaded" },
+                }),
+            );
+            expect(piece.error).toBeInstanceOf(Error);
+            expect(piece.error?.message).toBe("Overloaded");
+            expect(piece.text).toBeUndefined();
+            expect(piece.usage).toBeUndefined();
+        },
+    );
+
     test("buildRequestBody splits system prompt, requires max_tokens", () => {
         const req = makeRequest({
             modelName: "claude-3-5-sonnet",
