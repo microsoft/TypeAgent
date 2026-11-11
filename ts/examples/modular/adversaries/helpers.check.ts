@@ -25,6 +25,9 @@ import { kitFixture } from "../scenariokit.ts";
 import { makeTestCircles } from "./_circles.ts";
 import { TestCollection, TestGroup } from "./_group.ts";
 import { QuadTree } from "./_quadtree.ts";
+import { shapeCollectionWriterContract, shapeMessageProcessorContract } from "../shapeModel.contract.ts";
+import { RefShapeProcessor, RefShapeWriter } from "../shapemodelkit.ts";
+import { TestShapeProcessor, TestShapeWriter } from "./_shapeModel.ts";
 
 shapeLocatorContract(() => new QuadTree("none"));
 shapeCollectionContract(() => new TestCollection());
@@ -68,3 +71,9 @@ frameSchedulerContract(makeTestScheduler());
 // The event distributors.
 eventDistributorContract((region, locate) => new RefDistributor(region, locate));
 eventDistributorContract(makeTestDistributor());
+
+// The shape model (draft): the reference parts and the adversaries' helpers.
+shapeCollectionWriterContract(() => new RefShapeWriter());
+shapeMessageProcessorContract((id) => new RefShapeProcessor(id));
+shapeCollectionWriterContract(() => new TestShapeWriter());
+shapeMessageProcessorContract((id) => new TestShapeProcessor(id));

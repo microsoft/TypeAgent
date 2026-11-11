@@ -1,0 +1,246 @@
+// Contract tests for the shape model (shapeModel.ts): ShapeCollectionWriter,
+// with ShapeCollection's rules, and ShapeMessageProcessor, which also runs
+// the MessageProcessor suite (messageProcessor.contract.ts). Test names are
+// rule IDs.
+//
+// The writer suite runs random adds (on top or below a present shape) and
+// removes (with repeats and absent IDs) against a list kept by the test.
+// The processor suite plays collaborations and checks, each time a client's
+// process settles, its model against applied(p): the operations the client
+// has applied (shapesAfter in shapeModel.vocab.ts gives the shapes they
+// should leave).
+
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import fc from "fast-check";
+import type { OperationContent } from "./dataModel.ts";
+import type { ShapeCollection, ShapeCollectionWriter, ShapeId, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+import {
+  addOf, compareOrder, deepEqual, entries, ids, isAdd, isClear, isRemove, isStrictlySorted, knew, removedBy, unique,
+} from "./shapeModel.vocab.ts";
+import { messageProcessorContract, play, ruleTest, steps, type Client, type Hooks, type ProcessorSubject, type Step } from "./messageProcessor.contract.ts";
+import { coverage, TestBox } from "./testkit.ts";
+
+type Check = (rule: string, ok: boolean, detail?: string) => void;
+
+/** ShapeCollection's rules, checked on c as it is now. probes are IDs that may or may not be present, such as removed ones. */
+function checkCollection(c: ShapeCollection, check: Check, probes: readonly ShapeId[]): void {
+  const list = entries(c);
+  const events: string[] = [];
+  const count = () => events.push("change");
+  c.on("change", count);
+  check("ShapeCollection.size", c.size === list.length, `size ${c.size}, ${list.length} visited`);
+  check("ShapeCollection.z-order", unique(list.map(([id]) => id)) && isStrictlySorted(list.map(([id]) => id), (a, b) => c.compareZ(a, b)));
+  const present = new Set(list.map(([id]) => id));
+  check("ShapeCollection.get-agrees", list.every(([id, s]) => c.get(id) === s) &&
+    [...probes, "absent" as ShapeId].every((id) => present.has(id) || c.get(id) === undefined));
+  for (const [a] of list) {
+    for (const [b] of list) {
+      check("ShapeCollection.compareZ.zero-iff-same", (c.compareZ(a, b) === 0) === (a === b), `${a}, ${b}`);
+      check("ShapeCollection.compareZ.antisymmetric", Math.sign(c.compareZ(a, b)) === -Math.sign(c.compareZ(b, a)), `${a}, ${b}`);
+    }
+  }
+  c.off("change", count);
+  check("ShapeCollection.read-only", deepEqual(entries(c), list) && events.length === 0);
+}
+
+// ---- The writer ------------------------------------------------------------
+
+type WriterOp =
+  | { readonly op: "add"; readonly below: number | undefined; readonly shape: number }
+  | { readonly op: "remove"; readonly ids: readonly number[] };
+
+const writerOps: fc.Arbitrary<WriterOp[]> = fc.array(fc.oneof(
+  { weight: 3, arbitrary: fc.record({ op: fc.constant("add" as const), below: fc.option(fc.nat(20), { nil: undefined }), shape: fc.nat(4) }) },
+  { weight: 2, arbitrary: fc.record({ op: fc.constant("remove" as const), ids: fc.array(fc.nat(20), { maxLength: 4 }) }) },
+), { minLength: 5, maxLength: 25 });
+
+const testShapes = [0, 1, 2, 3, 4].map((i) => new TestBox({ x: i, y: i, width: 2, height: 2 }));
+
+/** Plays ops on a writer, calling check after each. IDs are w0, w1, … in order of adding; below and removes pick among those. */
+function playWriter(make: () => ShapeCollectionWriter, ops: readonly WriterOp[], check: Check): Set<string> {
+  const labels = new Set<string>();
+  const w = make();
+  const made: ShapeId[] = [];
+  let events = 0;
+  let seenAtEvent: unknown;
+  w.on("change", () => { events++; seenAtEvent = entries(w); });
+  for (const o of ops) {
+    const before = entries(w);
+    const eventsBefore = events;
+    if (o.op === "add") {
+      const id = `w${made.length}` as ShapeId;
+      const present = before.map(([i]) => i);
+      const below = o.below === undefined || present.length === 0 ? undefined : present[o.below % present.length];
+      labels.add(below === undefined ? "add on top" : below === present[0] ? "add at the bottom" : "add in the middle");
+      w.add(id, testShapes[o.shape], below);
+      made.push(id);
+      const expected = below === undefined ? [...before, [id, testShapes[o.shape]]] :
+        before.flatMap((e) => (e[0] === below ? [[id, testShapes[o.shape]], e] : [e]));
+      check("ShapeCollectionWriter.add.placed", deepEqual(entries(w), expected), `add ${id} below ${below}`);
+    } else {
+      const listed = o.ids.map((n) => (n < made.length ? made[n] : (`absent${n}` as ShapeId)));
+      if (listed.some((id) => before.some(([i]) => i === id))) labels.add("remove present");
+      if (listed.some((id) => !before.some(([i]) => i === id))) labels.add("remove absent");
+      if (!unique(listed)) labels.add("remove lists an ID twice");
+      const result = w.remove(listed);
+      const expected = before.filter(([i]) => !listed.includes(i));
+      check("ShapeCollectionWriter.remove.removed", deepEqual(entries(w), expected) && result === before.length - expected.length,
+        `remove ${listed.join(", ")} returned ${result}`);
+    }
+    const changed = !deepEqual(entries(w), before);
+    check("ShapeCollectionWriter.notifies", events - eventsBefore === (changed ? 1 : 0) && (!changed || deepEqual(seenAtEvent, entries(w))),
+      `${events - eventsBefore} events for a ${changed ? "" : "non-"}change`);
+    checkCollection(w, check, made);
+  }
+  return labels;
+}
+
+export function shapeCollectionWriterContract(make: () => ShapeCollectionWriter): void {
+  describe("ShapeCollectionWriter", () => {
+    for (const id of [
+      "ShapeCollectionWriter.add.placed", "ShapeCollectionWriter.remove.removed", "ShapeCollectionWriter.notifies",
+      "ShapeCollection.size", "ShapeCollection.z-order", "ShapeCollection.get-agrees", "ShapeCollection.read-only",
+      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric",
+    ]) {
+      test(id, () => {
+        fc.assert(fc.property(writerOps, (ops) => {
+          playWriter(make, ops, (rule, ok, detail) => assert.ok(rule !== id || ok, `${id}: ${detail ?? ""}`));
+        }));
+      });
+    }
+
+    test("ShapeCollectionWriter input coverage", () => {
+      coverage("writer ops", writerOps, (ops) => playWriter(make, ops, () => {}), {
+        "add on top": 0.4, "add at the bottom": 0.2, "add in the middle": 0.2,
+        "remove present": 0.3, "remove absent": 0.3, "remove lists an ID twice": 0.1,
+      });
+    });
+  });
+}
+
+// ---- The processor ---------------------------------------------------------
+
+/** Forms adds, removes of present (and sometimes absent) shapes, and clears. */
+function form(p: ShapeMessageProcessor, pick: number): OperationContent<ShapeOp> {
+  const kind = pick % 10;
+  if (kind < 6) return { type: "add", id: p.newShapeId(), shape: testShapes[pick % testShapes.length] };
+  if (kind < 9) {
+    const present = ids(p.model);
+    const listed = present.filter((_, i) => (pick >> i) % 3 === 0).slice(0, 3);
+    return { type: "remove", ids: pick % 7 === 0 ? [...listed, "absent" as ShapeId] : listed };
+  }
+  return { type: "clear" };
+}
+
+// Fixed cases, as steps: pick 0 forms an add, 6 a remove of the first two
+// present shapes, and 9 a clear (see form).
+const add = { do: "form", client: 0, pick: 0 } as const;
+const process0 = { do: "process", client: 0 } as const;
+const cases: Record<string, readonly (readonly Step[])[]> = {
+  // A remove of two shapes, and a clear of two, each applied alone.
+  "ShapeMessageProcessor.one-change": [
+    [add, add, process0, { do: "form", client: 0, pick: 6 }, process0],
+    [add, add, process0, { do: "form", client: 0, pick: 9 }, process0],
+  ],
+  // A clear of the client's own pending adds, applied with and without them.
+  "ShapeMessageProcessor.clear-known": [
+    [add, process0, { do: "form", client: 0, pick: 9 }, process0],
+    [add, add, { do: "form", client: 0, pick: 9 }, process0],
+  ],
+};
+
+const subject = (make: (clientId: string) => ShapeMessageProcessor): ProcessorSubject<ShapeCollection, ShapeOp> => ({
+  make,
+  form: (p, pick) => form(p as ShapeMessageProcessor, pick),
+  snapshot: (model) => entries(model),
+  events: ["change"],
+});
+
+type SC = Client<ShapeCollection, ShapeOp>;
+const atEvent = new WeakMap<SC, unknown>();
+
+/** The shape rules, checked each time a client's process settles. */
+const hooks: Hooks<ShapeCollection, ShapeOp> = {
+  event(c) {
+    atEvent.set(c, entries(c.p.model));
+  },
+  processed(c, newly, before, eventsBefore, violation) {
+    const check: Check = (rule, ok, detail) => { if (!ok) violation(rule, `${c.id}: ${detail ?? ""}`); };
+    const model = c.p.model;
+    const applied = c.applied;
+    const now = entries(model);
+    const events = c.events - eventsBefore;
+
+    check("ShapeMessageProcessor.read-facet", !("add" in model) && !("remove" in model));
+    check("ShapeMessageProcessor.add-on-z",
+      now.every(([id]) => addOf(applied, id) !== undefined) &&
+        isStrictlySorted(now.map(([id]) => id), (a, b) => compareOrder(addOf(applied, a)!, addOf(applied, b)!)),
+      `z-order ${now.map(([id]) => id).join(", ")}`);
+    check("ShapeMessageProcessor.kept",
+      applied.filter(isAdd).every((a) => removedBy(applied, a) || deepEqual(model.get(a.id), a.shape)));
+    check("ShapeMessageProcessor.remove-listed",
+      applied.filter(isRemove).every((r) => r.ids.every((id) => model.get(id) === undefined)));
+    check("ShapeMessageProcessor.clear-known",
+      applied.filter(isClear).every((cl) => now.every(([id]) => !knew(cl, addOf(applied, id)!))));
+
+    const acks = newly.filter((op) => op.clientId === c.id && op.seq !== -1 &&
+      !newly.some((o) => o !== op && o.clientId === c.id && o.clientSeq === op.clientSeq));
+    if (newly.length > 0 && acks.length === newly.length) {
+      check("ShapeMessageProcessor.ack-keeps-z", deepEqual(now, before) && events === 0, "an acknowledgment changed the model");
+    }
+    if (newly.length === 1) {
+      const changed = !deepEqual(now, before);
+      check("ShapeMessageProcessor.one-change", events === (changed ? 1 : 0) && (!changed || deepEqual(atEvent.get(c), now)),
+        `${events} events for one ${newly[0].type} that ${changed ? "changed" : "didn't change"} the shapes`);
+    }
+    checkCollection(model, check, applied.filter(isAdd).map((a) => a.id));
+  },
+  end(clients, violation) {
+    const observer = clients[clients.length - 1];
+    const added = observer.applied.filter(isAdd).map((a) => a.id);
+    if (!unique(added)) violation("ShapeMessageProcessor.new-ids", "two adds have the same id");
+  },
+};
+
+export function shapeMessageProcessorContract(make: (clientId: string) => ShapeMessageProcessor): void {
+  const s = subject(make);
+  messageProcessorContract(s, hooks);
+  describe("ShapeMessageProcessor", () => {
+    for (const id of [
+      "ShapeMessageProcessor.new-ids", "ShapeMessageProcessor.read-facet", "ShapeMessageProcessor.add-on-z",
+      "ShapeMessageProcessor.kept", "ShapeMessageProcessor.remove-listed", "ShapeMessageProcessor.clear-known",
+      "ShapeMessageProcessor.ack-keeps-z", "ShapeMessageProcessor.one-change",
+      "ShapeCollection.size", "ShapeCollection.z-order", "ShapeCollection.get-agrees", "ShapeCollection.read-only",
+      "ShapeCollection.compareZ.zero-iff-same", "ShapeCollection.compareZ.antisymmetric",
+    ]) ruleTest(id, s, hooks, false, cases[id]);
+
+    test("ShapeMessageProcessor input coverage", async () => {
+      const runs = fc.sample(steps, 200);
+      const counts = new Map<string, number>();
+      for (const stepList of runs) {
+        const labels = new Set<string>();
+        await play(s, stepList, {
+          processed(c, newly) {
+            const now = ids(c.p.model);
+            for (const op of newly) {
+              if (isClear(op) && now.some((id) => !knew(op, addOf(c.applied, id)!))) labels.add("clear leaves a shape it didn't know");
+              if (isClear(op) && op.clientId !== c.id && c.applied.some((a) => isAdd(a) && a.seq === -1)) labels.add("remote clear while local adds pending");
+              if (isAdd(op) && op.clientId !== c.id && now.some((id) => addOf(c.applied, id)!.seq === -1)) labels.add("remote add below pending local adds");
+              if (isRemove(op) && op.ids.some((id) => !now.includes(id))) labels.add("remove lists a shape not present");
+            }
+          },
+        });
+        for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+      }
+      const share = (l: string) => (counts.get(l) ?? 0) / runs.length;
+      if (process.env.COVERAGE) console.log("shape steps", Object.fromEntries([...counts.keys()].map((l) => [l, share(l).toFixed(2)])));
+      // Minimums are about half the shares measured on seeds 1-3.
+      const mins: Record<string, number> = {
+        "clear leaves a shape it didn't know": 0.25, "remote clear while local adds pending": 0.05,
+        "remote add below pending local adds": 0.2, "remove lists a shape not present": 0.2,
+      };
+      assert.deepEqual(Object.entries(mins).filter(([l, m]) => share(l) < m).map(([l]) => `${l}: ${share(l).toFixed(2)}`), []);
+    });
+  });
+}

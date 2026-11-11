@@ -10,11 +10,16 @@
 //
 // Runs use a fixed fast-check seed (FC_SEED, default 1), so results repeat.
 //
+// Each adversary runs only the test named by its rule ID, since that test's
+// failure is the verdict. Adversaries run in parallel, one per core
+// (ADVERSARY_JOBS to change).
+//
 // Run with: npm run adversaries
 // Or, for only the adversaries whose file names contain some text:
 //   npm run adversaries -- <text>
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { availableParallelism } from "node:os";
 import { readdirSync } from "node:fs";
 
 const dir = "adversaries";
@@ -33,16 +38,37 @@ if (helpers.status !== 0) {
   process.exit(1);
 }
 
-for (const file of files) {
+/** Runs one adversary, with only its rule's test, and says whether that test failed. */
+function check(file: string): Promise<string> {
   const rule = file.slice(0, file.indexOf("--"));
-  const run = spawnSync(process.execPath, ["--test", "--test-reporter=tap", `${dir}/${file}`], {
-    encoding: "utf8", timeout: 600_000, maxBuffer: 256 * 1024 * 1024, env,
+  const pattern = `^${rule.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", `--test-name-pattern=${pattern}`, `${dir}/${file}`], {
+      env, timeout: 600_000,
+    });
+    let stdout = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+    child.on("close", (status) => {
+      const failed = [...stdout.matchAll(/^\s*not ok \d+ - (.+?)\s*$/gm)].map((m) => m[1]);
+      const caught = status !== 0 && failed.includes(rule);
+      if (!caught) escapes++;
+      resolve(`${caught ? "caught " : "ESCAPED"} ${file}${caught ? "" : `  (failed: ${failed.join(", ") || "nothing"})`}`);
+    });
   });
-  const failed = [...run.stdout.matchAll(/^\s*not ok \d+ - (.+?)\s*$/gm)].map((m) => m[1]);
-  const caught = run.status !== 0 && failed.includes(rule);
-  if (!caught) escapes++;
-  console.log(`${caught ? "caught " : "ESCAPED"} ${file}${caught ? "" : `  (failed: ${failed.join(", ") || "nothing"})`}`);
 }
+
+// Up to jobs adversaries at once; results print in file order.
+const jobs = Number(process.env.ADVERSARY_JOBS ?? availableParallelism());
+const results: Promise<string>[] = [];
+const running = new Set<Promise<string>>();
+for (const file of files) {
+  if (running.size >= jobs) await Promise.race(running);
+  const result = check(file);
+  running.add(result);
+  void result.then(() => running.delete(result));
+  results.push(result);
+}
+for (const result of results) console.log(await result);
 
 console.log(`\n${files.length} adversaries, ${escapes} escaped`);
 process.exitCode = escapes === 0 ? 0 : 1;

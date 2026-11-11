@@ -15,7 +15,8 @@
   --edge: #9aa5b5;
   --accent: #2b57a8;
   --accent-soft: #dce6f7;
-  --app-soft: #e6f0e4;
+  --module-soft: #f8e7c8;
+  --module-line: #b9791f;
   --tag-requires: #9a6414;
   --tag-ensures: #2b57a8;
   --tag-invariant: #6f45b5;
@@ -46,8 +47,8 @@
     --edge: #5c6879;
     --accent: #84a9f0;
     --accent-soft: #23344f;
-  --app-soft: #22362a;
-    --app-soft: #22362a;
+    --module-soft: #3b2e17;
+    --module-line: #d9a14e;
     --tag-requires: #e0a64a;
     --tag-ensures: #84a9f0;
     --tag-invariant: #b897ef;
@@ -70,6 +71,8 @@
   --edge: #5c6879;
   --accent: #84a9f0;
   --accent-soft: #23344f;
+  --module-soft: #3b2e17;
+  --module-line: #d9a14e;
   --tag-requires: #e0a64a;
   --tag-ensures: #84a9f0;
   --tag-invariant: #b897ef;
@@ -139,9 +142,11 @@ h1 {
 .map svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 .node { cursor: pointer; }
 .node rect.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
-.node.window rect.box, .node.pointer rect.box { fill: var(--surface-alt); }
-.node.view rect.box, .node.shapeView rect.box { fill: var(--accent-soft); }
-.node.ui rect.box, .node.chrome rect.box, .node.app rect.box { fill: var(--app-soft); }
+.node.alt rect.box { fill: var(--surface-alt); }
+.node.accent rect.box { fill: var(--accent-soft); }
+/* A file's header rules: not an interface, so it gets its own fill and a dashed border. */
+.node.module rect.box { fill: var(--module-soft); stroke: var(--module-line); stroke-dasharray: 5 3; }
+.node.module text.name { font-style: italic; }
 .node:hover rect.box { stroke: var(--edge); }
 .node.selected rect.box { stroke: var(--accent); stroke-width: 2; }
 .node.related rect.box { stroke: var(--accent); }
@@ -297,7 +302,7 @@ footer { color: var(--muted); font-size: var(--step--1); }
 <div class="page">
   <header>
     <h1>Interface Atlas</h1>
-    <p class="lede">The interfaces in <span class="mono">geometry.ts</span>, <span class="mono">color.ts</span>, <span class="mono">shape.ts</span>, <span class="mono">frames.ts</span>, <span class="mono">view.ts</span>, <span class="mono">shapeView.ts</span>, <span class="mono">pointer.ts</span>, <span class="mono">ui.ts</span>, <span class="mono">chrome.ts</span> and <span class="mono">app.ts</span>, how they depend on one another, and how each rule is checked. Click an interface to highlight its relationships. The <kbd>arrow</kbd> keys walk the rows; <kbd>Shift</kbd> follows the diagram instead, down to what it extends or uses, up to what extends or uses it, and sideways to a node sharing one of those; <kbd>Ctrl</kbd> goes to the nearest node on screen. Press <kbd>c</kbd> for the card and <kbd>Escape</kbd> to close it.</p>
+    <p class="lede">The interfaces in <span id="files"></span>, how they depend on one another, and how each rule is checked. Click an interface to highlight its relationships. The <kbd>arrow</kbd> keys walk the rows; <kbd>Shift</kbd> follows the diagram instead, down to what it extends or uses, up to what extends or uses it, and sideways to a node sharing one of those; <kbd>Ctrl</kbd> goes to the nearest node on screen. Press <kbd>c</kbd> for the card and <kbd>Escape</kbd> to close it.</p>
   </header>
 
   <div class="summary" id="summary"></div>
@@ -335,7 +340,14 @@ const edges = ifs.flatMap((i) => [
   ...i.extends.map((to) => ({ from: i.name, to, kind: "extends" })),
   ...i.uses.map((to) => ({ from: i.name, to, kind: "uses" })),
 ]);
-const fileClass = (f) => f.replace(/\.ts$/, "");
+// Node fill by file; files not listed get the plain fill. The legend lists only files in DATA.sources.
+const FILLS = [
+  { cls: "alt", files: ["frames.ts", "layout.ts", "events.ts"] },
+  { cls: "accent", files: ["view.ts", "shapeView.ts"] },
+];
+const fillOf = (f) => FILLS.find((g) => g.files.includes(f))?.cls ?? "plain";
+const modules = ifs.filter((i) => i.module);
+const fileList = (files) => files.flatMap((f, n) => [n === 0 ? "" : n === files.length - 1 ? " and " : ", ", el("span", { class: "mono" }, f)]);
 const countBy = (rules) => Object.fromEntries(ORDER.map((s) => [s, rules.filter((r) => r.status === s).length]));
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -381,13 +393,15 @@ function summary() {
     s.append(svgEl("line", { x1: 1, y1: 5, x2: 33, y2: 5, class: `edge ${dash ? "uses" : ""}` }));
     return s;
   };
+  const swatch = (fill, border, style = "solid") => el("span", { class: "swatch", style: `background: ${fill}; border: 1px ${style} ${border}` });
+  document.getElementById("files").replaceChildren(...fileList(DATA.sources));
   const keys = [
     el("span", { class: "key" }, line(false), "extends"),
     el("span", { class: "key" }, line(true), "uses"),
-    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface); border: 1px solid var(--line)" }), "geometry.ts, color.ts, shape.ts"),
-    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--surface-alt); border: 1px solid var(--line)" }), "frames.ts, pointer.ts"),
-    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--accent-soft); border: 1px solid var(--line)" }), "view.ts, shapeView.ts"),
-    el("span", { class: "key" }, el("span", { class: "swatch", style: "background: var(--app-soft); border: 1px solid var(--line)" }), "ui.ts, chrome.ts, app.ts"),
+    ...[{ cls: "plain" }, ...FILLS].map(({ cls }) => [cls, DATA.sources.filter((f) => fillOf(f) === cls)])
+      .filter(([, files]) => files.length > 0)
+      .map(([cls, files]) => el("span", { class: "key" }, swatch(`var(--${{ plain: "surface", alt: "surface-alt", accent: "accent-soft" }[cls]})`, "var(--line)"), files.join(", "))),
+    ...(modules.length ? [el("span", { class: "key" }, swatch("var(--module-soft)", "var(--module-line)", "dashed"), `file rules (${modules.map((m) => m.file).join(", ")})`)] : []),
   ];
   if (showRules) for (const s of ORDER) keys.push(el("span", { class: "key" }, el("span", { class: "swatch", style: `background: ${STATUS[s].color}` }), STATUS[s].long));
   document.getElementById("legend").replaceChildren(...keys);
@@ -484,7 +498,7 @@ function map() {
 
   for (const i of ifs) {
     const p = pos.get(i.name);
-    const cls = ["node", fileClass(i.file)];
+    const cls = ["node", i.module ? "module" : fillOf(i.file)];
     if (selected) {
       if (i.name === selected) cls.push("selected");
       else if (related.has(i.name)) cls.push("related");

@@ -490,7 +490,7 @@ if (import.meta.main) {
   if (problems.length > 0) throw new Error(`${problems.join("; ")}. The catalog was not written.`);
   writeFileSync("catalog.md", markdown(all));
   const template = readFileSync("catalog.template.html", "utf8");
-  const data = JSON.stringify({ generated: new Date().toLocaleDateString("en-CA"), interfaces: all }).replace(/</g, "\\u003c");
+  const data = JSON.stringify({ generated: new Date().toLocaleDateString("en-CA"), sources, interfaces: all }).replace(/</g, "\\u003c");
   writeFileSync("catalog.html", template.replace("/*CATALOG_DATA*/null", data));
   const count = (s: Status) => rules.filter((r) => r.status === s).length;
   console.log(`${all.filter((i) => !i.module).length} interfaces, ${rules.length} rules: ${count("tested")} tested, ` +

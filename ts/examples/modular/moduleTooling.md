@@ -67,7 +67,7 @@ it reads the spec the way a future implementer will.
 |---|---|---|
 | `npm test` | Every contract and test passes | Seconds |
 | `npm run typecheck` | No type errors | Seconds |
-| `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 5 minutes |
+| `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. Each adversary runs only that test, and they run in parallel, one per core (`ADVERSARY_JOBS` to change). `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 30 seconds on 32 cores |
 | `npm run bench` | Prints the measurements | Seconds |
 | `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count. Refuses to write when a rule isn't accounted for: a test named by its ID, or a `@requires`, a refined `@abstract`, a `@budget` or a planned `@deferred` | About 15 seconds |
 | `npm run summary` | Regenerates `summary.pdf`. Doesn't run tests | Under a second |
