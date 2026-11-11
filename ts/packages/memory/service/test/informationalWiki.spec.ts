@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -22,7 +24,6 @@ import { validateViewDraft } from "../src/viewValidation.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import type { IndexedFragmentRequest, IndexedSubject } from "../src/types.js";
 import type {
-    ViewBuildJob,
     ViewBuildSnapshot,
     ViewBuildRequest,
     ViewSynthesisAdapter,
@@ -135,24 +136,6 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         clock.useRealTimers();
     }
 });
-
-async function waitForViewBuild(
-    service: FileMemoryService,
-    admitted: ViewBuildJob,
-): Promise<ViewBuildJob> {
-    let job = admitted;
-    for (let attempt = 0; job.state === "running" && attempt < 300; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        const current = await service.getViewBuild({
-            corpusId: job.corpusId,
-            jobId: job.jobId,
-        });
-        if (!current) throw new Error("Build receipt disappeared");
-        job = current;
-    }
-    if (job.state === "running") throw new Error("Mock wiki build timed out");
-    return job;
-}
 
 class MockIndexedCorpus extends FakeSemanticCorpusIndex {
     public static messageTime: string | undefined;

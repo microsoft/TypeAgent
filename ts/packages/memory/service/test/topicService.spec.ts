@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild as waitTopicJob } from "./viewBuildTestWait.js";
+
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +12,6 @@ import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import type { MemoryTopicService, TopicOccurrence } from "../src/topicTypes.js";
 import type { MemoryService } from "../src/types.js";
 import type {
-    ViewBuildJob,
     ViewBuildSnapshot,
     ViewSynthesisAdapter,
 } from "../src/viewTypes.js";
@@ -56,22 +57,6 @@ function topics(
         rebuildTopics: service.rebuildTopics.bind(service),
     };
 }
-async function waitTopicJob(
-    service: FileMemoryService,
-    job: ViewBuildJob,
-): Promise<ViewBuildJob> {
-    for (let attempt = 0; attempt < 500; attempt++) {
-        const current = await service.getViewBuild({
-            corpusId: job.corpusId,
-            jobId: job.jobId,
-        });
-        if (!current) throw new Error("Topic job was purged");
-        if (current.state !== "running") return current;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error("Offline topic build timed out");
-}
-
 describe("production topic service vertical slice", () => {
     let directory: string;
     let service: FileMemoryService;

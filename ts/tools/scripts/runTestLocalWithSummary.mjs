@@ -16,6 +16,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import {
+    runBoundedTestCommand,
+    workspaceTestTimeout,
+} from "./lib/testCommand.mjs";
 
 import {
     dedupeFailures,
@@ -36,20 +40,24 @@ import {
 const workspaceRoot = process.cwd();
 const isWindows = process.platform === "win32";
 const inGithubActions = process.env.GITHUB_ACTIONS === "true";
+const workspaceTimeoutMs = workspaceTestTimeout(
+    process.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS,
+);
+let workspaceDeadline;
 
 const firstDirectory = makeFailuresDirectory("run1");
 const failureDirectories = [firstDirectory];
 try {
-    process.exitCode = runLocalTestPhases(
-        () => {
-            const status = runWorkspaceTests();
+    process.exitCode = await runLocalTestPhases(
+        async () => {
+            const status = await runWorkspaceTests();
             reportPhase("Workspace tests (including retries)", status);
             return status;
         },
-        () => {
+        async () => {
             console.error("\nROOT SCRIPT TEST PHASE");
             const started = Date.now();
-            const status = runScriptTests();
+            const status = await runScriptTests();
             console.error(`Root phase elapsed: ${Date.now() - started}ms`);
             reportPhase("Root script tests", status);
             return status;
@@ -62,7 +70,8 @@ try {
     }
 }
 
-function runScriptTests() {
+async function runScriptTests() {
+    workspaceDeadline = undefined;
     let commands = ["test:local:scripts"];
     if (process.env.TYPEAGENT_TEST_PHASE === "scripts") {
         const scripts = JSON.parse(
@@ -84,7 +93,7 @@ function runScriptTests() {
     }
     for (const command of commands) {
         const started = Date.now();
-        const result = runPnpm(["run", command], firstDirectory);
+        const result = await runPnpm(["run", command], firstDirectory);
         const infrastructureFailure = checkInfrastructureFailure(result);
         const status = infrastructureFailure ? 1 : (result.status ?? 1);
         console.error(`${command}: ${Date.now() - started}ms, exit ${status}`);
@@ -114,15 +123,28 @@ function reportPhase(name, status) {
     }
 }
 
-function runWorkspaceTests() {
+async function runWorkspaceTests() {
     console.error("\nWORKSPACE TEST PHASE");
-    const firstResult = runPnpm(["run", "test:local:packages"], firstDirectory);
-    if (checkInfrastructureFailure(firstResult)) return 1;
+    workspaceDeadline =
+        workspaceTimeoutMs === undefined
+            ? undefined
+            : Date.now() + workspaceTimeoutMs;
+    const firstResult = await runPnpm(
+        ["run", "test:local:packages"],
+        firstDirectory,
+    );
+    const infrastructureFailure = checkInfrastructureFailure(firstResult);
 
     const firstFailures = dedupeFailures(
         readFailures(firstDirectory),
         workspaceRoot,
     );
+    if (infrastructureFailure) {
+        if (firstFailures.length > 0) {
+            await handleFailures(firstFailures, false);
+        }
+        return 1;
+    }
 
     if (firstFailures.length === 0) {
         if ((firstResult.status ?? 1) !== 0) {
@@ -135,7 +157,7 @@ function runWorkspaceTests() {
     return handleFailures(firstFailures);
 }
 
-function handleFailures(firstFailures) {
+async function handleFailures(firstFailures, allowRetries = true) {
     const annotated = annotatePackages(firstFailures);
 
     const packages = [
@@ -148,9 +170,9 @@ function handleFailures(firstFailures) {
 
     let priorFailures = annotated;
     let finalFailures = [];
-    let retryTrusted = true;
-    let retryFailed = false;
-    if (packages.length > 0) {
+    let retryTrusted = allowRetries;
+    let retryFailed = !allowRetries;
+    if (packages.length > 0 && allowRetries) {
         const retriableCount = annotated.filter(
             (failure) => failure.package !== undefined,
         ).length;
@@ -170,7 +192,7 @@ function handleFailures(firstFailures) {
                 ),
             ];
             for (const name of packageNames) {
-                const result = retryPackage(
+                const result = await retryPackage(
                     name,
                     priorFailures.filter((failure) => failure.package === name),
                     attempt,
@@ -229,7 +251,7 @@ function handleFailures(firstFailures) {
     return hasHardFailures(classification) ? 1 : 0;
 }
 
-function retryPackage(name, failures, attempt) {
+async function retryPackage(name, failures, attempt) {
     const packageDir = resolvePackage(failures[0].testFilePath)?.directory;
     if (packageDir === undefined) {
         return { failures: [], failed: true, trusted: false };
@@ -262,10 +284,9 @@ function retryPackage(name, failures, attempt) {
     );
     const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
     failureDirectories.push(retryDirectory);
-    const result = runPnpm(plan.args, retryDirectory, true, plan.cwd);
+    const result = await runPnpm(plan.args, retryDirectory, true, plan.cwd);
     const observed = readFailures(retryDirectory);
-    const infrastructureFailed =
-        result.error !== undefined || result.signal !== null;
+    const infrastructureFailed = checkInfrastructureFailure(result);
     const failed = infrastructureFailed || (result.status ?? 1) !== 0;
     // Each command needs its own artifacts; another package cannot establish trust.
     const trusted = !infrastructureFailed && !(failed && observed.length === 0);
@@ -301,7 +322,7 @@ function isRegularPackageFile(file, packageDir) {
     }
 }
 
-function runPnpm(
+async function runPnpm(
     pnpmArguments,
     failuresDirectory,
     disableJestCache = false,
@@ -322,7 +343,7 @@ function runPnpm(
           ]
         : ["pnpm", pnpmArguments];
 
-    return spawnSync(command, commandArguments, {
+    const options = {
         cwd,
         ...(isWindows ? { windowsVerbatimArguments: true } : {}),
         env: {
@@ -331,6 +352,23 @@ function runPnpm(
             ...(disableJestCache ? { TYPEAGENT_JEST_NO_CACHE: "true" } : {}),
         },
         stdio: "inherit",
+    };
+    if (workspaceDeadline === undefined) {
+        return spawnSync(command, commandArguments, options);
+    }
+    const timeoutMs = workspaceDeadline - Date.now();
+    if (timeoutMs <= 0) {
+        return {
+            status: null,
+            signal: null,
+            error: new Error(
+                "Workspace test deadline exhausted; no further retry was launched.",
+            ),
+        };
+    }
+    return runBoundedTestCommand(command, commandArguments, {
+        ...options,
+        timeoutMs,
     });
 }
 

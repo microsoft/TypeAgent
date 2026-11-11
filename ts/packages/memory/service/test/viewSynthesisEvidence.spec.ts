@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -197,18 +199,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
         });
     }
     async function wait(job: ViewBuildJob): Promise<ViewBuildJob> {
-        for (let tries = 0; tries < 1000; tries++) {
-            if (job.state !== "running") return job;
-            await new Promise<void>((resolve) => setTimeout(resolve, 10));
-            const current = await service.getViewBuild({
-                corpusId,
-                jobId: job.jobId,
-            });
-            if (!current)
-                throw new Error("Expected durable inventory build receipt");
-            job = current;
-        }
-        throw new Error("Inventory build did not terminate");
+        return waitForViewBuild(service, job);
     }
     async function build(): Promise<ViewBuildJob> {
         return wait(await admit());

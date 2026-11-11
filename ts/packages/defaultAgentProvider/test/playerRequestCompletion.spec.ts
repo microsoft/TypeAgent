@@ -24,11 +24,13 @@
 import type { Dispatcher } from "agent-dispatcher";
 import fs from "node:fs";
 import path from "node:path";
+import { createDispatcherTestFixture } from "./dispatcherTestFixture.js";
 
 const errorNamespace = "typeagent:command:completion:error";
 
 describe("Player request completion", () => {
     let dispatcher: Dispatcher;
+    let closeDispatcher: (() => Promise<void>) | undefined;
     const errors: string[] = [];
     let originalWrite: typeof process.stderr.write;
     const originalDebug = process.env.DEBUG;
@@ -53,15 +55,19 @@ describe("Player request completion", () => {
         }) as typeof process.stderr.write;
 
         try {
-            const { createDispatcher } = await import("agent-dispatcher");
-            const {
-                getDefaultAppAgentProviders,
-                getDefaultConstructionProvider,
-            } = await import("../src/index.js");
-            dispatcher = await createDispatcher("completion-test", {
-                appAgentProviders: getDefaultAppAgentProviders(undefined),
-                constructionProvider: getDefaultConstructionProvider(),
+            const fixture = createDispatcherTestFixture(async () => {
+                const { createDispatcher } = await import("agent-dispatcher");
+                const {
+                    getDefaultAppAgentProviders,
+                    getDefaultConstructionProvider,
+                } = await import("../src/index.js");
+                return createDispatcher("completion-test", {
+                    appAgentProviders: getDefaultAppAgentProviders(undefined),
+                    constructionProvider: getDefaultConstructionProvider(),
+                });
             });
+            closeDispatcher = fixture.close;
+            dispatcher = await fixture.dispatcher;
         } catch (error) {
             process.stderr.write = originalWrite;
             throw error;
@@ -70,7 +76,7 @@ describe("Player request completion", () => {
 
     afterAll(async () => {
         try {
-            await dispatcher?.close();
+            await closeDispatcher?.();
         } finally {
             if (originalWrite !== undefined) {
                 process.stderr.write = originalWrite;

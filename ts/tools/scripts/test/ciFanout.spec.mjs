@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import {
     createManifest,
@@ -15,9 +16,9 @@ import {
     stageArtifact,
     qualify,
     memoryTestSelection,
-} from "../ciFanoutExperiment.mjs";
+} from "../ciFanout.mjs";
 import { localTestCommands, spawnPnpm } from "../runLocalTestPackages.mjs";
-import { fanoutIncludesControl, fanoutNodes } from "../lib/ciFanoutTargets.mjs";
+import { fanoutNodes } from "../lib/ciFanoutTargets.mjs";
 
 const sha = "a".repeat(40);
 const spec = "packages/memory/service/dist/test/example.spec.js";
@@ -51,6 +52,51 @@ test("compiled manifest round-trips without dependencies or credential files", (
         assert.deepEqual(manifest.tests, [spec]);
         verifyManifest(root, sha, manifest);
     });
+});
+
+test("artifact operations emit no timing records even with inherited profiling enabled", () => {
+    fixture((root) =>
+        fixture((consumer) => {
+            for (const enabled of ["false", "true"]) {
+                const directory = path.join(consumer, `payload-${enabled}`);
+                const result = spawnSync(
+                    process.execPath,
+                    [
+                        "--input-type=module",
+                        "-e",
+                        `
+                            import { createManifest, verifyManifest, stageArtifact } from ${JSON.stringify(new URL("../ciFanout.mjs", import.meta.url).href)};
+                            const manifest = createManifest(process.argv[1], ${JSON.stringify(sha)}, [${JSON.stringify(spec)}]);
+                            verifyManifest(process.argv[1], ${JSON.stringify(sha)}, manifest);
+                            stageArtifact(process.argv[1], manifest, process.argv[2]);
+                        `,
+                        root,
+                        directory,
+                    ],
+                    {
+                        encoding: "utf8",
+                        env: {
+                            ...process.env,
+                            TYPEAGENT_CI_PROFILE: enabled,
+                            GITHUB_SHA: "",
+                            BUILD_SOURCEVERSION: "",
+                        },
+                    },
+                );
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stdout, "");
+                assert.equal(
+                    JSON.parse(
+                        fs.readFileSync(
+                            path.join(directory, "ci-fanout-manifest.json"),
+                            "utf8",
+                        ),
+                    ).sha,
+                    sha,
+                );
+            }
+        }),
+    );
 });
 
 test("workspace artifacts reuse transport verification but cannot masquerade as memory artifacts", () => {
@@ -217,9 +263,8 @@ function reports() {
             const expectedTests = [1, 2, 3, 4].map(
                 (number) => `test-${number}`,
             );
-            return ["1", "2", "3", "4", "control"].map((group) => {
-                const files =
-                    group === "control" ? expectedTests : [`test-${group}`];
+            return ["1", "2", "3", "4"].map((group) => {
+                const files = [`test-${group}`];
                 return {
                     sha,
                     platform,
@@ -229,7 +274,7 @@ function reports() {
                     expectedTests,
                     exitCode: 0,
                     success: true,
-                    elapsedMs: group === "control" ? 400 : 100,
+                    elapsedMs: 100,
                     files,
                     outcomes: files.map((name) =>
                         JSON.stringify([name, "assertion", "passed"]),
@@ -240,65 +285,78 @@ function reports() {
     );
 }
 
-test("qualification checks complete shard inventories and control assertion outcomes", () => {
+test("qualification checks complete shard inventories and assertion outcomes", () => {
     assert.deepEqual(
         qualify(reports(), sha).map((row) => row.slowestShardMs),
         Array(6).fill(100),
     );
 });
 
-test("target selection is explicit and rejects unknown or empty configurations", () => {
-    assert.deepEqual(fanoutNodes("all"), ["v24.22.1", "v26.12.1"]);
-    assert.deepEqual(fanoutNodes("24-and-26"), ["v24.22.1", "v26.12.1"]);
-    for (const value of ["", "unknown", "[]"])
-        assert.throws(() => fanoutNodes(value), /Unknown/);
-    assert.equal(fanoutIncludesControl("true"), true);
-    assert.equal(fanoutIncludesControl("false"), false);
-    for (const value of ["", "0", "unknown"])
-        assert.throws(() => fanoutIncludesControl(value), /Invalid/);
+test("CI qualification pins Node 24 and 26 independently of declared Node 22 support", () => {
+    assert.deepEqual(fanoutNodes(), ["v24.22.1", "v26.12.1"]);
 });
 
-const shardOptions = { nodeSet: "24-and-26", includeControls: false };
-function shardReports() {
-    return reports().filter((row) => row.group !== "control");
-}
+test("the production collector CLI writes summaries without retired control dependencies", () => {
+    fixture((root, write) => {
+        const head = execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: new URL("../../../", import.meta.url),
+            encoding: "utf8",
+        }).trim();
+        for (const [index, report] of reports().entries()) {
+            write(
+                `fanout-results/${index}.qualification.json`,
+                JSON.stringify({ ...report, sha: head }),
+            );
+        }
+        const summary = path.join(root, "summary.md");
+        const result = spawnSync(
+            process.execPath,
+            [
+                fileURLToPath(new URL("../ciFanout.mjs", import.meta.url)),
+                "aggregate",
+            ],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    GITHUB_SHA: head,
+                    RUNNER_TEMP: root,
+                    GITHUB_STEP_SUMMARY: summary,
+                },
+            },
+        );
+        assert.ifError(result.error);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(JSON.parse(result.stdout).length, 6);
+        const text = fs.readFileSync(summary, "utf8");
+        assert.match(
+            text,
+            /Complete shard inventory and per-file assertion qualification/,
+        );
+        assert.doesNotMatch(text, /Control \(s\)|controlMs|unsharded/);
+    });
+});
 
-test("selected-node shard-only qualification requires all six targets without claiming control equivalence", () => {
-    const rows = shardReports();
+test("qualification requires all six targets without duplicate control runs", () => {
+    const rows = reports();
     assert.equal(rows.length, 24);
-    const summary = qualify(rows, sha, shardOptions);
+    const summary = qualify(rows, sha);
     assert.equal(summary.length, 6);
     for (const row of summary) {
-        assert.equal(row.controlMs, null);
+        assert.equal(row.controlMs, undefined);
         assert.equal(row.files, 4);
         assert.equal(row.assertions, 4);
         assert.equal(row.skippedAssertions, 0);
     }
-    assert.equal(
-        qualify(reports(), sha, { nodeSet: "24-and-26" }).length,
-        6,
-        "Selected Nodes can still be qualified with controls",
-    );
-    assert.throws(() => qualify(rows, sha));
-    assert.throws(() => qualify(reports(), sha, shardOptions));
-    assert.equal(
-        qualify(
-            reports().filter((row) => row.group !== "control"),
-            sha,
-            { includeControls: false },
-        ).length,
-        6,
-        "Control exclusion is independent of Node selection",
-    );
     assert.throws(() =>
-        qualify(rows, sha, { ...shardOptions, includeControls: "false" }),
+        qualify([...rows, { ...rows[0], group: "control" }], sha),
     );
 });
 
 test("shard-only qualification exposes existing skipped assertions rather than counting them as passes", () => {
-    const rows = shardReports();
+    const rows = reports();
     rows[0].outcomes = [JSON.stringify(["test-1", "assertion", "pending"])];
-    assert.equal(qualify(rows, sha, shardOptions)[0].skippedAssertions, 1);
+    assert.equal(qualify(rows, sha)[0].skippedAssertions, 1);
 });
 
 for (const [name, change] of [
@@ -381,9 +439,9 @@ for (const [name, change] of [
     ],
 ]) {
     test(`shard-only qualification rejects ${name}`, () => {
-        const rows = shardReports();
+        const rows = reports();
         change(rows);
-        assert.throws(() => qualify(rows, sha, shardOptions));
+        assert.throws(() => qualify(rows, sha));
     });
 }
 
@@ -444,14 +502,6 @@ for (const [name, change] of [
         },
     ],
     [
-        "changed assertion identity",
-        (rows) => {
-            rows[0].outcomes = [
-                JSON.stringify(["test-1", "different assertion", "passed"]),
-            ];
-        },
-    ],
-    [
         "changed assertion outcome",
         (rows) => {
             rows[0].outcomes = ["failed"];
@@ -492,66 +542,54 @@ function matrixValue(expression, inputs, github = {}, required = "true") {
     });
 }
 
-test("all CI matrices and collectors use Node 24 and 26 with optional controls", () => {
+test("production CI uses Node 24/26 and four shards without rollout selectors", () => {
     const main = workflow("build-ts");
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout");
     const target = workflow("ci-fanout-target");
     const inputs = main.on.workflow_dispatch.inputs;
     assert.equal(inputs.fanout_node_set, undefined);
-    assert.equal(inputs.fanout_include_controls.default, false);
+    assert.equal(inputs.fanout_experiment, undefined);
+    assert.equal(inputs.fanout_include_controls, undefined);
     assert.equal(experiment.on.workflow_call.inputs.node_set, undefined);
     assert.equal(
-        experiment.on.workflow_call.inputs.include_controls.default,
-        false,
+        experiment.on.workflow_call.inputs.include_controls,
+        undefined,
     );
-    assert.equal(
-        target.on.workflow_call.inputs.include_controls.default,
-        false,
-    );
-    assert.equal(main.jobs.fanout_experiment.with.node_set, undefined);
-    assert.equal(
-        main.jobs.fanout_experiment.with.include_controls,
-        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}",
-    );
-    assert.equal(
-        experiment.jobs.targets.with.include_controls,
-        "${{ inputs.include_controls }}",
-    );
+    assert.equal(target.on.workflow_call.inputs.include_controls, undefined);
+    assert.equal(main.jobs.sharded.with.node_set, undefined);
+    assert.equal(main.jobs.sharded.with.include_controls, undefined);
     assert.deepEqual(experiment.jobs.qualification.env, {
-        TYPEAGENT_FANOUT_INCLUDE_CONTROLS: "${{ inputs.include_controls }}",
+        TYPEAGENT_FULL_MACOS_QUALIFICATION: "${{ inputs.full_macos }}",
         pnpm_config_verify_deps_before_run: "false",
     });
     for (const matrix of [
         main.jobs.build_ts.strategy.matrix,
-        main.jobs.build_ts_legacy.strategy.matrix,
         experiment.jobs.targets.strategy.matrix,
     ]) {
         assert.deepEqual(matrix.version, ["24.22.1", "26.12.1"]);
         assert.deepEqual(
             matrix.version,
-            fanoutNodes("all").map((node) => node.slice(1)),
+            fanoutNodes().map((node) => node.slice(1)),
         );
     }
-    for (const includeControls of [true, false])
-        assert.deepEqual(
-            matrixValue(target.jobs.test.strategy.matrix.group, {
-                include_controls: includeControls,
-            }),
-            includeControls
-                ? ["1", "2", "3", "4", "control"]
-                : ["1", "2", "3", "4"],
-        );
+    assert.deepEqual(target.jobs.test.strategy.matrix.group, [
+        "1",
+        "2",
+        "3",
+        "4",
+    ]);
 });
 
-test("the default graph has 85 executable jobs across six OS/Node targets", () => {
+test("the production graph has 86 jobs including the aggregate and six migration aliases", () => {
     const main = workflow("build-ts");
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout");
     const target = workflow("ci-fanout-target");
     const matrix = experiment.jobs.targets.strategy.matrix;
-    let jobs = 3 + matrix.os.length * matrix.version.length;
-    for (const os of matrix.os) {
+    const platforms = matrixValue(matrix.os, { full_macos: false });
+    let jobs = 4 + platforms.length * matrix.version.length;
+    for (const os of platforms) {
         for (const version of matrix.version) {
-            const inputs = { os, version, include_controls: false };
+            const inputs = { os, version };
             for (const job of Object.values(target.jobs)) {
                 if (job.if && !vm.runInNewContext(job.if, { inputs })) {
                     continue;
@@ -568,19 +606,17 @@ test("the default graph has 85 executable jobs across six OS/Node targets", () =
             }
         }
     }
-    assert.equal(jobs, 85);
+    assert.equal(jobs, 86);
     assert.deepEqual(
         main.jobs.build_ts.strategy.matrix.version,
         matrix.version,
     );
 });
 
-test("sharded CI defaults to Node 24 and 26 while retaining the macOS-only full-test schedule", () => {
+test("every trigger uses sharding and scheduled runs select full macOS coverage", () => {
     const main = workflow("build-ts");
-    assert.equal(
-        main.on.workflow_dispatch.inputs.fanout_experiment.default,
-        true,
-    );
+    assert.equal(main.jobs.build_ts_legacy, undefined);
+    assert.equal(main.jobs.sharded.uses, "./.github/workflows/ci-fanout.yml");
     for (const trigger of ["push", "pull_request", "merge_group", "schedule"]) {
         assert.ok(main.on[trigger]);
     }
@@ -592,13 +628,10 @@ test("sharded CI defaults to Node 24 and 26 while retaining the macOS-only full-
         "workflow_dispatch",
     ]) {
         const github = { event_name: event };
-        const inputs = { fanout_experiment: true };
+        const inputs = { macos_qualification: false };
+        assert.equal(matrixValue(main.jobs.sharded.if, inputs, github), true);
         assert.equal(
-            matrixValue(main.jobs.fanout_experiment.if, inputs, github),
-            event !== "schedule",
-        );
-        assert.equal(
-            matrixValue(main.jobs.build_ts_legacy.if, inputs, github),
+            matrixValue(main.jobs.sharded.with.full_macos, inputs, github),
             event === "schedule",
         );
         assert.deepEqual(main.jobs.build_ts.strategy.matrix.version, [
@@ -612,36 +645,41 @@ test("sharded CI defaults to Node 24 and 26 while retaining the macOS-only full-
                 : ["ubuntu-latest", "windows-latest", "macos-latest"],
         );
     }
-    const github = { event_name: "workflow_dispatch" };
-    assert.equal(
-        matrixValue(
-            main.jobs.build_ts_legacy.if,
-            { fanout_experiment: false },
-            github,
-        ),
-        true,
-    );
-    assert.equal(
-        matrixValue(
-            main.jobs.fanout_experiment.if,
-            { fanout_experiment: false },
-            github,
-        ),
-        false,
-    );
+    assert.equal(main.jobs.typescript_ci.name, "TypeScript CI");
+    assert.equal(main.jobs.typescript_ci.if, "${{ always() }}");
+    assert.deepEqual(main.jobs.typescript_ci.needs, ["changes", "sharded"]);
+    assert.equal(main.jobs.typescript_ci["runs-on"], "ubuntu-latest");
+    assert.equal(main.jobs.build_ts.needs, "typescript_ci");
     assert.equal(main.jobs.build_ts.if, "${{ always() }}");
-    assert.deepEqual(main.jobs.build_ts.needs, [
-        "changes",
-        "fanout_experiment",
-        "build_ts_legacy",
-    ]);
-    assert.equal(main.jobs.build_ts["runs-on"], "ubuntu-latest");
 });
 
-for (const legacy of [false, true]) {
+test("manual macOS qualification selects only the full nightly matrix and its matching aggregate", () => {
+    const main = workflow("build-ts");
+    assert.equal(
+        main.on.workflow_dispatch.inputs.macos_qualification.default,
+        false,
+    );
+    const github = { event_name: "workflow_dispatch" };
+    for (const macos of [true, false]) {
+        const inputs = { macos_qualification: macos };
+        assert.equal(matrixValue(main.jobs.sharded.if, inputs, github), true);
+        assert.equal(
+            matrixValue(main.jobs.sharded.with.full_macos, inputs, github),
+            macos,
+        );
+        assert.deepEqual(
+            matrixValue(main.jobs.build_ts.strategy.matrix.os, inputs, github),
+            macos
+                ? ["macos-latest"]
+                : ["ubuntu-latest", "windows-latest", "macos-latest"],
+        );
+    }
+});
+
+for (const gate of ["typescript_ci", "build_ts"]) {
     for (const result of ["success", "failure", "cancelled", "skipped", ""]) {
-        test(`required matrix checks fail closed: legacy=${legacy}, result=${result || "missing"}`, () => {
-            const step = workflow("build-ts").jobs.build_ts.steps[0];
+        test(`required checks fail closed: gate=${gate}, result=${result || "missing"}`, () => {
+            const step = workflow("build-ts").jobs[gate].steps[0];
             const child = spawnSync(
                 "pwsh",
                 ["-NoProfile", "-NonInteractive", "-Command", step.run],
@@ -652,9 +690,8 @@ for (const legacy of [false, true]) {
                         ...process.env,
                         CI_CHANGES_RESULT: "success",
                         CI_COVERAGE_REQUIRED: "true",
-                        CI_USE_LEGACY: String(legacy),
-                        CI_SHARDED_RESULT: legacy ? "success" : result,
-                        CI_LEGACY_RESULT: legacy ? result : "success",
+                        CI_SHARDED_RESULT: result,
+                        CI_AGGREGATE_RESULT: result,
                     },
                 },
             );
@@ -671,7 +708,7 @@ for (const legacy of [false, true]) {
 test("documentation-only PRs skip work only after a successful explicit path decision", () => {
     const main = workflow("build-ts");
     const event = { event_name: "pull_request" };
-    for (const strategy of ["fanout_experiment", "build_ts_legacy"]) {
+    for (const strategy of ["sharded"]) {
         assert.equal(
             matrixValue(main.jobs[strategy].if, {}, event, "false"),
             false,
@@ -683,7 +720,7 @@ test("documentation-only PRs skip work only after a successful explicit path dec
     for (const path of [
         "ts/**",
         ".github/workflows/build-ts.yml",
-        ".github/workflows/ci-fanout-*.yml",
+        ".github/workflows/ci-fanout*.yml",
         ".github/actions/fanout-setup/**",
     ]) {
         assert.ok(filter.with.filters.includes(`"${path}"`));
@@ -699,7 +736,7 @@ test("documentation-only PRs skip work only after a successful explicit path dec
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                main.jobs.build_ts.steps[0].run,
+                main.jobs.typescript_ci.steps[0].run,
             ],
             {
                 encoding: "utf8",
@@ -709,7 +746,6 @@ test("documentation-only PRs skip work only after a successful explicit path dec
                     CI_CHANGES_RESULT: result,
                     CI_COVERAGE_REQUIRED: decision,
                     CI_SHARDED_RESULT: "skipped",
-                    CI_LEGACY_RESULT: "skipped",
                 },
             },
         );
@@ -719,7 +755,7 @@ test("documentation-only PRs skip work only after a successful explicit path dec
 });
 
 test("sharded PR analysis retains changed formatting and all four ratchets", () => {
-    const steps = workflow("ci-fanout-experiment").jobs.analysis.steps;
+    const steps = workflow("ci-fanout").jobs.analysis.steps;
     const format = steps.find((step) => step.env?.CI_EVENT_NAME);
     assert.ok(
         format.run.includes("git fetch --no-tags origin $env:CI_BASE_REF"),
@@ -781,16 +817,17 @@ test("Linux prerequisites bound apt network waits and propagate failures", () =>
 });
 
 test("test runners install native dependencies but never rebuild shared product output", () => {
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout");
     const target = workflow("ci-fanout-target");
     assert.deepEqual(Object.keys(experiment.on), ["workflow_call"]);
     assert.deepEqual(experiment.permissions, { contents: "read" });
     assert.deepEqual(target.permissions, { contents: "read" });
-    assert.deepEqual(experiment.jobs.targets.strategy.matrix.os, [
-        "ubuntu-latest",
-        "windows-latest",
-        "macos-latest",
-    ]);
+    assert.deepEqual(
+        matrixValue(experiment.jobs.targets.strategy.matrix.os, {
+            full_macos: false,
+        }),
+        ["ubuntu-latest", "windows-latest", "macos-latest"],
+    );
     assert.equal(
         target.jobs.build.steps.find((step) =>
             step.name?.startsWith("Build memory service"),
@@ -799,7 +836,7 @@ test("test runners install native dependencies but never rebuild shared product 
     );
     assert.deepEqual(
         experiment.jobs.targets.strategy.matrix.version,
-        workflow("build-ts").jobs.build_ts_legacy.strategy.matrix.version,
+        workflow("build-ts").jobs.build_ts.strategy.matrix.version,
     );
     assert.equal(
         experiment.jobs.targets.uses,
@@ -827,18 +864,18 @@ test("test runners install native dependencies but never rebuild shared product 
         ).with.path,
         "${{ runner.temp }}/fanout-build",
     );
-    assert.deepEqual(
-        matrixValue(target.jobs.test.strategy.matrix.group, {
-            include_controls: true,
-        }),
-        ["1", "2", "3", "4", "control"],
-    );
+    assert.deepEqual(target.jobs.test.strategy.matrix.group, [
+        "1",
+        "2",
+        "3",
+        "4",
+    ]);
     assert.equal(target.jobs.test.needs, "build");
     assert.equal(target.jobs.test.strategy["fail-fast"], false);
     const commands = target.jobs.test.steps
         .map((step) => step.run ?? "")
         .join("\n");
-    assert.match(commands, /ciFanoutExperiment.mjs test/);
+    assert.match(commands, /ciFanout.mjs test/);
     assert.doesNotMatch(commands, /fluid-build|run build|getKeys/);
     assert.equal(experiment.jobs.qualification.if, "always()");
     assert.deepEqual(experiment.jobs.qualification.needs, [
@@ -852,8 +889,77 @@ test("test runners install native dependencies but never rebuild shared product 
     );
 });
 
+test("full macOS qualification uses four sequential complete-package lanes, roots and fail-closed collection", () => {
+    const main = workflow("build-ts");
+    const experiment = workflow("ci-fanout");
+    const target = workflow("ci-fanout-target");
+    const inputs = { full_macos: true, os: "macos-latest" };
+    assert.deepEqual(
+        matrixValue(experiment.jobs.targets.strategy.matrix.os, inputs),
+        ["macos-latest"],
+    );
+    assert.equal(
+        main.jobs.sharded.with.full_macos,
+        "${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.macos_qualification) }}",
+    );
+    assert.equal(
+        experiment.jobs.targets.with.full_macos,
+        "${{ inputs.full_macos }}",
+    );
+    assert.equal(
+        target.env.TYPEAGENT_FULL_MACOS_QUALIFICATION,
+        "${{ inputs.full_macos }}",
+    );
+    assert.equal(
+        experiment.jobs.qualification.env.TYPEAGENT_FULL_MACOS_QUALIFICATION,
+        "${{ inputs.full_macos }}",
+    );
+    assert.deepEqual(
+        matrixValue(target.jobs.remainder.strategy.matrix.group, inputs),
+        ["1", "2", "3", "4"],
+    );
+    assert.equal(
+        matrixValue(target.jobs.remainder["timeout-minutes"], inputs),
+        240,
+    );
+    const step = target.jobs.remainder.steps.find(
+        (step) => step.env?.TYPEAGENT_REMAINDER_ARTIFACT_SCOPE,
+    );
+    assert.equal(
+        matrixValue(step.env.TYPEAGENT_TEST_WORKSPACE_TIMEOUT_MS, inputs),
+        "10800000",
+    );
+    for (const name of ["build", "test", "package_partitions"]) {
+        assert.equal(
+            vm.runInNewContext(target.jobs[name].if, { inputs }),
+            false,
+        );
+    }
+    for (const name of ["workspace_build", "remainder", "roots"]) {
+        assert.equal(target.jobs[name].if, undefined);
+    }
+    for (const step of experiment.jobs.qualification.steps) {
+        if (
+            step.with?.pattern?.match(/^fanout-(result|partition)-/) ||
+            step.run?.match(/(?:ciFanout|ciPackagePartitions)\.mjs aggregate/)
+        ) {
+            assert.equal(vm.runInNewContext(step.if, { inputs }), false);
+        }
+    }
+    assert.equal(
+        experiment.jobs.qualification.steps.find((step) =>
+            step.run?.includes("ciWorkspaceLanes.mjs aggregate"),
+        ).if,
+        undefined,
+    );
+    const roots = target.jobs.roots.steps.find(
+        (step) => step.env?.TYPEAGENT_TEST_PHASE === "scripts",
+    );
+    assert.equal(roots.env.TYPEAGENT_FULL_MACOS_QUALIFICATION, "false");
+});
+
 test("platform-independent analysis runs once and remains blocking", () => {
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout");
     const analysis = experiment.jobs.analysis;
     assert.equal(analysis.strategy, undefined);
     assert.ok(
@@ -968,9 +1074,9 @@ test("memory producers never wait for or run non-memory builds or tests", () => 
     );
     assert.equal(
         jobs.remainder.strategy.matrix.group,
-        '${{ inputs.os == \'macos-latest\' && fromJSON(\'["1"]\') || fromJSON(\'["1","2","3","4"]\') }}',
+        '${{ inputs.os == \'macos-latest\' && !inputs.full_macos && fromJSON(\'["1"]\') || fromJSON(\'["1","2","3","4"]\') }}',
     );
-    const qualification = workflow("ci-fanout-experiment").jobs.qualification;
+    const qualification = workflow("ci-fanout").jobs.qualification;
     assert.ok(
         qualification.steps.findIndex((step) =>
             step.name?.startsWith("Reject failed"),
@@ -999,17 +1105,14 @@ test("orchestration entrypoints establish pnpm's shell-free package-script conte
         ),
     ).scripts;
     assert.equal(scripts["ci:node"], "node");
-    const commands = ["ci-fanout-target", "ci-fanout-experiment"].flatMap(
-        (name) =>
-            Object.values(workflow(name).jobs).flatMap((job) =>
-                (job.steps ?? []).flatMap((step) =>
-                    (step.run ?? "")
-                        .split("\n")
-                        .filter((line) =>
-                            /tools\/scripts\/ci\w+\.mjs/.test(line),
-                        ),
-                ),
+    const commands = ["ci-fanout-target", "ci-fanout"].flatMap((name) =>
+        Object.values(workflow(name).jobs).flatMap((job) =>
+            (job.steps ?? []).flatMap((step) =>
+                (step.run ?? "")
+                    .split("\n")
+                    .filter((line) => /tools\/scripts\/ci\w+\.mjs/.test(line)),
             ),
+        ),
     );
     assert.equal(commands.length, 12);
     for (const command of commands)
@@ -1031,8 +1134,9 @@ test("qualification preserves pnpm context without installing workspace dependen
         path.join(root, "pnpm-workspace.yaml"),
         "packages: []\nverifyDepsBeforeRun: install\n",
     );
-    const setting = workflow("ci-fanout-experiment").jobs.qualification.env
-        .pnpm_config_verify_deps_before_run;
+    const setting =
+        workflow("ci-fanout").jobs.qualification.env
+            .pnpm_config_verify_deps_before_run;
     assert.equal(setting, "false");
     const args = ["run", "ci:node", "-p", "process.env.npm_execpath"];
     const run = (value) =>

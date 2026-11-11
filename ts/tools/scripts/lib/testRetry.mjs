@@ -91,7 +91,7 @@ export function windowsPnpmCommand(args) {
     return `"pnpm ${args.map((arg) => `"${arg}"`).join(" ")}"`;
 }
 
-export function runLocalTestPhases(
+export async function runLocalTestPhases(
     runWorkspaceTests,
     runScriptTests,
     phase = "all",
@@ -99,8 +99,8 @@ export function runLocalTestPhases(
     if (!["all", "workspace", "scripts"].includes(phase)) {
         throw new Error(`Unknown TYPEAGENT_TEST_PHASE: ${phase}`);
     }
-    const workspaceStatus = phase === "scripts" ? 0 : runWorkspaceTests();
-    const scriptStatus = phase === "workspace" ? 0 : runScriptTests();
+    const workspaceStatus = phase === "scripts" ? 0 : await runWorkspaceTests();
+    const scriptStatus = phase === "workspace" ? 0 : await runScriptTests();
     return workspaceStatus !== 0 || scriptStatus !== 0 ? 1 : 0;
 }
 

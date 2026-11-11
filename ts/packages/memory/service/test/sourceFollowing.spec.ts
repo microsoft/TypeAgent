@@ -26,7 +26,7 @@ afterEach(() => {
     else process.env.TYPEAGENT_EMBEDDING_PROVIDER = priorProvider;
 });
 
-async function initial(root: string) {
+async function pausedHost(root: string) {
     const host = sourceFollowingHost(root);
     const service = host.open();
     const { corpusId } = await service.createCorpus("Real KnowPro C5");
@@ -38,6 +38,11 @@ async function initial(root: string) {
             expectedHead: (await service.listViews(corpusId)).head,
         });
     await changeFamily(service, corpusId, "pause");
+    return { host, service, corpusId };
+}
+
+async function initial(root: string) {
+    const { host, service, corpusId } = await pausedHost(root);
     await sourceFollowingStage(service, corpusId, "initial");
     await changeFamily(service, corpusId, "resume");
     const old = (await settleConsolidation(service, corpusId)).views.find(
@@ -303,9 +308,9 @@ test("current-source reanchoring stays within four indexed blocks and the shared
     const root = await mkdtemp(
         path.join(os.tmpdir(), "source-following-bounds-"),
     );
-    const { host, service, corpusId, old } = await initial(root);
+    const { host, service, corpusId } = await pausedHost(root);
     try {
-        await changeFamily(service, corpusId, "pause");
+        await sourceFollowingStage(service, corpusId, "initial");
         await sourceFollowingStage(service, corpusId, "t1");
         const text = (
             await service.getSourceContent({
@@ -327,6 +332,13 @@ test("current-source reanchoring stays within four indexed blocks and the shared
         });
         expect(text.length * 80).toBeGreaterThan(32000);
         expect(selection.fragments.length).toBeGreaterThan(0);
+        expect(
+            selection.fragments.every(
+                (fragment) =>
+                    fragment.sourceId === "handoff" &&
+                    fragment.revisionId === source.activeRevisionId,
+            ),
+        ).toBe(true);
         expect(selection.fragments.length).toBeLessThanOrEqual(12);
         expect(selection.readChars).toBeLessThanOrEqual(32000);
         expect(
@@ -337,12 +349,12 @@ test("current-source reanchoring stays within four indexed blocks and the shared
             ).size,
         ).toBeLessThanOrEqual(4);
         expect(selection.limited).toBe(true);
-        await changeFamily(service, corpusId, "resume");
-        await settleConsolidation(service, corpusId);
-        expect(
-            (await service.getView({ corpusId, viewId: old.viewId }))?.content
-                .sections[0].body,
-        ).toContain("Preserve navigable context");
+        expect(host.calls).toEqual({
+            generation: 0,
+            purpose: 0,
+            actual: 0,
+        });
+        expect(host.unexpectedModelCalls()).toBe(0);
     } finally {
         await service.close();
         await rm(root, { recursive: true, force: true });

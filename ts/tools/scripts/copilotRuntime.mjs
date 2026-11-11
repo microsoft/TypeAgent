@@ -722,7 +722,11 @@ async function main() {
     }
 }
 
-if (path.resolve(process.argv[1] ?? "") === scriptPath) {
+if (
+    process.argv[1] &&
+    fs.existsSync(process.argv[1]) &&
+    fs.realpathSync(process.argv[1]) === fs.realpathSync(scriptPath)
+) {
     main()
         .then((code) => process.exit(code))
         .catch((error) => {
