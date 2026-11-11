@@ -218,16 +218,37 @@ The implementation agent writes the files named in the round of
   the script that measures it. Absolute times belong in the script's output.
 - **Done** means `npm test` passes and `npm run typecheck` reports no
   errors. The agent doesn't change interfaces, `rules.ts`, the `.vocab.ts` files, contracts or test
-  wiring. If a rule seems wrong or ambiguous, it says so in its report
-  rather than working around it.
+  wiring.
+- **It decides only what the spec leaves open**: anything under "Left to
+  the implementer", and details no rule or spec text addresses. It never
+  decides what the spec means. On the first rule or spec text it would
+  have to interpret (ambiguous, inconsistent, or silent on something the
+  implementation must get right), it stops implementing, reads the rest
+  of the task for every other such question, and writes a stopped report.
 
-The report lists anything ambiguous or wrong, and anything the agent found
-hard. Anything in it that 1b missed is evidence about how well 1b works.
+Every report starts with `Status: done` or `Status: stopped`, and
+`task.ts` checks its form. A done report has a `## Choices` section (each
+open choice and where the header records it) and `## Notes`, and no
+questions. A stopped report has a `## Questions` section: for each, the
+rule ID or spec text, what is wrong with it, the readings with a concrete
+case where they differ, and what the agent needs to be told.
+
+**Phase 2 iterates.** `npm run task collect <n>` on a stopped attempt
+keeps its report as `reports/task-<n>-stop-<k>.md`, records the attempt
+and its token use in `tasks.json`, and deletes the workspace; nothing
+else is collected. The questions go back to phase 1: the human settles
+each one, and the design agent writes the answer into the spec, adding
+tests and adversaries for any new rule. The task is then made again and
+run by a fresh agent, which never sees the earlier attempt. Questions that
+1b missed are evidence about how well 1b works.
 
 ### Review of phase 2 (human and design agent)
 
 1. **Verify.** Re-run the tests, type-check and adversaries. Reproduce every
-   claim in the report before acting on it.
+   claim in the report before acting on it. Read the Choices list: a
+   choice that was really a reading of the spec counts as a stop. Settle
+   it in the spec, and if the implementation read it differently, queue
+   the task again.
 2. **Classify** each finding as a bug, decision or format issue, as in 1b,
    and the human decides each one.
 3. **Turn each bug into an adversary.** When a finding is a way an

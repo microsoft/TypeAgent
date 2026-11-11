@@ -63,8 +63,14 @@ whose reads include one).
 
 - **Done** means `npm test` passes and `npm run typecheck` reports no errors.
   Don't change the contract tests (`*.contract.ts`), the `*.test.ts` files,
-  the interface files, `rules.ts` or the `*.vocab.ts` files. If a rule seems wrong or
-  ambiguous, say so in your report and don't work around it.
+  the interface files, `rules.ts` or the `*.vocab.ts` files.
+- **Decide only what the spec leaves open.** That is anything under "Left
+  to the implementer", and details no rule or spec text addresses. Never
+  decide what the spec means: when a rule or spec text can be read more
+  than one way, conflicts with another, or leaves out something the
+  implementation must get right, stop, list every such question you can
+  find in the task, and report them instead of finishing. `TASK.md` gives
+  the report's form.
 
 ## 1. `rectangleOps.ts`
 

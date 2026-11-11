@@ -125,13 +125,16 @@ function readsOf(task: Task): string[] {
 
 // ---- State ----------------------------------------------------------------
 
-type State = Record<string, { collected: string; outputs?: Record<string, string>; report?: string; usage?: unknown }>;
+/** One attempt that stopped with questions. */
+type Stop = { stopped: string; report: string; usage?: unknown };
+type State = Record<string, { collected?: string; outputs?: Record<string, string>; report?: string; usage?: unknown; stops?: Stop[] }>;
+const isDone = (state: State, n: number) => Boolean(state[n]?.collected);
 const statePath = join(repo, "tasks.json");
 const loadState = (): State => (existsSync(statePath) ? JSON.parse(read(statePath)) : {});
 
 /** Pending tasks in waves: a task waits for any pending task whose outputs it reads. */
 function waves(tasks: Task[], state: State): Task[][] {
-  let pending = tasks.filter((t) => !state[t.n]);
+  let pending = tasks.filter((t) => !isDone(state, t.n));
   const result: Task[][] = [];
   while (pending.length > 0) {
     const outputsOf = (ts: Task[]) => new Set(ts.flatMap((t) => t.outputs.map((o) => o.file)));
@@ -303,9 +306,28 @@ may read. The restrictions below are enforced, not only asked for.
   runs every check the collector will run.
 - **Read-only files here:** ${reads.map((f) => `\`${f}\``).join(", ")}.
 
-**REPORT.md** lists: each rule or spec text you found wrong or ambiguous,
-and what you did about it; each choice you made that the spec left open;
-and anything you needed to know that none of these files told you.
+**What you may decide.** Only what the spec leaves open: anything under
+"Left to the implementer", and details no rule or spec text addresses,
+such as names, data layout and helper functions. You may not decide what
+the spec means. If a rule or spec text can be read more than one way, if
+two of them conflict, or if the spec doesn't say something your
+implementation must get right, stop: don't pick a reading, and don't
+finish the implementation. Read the rest of this task's rules and spec for
+every other such question, so that the next attempt can have them all
+settled, and write a stopped report.
+
+**REPORT.md** starts with one line: \`Status: done\` or \`Status: stopped\`.
+
+- **Done:** a \`## Choices\` section listing each choice you made that the
+  spec left open, and where your header records it (AdditionalSemantics,
+  Cost and so on), and a \`## Notes\` section for anything you found hard
+  or needed to know that none of these files told you. A done report has
+  no questions.
+- **Stopped:** a \`## Questions\` section. For each question: the file and
+  rule ID or spec text; what is ambiguous, inconsistent or missing; the
+  readings you see, with a concrete case where they differ; and what you
+  need to be told. Your outputs are not collected, so they may be missing
+  or partial.
 
 ${shared}
 
@@ -435,8 +457,34 @@ function lintWorkspace(dir: string, m: Manifest): string[] {
   return problems;
 }
 
+/** The status line REPORT.md starts with, if it has one. */
+function statusOf(dir: string): "done" | "stopped" | undefined {
+  const path = join(dir, "REPORT.md");
+  if (!existsSync(path)) return undefined;
+  const first = read(path).split(/\r?\n/).find((l) => l.trim() !== "");
+  return (/^Status: (done|stopped)\s*$/.exec(first ?? "")?.[1] as "done" | "stopped" | undefined);
+}
+
+/** Problems with REPORT.md's shape: a status line, and the sections its status needs. */
+function reportProblems(dir: string): string[] {
+  const path = join(dir, "REPORT.md");
+  if (!existsSync(path)) return ["REPORT.md: missing"];
+  const status = statusOf(dir);
+  if (!status) return ["REPORT.md: must start with the line Status: done or Status: stopped"];
+  const text = read(path);
+  const has = (heading: string) => new RegExp(`^## ${heading}\\s*$`, "m").test(text);
+  if (status === "stopped") return has("Questions") ? [] : ["REPORT.md: a stopped report needs a ## Questions section"];
+  return [
+    ...(has("Choices") ? [] : ["REPORT.md: a done report needs a ## Choices section"]),
+    ...(has("Questions") ? ["REPORT.md: a done report has no ## Questions; stop instead"] : []),
+  ];
+}
+
 function checkWorkspace(dir: string, m: Manifest, full: boolean): string[] {
-  const problems = lintWorkspace(dir, m);
+  // A stopped attempt is checked only for what it may have changed: its
+  // outputs aren't collected.
+  const stopped = statusOf(dir) === "stopped";
+  const problems = stopped ? [] : lintWorkspace(dir, m);
   const outputs = m.outputs.map((o) => o.file);
   for (const [f, hash] of Object.entries(m.inputs)) {
     if (!existsSync(join(dir, f))) problems.push(`${f}: deleted`);
@@ -444,8 +492,8 @@ function checkWorkspace(dir: string, m: Manifest, full: boolean): string[] {
   }
   const known = (f: string) => f in m.inputs || outputs.includes(f) || f === "REPORT.md" || f === ".task/manifest.json";
   for (const f of walk(dir)) if (!known(f)) problems.push(`${f}: not part of the task`);
-  if (!existsSync(join(dir, "REPORT.md"))) problems.push("REPORT.md: missing");
-  if (!full || problems.length > 0) return problems;
+  problems.push(...reportProblems(dir));
+  if (!full || stopped || problems.length > 0) return problems;
   for (const cmd of ["npx --no-install tsc -p tsconfig.impl.json", "npx --no-install tsc -p tsconfig.json", ...(m.tests.length ? [`node --test ${m.tests.join(" ")}`] : [])]) {
     const r = run(cmd, dir);
     if (!r.ok) problems.push(`${cmd} failed:\n${r.output}`);
@@ -466,14 +514,28 @@ function collect(task: Task): void {
   // The repo must still hold what the workspace was made from.
   for (const f of readsOf(task)) if (m.inputs[f] !== sha(join(repo, f))) problems.push(`${f}: changed in the repo since the workspace was made`);
   report(problems, "");
-  for (const o of m.outputs) copyFileSync(join(dir, o.file), join(repo, o.file));
   mkdirSync(join(repo, "reports"), { recursive: true });
-  const reportFile = `reports/task-${task.n}.md`;
-  copyFileSync(join(dir, "REPORT.md"), join(repo, reportFile));
   const runFile = `${dir}.run.json`;
   const usage = existsSync(runFile) ? (({ total_cost_usd, usage, modelUsage, num_turns, duration_ms }) => ({ total_cost_usd, usage, modelUsage, num_turns, duration_ms }))(JSON.parse(read(runFile) || "{}")) : undefined;
   const state = loadState();
+  const entry = state[task.n] ?? {};
+  if (statusOf(dir) === "stopped") {
+    // The questions go back to phase 1. The workspace goes, so that the
+    // next attempt is made fresh from the settled spec.
+    const stops = entry.stops ?? [];
+    const reportFile = `reports/task-${task.n}-stop-${stops.length + 1}.md`;
+    copyFileSync(join(dir, "REPORT.md"), join(repo, reportFile));
+    state[task.n] = { ...entry, stops: [...stops, { stopped: new Date().toISOString(), report: reportFile, usage }] };
+    writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n");
+    for (const f of [dir, manifestOf(task), runFile, policyOf(task)]) rmSync(f, { recursive: true, force: true });
+    console.log(`task ${task.n} stopped with questions: ${reportFile}. Settle them in the spec, then make it again.`);
+    return;
+  }
+  for (const o of m.outputs) copyFileSync(join(dir, o.file), join(repo, o.file));
+  const reportFile = `reports/task-${task.n}.md`;
+  copyFileSync(join(dir, "REPORT.md"), join(repo, reportFile));
   state[task.n] = {
+    ...entry,
     collected: new Date().toISOString(),
     outputs: Object.fromEntries(m.outputs.map((o) => [o.file, sha(join(repo, o.file))])),
     report: reportFile,
@@ -486,7 +548,7 @@ function collect(task: Task): void {
 /** The output checks, applied in the repo to every collected task's outputs. */
 function lintRepo(): string[] {
   const state = loadState();
-  const tasks = parseTasks().filter((t) => state[t.n]);
+  const tasks = parseTasks().filter((t) => isDone(state, t.n));
   // A file written by several tasks is linted under the latest.
   const owner = new Map<string, Task>();
   for (const t of tasks) for (const o of t.outputs) if (!o.headerOnly) owner.set(o.file, t);
@@ -513,11 +575,11 @@ function lintRepo(): string[] {
 function list(): void {
   const tasks = parseTasks();
   const state = loadState();
-  for (const t of tasks) if (state[t.n]) console.log(`done     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}`);
+  for (const t of tasks) if (isDone(state, t.n)) console.log(`done     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}`);
   waves(tasks, state).forEach((wave, i) => {
     for (const t of wave) {
       const leak = leaks(t);
-      console.log(`wave ${i + 1}   ${t.n}. ${t.outputs.map((o) => o.file + (o.headerOnly ? " (header)" : "")).join(", ")}  reads ${readsOf(t).length} files${leak.length ? `  READS HIDDEN ${leak.join(", ")}` : ""}`);
+      console.log(`wave ${i + 1}   ${t.n}. ${t.outputs.map((o) => o.file + (o.headerOnly ? " (header)" : "")).join(", ")}  reads ${readsOf(t).length} files${leak.length ? `  READS HIDDEN ${leak.join(", ")}` : ""}${state[t.n]?.stops?.length ? `  stopped ${state[t.n].stops!.length}x` : ""}`);
     }
   });
 }

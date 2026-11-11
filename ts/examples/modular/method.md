@@ -87,6 +87,22 @@ A new agent writes the implementations named in `impl-specs.md`, one task
 at a time. It imports only the agreed interfaces. Done means `npm test`
 passes and `npm run typecheck` reports no errors.
 
+**Phase 2 doesn't interpret the spec.** The agent decides only what the
+spec leaves open: anything under "Left to the implementer", and details
+no rule or spec text addresses. When it would have to decide what a rule
+or spec text means, because it is ambiguous, inconsistent or silent on
+something the implementation must get right, it stops. It lists every
+such question in the task and finishes with a stopped report instead of
+code.
+
+**So phase 2 iterates.** A stopped report goes back to phase 1: the human
+settles each question, and the design agent puts the answer in the spec,
+with tests and adversaries where it adds a rule. Then the task is made
+again and run by a fresh agent, which never sees the earlier attempt.
+`task.ts` keeps each stopped report as `reports/task-<n>-stop-<k>.md`, and
+`npm run task list` shows how often a task has stopped. A task is done
+when an attempt finishes with a done report and passes its checks.
+
 ### Tasks
 
 Every restriction on a task is enforced, not only stated, so that the
@@ -129,5 +145,10 @@ The policy relies on Claude Code's own enforcement of its file tools. On
 native Windows there is no sandbox for processes, which is why only our
 tests and linted outputs ever run.
 
-Its report lists anything ambiguous or wrong. **This report measures phase
-1b:** anything it finds that 1b missed is evidence about how well 1b works.
+A report starts with `Status: done` or `Status: stopped`, and `task.ts`
+checks its form: a done report lists its choices and has no questions; a
+stopped report lists its questions, and its outputs are not collected.
+What `task.ts` can't check is whether a listed choice was really a
+reading of the spec; the review does that, and such a choice counts as a
+stop. **Stopped reports measure phase 1b:** each question 1b missed is
+evidence about how well 1b works.
