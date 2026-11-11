@@ -25,7 +25,7 @@ is `ShapeLocatorQueries`.
 |---|---|---|---|---|---|
 | `add` | `add.placed`; `SC.size`, `SC.z-order`, `SC.get-agrees` | `SLQ.*.exact` | `SLQ.no-retain` | `notifies`; `EventEmitter.*` | nothing |
 | `remove` | `remove.removed`; `SC.size`, `SC.z-order`, `SC.get-agrees` | `SLQ.*.exact` | `SLQ.no-retain` | `notifies` (none if nothing was removed) | `remove.removed` |
-| `get`, `size`, `forEach`, `compareZ`, `inRect`, `atPoint`, `on`, `off` | `SC.read-only` | `SC.read-only`, `SLQ.read-only` | `SLQ.*.append`, `SLQ.no-retain` | `SC.read-only` (emits nothing); `on`, `off` by `EventEmitter.*` | `SC.get-agrees`, `SC.size`, `SC.z-order`, `SC.compareZ.*`, `SLQ.*.count`, `SLQ.*.once`, `SLQ.*.exact`; `this` for `on` and `off`, by type |
+| `get`, `size`, `forEach`, `compareZ`, `inRect`, `atPoint`, `on`, `off` | `SC.read-only` | `SC.read-only`, `SLQ.read-only` | `SLQ.*.append`, `SLQ.no-retain` | `SC.read-only` (emits nothing); `on`, `off` by `EventEmitter.*` | `SC.get-agrees`, `SC.size`, `SC.z-order`, `SC.compareZ.*`, `SLQ.*.count`, `SLQ.*.once`, `SLQ.*.exact`; `EventEmitter.on.returns-this`, `EventEmitter.off.returns-this` |
 
 Unspecified on purpose: `add` with an ID that is present (`add.new-id`),
 below a shape that isn't (`add.below-present`), or with a shape outside
@@ -55,16 +55,17 @@ that return value, so no other call can send one. Rule IDs without a prefix are
 `MessageProcessor`'s; `SMP.` is `ShapeMessageProcessor`.
 
 | Call | Model | Model change events | Returns |
-|---|---|---|---|---|
+|---|---|---|---|
 | `local.enqueue` | `enqueue-defers`, `sole-writer` (unchanged until `process`) | `enqueue-defers` (none) | the stamped operation: `stamps`, `Operation.*`, `OperationSink.enqueue.own-copy` |
 | `remote.enqueue` | `enqueue-defers`, `sole-writer` | `enqueue-defers` | the operation as queued: `OperationSink.enqueue.own-copy` |
 | `process` | `SMP.add-on-z`, `SMP.kept`, `SMP.remove-listed`, `SMP.clear-known`, `SMP.ack-keeps-z`; `converges` across clients | `SMP.one-change`, `SMP.ack-keeps-z` | settles once the queues are empty (by its doc) |
 | `newShapeId` | `sole-writer` | `sole-writer` | `SMP.new-ids` |
-| Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | `SMP.read-facet` |
+| Reading `model` | `sole-writer`, `SC.read-only` | `sole-writer` | `SMP.read-facet` (its `on` and `off` return the model) |
 | Nothing (time passing) | `passive` | `passive` | — |
 
 Unspecified on purpose: operations that break `formed-now`, `remote-seq`,
-`unique-identity`, `SMP.fresh-add-id` or `SMP.in-range`; and calls from
+`unique-identity`, `not-reentrant` (an enqueue or a second `process` while
+one is pending), `SMP.fresh-add-id` or `SMP.in-range`; and calls from
 anything but the message infrastructure (`infrastructure-only`).
 
 ## ShapeView
@@ -81,6 +82,7 @@ Rule IDs without a prefix are `View`'s.
 | `frame()` | `ShapeView.frame.paints` | `idle` | `one-listener` | nothing |
 | Reading `model`, `viewport` | `read-only` | `read-only` | `read-only` | `viewport` is the identity, by the ShapeView doc§ |
 | `dispose()`, and anything after it | `dispose.inert` | `dispose.detaches` | `dispose.detaches` | nothing |
+| A second `dispose()` | `dispose.idempotent` | `dispose.idempotent` | `dispose.idempotent` | nothing, and doesn't throw |
 | Setting `viewport` | outside the rules for ShapeView | outside the rules | outside the rules | — |
 | `on`, `off` (viewport) | — | — | — | the EventEmitter rules apply; `viewport` is never emitted yet |
 
@@ -114,7 +116,7 @@ calling `locate` leaves the registrations as they were.
 Drawing these tables for round 4 found three empty cells, all in the
 bottom rows: nothing said that observers (`get`, `forEach` and the rest),
 queries, or subscribing leave the state unchanged. They became
-`ShapeCollection.observers-read-only`, `ShapeLocatorQueries.read-only` and
+`ShapeCollection.observers-read-only` (now `ShapeCollection.read-only`), `ShapeLocatorQueries.read-only` and
 `Layer.read-only` (then named `Layer.subscriptions-separate`), each with a
 adversary. Two earlier gaps,
 `get-agrees` and `others-kept`, were also cells of these tables.

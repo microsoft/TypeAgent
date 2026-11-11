@@ -67,7 +67,7 @@ it reads the spec the way a future implementer will.
 |---|---|---|
 | `npm test` | Every contract and test passes | Seconds |
 | `npm run typecheck` | No type errors | Seconds |
-| `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. Each adversary runs only that test, and they run in parallel, one per core (`ADVERSARY_JOBS` to change). `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 30 seconds on 32 cores |
+| `npm run adversaries` | The helpers pass cleanly, then every adversary fails the test named by its rule ID. Each adversary runs only that test, and they run in parallel, one per core (`ADVERSARY_JOBS` to change). `FC_SEED` picks the seed (default 1); `npm run adversaries -- <text>` runs only adversaries whose file names contain the text | About 45 seconds on 32 cores, most of it `helpers.check.ts` |
 | `npm run bench` | Prints the measurements | Seconds |
 | `npm run catalog` | Regenerates `catalog.md` and `catalog.html`: interfaces, extends and uses edges, and each rule's test status and adversary count. Refuses to write when a rule isn't accounted for: a test named by its ID, or a `@requires`, a refined `@abstract`, a `@budget` or a planned `@deferred` | About 15 seconds |
 | `npm run summary` | Regenerates `summary.pdf`. Doesn't run tests | Under a second |
@@ -558,6 +558,27 @@ model, which is why no separate differential test is needed.
     their own contract. Task 9 is now `shapeProcessor.ts`. The adversary
     runner runs only each adversary's named test, in parallel: about 25
     seconds per seed for 140 adversaries (139 after `local.enqueue` began returning the stamped operation).
+  - Phase 1b on round 4 (2026-11-11). A fresh agent, about 205,000
+    tokens, 50 tool calls and 15 minutes. It found 21 items (10 test
+    gaps, 6 decisions, 5 format) and added 13 adversaries, 9 of which
+    escaped. Its throwaway draft of tasks 8, 9 and 12 passed nearly every
+    contract at once; its value was in where it pointed (the facet's `on`
+    return value, the ID separator, the cost of order keys, enqueue during
+    `process`, the placement rule), at about a fifth of the agent's tool
+    calls. The human decided: logarithmic amortized costs for the writer
+    and processor, as `@budget` rules that `bench.ts` measures as a
+    scaling ratio and fails above 4 (task 8 names a balanced tree or local
+    relabeling; renumbering every key breaks the cost); `not-reentrant`;
+    processing outside frame callbacks; `Operation.seq` readonly, with
+    processors keeping acknowledged seqs in their own state; and the
+    placement rule stated directly. New rules: `EventEmitter.on` and
+    `off.returns-this`, `View.dispose.idempotent`. The tests now check
+    what a change listener sees through queries, views made on a
+    non-empty model, tricky clientIds, real timers for `passive` and
+    `frames.complete`, and runs of 64 to 100 adds below one shape.
+    `OperationSink.enqueue.own-copy--shares-op` was removed: with `seq`
+    readonly, nothing changes an operation a processor shares, so sharing
+    it is no longer a fault.
 
 ## Acknowledgments
 

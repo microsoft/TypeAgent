@@ -61,6 +61,8 @@ interface Step {
   none: boolean;
   /** What the meddler did during this step, if anything. */
   meddled: "on" | "off" | null;
+  /** For on and off, whether the call returned the emitter. */
+  returnedThis: boolean;
 }
 
 const sameTokens = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => t === b[i]);
@@ -96,7 +98,9 @@ function run(make: () => EmitterSubject, opList: Op[], check: (s: Step) => void)
       removed[k] = true;
     }
   };
-  emitter.on("change", refListener).on("change", meddler);
+  // Not chained, so that on returning something else fails only returns-this.
+  emitter.on("change", refListener);
+  emitter.on("change", meddler);
   registered.push("ref", "meddler");
   for (const op of opList) {
     const registeredBefore = [...registered];
@@ -104,16 +108,17 @@ function run(make: () => EmitterSubject, opList: Op[], check: (s: Step) => void)
     meddled = null;
     let offEmpty = false;
     let none = false;
+    let returnedThis = true;
     switch (op.op) {
       case "change":
         change();
         break;
       case "on":
-        emitter.on("change", fns[op.k]);
+        returnedThis = emitter.on("change", fns[op.k]) === emitter;
         registered.push(op.k);
         break;
       case "off":
-        emitter.off("change", fns[op.k]);
+        returnedThis = emitter.off("change", fns[op.k]) === emitter;
         offEmpty = !unregister(op.k);
         removed[op.k] = true;
         break;
@@ -124,15 +129,17 @@ function run(make: () => EmitterSubject, opList: Op[], check: (s: Step) => void)
         // Removes the reference and the meddler and registers them again, so
         // that an emitter sometimes has no listeners at all, and the order
         // of registrations varies.
-        emitter.off("change", refListener).off("change", meddler);
+        emitter.off("change", refListener);
+        emitter.off("change", meddler);
         unregister("ref");
         unregister("meddler");
         none = registered.length === 0;
-        emitter.on("change", meddler).on("change", refListener);
+        emitter.on("change", meddler);
+        emitter.on("change", refListener);
         registered.push("meddler", "ref");
         break;
     }
-    check({ op, log: [...log], registered: registeredBefore, removed: [...removed], offEmpty, none, meddled });
+    check({ op, log: [...log], registered: registeredBefore, removed: [...removed], offEmpty, none, meddled, returnedThis });
   }
 }
 
@@ -173,6 +180,10 @@ export function eventEmitterContract(make: () => EmitterSubject): void {
       s.log.filter((u) => u === t).length === s.registered.filter((u) => u === t).length));
 
     rule("EventEmitter.off.removes-one", (s) => !s.removed.some(Boolean) || emitted(s));
+
+    rule("EventEmitter.on.returns-this", (s) => s.op.op !== "on" || s.returnedThis);
+
+    rule("EventEmitter.off.returns-this", (s) => s.op.op !== "off" || s.returnedThis);
 
     rule("EventEmitter.order", (s) => s.meddled !== null || emitted(s));
 

@@ -28,7 +28,8 @@ export type ViewBug =
   | "draws-after-dispose"      // a frame requested before dispose still draws
   | "viewport-read-requests"   // reading viewport requests a frame, to be safe
   | "viewport-zero"            // viewport reads as all zeros, a viewport never initialized
-  | "set-requests";            // setting the viewport requests a frame even when the value is unchanged
+  | "set-requests"             // setting the viewport requests a frame even when the value is unchanged
+  | "dispose-twice-throws";    // a second dispose throws, as a guard against misuse
 
 const identity: Viewport = { scale: 1, rotation: 0, tx: 0, ty: 0 };
 
@@ -88,6 +89,7 @@ export class TestShapeView extends Events<{ viewport: [Viewport] }> implements S
   }
 
   dispose(): void {
+    if (this.disposed && this.bug === "dispose-twice-throws") throw new Error("view already disposed");
     if (this.disposed) return;
     this.disposed = true;
     if (this.bug !== "dispose-keeps-listeners") this.model.off("change", this.onChange);

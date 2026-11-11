@@ -180,24 +180,28 @@ budget for model updates, a circle, and a canvas view that draws circles.
 - **Hidden:** `shapewriterkit.ts`, `adversaries/_shapeModel.ts`
 - **Imports:** `geometry.ts`, `shape.ts`, `shapeModel.ts`, `events.ts`
 - **Approach:** keep the shapes in a map by ID, and their z-order in a
-  structure that supports adding directly below a present shape. Index
-  each present shape in `locator` under its ID, and answer `inRect` and
-  `atPoint` with the locator's queries. The locator starts empty and
-  belongs to the collection from then on; anything else is outside the
-  rules.
-- **Costs:** `get` and `size` take constant time; `add` and `compareZ`
-  take constant or logarithmic time (amortized is fine); `remove` takes
-  time in proportion to the number of IDs listed, plus the locator's;
-  `forEach` in proportion to the number of shapes.
+  structure that adds directly below a present shape in amortized
+  logarithmic time whatever the pattern of adds: a balanced tree in
+  z-order with subtree sizes and parent links (as a merge tree is), or
+  order-maintenance keys that relabel only a small range around a gap
+  that has filled. Renumbering every key when a gap fills breaks the
+  cost: remote adds arriving under one pending local add fill the same
+  gap again and again. Index each present shape in `locator` under its
+  ID, and answer `inRect` and `atPoint` with the locator's queries. The
+  locator starts empty and belongs to the collection from then on;
+  anything else is outside the rules.
+- **Costs** (`ShapeCollectionWriter.log-amortized`): `get` and `size` take
+  constant time; `add` and `compareZ` amortized logarithmic time;
+  `remove` amortized logarithmic time per ID listed, plus the locator's;
+  `forEach` time in proportion to the number of shapes.
 - **Decided behavior:**
   - `add` has the locator's `in-range` requirement, as its own rule says,
     so it need not handle a locator that rejects a shape.
   - `on` and `off` follow `events.ts`; change is emitted as
     `ShapeCollectionWriter.notifies` says. A listener that throws is
     outside the rules.
-- **Left to the implementer:** how z-order is stored (for example order
-  keys renumbered when they run out, or a balanced tree), as long as the
-  costs hold.
+- **Left to the implementer:** which of those structures, or another,
+  as long as the costs hold.
 - **Contract:** `shapeModel.contract.ts` (`shapeCollectionWriterContract`,
   which also runs `eventEmitter.contract.ts` on the change event), wired in
   `mapShapeCollection.test.ts` over `ListIndex` (`modelkit.ts`).
@@ -217,22 +221,29 @@ budget for model updates, a circle, and a canvas view that draws circles.
     neither applies anything.
   - `process` applies what is queued, through the writer, and is the only
     thing that calls the writer's `add` and `remove`.
-  - An add goes directly below the lowest present shape whose add comes
-    later in the order `ShapeMessageProcessor` describes (acknowledged
-    adds by seq, then pending local adds by clientSeq), or on top if none
-    does. A remove calls the writer's `remove` once with the listed IDs.
-    A clear removes, in one call, the present shapes whose adds it knew.
-  - The acknowledgment of a local operation that has been applied records
-    its seq and applies nothing.
+  - A local add goes on top. A remote add goes directly below the lowest
+    shape of a pending local add, or on top if none is pending: the order
+    `ShapeMessageProcessor` describes comes to this. Keep track of that
+    lowest pending shape rather than searching for it. A remove calls the
+    writer's `remove` once with the listed IDs. A clear removes, in one
+    call, the present shapes whose adds it knew.
+  - The acknowledgment of a local operation records its seq in the
+    processor's own state, and applies nothing. Operations are never
+    changed.
   - `model` is a read-only facet of the writer: an object with only
     `ShapeCollection`'s members, delegating to the writer. Never the writer
     itself.
   - The writer starts empty and belongs to the processor from then on.
 - **Decided behavior:**
-  - `newShapeId` returns IDs that include the `clientId`, so that IDs from
-    different clients never collide.
+  - `newShapeId` returns `` `${clientId}#${n}` ``, with n counting from 0
+    on each processor. The counter follows the last `#`, so IDs from
+    different clientIds never collide, whatever characters they contain.
   - `process` never schedules itself, and nothing else in the class does
     (`MessageProcessor.passive`).
+- **Costs** (`ShapeMessageProcessor.log-amortized`): `process` takes
+  amortized logarithmic time per operation, plus time in proportion to
+  the shapes a clear removes; `local.enqueue`, `remote.enqueue` and
+  `newShapeId` take constant time, apart from copying the operation.
 - **Left to the implementer:** how pending operations and each shape's add
   are kept, and the order in which `process` takes the two queues, as long
   as a local operation whose acknowledgment arrives in the same call is
@@ -278,7 +289,28 @@ before the stroke ends sends nothing and isn't measured.
 
 Print each measurement's median time as a fraction of the budget, marking
 any that exceeds it. Record the results in the Cost fields as "Measured
-numbers" describes. Exceeding the budget isn't a test failure; report it.
+numbers" describes. Exceeding the frame budget isn't a test failure;
+report it.
+
+Also measure the two `log-amortized` budgets in `shapeModel.ts`, labeled
+with their IDs, `ShapeCollectionWriter.log-amortized` and
+`ShapeMessageProcessor.log-amortized`. For each pattern below, time a
+batch of operations on a `MapShapeCollection` (over `QuadTreeLocator`)
+holding 1,000 shapes, and on one holding 100,000, and print the time per
+operation at 100,000 divided by the time at 1,000:
+
+- adds, each directly below the same shape;
+- adds, each directly below the one added before it;
+- adds at the bottom;
+- adds below random present shapes;
+- removes of random present shapes, mixed with adds;
+- `compareZ` on random pairs;
+- through a `ShapeProcessor` with the stand-in infrastructure: remote
+  adds arriving while one local add is pending, then local adds.
+
+Logarithmic growth gives a ratio of about 2, and linear growth about 100.
+Unlike the frame budget, a ratio above 4 is a failure: print it and make
+`bench.ts` exit with a nonzero status.
 
 `ShapeId` is now a string (`shape.ts`); the locator measurements must use
 string IDs too, and otherwise stay as they are.

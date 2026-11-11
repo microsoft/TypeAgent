@@ -102,15 +102,19 @@ export function makeFixture(makers: AppMakers, settings: CirclesSettings): AppFi
   };
   // As a display would: after each action, process what it sent and run
   // the frames anything asks for. The action must have sent everything
-  // before it returned (frames.complete), so processing again after the
-  // frames changes nothing.
+  // before it returned (frames.complete), so running frames and processing
+  // again, then or later, changes nothing.
+  let settledModel = model();
+  const recheck = async () => {
+    runFrames();
+    await processor.process();
+    if (!deepEqual(model(), settledModel)) throw new Error("frames.complete: the model changed after an action's operations were processed");
+  };
   const settle = async (action: () => void) => {
     action();
     await processor.process();
-    const before = model();
-    runFrames();
-    await processor.process();
-    if (!deepEqual(model(), before)) throw new Error("frames.complete: the model changed after an action's operations were processed");
+    settledModel = model();
+    await recheck();
   };
   runFrames();
   return {
@@ -133,6 +137,7 @@ export function makeFixture(makers: AppMakers, settings: CirclesSettings): AppFi
           break;
       }
     }),
+    settled: recheck,
     painted: (p) => painted(p),
     dispose: () => {
       app.dispose();

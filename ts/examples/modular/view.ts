@@ -39,7 +39,7 @@ export interface View<M extends ViewModel> extends FrameHandler, EventEmitter<{ 
    *
    * @deferred set-redraws  Setting a different viewport requests a frame, and that frame draws through the new viewport.
    *   when: a ShapeView supports viewports other than the identity.
-   *   how: shapeView.contract.ts gains a step that sets a random viewport (scale 0.5 to 2, rotation a multiple of 90 degrees, whole-number translation, so mapping is exact) and checks that a frame is requested and that afterward each sample point p shows what the model shows at the viewport's inverse of p; with an adversary that draws through the old viewport.
+   *   how: shapeView.contract.ts gains a step that sets a random viewport (scale 0.5, 1 or 2, rotation a multiple of 90 degrees, whole-number translation, so mapping is exact) and checks that a frame is requested and that afterward each sample point p shows what the model shows at the viewport's inverse of p; with an adversary that draws through the old viewport.
    * @ensures set-equal  Setting a viewport equal to the current one, field by field, requests no frame and emits nothing.
    * @deferred set-emits  Setting a different viewport emits viewport with the new value before the setter returns.
    *   when: a ShapeView supports viewports other than the identity.
@@ -49,8 +49,9 @@ export interface View<M extends ViewModel> extends FrameHandler, EventEmitter<{ 
 
   /**
    * Ends the view: removes its listener from the model, and requests, draws
-   * and emits nothing more. Calling it again does nothing.
+   * and emits nothing more.
    *
+   * @ensures idempotent  Calling it again does nothing: it doesn't throw, and changes no listener, frame request or drawing.
    * @ensures detaches  Afterward, the view has no listeners on the model, and model changes request no frame.
    * @ensures inert  Afterward, frame() draws nothing, including a frame requested before dispose.
    */

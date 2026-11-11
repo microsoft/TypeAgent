@@ -9,7 +9,8 @@
 // the app sent and runs the frames the app asks for, as a display would,
 // then processes again, and throws, with the rule's ID in its message, if
 // the model changed after the first processing. A test of that name runs
-// random sequences of actions.
+// random sequences of actions, and after each waits for a timer and asks
+// the fixture to check again, so that a send deferred to a timer is seen.
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,6 +25,12 @@ import { deepEqual } from "./rules.ts";
 export interface AppFixture {
   /** Does what the user does, with the app's controls, then processes what the app sent and runs the frames it asks for. */
   act(action: Action): Promise<void>;
+  /**
+   * Runs the frames the app asks for and processes anything it has sent
+   * since its last action was settled; throws, with frames.complete in the
+   * message, if that changes the model.
+   */
+  settled(): Promise<void>;
   /** What the drawing shows at p, in the drawing's coordinates. */
   painted(p: Point): Color;
   dispose(): void;
@@ -76,7 +83,11 @@ export function scenarioContract(make: () => AppFixture, reference?: () => AppFi
     test("frames.complete", async () => {
       await fc.assert(fc.asyncProperty(fc.array(actionArb, { minLength: 1, maxLength: 25 }), async (actions) => {
         const app = make();
-        for (const a of actions) await app.act(a);
+        for (const a of actions) {
+          await app.act(a);
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          await app.settled();
+        }
         app.dispose();
       }), { numRuns: 50 });
     });

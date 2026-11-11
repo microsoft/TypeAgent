@@ -60,7 +60,7 @@ export class RefShapeProcessor implements ShapeMessageProcessor {
     const mine = op.clientId === this.clientId ? this.pending.get(op.clientSeq) : undefined;
     if (mine) {
       // The acknowledgment of an applied local operation: record its seq only.
-      mine.seq = op.seq;
+      if (mine.type === "add") this.adds.set(mine.id, { ...mine, seq: op.seq });
       this.pending.delete(op.clientSeq);
       return;
     }

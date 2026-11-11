@@ -14,7 +14,9 @@ export type EventsBug =
   | "off-removes-first"          // off removes the earliest registration rather than the most recent
   | "off-absent-removes-another" // off for a listener with no registration removes the most recent one of any listener
   | "emit-live-list"             // an emit walks the live list, so listeners added during it are called and removed ones aren't
-  | "emit-newest-first";         // an emit calls the most recent registration first
+  | "emit-newest-first"          // an emit calls the most recent registration first
+  | "on-returns-nothing"         // on returns undefined, so calls can't be chained
+  | "off-returns-nothing";       // off returns undefined
 
 export class TestEvents implements EventEmitter<{ change: [] }> {
   private listeners: (() => void)[] = [];
@@ -27,10 +29,15 @@ export class TestEvents implements EventEmitter<{ change: [] }> {
   on(_: "change", listener: () => void): this {
     if (this.bug === "on-dedupes" && this.listeners.includes(listener)) return this;
     this.listeners.push(listener);
-    return this;
+    return this.bug === "on-returns-nothing" ? (undefined as unknown as this) : this;
   }
 
   off(_: "change", listener: () => void): this {
+    if (this.bug === "off-returns-nothing") {
+      const i = this.listeners.lastIndexOf(listener);
+      if (i >= 0) this.listeners.splice(i, 1);
+      return undefined as unknown as this;
+    }
     if (this.bug === "off-ignored") return this;
     if (this.bug === "off-removes-all") {
       this.listeners = this.listeners.filter((l) => l !== listener);

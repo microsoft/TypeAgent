@@ -41,6 +41,8 @@ const samples: Point[] = Array.from({ length: width * height }, (_, i) => ({ x: 
 const color: fc.Arbitrary<Color> = fc.constantFrom(
   { r: 255, g: 0, b: 0, a: 1 }, { r: 0, g: 128, b: 255, a: 1 }, { r: 20, g: 200, b: 60, a: 1 },
   { r: 0, g: 0, b: 0, a: 0.5 }, { r: 255, g: 255, b: 0, a: 0.25 }, { r: 90, g: 30, b: 200, a: 0.75 },
+  // Alphas with more digits than a short format keeps.
+  { r: 10, g: 20, b: 30, a: 1 / 3 }, { r: 200, g: 100, b: 50, a: 0.123456789 },
 );
 
 type Op =
@@ -65,13 +67,28 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
   { weight: 1, arbitrary: fc.constant<Op>({ op: "read" }) },
 );
 
-/** Ops; a third of sequences dispose of the view partway. */
+const circleArb = fc.record({
+  center: fc.record({ x: fc.integer({ min: -2, max: width + 2 }), y: fc.integer({ min: -2, max: height + 2 }) }),
+  radius: fc.integer({ min: 1, max: 5 }),
+  color,
+});
+
+/**
+ * Circles already in the model when the view is made (none in about half
+ * of sequences), then ops; a third of sequences dispose of the view
+ * partway, and some of those dispose twice.
+ */
 const sequence = fc.record({
+  prefill: fc.option(fc.array(circleArb, { minLength: 1, maxLength: 4 }), { nil: undefined }),
   ops: fc.array(opArb, { minLength: 1, maxLength: 30, size: "max" }),
   disposeAt: fc.option(fc.nat({ max: 29 }), { freq: 2 }),
-}).map(({ ops, disposeAt }) =>
-  disposeAt === null ? ops : [...ops.slice(0, disposeAt), { op: "dispose" } as Op, ...ops.slice(disposeAt)]);
-type Sequence = Op[];
+  again: fc.boolean(),
+}).map(({ prefill, ops, disposeAt, again }) => ({
+  prefill: prefill ?? [],
+  ops: disposeAt === null ? ops
+    : [...ops.slice(0, disposeAt), { op: "dispose" } as Op, ...(again ? [{ op: "dispose" } as Op] : []), ...ops.slice(disposeAt)],
+}));
+type Sequence = { prefill: { center: Point; radius: number; color: Color }[]; ops: Op[] };
 
 interface Step {
   op: Op;
@@ -105,16 +122,21 @@ const sameColors = (a: Color[], b: Color[]) => a.every((c, i) => deepEqual(c, b[
 /** Runs a sequence against a fresh view, calling check after each step. */
 function run(make: MakeShapeView, seq: Sequence, check: (s: Step) => void): void {
   const writer = new RefShapeWriter();
+  const made: ShapeId[] = [];
+  for (const c of seq.prefill) {
+    const id = `v${made.length}` as ShapeId;
+    writer.add(id, testCircle(c));
+    made.push(id);
+  }
   const model = readFacet(writer);
   const scheduler = new ManualScheduler();
   const { view, painted } = make(model, scheduler, width, height);
   const look = () => samples.map(painted);
   const counts = () => writer.listenerCount("change");
-  const made: ShapeId[] = [];
   let disposed = false;
   let dirty = true;
   let shown = look();
-  for (const op of seq) {
+  for (const op of seq.ops) {
     const before = shown;
     const requestedBefore = scheduler.isRequested(view);
     const listenersBefore = counts();
@@ -167,6 +189,7 @@ function labelsOf(make: MakeShapeView, seq: Sequence): Set<string> {
       seen.add("circle partly off the surface");
     }
     if (s.op.op === "dispose" && s.requestedBefore) seen.add("dispose with a frame pending");
+    if (s.op.op === "dispose" && s.disposed) seen.add("dispose twice");
     if (s.disposed && s.changing) seen.add("edit after dispose");
     if (s.disposed && s.op.op === "frame") seen.add("frame after dispose");
     if (s.disposed) return;
@@ -194,10 +217,18 @@ export function shapeViewContract(make: MakeShapeView): void {
     });
 
   describe("ShapeView", () => {
+    // A view made on a model that already has circles: its first frame shows them.
     test("ShapeView.first-frame", () => {
-      const scheduler = new ManualScheduler();
-      const { view } = make(readFacet(new RefShapeWriter()), scheduler, width, height);
-      assert.ok(scheduler.isRequested(view));
+      fc.assert(fc.property(fc.array(circleArb, { maxLength: 4 }), (circles) => {
+        const writer = new RefShapeWriter();
+        circles.forEach((c, i) => writer.add(`f${i}` as ShapeId, testCircle(c)));
+        const model = readFacet(writer);
+        const scheduler = new ManualScheduler();
+        const { view, painted } = make(model, scheduler, width, height);
+        if (!scheduler.isRequested(view)) return false;
+        scheduler.runFrame();
+        return sameColors(samples.map(painted), expected(model));
+      }));
     });
 
     // ShapeView has only the identity viewport, so the equal value is a copy of it.
@@ -229,6 +260,9 @@ export function shapeViewContract(make: MakeShapeView): void {
       return s.listenersAfter === 0 && (!s.changing || s.requestedAfter === s.requestedBefore);
     });
 
+    rule("View.dispose.idempotent", (s) => s.op.op !== "dispose" || !s.disposed ||
+      (sameColors(s.after, s.before) && s.requestedAfter === s.requestedBefore && s.listenersAfter === s.listenersBefore));
+
     rule("View.dispose.inert", (s) => !s.disposed || sameColors(s.after, s.before));
 
     test("ShapeView input coverage", () => {
@@ -239,7 +273,7 @@ export function shapeViewContract(make: MakeShapeView): void {
 }
 
 const MINIMUMS: Record<string, number> = {
-  "add below another circle": 0.32, "circle partly off the surface": 0.41, "circles of different colors overlap": 0.17,
+  "add below another circle": 0.32, "dispose twice": 0.04, "circle partly off the surface": 0.41, "circles of different colors overlap": 0.17,
   "dispose with a frame pending": 0.16, "edit after dispose": 0.1,
   "frame after dispose": 0.1, "frame with nothing changed": 0.24, "removal": 0.25,
   "translucent circle over another": 0.12,

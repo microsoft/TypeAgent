@@ -49,7 +49,9 @@ export interface DataModel {
  * and its place among that client's operations. seq is its place in the
  * order the collaboration protocol assigns. A local operation has seq -1
  * (pending) until it is acknowledged, when it appears in the remote queue
- * with the same clientId and clientSeq and its assigned seq.
+ * with the same clientId and clientSeq and its assigned seq. Operations
+ * are never changed: a processor records an acknowledged seq in its own
+ * state.
  *
  * refSeq is what the client knew when it made the operation: the seq of
  * the last remote operation it had applied, or -1 if none. The client also
@@ -68,7 +70,7 @@ export interface Operation {
     readonly clientId: string;
     readonly clientSeq: number;
     readonly refSeq: number;
-    seq: number;
+    readonly seq: number;
 }
 
 /**
@@ -133,16 +135,17 @@ export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp
  * @requires infrastructure-only  Only the message infrastructure enqueues and calls process; controllers send through a LocalSend.
  * @requires remote-seq  Each remote operation has an assigned seq, greater than any earlier remote operation's.
  * @requires unique-identity  No two operations share a clientId and clientSeq, except a local operation and its acknowledgment.
+ * @requires not-reentrant  While a call to process is pending, nothing enqueues on either queue or calls process again.
  * @ensures stamps  enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
  * @deferred snapshot  A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules.
  *   when: the collaboration protocol, or saving and loading a model, is specified.
  *   how: the processor contract gains a factory that takes a snapshot; it checks that a processor loaded from a snapshot taken after some operations then reaches the same model as one that applied those operations, given the same later remote operations, and that stamps' refSeq starts at the snapshot's seq; with adversaries that start refSeq at -1 and that reuse a snapshot ID.
- * @ensures sole-writer  The model changes only during process: reading it, and enqueuing, change nothing and emit none of its events.
+ * @ensures sole-writer  The model changes only during process: reading it changes nothing and emits none of its events.
  * @ensures passive  Never calls process itself: until the infrastructure calls it, queued operations stay unapplied.
  * @ensures enqueue-defers  enqueue on either queue doesn't change the model or emit any of the model's events before it returns.
  * @abstract local-order  Local operations are applied in the order they were enqueued.
  * @abstract remote-order  Remote operations are applied in the order they were enqueued.
- * @abstract once  Each operation is applied once: the acknowledgment of a local operation that was already applied, recognized by its clientId and clientSeq, replaces the pending seq with the assigned one and isn't applied again.
+ * @abstract once  Each operation is applied once: the acknowledgment of a local operation, recognized by its clientId and clientSeq, gives it its assigned seq and isn't applied as another operation, whether it arrives before or after the local operation is applied.
  * @abstract atomic  A change listener never sees part of an operation's effect: each change event is emitted after the operation it reports is fully applied.
  * @ensures converges  Processors whose remote queues deliver the same operations in the same order reach equal models once each one's local operations are acknowledged and process has settled, whatever the interleaving of their local and remote queues.
  */

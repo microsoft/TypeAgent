@@ -37,7 +37,7 @@ export interface ShapeView extends View<ShapeCollection> {
    * Draws the model as it is now.
    *
    * @ensures paints  Afterward, each point of the surface that is on no circle's edge shows the model's circles containing it, composited bottom to top, and nothing else.
-   *   (p: Point) => implies(circles(this.model).every((c) => distToPolyline(p, [c.center]) !== c.radius),
+   *   (p: Point) => implies(onSurface(this, p) && circles(this.model).every((c) => distToPolyline(p, [c.center]) !== c.radius),
    *     deepEqual(painted(this, p), over(circles(this.model).filter((c) => c.contains(p)).map((c) => c.color))))
    */
   frame(timeMs: number): void;

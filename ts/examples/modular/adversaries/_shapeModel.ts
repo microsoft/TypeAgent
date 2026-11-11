@@ -123,7 +123,6 @@ export type ProcessorBug =
   | "pending-minus-two"   // stamps a pending seq of -2
   | "client-seq-from-minus-one" // clientSeq starts at -1
   | "refseq-minus-two"    // refSeq starts at -2 before any remote operation
-  | "shares-op"           // returns its own stamped operation, which acknowledging later changes
   | "marks-remote"        // returns the queued remote operation itself, and marks it when applying it
   | "applies-at-once"     // enqueue on local applies the operation immediately
   | "applies-on-read"     // reading the model first applies whatever is queued
@@ -204,7 +203,7 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
     }
     if (this.bug === "applies-at-once") this.drain();
     if (this.bug === "self-schedules") setImmediate(() => void this.process());
-    return this.bug === "shares-op" ? op : { ...op };
+    return { ...op };
   }
 
   private enqueueRemote(op: ShapeOp): ShapeOp {
@@ -217,7 +216,7 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
     this.lastSeq = op.seq;
     const mine = op.clientId === this.clientId ? this.pending.get(op.clientSeq) : undefined;
     if (mine) {
-      mine.seq = op.seq;
+      if (mine.type === "add") this.adds.set(mine.id, { ...mine, seq: op.seq });
       this.pending.delete(op.clientSeq);
       if (this.bug === "ack-reapplies" && mine.type === "add" && this.writer.get(mine.id)) {
         this.writer.remove([mine.id]);

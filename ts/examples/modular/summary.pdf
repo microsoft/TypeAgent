@@ -445,7 +445,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 18 0 R /Resources << /Font << /H 3 0 R /HB 4 0 R /HO 5 0 R /C 6 0 R >> >> >>
 endobj
 18 0 obj
-<< /Length 8679 >>
+<< /Length 8691 >>
 stream
 BT /HB 14.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 36.00 562.56 Tm (Interface summary) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 163.27 562.56 Tm (Page 6 of 6) Tj ET
@@ -493,7 +493,7 @@ BT /H 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 77.68 178.00 Tm (ShapeCollection, DataM
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 166.00 Tm (add\(id: ShapeId, shape: S, below?: ShapeId\): void) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 154.00 Tm (Adds shape under id: directly below the shape below, or on top when) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 142.00 Tm (below is undefined.) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 130.00 Tm (remove\(ids: readonly ShapeId[]\): number) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 42.00 130.00 Tm (remove\(listed: readonly ShapeId[]\): number) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 118.00 Tm (Removes every listed shape that is present; repeats and absent IDs are) Tj ET
 BT /H 10.00 Tf 0.36 0.39 0.45 rg 1 0 0 1 54.00 106.00 Tm (ignored.) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 507.68 Tm (Operation) Tj ET
@@ -506,7 +506,7 @@ BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 459.20 Tm (readonly type: string
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 447.20 Tm (readonly clientId: string) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 435.20 Tm (readonly clientSeq: number) Tj ET
 BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 423.20 Tm (readonly refSeq: number) Tj ET
-BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (seq: number) Tj ET
+BT /C 10.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 414.00 411.20 Tm (readonly seq: number) Tj ET
 BT /HB 12.00 Tf 0.11 0.13 0.18 rg 1 0 0 1 408.00 389.28 Tm (RemoveShapes) Tj ET
 BT /H 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 500.14 389.28 Tm (extends) Tj ET
 BT /C 10.00 Tf 0.13 0.36 0.56 rg 1 0 0 1 537.94 389.28 Tm (Operation) Tj ET
@@ -570,5 +570,5 @@ xref
 trailer
 << /Size 19 /Root 1 0 R >>
 startxref
-46517
+46529
 %%EOF

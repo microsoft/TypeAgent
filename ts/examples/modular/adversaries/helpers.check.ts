@@ -29,6 +29,8 @@ import { TestShapeProcessor, TestShapeWriter } from "./_shapeModel.ts";
 import { eventEmitterContract } from "../eventEmitter.contract.ts";
 import { Events } from "../eventkit.ts";
 import { makeTestEvents } from "./_events.ts";
+import { FacetProcessor, KeyedWriter } from "./_1b-shapeModel.ts";
+import { makeDirtyView } from "./_1b-view.ts";
 
 shapeLocatorContract(() => new QuadTree("none"));
 circleContract(makeTestCircle());
@@ -81,3 +83,10 @@ shapeCollectionWriterContract(() => new RefShapeWriter());
 shapeMessageProcessorContract((id) => new RefShapeProcessor(id));
 shapeCollectionWriterContract(() => new TestShapeWriter());
 shapeMessageProcessorContract((id) => new TestShapeProcessor(id));
+
+// The phase 1b helpers: a writer with order keys over a locator, a processor
+// with its own facet, over both writers, and a view that draws only when dirty.
+shapeCollectionWriterContract(() => new KeyedWriter());
+shapeMessageProcessorContract((id) => new FacetProcessor(id));
+shapeMessageProcessorContract((id) => new FacetProcessor(id, "none", new KeyedWriter()));
+shapeViewContract(makeDirtyView());

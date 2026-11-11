@@ -23,16 +23,20 @@ export type EventMap = Record<string, unknown[]>;
  */
 export interface EventEmitter<Events extends EventMap> {
   /**
-   * Registers listener for event. Returns this.
+   * Registers listener for event.
    *
+   * @ensures returns-this  Returns this.
+   *   result === this
    * @ensures notified  Each emit of the event calls the listener once for each of its registrations, synchronously, before the emit returns.
    */
   on<E extends keyof Events & string>(event: E, listener: (...args: Events[E]) => void): this;
 
   /**
    * Removes the most recent registration of listener for event; does
-   * nothing if it has none. Returns this.
+   * nothing if it has none.
    *
+   * @ensures returns-this  Returns this.
+   *   result === this
    * @ensures removes-one  Removes exactly one registration, the most recent, when there is one, and nothing otherwise.
    */
   off<E extends keyof Events & string>(event: E, listener: (...args: Events[E]) => void): this;

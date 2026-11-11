@@ -137,13 +137,25 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   let nextSeq = 0;
 
   /** Runs a step that isn't process, checking that no model changes during it. */
+  /** Reads c's model, reporting sole-writer if reading it emits the model's events or changes it; returns the snapshot and whether it held. */
+  const read = (c: Client<TR, TOp>, when: string) => {
+    const events = c.events;
+    const first = snap(c);
+    const quiet = c.events === events && deepEqual(snap(c), first);
+    if (!quiet) violation("MessageProcessor.sole-writer", `reading ${c.id}'s model changed it, ${when}`);
+    return { snapshot: first, quiet };
+  };
+
+  /** Runs an enqueue step, checking that no model changes during it, and that reading a model changes nothing. */
   const quietly = async (what: string, action: () => void) => {
-    const before = everyone.map((c) => [snap(c), c.events] as const);
+    const before = everyone.map((c) => [read(c, `before ${what}`).snapshot, c.events] as const);
     action();
+    const during = everyone.map((c) => c.events);
     everyone.forEach((c, i) => {
-      if (!deepEqual(snap(c), before[i][0]) || c.events !== before[i][1]) {
-        violation("MessageProcessor.sole-writer", `${c.id}'s model changed during ${what}`);
-        if (what === "enqueue") violation("MessageProcessor.enqueue-defers", `${c.id}'s model changed during enqueue`);
+      const after = read(c, `after ${what}`);
+      // A read that changed the model is sole-writer's fault, not the enqueue's.
+      if (during[i] !== before[i][1] || (after.quiet && !deepEqual(after.snapshot, before[i][0]))) {
+        violation("MessageProcessor.enqueue-defers", `${c.id}'s model changed during ${what}`);
       }
     });
     if (flush) {
@@ -194,7 +206,7 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
     for (const op of c.delivered.splice(0)) {
       c.lastApplied = op.seq;
       const own = op.clientId === c.id ? c.applied.find((a) => a.clientSeq === op.clientSeq && a.clientId === c.id) : undefined;
-      if (own) own.seq = op.seq;
+      if (own) c.applied[c.applied.indexOf(own)] = { ...own, seq: op.seq };
       else c.applied.push(op);
       newly.push(op);
     }
@@ -206,6 +218,17 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
     if (step.do === "form") await form(c, step.pick);
     else if (step.do === "sequence") await sequence(c);
     else await processOn(c);
+  }
+  if (flush) {
+    // A processor that schedules its own process on a timer, such as the
+    // next frame's, shows it only after real time passes.
+    const settled = everyone.map((c) => [snap(c), c.events] as const);
+    await new Promise<void>((resolve) => setTimeout(resolve, 40));
+    everyone.forEach((c, i) => {
+      if (!deepEqual(snap(c), settled[i][0]) || c.events !== settled[i][1]) {
+        violation("MessageProcessor.passive", `${c.id}'s model changed with no process call, within 40 ms`);
+      }
+    });
   }
   while (clients.some((c) => c.outbox.length > 0)) {
     for (const c of clients) await sequence(c);

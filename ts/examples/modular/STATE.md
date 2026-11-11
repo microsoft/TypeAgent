@@ -6,7 +6,9 @@ deferred.
 
 ## Where things stand
 
-- **The data model** (2026-11-11; the last entry under "Status" in
+- **Phase 1b ran on round 4** (2026-11-11), and its findings are
+  applied; see the last entry under "Status" in `moduleTooling.md`.
+- **The data model** (2026-11-11; the entry before it under "Status" in
   `moduleTooling.md`):
   - `dataModel.ts` and `shapeModel.ts` are interface files. A model's
     write side is held only by its processor; the message infrastructure
@@ -54,8 +56,8 @@ deferred.
   was removed (no rules, no contract, no implementation). "Shapes are
   immutable values" became the rule `Shape.immutable`, with a test in
   `shape.contract.ts` and an adversary.
-- **Phase 1 waits for the human's review** of rounds 4 and 6, and of
-  round 5 as it now stands (scenarios only).
+- **Phase 1 waits for the human's review** of round 6, and of round 5 as
+  it now stands (scenarios only). Round 4 was reviewed on 2026-11-11.
 - **Phase 1b has not run on rounds 5 and 6.** It was deferred until the
   device context (the platform subsets) is discussed. When it runs, it
   challenges the blueprint only; `canvas.ts` and `dom.ts` are out of
@@ -66,14 +68,14 @@ deferred.
   isn't accounted for.
 - **Coordinate spaces** (`geometry.ts`): canonical, window and view.
   Layout objects and distributed events are in window coordinates.
-- **Catalog:** 30 interfaces, 127 rules: 95 tested, 6 abstract, 1 budget,
-  5 deferred, 20 caller obligations.
+- **Catalog:** 30 interfaces, 133 rules: 98 tested, 6 abstract, 3 budgets,
+  5 deferred, 21 caller obligations.
 - **Phase 2 has not run.** `node task.ts list` shows the tasks and waves:
   - wave 1: tasks 8, 9, 11, 12, 16 and 19;
   - wave 2: task 10, which needs tasks 8 and 9.
-- **Adversaries:** 140 in all, every one caught on seeds 1 to 3.
-  `node adversaries/helpers.check.ts` passes 277 tests. A full run takes
-  about 25 seconds per seed.
+- **Adversaries:** 155 in all, every one caught on seeds 1 to 3.
+  `node adversaries/helpers.check.ts` passes 400 tests. A full run takes
+  about 45 seconds per seed, nearly 40 of them for `helpers.check.ts`.
 - **The EventDistributor observer table has one open row:** nothing says
   that reading `region` or calling `locate` leaves the registrations as
   they were (`observer-tables.md`). It's left for the human to decide.
@@ -111,8 +113,7 @@ decision.
 
 ## Deferred
 
-- **Phase 1b** on the data model (round 4 as rewritten), and on rounds 5
-  and 6 after the device-context discussion.
+- **Phase 1b** on rounds 5 and 6, after the device-context discussion.
 - **Phase 2:** rounds 3 to 6, wave 1 then wave 2.
 - **The message infrastructure:** the interface that owns a processor,
   with `localSend` (`LocalSend` is its agreed part) and `OperationQueue`.

@@ -196,9 +196,9 @@ classDiagram
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `frames.complete` | ensures | Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model. | tested | 2 |
-| `frames.processed-before-frame` | deferred | The message infrastructure processes what an input event's handler sent before the next frame draws, so that frames.complete holds on every platform. | deferred: when the message infrastructure is specified. |  |
-| `frames.fraction-of-frame` | budget | Sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: not measured yet |  |
+| `frames.complete` | ensures | Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model. | tested | 3 |
+| `frames.processed-before-frame` | deferred | The message infrastructure processes what an input event's handler sent after the handler returns and before the next frame begins, never inside a frame callback, so that the first frame after the event shows it and frames.complete holds on every platform. | deferred: when the message infrastructure is specified. |  |
+| `frames.fraction-of-frame` | budget | Forming (including any query of the model), sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: not measured yet |  |
 
 ## EventEmitter
 
@@ -208,7 +208,9 @@ classDiagram
 |---|---|---|---|---|
 | `EventEmitter.order` | ensures | An emit calls its listeners in the order they were registered. | tested | 1 |
 | `EventEmitter.snapshot` | ensures | An emit calls the listeners registered when it started: a listener added during the emit isn't called by it, and one removed during it still is. | tested | 1 |
+| `EventEmitter.on.returns-this` | ensures | Returns this. | tested | 1 |
 | `EventEmitter.on.notified` | ensures | Each emit of the event calls the listener once for each of its registrations, synchronously, before the emit returns. | tested | 2 |
+| `EventEmitter.off.returns-this` | ensures | Returns this. | tested | 1 |
 | `EventEmitter.off.removes-one` | ensures | Removes exactly one registration, the most recent, when there is one, and nothing otherwise. | tested | 4 |
 
 ## Point
@@ -385,14 +387,15 @@ No rules of its own.
 | `MessageProcessor.infrastructure-only` | requires | Only the message infrastructure enqueues and calls process; controllers send through a LocalSend. | caller's obligation |  |
 | `MessageProcessor.remote-seq` | requires | Each remote operation has an assigned seq, greater than any earlier remote operation's. | caller's obligation |  |
 | `MessageProcessor.unique-identity` | requires | No two operations share a clientId and clientSeq, except a local operation and its acknowledgment. | caller's obligation |  |
+| `MessageProcessor.not-reentrant` | requires | While a call to process is pending, nothing enqueues on either queue or calls process again. | caller's obligation |  |
 | `MessageProcessor.stamps` | ensures | enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
 | `MessageProcessor.snapshot` | deferred | A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
-| `MessageProcessor.sole-writer` | ensures | The model changes only during process: reading it, and enqueuing, change nothing and emit none of its events. | tested | 1 |
-| `MessageProcessor.passive` | ensures | Never calls process itself: until the infrastructure calls it, queued operations stay unapplied. | tested | 1 |
+| `MessageProcessor.sole-writer` | ensures | The model changes only during process: reading it changes nothing and emits none of its events. | tested | 1 |
+| `MessageProcessor.passive` | ensures | Never calls process itself: until the infrastructure calls it, queued operations stay unapplied. | tested | 2 |
 | `MessageProcessor.enqueue-defers` | ensures | enqueue on either queue doesn't change the model or emit any of the model's events before it returns. | tested | 1 |
 | `MessageProcessor.local-order` | abstract | Local operations are applied in the order they were enqueued. | abstract: refined by `ShapeMessageProcessor.add-on-z` |  |
 | `MessageProcessor.remote-order` | abstract | Remote operations are applied in the order they were enqueued. | abstract: refined by `ShapeMessageProcessor.add-on-z` |  |
-| `MessageProcessor.once` | abstract | Each operation is applied once: the acknowledgment of a local operation that was already applied, recognized by its clientId and clientSeq, replaces the pending seq with the assigned one and isn't applied again. | abstract: refined by `ShapeMessageProcessor.ack-keeps-z` |  |
+| `MessageProcessor.once` | abstract | Each operation is applied once: the acknowledgment of a local operation, recognized by its clientId and clientSeq, gives it its assigned seq and isn't applied as another operation, whether it arrives before or after the local operation is applied. | abstract: refined by `ShapeMessageProcessor.ack-keeps-z` |  |
 | `MessageProcessor.atomic` | abstract | A change listener never sees part of an operation's effect: each change event is emitted after the operation it reports is fully applied. | abstract: refined by `ShapeMessageProcessor.one-change` |  |
 | `MessageProcessor.converges` | ensures | Processors whose remote queues deliver the same operations in the same order reach equal models once each one's local operations are acknowledged and process has settled, whatever the interleaving of their local and remote queues. | tested | 1 |
 
@@ -407,7 +410,7 @@ No rules of its own.
 | `ShapeCollection.get-agrees` | invariant | get returns exactly the shapes forEach visits, under the same IDs. | tested | 1 |
 | `ShapeCollection.read-only` | ensures | get, size, forEach, compareZ, inRect, atPoint, on and off never change the shapes. | tested | 1 |
 | `ShapeCollection.compareZ.present` | requires | Both shapes are in the collection. | caller's obligation |  |
-| `ShapeCollection.compareZ.zero-iff-same` | ensures | Returns 0 only when comparing a shape with itself. | tested | 1 |
+| `ShapeCollection.compareZ.zero-iff-same` | ensures | Returns 0 only when comparing a shape with itself. | tested | 2 |
 | `ShapeCollection.compareZ.antisymmetric` | ensures | Swapping the arguments flips the sign. | tested | 1 |
 
 ## ShapeCollectionWriter
@@ -416,7 +419,8 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `ShapeCollectionWriter.notifies` | ensures | Each call that changes the shapes emits change once, after the change is complete; a call that changes nothing emits nothing. | tested | 2 |
+| `ShapeCollectionWriter.notifies` | ensures | Each call that changes the shapes emits change once, after the change is complete, so that every observer and query already shows it; a call that changes nothing emits nothing. | tested | 3 |
+| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take amortized time logarithmic in the number of shapes, whatever the pattern of adds; bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 4. | budget: not measured yet |  |
 | `ShapeCollectionWriter.add.new-id` | requires | id isn't present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.below-present` | requires | below, when given, is present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.in-range` | requires | The shape's bounding box lies within ±1e300, right and bottom edges included. | caller's obligation |  |
@@ -449,14 +453,15 @@ No rules of its own.
 |---|---|---|---|---|
 | `ShapeMessageProcessor.fresh-add-id` | requires | Each add's id came from newShapeId, and no other add has it. | caller's obligation |  |
 | `ShapeMessageProcessor.in-range` | requires | Each add's shape has its bounding box within ±1e300, right and bottom edges included. | caller's obligation |  |
-| `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID that it, or any processor with a different clientId, has returned. | tested | 1 |
-| `ShapeMessageProcessor.read-facet` | ensures | model has none of the writer's members, so whoever holds it can't change the shapes through it. | tested | 1 |
+| `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID that it, or any processor with a different clientId, has returned. | tested | 2 |
+| `ShapeMessageProcessor.read-facet` | ensures | model has none of the writer's members, and its on and off return the model itself, so whoever holds it can't change the shapes through it. | tested | 2 |
 | `ShapeMessageProcessor.add-on-z` | ensures | The shapes are in compareOrder of their adds (shapeModel.vocab.ts). | tested | 1 |
-| `ShapeMessageProcessor.kept` | ensures | Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add. | tested | 2 |
+| `ShapeMessageProcessor.kept` | ensures | Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add. | tested | 4 |
 | `ShapeMessageProcessor.remove-listed` | ensures | No shape that an applied remove lists is present. | tested | 1 |
-| `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 1 |
-| `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 1 |
-| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes already show its whole effect; one that changes nothing emits nothing. | tested | 1 |
+| `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 2 |
+| `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 2 |
+| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes, and every observer and query, already show its whole effect; one that changes nothing emits nothing. | tested | 1 |
+| `ShapeMessageProcessor.log-amortized` | budget | process takes amortized time per operation logarithmic in the number of shapes, plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized. | budget: not measured yet |  |
 
 ## FrameHandler
 
@@ -487,6 +492,7 @@ No rules of its own.
 | `View.viewport.set-redraws` | deferred | Setting a different viewport requests a frame, and that frame draws through the new viewport. | deferred: when a ShapeView supports viewports other than the identity. |  |
 | `View.viewport.set-equal` | ensures | Setting a viewport equal to the current one, field by field, requests no frame and emits nothing. | tested | 1 |
 | `View.viewport.set-emits` | deferred | Setting a different viewport emits viewport with the new value before the setter returns. | deferred: when a ShapeView supports viewports other than the identity. |  |
+| `View.dispose.idempotent` | ensures | Calling it again does nothing: it doesn't throw, and changes no listener, frame request or drawing. | tested | 1 |
 | `View.dispose.detaches` | ensures | Afterward, the view has no listeners on the model, and model changes request no frame. | tested | 1 |
 | `View.dispose.inert` | ensures | Afterward, frame() draws nothing, including a frame requested before dispose. | tested | 1 |
 
@@ -497,9 +503,9 @@ No rules of its own.
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `ShapeView.circles-only` | requires | Every shape in the model is a Circle; other kinds are outside the rules until their drawing is specified. | caller's obligation |  |
-| `ShapeView.first-frame` | ensures | Requests a frame when created, so that its first frame shows the model. | tested | 1 |
+| `ShapeView.first-frame` | ensures | Requests a frame when created, so that its first frame shows the model. | tested | 2 |
 | `ShapeView.view-state` | deferred | A view draws its own state, such as a drag in progress or wet ink, above the model's shapes, and paints then covers both. | deferred: when a ShapeView has state of its own (the first drag or wet-ink task). |  |
-| `ShapeView.frame.paints` | ensures | Afterward, each point of the surface that is on no circle's edge shows the model's circles containing it, composited bottom to top, and nothing else. | tested | 4 |
+| `ShapeView.frame.paints` | ensures | Afterward, each point of the surface that is on no circle's edge shows the model's circles containing it, composited bottom to top, and nothing else. | tested | 5 |
 
 ## LayoutObject
 
