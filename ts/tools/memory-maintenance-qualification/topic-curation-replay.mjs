@@ -539,6 +539,28 @@ async function indexStorageReplay(file, samples, output) {
     };
 }
 
+async function writeCancelledTopicReplay(output, cancellation, snapshot) {
+    await writeFile(
+        path.join(output, "failure.json"),
+        JSON.stringify({
+            status: "cancelled",
+            ...cancellation,
+        }),
+        { flag: "wx" },
+    );
+    await writeFile(
+        path.join(output, "partial-curation.json"),
+        JSON.stringify(
+            snapshot.curation ??
+                snapshot.curationProgress ?? {
+                    concepts: [],
+                    deferred: [],
+                },
+        ),
+        { flag: "wx" },
+    );
+}
+
 async function callReplay(
     values,
     snapshot,
@@ -826,25 +848,7 @@ async function callReplay(
         ) {
             disposition = "deadline-incomplete";
             cancellation = { name: error.name, message: error.message };
-            await writeFile(
-                path.join(output, "failure.json"),
-                JSON.stringify({
-                    status: "cancelled",
-                    ...cancellation,
-                }),
-                { flag: "wx" },
-            );
-            await writeFile(
-                path.join(output, "partial-curation.json"),
-                JSON.stringify(
-                    snapshot.curation ??
-                        snapshot.curationProgress ?? {
-                            concepts: [],
-                            deferred: [],
-                        },
-                ),
-                { flag: "wx" },
-            );
+            await writeCancelledTopicReplay(output, cancellation, snapshot);
         } else {
             await writeFile(
                 path.join(output, "failure.json"),
