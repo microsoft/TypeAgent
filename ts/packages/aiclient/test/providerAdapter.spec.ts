@@ -306,7 +306,10 @@ describe("MessagesWireApiProvider", () => {
                         JSON.stringify({
                             type: "content_block_delta",
                             index: 0,
-                            delta: { type: "text_delta", text: "Partial answer" },
+                            delta: {
+                                type: "text_delta",
+                                text: "Partial answer",
+                            },
                         }),
                     ).text,
                 ).toBe("Partial answer");
