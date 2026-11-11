@@ -6,7 +6,7 @@ name: Sharded TypeScript CI
 on:
   workflow_call:
     inputs:
-      include_controls:
+      full_macos:
         type: boolean
         default: false
       build_cache:
@@ -90,13 +90,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ inputs.full_macos && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest","windows-latest","macos-latest"]') }}
         version: ["24.22.1", "26.12.1"]
     uses: ./.github/workflows/ci-fanout-target.yml
     with:
+      full_macos: ${{ inputs.full_macos }}
       os: ${{ matrix.os }}
       version: ${{ matrix.version }}
-      include_controls: ${{ inputs.include_controls }}
       build_cache: ${{ inputs.build_cache }}
       native_cache: ${{ inputs.native_cache }}
       compact_artifact: ${{ inputs.compact_artifact }}
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      TYPEAGENT_FANOUT_INCLUDE_CONTROLS: ${{ inputs.include_controls }}
+      TYPEAGENT_FULL_MACOS_QUALIFICATION: ${{ inputs.full_macos }}
       pnpm_config_verify_deps_before_run: "false"
     defaults:
       run:
@@ -127,18 +127,22 @@ jobs:
         with:
           node-version: "24.22.1"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: "!inputs.full_macos"
         with:
           pattern: fanout-result-*
           path: ${{ runner.temp }}/fanout-results
           merge-multiple: true
-      - name: Qualify selected memory shard inventories and optional control comparisons
-        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs aggregate
+      - name: Require exact memory shard inventories and assertion outcomes
+        if: "!inputs.full_macos"
+        run: pnpm run ci:node tools/scripts/ciFanout.mjs aggregate
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: "!inputs.full_macos"
         with:
           pattern: fanout-partition-*
           path: ${{ runner.temp }}/fanout-partitions
           merge-multiple: true
       - name: Require exact dispatcher and provider partition coverage
+        if: "!inputs.full_macos"
         run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs aggregate
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

@@ -17,7 +17,10 @@ import {
     createTrustedNormalHookReader,
     isTrustedNormalHookCallback,
 } from "../macro-eval-native-callback.mjs";
-import { stageNativeNormalHook } from "../macro-eval-native-bridge.mjs";
+import {
+    stageNativeNormalHook,
+    captureNativePipeStartup,
+} from "../macro-eval-native-bridge.mjs";
 
 const scripts = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -463,6 +466,52 @@ test("compiled router requires a unique actual OS child of the pipe-authenticate
     }
 });
 
+test("native pipe startup diagnostics retain bounded output, phases and exit status", async () => {
+    const f = fixture();
+    try {
+        fs.writeFileSync(
+            path.join(f.root, "startup.jsonl"),
+            JSON.stringify({ phase: "compiling-pipe-helper" }) + "\n",
+        );
+        const child = spawn(
+            process.execPath,
+            [
+                "-e",
+                "process.stdout.write('x'.repeat(5000));process.stderr.write('compiler diagnostic');process.exitCode=3;",
+            ],
+            { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const diagnostics = captureNativePipeStartup(child, f.root);
+        await new Promise((resolve) => child.once("close", resolve));
+        const result = JSON.parse(diagnostics().split("startup failed: ")[1]);
+        assert.equal(result.pid, child.pid);
+        assert.equal(result.exitCode, 3);
+        assert.equal(result.signalCode, null);
+        assert.equal(result.stderr, "compiler diagnostic");
+        assert.equal(result.stdout.length, 4096);
+        assert.match(result.phases, /compiling-pipe-helper/);
+        assert.ok(result.elapsedMs >= 0);
+    } finally {
+        fs.rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+test("native pipe startup diagnostics report launch errors before readiness exists", async () => {
+    const f = fixture();
+    try {
+        const child = spawn(path.join(f.root, "missing-executable"), [], {
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        const diagnostics = captureNativePipeStartup(child, f.root);
+        await new Promise((resolve) => child.once("close", resolve));
+        const result = JSON.parse(diagnostics().split("startup failed: ")[1]);
+        assert.match(result.spawnError, /ENOENT/);
+        assert.equal(result.phases, "No startup phase recorded");
+    } finally {
+        fs.rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
 test(
     "actual staged wrapper holds real compiled-router OS child until stdin association",
     { skip: process.platform !== "win32" },
@@ -538,10 +587,7 @@ test(
             ],
             { stdio: ["ignore", "pipe", "pipe"] },
         );
-        let stderr = "";
-        server.stderr.on("data", (value) => {
-            stderr += value;
-        });
+        const startupFailure = captureNativePipeStartup(server, directory);
 
         let wrapper;
         try {
@@ -554,7 +600,7 @@ test(
                 await delay(50);
             assert.ok(
                 fs.existsSync(path.join(directory, "ready.json")),
-                stderr,
+                startupFailure(),
             );
             const command = staged.command.replace("${PLUGIN_ROOT}", plugin);
             wrapper = spawn(
@@ -638,6 +684,24 @@ test(
                 1,
             );
             assert.deepEqual(JSON.parse(receipt.packet.stdin), input);
+            const phases = fs
+                .readFileSync(path.join(directory, "startup.jsonl"), "utf8")
+                .replace(/^\uFEFF/u, "")
+                .trim()
+                .split(/\r?\n/)
+                .map(JSON.parse);
+            assert.deepEqual(
+                phases.map((record) => record.phase),
+                [
+                    "compiling-pipe-helper",
+                    "pipe-helper-compiled",
+                    "creating-pipe",
+                    "ready",
+                ],
+            );
+            assert.ok(
+                phases.every((record) => record.serverPid === server.pid),
+            );
         } finally {
             for (const process of [wrapper, server])
                 if (process?.exitCode === null && process.signalCode === null)
@@ -678,10 +742,7 @@ test(
             ],
             { stdio: ["ignore", "pipe", "pipe"] },
         );
-        let stderr = "";
-        child.stderr.on("data", (value) => {
-            stderr += value;
-        });
+        const startupFailure = captureNativePipeStartup(child, root);
         try {
             const until = Date.now() + 15000;
             while (
@@ -690,7 +751,10 @@ test(
                 child.exitCode === null
             )
                 await delay(50);
-            assert.ok(fs.existsSync(path.join(root, "ready.json")), stderr);
+            assert.ok(
+                fs.existsSync(path.join(root, "ready.json")),
+                startupFailure(),
+            );
             await new Promise((resolve, reject) => {
                 const client = net.createConnection(`\\\\.\\pipe\\${pipe}`);
                 client.on("error", reject);

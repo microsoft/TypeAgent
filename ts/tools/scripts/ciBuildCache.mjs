@@ -11,7 +11,7 @@ import {
     verifyManifest,
     identity,
     verifyCheckout,
-} from "./ciFanoutExperiment.mjs";
+} from "./ciFanout.mjs";
 
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const cacheName = "ci-build-cache.json";

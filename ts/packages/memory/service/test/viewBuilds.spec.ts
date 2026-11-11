@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { waitForViewBuild } from "./viewBuildTestWait.js";
+
 import {
     getRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
@@ -483,13 +485,7 @@ describe("durable draft builds and explicit edit merge", () => {
         };
     }
     async function wait(job: ViewBuildJob): Promise<ViewBuildJob> {
-        for (let tries = 0; tries < 1000; tries++) {
-            const value = await service.getViewBuild(job);
-            if (!value) throw new Error("Missing durable build");
-            if (value.state !== "running") return value;
-            await new Promise<void>((resolve) => setTimeout(resolve, 10));
-        }
-        throw new Error("Build did not terminate");
+        return waitForViewBuild(service, job);
     }
     test("default-enabled builds surface unavailable provider errors without saving a View", async () => {
         const request = await fixture();

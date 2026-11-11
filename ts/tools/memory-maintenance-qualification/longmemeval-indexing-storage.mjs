@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { linkSync, unlinkSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -384,11 +384,16 @@ export async function capturePreparation(
 }
 
 export function pauseAt(directory, point) {
-    writeFileSync(
-        path.join(directory, "checkpoint.json"),
-        encode({ point, pid: process.pid }),
-        { flag: "wx" },
-    );
+    const checkpoint = path.join(directory, "checkpoint.json");
+    const temporary = `${checkpoint}.${process.pid}.tmp`;
+    writeFileSync(temporary, encode({ point, pid: process.pid }), {
+        flag: "wx",
+    });
+    try {
+        linkSync(temporary, checkpoint);
+    } finally {
+        unlinkSync(temporary);
+    }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000);
     throw new Error(
         "Recovery supervisor failed to terminate the paused worker",

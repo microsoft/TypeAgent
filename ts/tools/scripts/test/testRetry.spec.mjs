@@ -161,14 +161,14 @@ test("quotes Windows argument boundaries, spaces and shell metacharacters", () =
 
 for (const workspaceStatus of [0, 1]) {
     for (const scriptStatus of [0, 1]) {
-        test(`both phases run: workspace=${workspaceStatus}, scripts=${scriptStatus}`, () => {
+        test(`both phases run: workspace=${workspaceStatus}, scripts=${scriptStatus}`, async () => {
             const calls = [];
-            const status = runLocalTestPhases(
-                () => {
+            const status = await runLocalTestPhases(
+                async () => {
                     calls.push("workspace including retries");
                     return workspaceStatus;
                 },
-                () => {
+                async () => {
                     calls.push("scripts");
                     return scriptStatus;
                 },

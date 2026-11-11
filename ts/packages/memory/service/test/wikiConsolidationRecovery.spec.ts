@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import type { ViewSynthesisAdapter } from "../src/viewTypes.js";
+import { waitForTestState } from "./waitForTestState.js";
 import {
     ConsolidationIndex,
     changeFamily,
@@ -23,12 +25,66 @@ const phases = [
     "ack",
 ] as const;
 
+function openService(root: string, adapter: ViewSynthesisAdapter) {
+    return new FileMemoryService(root, {
+        sourceSynopses: false,
+        discoveryPolicy: "off",
+        indexFactory: (_id, directory) => new ConsolidationIndex(directory),
+        viewSynthesisAdapter: adapter,
+    });
+}
+
+let baseline: string;
+let corpusId: string;
+beforeAll(async () => {
+    baseline = await mkdtemp(
+        path.join(os.tmpdir(), "memory-consolidation-baseline-"),
+    );
+    const { adapter, calls } = offlineConsolidationAdapter();
+    const service = openService(baseline, adapter);
+    try {
+        ({ corpusId } = await service.createCorpus(
+            "Consolidation recovery baseline",
+        ));
+        await changeFamily(service, corpusId, "pause");
+        await ingestFixture(
+            service,
+            corpusId,
+            "initial",
+            "document-021.md",
+            "review",
+        );
+        await changeFamily(service, corpusId, "resume");
+        const snapshot = await settleConsolidation(service, corpusId, false, {
+            description: "Recovery baseline articles",
+        });
+        expect(
+            snapshot.views.filter((view) =>
+                view.definition.wiki?.query.endsWith("review"),
+            ),
+        ).toHaveLength(2);
+        expect(calls.actual).toBe(0);
+        await changeFamily(service, corpusId, "pause");
+    } finally {
+        await service.close();
+    }
+}, 60000);
+
+afterAll(async () => {
+    if (baseline) await rm(baseline, { recursive: true, force: true });
+});
+
 test.each(phases)(
     "actual P0 interrupted %s effect resumes exact canonical/redirect/index without synthesis or duplicate versions",
     async (phase) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), `memory-consolidation-${phase}-`),
         );
+        const deadline = Date.now() + 45_000;
+        const stage = <T>(name: string, operation: () => Promise<T>) =>
+            waitForTestState(operation, () => true, `${phase}: ${name}`, {
+                deadline,
+            });
         const { adapter, calls } = offlineConsolidationAdapter();
         let armed = false;
         let fired = false;
@@ -120,38 +176,30 @@ test.each(phases)(
                     return publication;
                 }),
         );
-        const open = () =>
-            new FileMemoryService(root, {
-                sourceSynopses: false,
-                indexFactory: (_id, directory) =>
-                    new ConsolidationIndex(directory),
-                viewSynthesisAdapter: adapter,
-            });
+        const open = () => openService(root, adapter);
         let service = open();
+        const settle = (name: string) =>
+            settleConsolidation(service, corpusId, false, {
+                deadline,
+                description: `${phase}: ${name}`,
+            });
         try {
-            const { corpusId } = await service.createCorpus(
-                `Actual P0 ${phase} interrupted consolidation`,
+            await stage("restore prepared articles", () =>
+                cp(baseline, root, { recursive: true }),
             );
-            await changeFamily(service, corpusId, "pause");
-            await ingestFixture(
-                service,
-                corpusId,
-                "initial",
-                "document-021.md",
-                "review",
-            );
-            await changeFamily(service, corpusId, "resume");
-            await settleConsolidation(service, corpusId);
-            await changeFamily(service, corpusId, "pause");
+            await stage("open prepared corpus", () => service.initialize());
             await ingestFixture(
                 service,
                 corpusId,
                 "t1",
                 "document-021.md",
                 "review",
+                { deadline },
             );
-            await changeFamily(service, corpusId, "resume");
-            await settleConsolidation(service, corpusId);
+            await stage("resume clarification", () =>
+                changeFamily(service, corpusId, "resume"),
+            );
+            await settle("injected committed effect");
             expect(fired).toBe(true);
             const interrupted = (await service.listViewBuilds(corpusId)).find(
                 (job) => job.results.some((result) => result.wikiConsolidation),
@@ -161,10 +209,12 @@ test.each(phases)(
             )!.wikiConsolidation!;
             const counts = { ...calls };
             for (const spy of spies) spy.mockRestore();
-            await service.close();
+            await stage("close interrupted writer", () => service.close());
             service = open();
-            await service.initialize();
-            await settleConsolidation(service, corpusId);
+            await stage("reopen interrupted corpus", () =>
+                service.initialize(),
+            );
+            await settle("recover exact receipt");
             const recovered = await service.getViewBuild({
                 corpusId,
                 jobId: interrupted!.jobId,
@@ -199,10 +249,10 @@ test.each(phases)(
             expect(publication.indexState).toBe("ready");
             expect(publication.indexedRevisionId).toBe(canonical.revisionId);
             const head = (await service.listViews(corpusId)).head;
-            await service.close();
+            await stage("close recovered writer", () => service.close());
             service = open();
-            await service.initialize();
-            await settleConsolidation(service, corpusId);
+            await stage("reopen recovered corpus", () => service.initialize());
+            await settle("verify second restart is unchanged");
             expect((await service.listViews(corpusId)).head).toBe(head);
             expect(calls).toEqual(counts);
         } finally {
@@ -218,6 +268,7 @@ test("forget while actual canonical-output judgment is pending denies the late e
     const root = await mkdtemp(
         path.join(os.tmpdir(), "memory-consolidation-late-"),
     );
+    const deadline = Date.now() + 45_000;
     const { adapter } = offlineConsolidationAdapter();
     let entered: () => void = () => {
         throw new Error("Offline checker entry callback not initialized");
@@ -238,35 +289,26 @@ test("forget while actual canonical-output judgment is pending denies the late e
         await pending;
         return check(...args);
     };
-    const service = new FileMemoryService(root, {
-        sourceSynopses: false,
-        indexFactory: (_id, directory) => new ConsolidationIndex(directory),
-        viewSynthesisAdapter: adapter,
-    });
+    const service = openService(root, adapter);
     try {
-        const { corpusId } = await service.createCorpus(
-            "Actual P0 late consolidation privacy",
-        );
-        await changeFamily(service, corpusId, "pause");
-        await ingestFixture(
-            service,
-            corpusId,
-            "initial",
-            "document-021.md",
-            "review",
-        );
-        await changeFamily(service, corpusId, "resume");
-        const original = (await settleConsolidation(service, corpusId)).views;
-        await changeFamily(service, corpusId, "pause");
+        await cp(baseline, root, { recursive: true });
+        await service.initialize();
+        const original = (await service.listViews(corpusId)).views;
         await ingestFixture(
             service,
             corpusId,
             "t1",
             "document-021.md",
             "review",
+            { deadline },
         );
         await changeFamily(service, corpusId, "resume");
-        await checking;
+        await waitForTestState(
+            () => checking,
+            () => true,
+            "Forget race: actual-output checker entry",
+            { deadline },
+        );
         const preview = await service.previewForgetSource(corpusId, "review");
         await service.forgetSource({
             corpusId,
@@ -274,7 +316,10 @@ test("forget while actual canonical-output judgment is pending denies the late e
             confirmationToken: preview.confirmationToken,
         });
         release();
-        await settleConsolidation(service, corpusId);
+        await settleConsolidation(service, corpusId, false, {
+            deadline,
+            description: "Forget race: reject late canonical output",
+        });
         for (const view of original) {
             expect(
                 await service.getView({ corpusId, viewId: view.viewId }),

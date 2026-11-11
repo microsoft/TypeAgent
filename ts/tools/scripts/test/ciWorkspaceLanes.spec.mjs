@@ -2,21 +2,25 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { localTestCommands } from "../runLocalTestPackages.mjs";
 import { runLocalTestPhases } from "../lib/testRetry.mjs";
-import { readWorkspace } from "../ciWorkspaceLanes.mjs";
+import { readWorkspace, createRemainderPlan } from "../ciWorkspaceLanes.mjs";
 import {
     packageTimingsFromLog,
     planLanes,
     qualifyLanes,
     remainderPackages,
     runtimeClosure,
+    fullMacosHeavyPackages,
 } from "../lib/ciWorkspaceLanes.mjs";
+import { fullMacosQualification } from "../lib/ciFanoutTargets.mjs";
 
 const packages = Array.from({ length: 12 }, (_, i) => ({
     name: `package-${i}`,
@@ -39,6 +43,79 @@ const plans = Object.fromEntries(
     ]),
 );
 const sha = "a".repeat(40);
+
+test("the full macOS collector CLI accepts both complete runtime inventories and rejects a missing lane", (t) => {
+    const workspace = fileURLToPath(new URL("../../../", import.meta.url));
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: workspace,
+        encoding: "utf8",
+    }).trim();
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-full-macos-"),
+    );
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const reportsDirectory = path.join(directory, "fanout-lanes");
+    fs.mkdirSync(reportsDirectory);
+    const plan = createRemainderPlan(readWorkspace(workspace), "darwin", true);
+    assert.equal(plan.groups.length, 4);
+    for (const node of ["v24.22.1", "v26.12.1"]) {
+        for (const [index, group] of plan.groups.entries()) {
+            fs.writeFileSync(
+                path.join(reportsDirectory, `${node}-${index}.lane.json`),
+                JSON.stringify({
+                    sha: head,
+                    platform: "darwin",
+                    node,
+                    group: String(index + 1),
+                    manifestHash: "b".repeat(64),
+                    workspaceHash: "b".repeat(64),
+                    plan,
+                    packages: group.files,
+                    success: true,
+                    elapsedMs: 1,
+                }),
+            );
+        }
+    }
+    const run = () =>
+        spawnSync(
+            process.execPath,
+            [
+                fileURLToPath(
+                    new URL("../ciWorkspaceLanes.mjs", import.meta.url),
+                ),
+                "aggregate",
+            ],
+            {
+                encoding: "utf8",
+                env: {
+                    ...process.env,
+                    RUNNER_TEMP: directory,
+                    GITHUB_SHA: head,
+                    GITHUB_STEP_SUMMARY: "",
+                    TYPEAGENT_FULL_MACOS_QUALIFICATION: "true",
+                },
+            },
+        );
+    const complete = run();
+    assert.ifError(complete.error);
+    assert.equal(complete.status, 0, complete.stderr);
+    assert.deepEqual(
+        JSON.parse(complete.stdout).map(({ node, packages }) => ({
+            node,
+            packages,
+        })),
+        [
+            { node: "v24.22.1", packages: plan.packages.length },
+            { node: "v26.12.1", packages: plan.packages.length },
+        ],
+    );
+    fs.rmSync(path.join(reportsDirectory, "v26.12.1-3.lane.json"));
+    const missing = run();
+    assert.ifError(missing.error);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /Expected every full remainder/);
+});
 
 test("the final collector discovers exact package scripts without installing native dependencies", (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-collector-"));
@@ -154,6 +231,116 @@ test("macOS uses only canonical compatibility directories in one lane", () => {
         () => planLanes(packages.slice(1), timings, "darwin", compatibility),
         /compatibility/,
     );
+});
+
+test("full macOS lanes isolate heavy packages and retain every complete package script", () => {
+    const inventory = [
+        ...packages,
+        ...fullMacosHeavyPackages.map((name) => ({
+            name,
+            directory: `packages/${name}`,
+            scripts: { "test:local": "jest && node additional-checks" },
+        })),
+        { name: "no-tests", scripts: {} },
+    ];
+    const plan = planLanes(inventory, timings, "darwin", compatibility, true);
+    assert.equal(plan.fullMacos, true);
+    assert.deepEqual(
+        plan,
+        planLanes(
+            [...inventory].reverse(),
+            timings,
+            "darwin",
+            compatibility,
+            true,
+        ),
+    );
+    assert.deepEqual(
+        plan.groups.flatMap(({ files }) => files).sort(),
+        inventory
+            .filter((pkg) => pkg.scripts["test:local"])
+            .map((pkg) => pkg.name)
+            .sort(),
+    );
+    for (const [index, group] of plan.groups.entries()) {
+        assert.deepEqual(
+            group.files.filter((name) => fullMacosHeavyPackages.includes(name)),
+            [fullMacosHeavyPackages[index]],
+        );
+        const command = localTestCommands(
+            "full-macos-lane",
+            "workspace",
+            3,
+            group.files,
+        )[0];
+        assert.ok(command.args.includes("--workspace-concurrency=1"));
+        assert.deepEqual(command.args.slice(-2), ["run", "test:local"]);
+        assert.deepEqual(
+            command.args.filter((arg) => arg.startsWith("--filter=")),
+            group.files.map((name) => `--filter=${name}`),
+        );
+    }
+    const rows = ["v24.22.1", "v26.12.1"].flatMap((node) =>
+        plan.groups.map(({ files }, i) => ({
+            sha,
+            platform: "darwin",
+            node,
+            group: String(i + 1),
+            manifestHash: "b".repeat(64),
+            workspaceHash: "b".repeat(64),
+            plan: structuredClone(plan),
+            packages: [...files],
+            success: true,
+            elapsedMs: 1000,
+        })),
+    );
+    const qualify = (rows, expected = plan) =>
+        qualifyLanes(rows, sha, { darwin: expected }, true);
+    assert.equal(qualify(rows).length, 2);
+    assert.throws(() => qualify(rows.slice(1)));
+    assert.throws(() => qualifyLanes(rows, sha, { darwin: plan }));
+    for (const change of [
+        (rows) => {
+            rows[0].packages.pop();
+        },
+        (rows) => {
+            rows[0].success = false;
+        },
+        (rows) => {
+            rows[0].platform = "linux";
+        },
+        (rows) => {
+            rows[0].node = "v22.23.4";
+        },
+        (rows) => {
+            rows[0].workspaceHash = "c".repeat(64);
+        },
+        (rows) => {
+            rows[0].plan.packages[0].scripts["test:local"] = "dropped checks";
+        },
+    ]) {
+        const changed = structuredClone(rows);
+        change(changed);
+        assert.throws(() => qualify(changed));
+    }
+    assert.throws(() => qualify(rows, plans.darwin));
+    assert.throws(
+        () =>
+            planLanes(
+                inventory.slice(0, -2),
+                timings,
+                "darwin",
+                compatibility,
+                true,
+            ),
+        /Missing full macOS package/,
+    );
+    assert.throws(() =>
+        planLanes(inventory, timings, "linux", compatibility, true),
+    );
+    assert.equal(fullMacosQualification("false"), false);
+    assert.equal(fullMacosQualification("true"), true);
+    assert.throws(() => fullMacosQualification("typo"), /Invalid full macOS/);
 });
 
 test("new packages are included with explicit median weights", () => {
@@ -323,26 +510,22 @@ test("remainder qualification requires every supported target, full script inven
     }
 });
 
-test("legacy Node-selection alias requires the same 18 lanes without accepting Node 22 substitutes", () => {
+test("qualification requires all 18 lanes without accepting Node 22 substitutes", () => {
     const rows = reports();
     assert.equal(rows.length, 18);
-    assert.equal(qualifyLanes(rows, sha, plans, "24-and-26").length, 6);
-    assert.deepEqual(
-        qualifyLanes(rows, sha, plans),
-        qualifyLanes(rows, sha, plans, "24-and-26"),
-    );
-    assert.throws(() => qualifyLanes(rows.slice(1), sha, plans, "24-and-26"));
+    assert.equal(qualifyLanes(rows, sha, plans).length, 6);
+    assert.throws(() => qualifyLanes(rows.slice(1), sha, plans));
     const wrongNode = structuredClone(rows);
     wrongNode[0].node = "v22.23.4";
-    assert.throws(() => qualifyLanes(wrongNode, sha, plans, "24-and-26"));
+    assert.throws(() => qualifyLanes(wrongNode, sha, plans));
     assert.throws(() => qualifyLanes([...rows, wrongNode[0]], sha, plans));
 });
 
-test("explicit workspace/root phases cannot silently drop or duplicate phases", () => {
+test("explicit workspace/root phases cannot silently drop or duplicate phases", async () => {
     for (const phase of ["workspace", "scripts"]) {
         const calls = [];
         assert.equal(
-            runLocalTestPhases(
+            await runLocalTestPhases(
                 () => {
                     calls.push("workspace");
                     return 1;
@@ -357,7 +540,7 @@ test("explicit workspace/root phases cannot silently drop or duplicate phases", 
         );
         assert.deepEqual(calls, [phase]);
     }
-    assert.throws(
+    await assert.rejects(
         () =>
             runLocalTestPhases(
                 () => assert.fail(),
@@ -429,7 +612,7 @@ test("cache and transport experiments are off by default, pinned, and never skip
     for (const workflow of [
         main,
         target,
-        read("../../../../.github/workflows/ci-fanout-experiment.yml"),
+        read("../../../../.github/workflows/ci-fanout.yml"),
     ]) {
         for (const job of Object.values(workflow.jobs)) {
             for (const step of job.steps ?? []) {

@@ -72,6 +72,8 @@ export function inventoryFixture(legacy: Fixture): Fixture {
                         (item) =>
                             (!filters.viewId ||
                                 item.viewId === filters.viewId) &&
+                            (!filters.kind ||
+                                item.content.kind === filters.kind) &&
                             !filters.excludeKinds?.includes(item.content.kind),
                     ),
                     request,

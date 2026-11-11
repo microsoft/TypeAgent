@@ -92,6 +92,130 @@ test("automatic live integration selects only main and never PRs", () => {
     assert.equal(integration.resources, undefined);
 });
 
+test("smoke build scope defaults to full and only changes build coverage, not tests or authentication", () => {
+    const parameter = smoke.parameters.find(
+        (item) => item.name === "smokeBuildScope",
+    );
+    assert.equal(parameter.type, "string");
+    assert.equal(parameter.default, "full");
+    assert.deepEqual(parameter.values, ["full", "smoke-closure"]);
+    const build = smokeJob.steps.find((step) => step.displayName === "Build");
+    assert.match(
+        build.pwsh,
+        /if \('\$\{\{ parameters.smokeBuildScope \}\}' -eq 'full'\)/,
+    );
+    assert.match(build.pwsh, /pnpm run build --timer --logtime/);
+    assert.match(
+        build.pwsh,
+        /pnpm exec fluid-build '\^\(agent-cli\|agent-shell\)\$' -t build --dep --timer --logtime/,
+    );
+    assert.match(build.pwsh, /exit \$status/);
+    assert.ok(!build.continueOnError);
+    assert.deepEqual(Object.keys(smokeJob.strategy.matrix).sort(), [
+        "linux",
+        "windows",
+    ]);
+    const usages = JSON.stringify(smoke).match(/parameters\.smokeBuildScope/g);
+    assert.equal(
+        usages.length,
+        2,
+        "Build scope must not affect test or credential gates",
+    );
+    for (const step of smokeJob.steps.filter(
+        (step) => step.task === "AzureCLI@2",
+    )) {
+        assert.equal(step.inputs.azureSubscription, "$(azureSubscription)");
+        assert.ok(!step.continueOnError);
+    }
+});
+
+test("shared pnpm bootstrap uses the pinned standalone version without enabling Corepack", () => {
+    const setup = pipeline("include-install-pnpm");
+    const install = setup.steps.find(
+        (step) => step.displayName === "Install and configure pnpm",
+    );
+    assert.match(install.bash, /^set -euo pipefail/);
+    assert.match(
+        install.bash,
+        /require\('\.\/package\.json'\)\.packageManager/,
+    );
+    assert.match(
+        install.bash,
+        /npm install --global --force --userconfig "\$PWD\/\.npmrc" "pnpm@\$\{BASH_REMATCH\[1\]\}"/,
+    );
+    assert.doesNotMatch(install.bash, /\bcorepack\b/);
+    assert.match(
+        install.bash,
+        /pnpm config set store-dir "\$storePath" --location project/,
+    );
+    assert.match(
+        install.bash,
+        /pnpm config set workspace-concurrency 0 --location project/,
+    );
+    assert.doesNotMatch(install.bash, /pnpm config set -g/);
+});
+
+test("project-scoped pnpm settings work without a configured global bin path and preserve user config", () => {
+    assert.ok(process.env.npm_execpath, "Run through pnpm run ci:node");
+    const directory = mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-pnpm-config-"),
+    );
+    try {
+        const userConfig = path.join(directory, "user.npmrc");
+        const store = path.join(directory, "store");
+        writeFileSync(userConfig, "audit=false\n");
+        writeFileSync(
+            path.join(directory, "package.json"),
+            JSON.stringify({ name: "bootstrap-fixture", private: true }),
+        );
+        const inherited = Object.fromEntries(
+            Object.entries(process.env).filter(
+                ([name]) => !name.toLowerCase().startsWith("npm_config_"),
+            ),
+        );
+        const options = {
+            cwd: directory,
+            encoding: "utf8",
+            env: {
+                ...inherited,
+                CI: "true",
+                PNPM_HOME: path.join(directory, "pnpm"),
+                HOME: directory,
+                USERPROFILE: directory,
+                APPDATA: path.join(directory, "roaming"),
+                LOCALAPPDATA: path.join(directory, "local"),
+                XDG_CONFIG_HOME: path.join(directory, "config"),
+                XDG_DATA_HOME: path.join(directory, "data"),
+                npm_config_userconfig: userConfig,
+                npm_config_global_bin_dir: path.join(directory, "missing-bin"),
+            },
+        };
+        const run = (...args) =>
+            execFileSync(
+                process.execPath,
+                [process.env.npm_execpath, "config", ...args],
+                options,
+            ).trim();
+        run("set", "store-dir", store, "--location", "project");
+        run("set", "workspace-concurrency", "0", "--location", "project");
+        assert.equal(
+            path.normalize(run("get", "store-dir")),
+            path.normalize(store),
+        );
+        const settings = yaml.load(
+            readFileSync(path.join(directory, "pnpm-workspace.yaml"), "utf8"),
+        );
+        assert.equal(settings.workspaceConcurrency, 0);
+        assert.equal(
+            Number(run("get", "workspace-concurrency")),
+            os.availableParallelism(),
+        );
+        assert.equal(readFileSync(userConfig, "utf8"), "audit=false\n");
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
 test("smoke installs only Chromium and provisions OS dependencies only on Linux", () => {
     for (const [platform, agentOS, command] of [
         ["Windows", "Windows_NT", "pnpm exec playwright install chromium"],

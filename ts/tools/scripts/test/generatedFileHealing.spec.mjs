@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import test from "node:test";
 import yaml from "js-yaml";
+import { runTestCommand } from "../lib/testProcess.mjs";
 import {
     loadJsonFile,
     prepareCandidateArtifact,
@@ -39,50 +40,30 @@ const HEALER_SCRIPT = resolve(
     "../heal-generated-files.mjs",
 );
 
-function checkedOutput(command, args, result) {
-    assert.ifError(result.error);
-    assert.equal(
-        result.status,
-        0,
-        `${command} ${args.join(" ")} failed:\n${result.stdout}\n${result.stderr}`,
-    );
-    return result.stdout.trim();
-}
-
 function runGit(args, options = {}) {
-    const result = spawnSync("git", args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
+    return runTestCommand("git", args, {
         ...options,
-    });
-    return checkedOutput("git", args, result);
+        stage: "generated-file fixture: git",
+    }).stdout.trim();
 }
 
 function runNode(args, options = {}) {
-    const result = spawnSync(process.execPath, args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
+    return runTestCommand(process.execPath, args, {
         ...options,
-    });
-    return checkedOutput(process.execPath, args, result);
+        stage: "generated-file fixture: node",
+    }).stdout.trim();
 }
 
 function locatePnpmWithWhich() {
-    const args = ["pnpm"];
-    const result = spawnSync("which", args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-    });
-    return checkedOutput("which", args, result);
+    return runTestCommand("which", ["pnpm"], {
+        stage: "generated-file fixture: locate pnpm",
+    }).stdout.trim();
 }
 
 function locatePnpmWithWhere() {
-    const args = ["pnpm"];
-    const result = spawnSync("where.exe", args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-    });
-    return checkedOutput("where.exe", args, result);
+    return runTestCommand("where.exe", ["pnpm"], {
+        stage: "generated-file fixture: locate pnpm",
+    }).stdout.trim();
 }
 
 function git(repository, ...args) {
