@@ -15,6 +15,7 @@ export type CircleBug =
   | "contains-closed"       // contains ignores the half-open rule at the maximum x and y
   | "intersects-by-box"     // intersects answers from the bounding box alone
   | "touch-is-true"         // intersects is distance <= radius, so a disk that only touches r intersects it
+  | "touch-extremes-only"   // an exact touch checks r's excluded edges only at the circle's four extremes, not at r's corners
   | "accepts-zero-radius"   // makeCircle accepts a radius of 0
   | "keeps-center-object"   // makeCircle keeps the caller's center object
   | "alpha-as-byte"         // the color's alpha is stored from 0 to 255, as some platforms use
@@ -52,6 +53,7 @@ export function makeTestCircle(bug: CircleBug = "none"): (fields: CircleFields) 
       const d = dist(q);
       if (bug === "touch-is-true") return d <= radius;
       if (d !== radius) return d < radius;
+      if (bug === "touch-extremes-only" && q.x !== center.x && q.y !== center.y) return contains(q);
       return rectContains(r, q) && contains(q);
     };
     const circle: Circle = { kind: "circle", center, radius, color, boundingBox: () => box, contains, intersects };

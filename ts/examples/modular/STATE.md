@@ -70,9 +70,11 @@ deferred.
   Layout objects and distributed events are in window coordinates.
 - **Catalog:** 30 interfaces, 133 rules: 98 tested, 6 abstract, 3 budgets,
   5 deferred, 21 caller obligations.
-- **Phase 2 has not run.** `node task.ts list` shows the tasks and waves:
-  - wave 1: tasks 8, 9, 11, 12, 16 and 19;
-  - wave 2: task 10, which needs tasks 8 and 9.
+- **Phase 2 on round 4** (2026-11-12): tasks 8, 9, 11 and 12 finished
+  with done reports, passed every check, and passed phase 2b; none
+  stopped. Together they cost $8.72. Their reports and reviews are in
+  `reports/`. Task 10 (the bench) is next; tasks 16 and 19 are held until
+  round 6 is reviewed and has had 1b. `node task.ts list` shows the state.
 - **Adversaries:** 155 in all, every one caught on seeds 1 to 3.
   `node adversaries/helpers.check.ts` passes 400 tests. A full run takes
   about 45 seconds per seed, nearly 40 of them for `helpers.check.ts`.
@@ -80,16 +82,16 @@ deferred.
   that reading `region` or calling `locate` leaves the registrations as
   they were (`observer-tables.md`). It's left for the human to decide.
 
-## Expected failures until phase 2 runs
+## Expected failures until phase 2 finishes
 
 These failures are expected because phase 2 hasn't produced the parts yet.
 
-- **`npm test`:** 69 tests, 56 pass, 13 fail.
-  - Six test files can't find the modules phase 2 will write.
+- **`npm test`:** 303 tests, 295 pass, 8 fail.
+  - `rectDistributor.test.ts` can't find the module task 19 will write.
   - Seven tests fail because `rectangleOps.ts` doesn't have the carving
     operations yet; task 16 adds them. The seventh is
     `Rectangle.non-negative-size`, run on the carving results.
-- **`npx tsc -p .`:** 7 TS2307 errors (missing modules), one TS2739
+- **`npx tsc -p .`:** one TS2307 error (`rectDistributor.ts`), one TS2739
   (`rectangleOps.ts` lacks the new members), and two TS2352 in `bench.ts`,
   which still makes numeric `ShapeId`s; task 10 rewrites it.
 

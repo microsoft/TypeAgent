@@ -249,14 +249,15 @@ budget for model updates, a circle, and a canvas view that draws circles.
     different clientIds never collide, whatever characters they contain.
   - `process` never schedules itself, and nothing else in the class does
     (`MessageProcessor.passive`).
+  - `process` applies the local queue first, then the remote queue, and
+    repeats until both are empty. So a local operation is always applied
+    before its acknowledgment, which can only be enqueued after it.
 - **Costs** (`ShapeMessageProcessor.log-amortized`): `process` takes
   amortized logarithmic time per operation, plus time in proportion to
   the shapes a clear removes; `local.enqueue`, `remote.enqueue` and
   `newShapeId` take constant time, apart from copying the operation.
 - **Left to the implementer:** how pending operations and each shape's add
-  are kept, and the order in which `process` takes the two queues, as long
-  as a local operation whose acknowledgment arrives in the same call is
-  applied once.
+  are kept.
 - **Contract:** `shapeModel.contract.ts` (`shapeMessageProcessorContract`,
   which also runs `messageProcessor.contract.ts`), wired in
   `shapeProcessor.test.ts` over `RefShapeWriter` (`shapewriterkit.ts`). The
@@ -351,8 +352,9 @@ string IDs too, and otherwise stay as they are.
 - **Hidden:** `shapeviewkit.ts`, `scenariokit.ts`, `adversaries/_view.ts`
 - **Imports:** `geometry.ts`, `shape.ts`, `shapeModel.ts`, `view.ts`,
   `frames.ts`, `shapeView.ts`, `canvas.ts`, `events.ts`. `canvas.ts` is a
-  platform subset (see `method.md`): use only its members, with no casts.
-  The tests pass a context that throws on any other member.
+  platform subset: the members of a browser canvas that this view may
+  use. Use only the members it declares, with no casts. The tests pass a
+  context that throws on any other member.
 - **Approach:** in the constructor, add one change listener to the model,
   and request a frame. The change listener requests a frame and does
   nothing else. `frame()` clears the whole canvas with one `clearRect`,

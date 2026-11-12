@@ -630,6 +630,19 @@ model, which is why no separate differential test is needed.
     `OperationSink.enqueue.own-copy--shares-op` was removed: with `seq`
     readonly, nothing changes an operation a processor shares, so sharing
     it is no longer a fault.
+  - Phase 2 on round 4 (2026-11-12), the first run through `task.ts`. Phase
+    2 became iterative (an agent stops and reports questions rather than
+    interpret the spec) and gained phase 2b, the review of each done
+    report. Tasks 11, 12, 8 and 9 all finished with done reports and
+    passed every check: $1.80, $1.78, $2.03 (an AVL tree) and $3.11.
+    Phase 2b found 30 of 33 choices open; it adopted three (the corner
+    touch in `Circle.exact-intersects`, now a fixed case with an
+    adversary; `boundingBox` returning the same object; local-first in
+    `process`), and made two spec fixes (task 12 states the platform
+    subset rule; `shapeModel.ts` states that acknowledged adds are a
+    contiguous bottom part of the z-order, and what any other queue order
+    must do). The integration test passed on the real parts the first
+    time it ran.
 
 ## Acknowledgments
 

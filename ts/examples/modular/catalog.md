@@ -301,7 +301,7 @@ No rules of its own.
 | `Circle.positive-radius` | valid | The radius is greater than 0. | tested |  |
 | `Circle.box` | ensures | The bounding box is the center grown by the radius. | tested | 1 |
 | `Circle.disk` | ensures | Covers every point within the radius of the center that lies in its bounding box as computed. | tested | 2 |
-| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 2 |
+| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 3 |
 
 ## ShapeLocatorQueries
 

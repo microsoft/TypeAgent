@@ -106,8 +106,9 @@ export function circleContract(make: Make): void {
       assert.equal(unit.intersects({ x: -0.25, y: -0.25, width: 0.5, height: 0.5 }), true, "around the center");
 
       // Exact touches: the disk reaches r's boundary but not its interior.
-      // An axis-aligned rectangle can touch a circle only at one of its four
-      // extremes, and the half-open rule makes every such touch false.
+      // An axis-aligned rectangle touches a circle at one of the circle's
+      // four extremes, or at one of its own corners; the half-open rule
+      // makes every such touch false.
       const touches: [string, Rectangle, boolean][] = [
         ["touches r's right edge from the left extreme", { x: -3, y: -0.5, width: 2, height: 1 }, false],
         ["touches r's bottom edge from the top extreme", { x: -0.5, y: -3, width: 1, height: 2 }, false],
@@ -118,6 +119,12 @@ export function circleContract(make: Make): void {
         assert.equal(distPolylineToRect([unit.center], r), 1, `${name}: the case really is a touch`);
         assert.equal(unit.intersects(r), expected, name);
       }
+      // A touch at r's top-right corner, which lies on r's excluded right
+      // edge: (-1.5, 2) is exactly 2.5 from the center (phase 2 task 11).
+      const wide = make({ center: { x: 0, y: 0 }, radius: 2.5, color: black });
+      const corner: Rectangle = { x: -5, y: 2, width: 3.5, height: 1 };
+      assert.equal(distPolylineToRect([wide.center], corner), 2.5, "the corner case really is a touch");
+      assert.equal(wide.intersects(corner), false, "touches r at its top-right corner, on its excluded right edge");
       fc.assert(fc.property(fields, rect(14), (f, r) => {
         const c = make(f);
         const d = distPolylineToRect([c.center], r);

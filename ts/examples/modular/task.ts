@@ -686,12 +686,19 @@ function main(args: string[]): void {
     }
     case "collect": return collect(findTask(arg));
     case "review": return review(findTask(arg));
+    case "review-check": {
+      // The form check alone, for a draft review: records nothing.
+      const task = findTask(arg);
+      const entry = loadState()[task.n];
+      if (!entry?.report) throw new Error(`task ${task.n} has no collected report`);
+      return report(reviewProblems(read(join(repo, entry.report)), read(join(repo, `reports/task-${task.n}.review.md`))), `task ${task.n}: the review's form is right`);
+    }
     case "lint": return report(lintRepo(), "every collected output passes");
     // Inside a workspace, against its own manifest.
     case "lint-here": return report(lintWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json")))), "outputs pass the lint");
     case "check-here": return report(checkWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json"))), true), "every check passes");
     default:
-      console.error("usage: node task.ts list | make <n> | run <n> | check <n> | collect <n> | review <n> | lint");
+      console.error("usage: node task.ts list | make <n> | run <n> | check <n> | collect <n> | review-check <n> | review <n> | lint");
       process.exit(2);
   }
 }

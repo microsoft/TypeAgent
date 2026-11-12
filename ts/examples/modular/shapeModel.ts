@@ -109,7 +109,14 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * applied, so every client ends with the same z-order, and an
  * acknowledgment moves nothing. Given remote-seq and the stamps, this
  * comes to: a local add goes on top, and a remote add goes directly below
- * the lowest shape of a pending local add, or on top if there is none.
+ * the lowest shape of a pending local add, or on top if there is none. So
+ * the shapes of acknowledged adds are always a contiguous bottom part of
+ * the z-order, in seq order, with the pending ones above them.
+ *
+ * Order of the queues. A processor that applies remote operations before
+ * a local operation whose acknowledgment has arrived must apply that
+ * local operation when its acknowledgment comes, as acknowledged;
+ * otherwise a remote remove or clear sequenced after it would miss it.
  *
  * Knowing. An operation's client knew an add when the add's seq is
  * assigned and at most the operation's refSeq, or when the add is the same
