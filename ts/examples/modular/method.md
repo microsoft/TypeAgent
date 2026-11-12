@@ -152,3 +152,34 @@ What `task.ts` can't check is whether a listed choice was really a
 reading of the spec; the review does that, and such a choice counts as a
 stop. **Stopped reports measure phase 1b:** each question 1b missed is
 evidence about how well 1b works.
+
+## 2b. Review each done report (human and design agent)
+
+A done task is collected, so its code is in the repo and the integration
+tests run on it, but it isn't done until the human and the design agent
+have reviewed its report. The question is what the attempt shows the spec
+should say.
+
+- **Each choice** in the report's Choices gets a disposition:
+
+| Disposition | Meaning | What follows |
+|---|---|---|
+| **open** | A detail of this implementation; others may differ | Nothing |
+| **adopt** | The spec takes the choice as decided | It goes into the spec: decided behavior if it binds only this task, a rule if it binds every implementation (with a test, and an adversary for the other choice) |
+| **respecify** | The spec decides differently, or adds a requirement the choice doesn't meet | Spec change and tests; the task goes back for another attempt |
+| **reading** | The choice was an interpretation: a missed stop | Settled in the spec; if the agent read it otherwise, as respecify |
+
+- **Each note** in its Notes leads to a **spec fix**, a **decision** for
+  the human, or **nothing**.
+- **The review is a file,** `reports/task-<n>.review.md`. It starts with
+  `Status: reviewed`, and has a Choices and a Notes section with one bullet
+  per bullet of the report, in order, each starting with its disposition in
+  bold and giving the reason.
+- **`npm run task review <n>`** checks that form and records the review.
+  With no respecify or reading, the task is done. Otherwise the review is
+  kept as `reports/task-<n>.review-<k>.md` and the task goes back for
+  another attempt by a fresh agent; its collected outputs stay until one
+  replaces them.
+- **A task that waits for its review blocks the tasks that read its
+  outputs,** as a held task does, so no task builds on code whose spec is
+  about to change.

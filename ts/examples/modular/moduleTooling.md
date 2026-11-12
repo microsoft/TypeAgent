@@ -242,7 +242,37 @@ tests and adversaries for any new rule. The task is then made again and
 run by a fresh agent, which never sees the earlier attempt. Questions that
 1b missed are evidence about how well 1b works.
 
-### Review of phase 2 (human and design agent)
+### Phase 2b: Review each done report (human and design agent)
+
+A done attempt is collected first, so that its code is in the repo and the
+integration tests run on it. It counts as done only after this review, and
+until then the tasks that read its outputs wait, as they do for a held
+task. The review asks what the attempt shows the spec should say.
+
+Each choice in the report's `## Choices` gets a disposition:
+
+| Disposition | Meaning | What follows |
+|---|---|---|
+| **open** | A detail of this implementation; others may differ | Nothing |
+| **adopt** | The spec takes the choice as decided | It goes into the spec: decided behavior if it binds only this task, a rule if it binds every implementation (with a test, and an adversary for the other choice) |
+| **respecify** | The spec decides differently, or adds a requirement the choice doesn't meet | Spec change and tests; the task goes back for another attempt |
+| **reading** | The choice was an interpretation: a missed stop | Settled in the spec; if the agent read it otherwise, as respecify |
+
+Each note in `## Notes` leads to a **spec fix**, a **decision** for the
+human, or **nothing**. The design agent drafts the dispositions; the human
+decides them.
+
+The review is recorded in `reports/task-<n>.review.md`: the line
+`Status: reviewed`, then a `## Choices` and a `## Notes` section with one
+bullet per bullet of the report, in the same order, each starting with its
+disposition in bold, then the reason. `npm run task review <n>` checks that
+form against the report and records it. With no respecify or reading the
+task is done; otherwise the review is kept as
+`reports/task-<n>.review-<k>.md`, the task's done state is cleared, and a
+fresh agent makes the next attempt. Its collected outputs stay until that
+attempt replaces them.
+
+The review also does the following:
 
 1. **Verify.** Re-run the tests, type-check and adversaries. Reproduce every
    claim in the report before acting on it. Read the Choices list: a

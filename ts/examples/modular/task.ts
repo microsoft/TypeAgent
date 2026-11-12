@@ -130,18 +130,28 @@ function readsOf(task: Task): string[] {
 
 /** One attempt that stopped with questions. */
 type Stop = { stopped: string; report: string; usage?: unknown };
-type State = Record<string, { collected?: string; outputs?: Record<string, string>; report?: string; usage?: unknown; stops?: Stop[] }>;
-const isDone = (state: State, n: number) => Boolean(state[n]?.collected);
+/** One phase 2b review that sent the task back for another attempt. */
+type Requeue = { requeued: string; review: string };
+type State = Record<string, {
+  collected?: string; outputs?: Record<string, string>; report?: string; usage?: unknown; stops?: Stop[];
+  /** When phase 2b accepted the collected outputs, and its record. */
+  reviewed?: string; review?: string; requeues?: Requeue[];
+}>;
+/** Collected and accepted by phase 2b: only then do tasks that read its outputs run. */
+const isDone = (state: State, n: number) => Boolean(state[n]?.collected && state[n]?.reviewed);
+/** Collected, and waiting for phase 2b. */
+const awaitsReview = (state: State, n: number) => Boolean(state[n]?.collected && !state[n]?.reviewed);
 const statePath = join(repo, "tasks.json");
 const loadState = (): State => (existsSync(statePath) ? JSON.parse(read(statePath)) : {});
 
 /**
  * Pending tasks in waves: a task waits for any pending task whose outputs it
- * reads. Held tasks never run, so tasks that read their outputs wait too.
+ * reads. Held tasks, and tasks waiting for phase 2b, don't run in a wave, so
+ * tasks that read their outputs wait too.
  */
 function waves(tasks: Task[], state: State): { waves: Task[][]; waiting: Task[] } {
-  const held = tasks.filter((t) => t.held !== undefined && !isDone(state, t.n));
-  let pending = tasks.filter((t) => t.held === undefined && !isDone(state, t.n));
+  const held = tasks.filter((t) => (t.held !== undefined || awaitsReview(state, t.n)) && !isDone(state, t.n));
+  let pending = tasks.filter((t) => t.held === undefined && !awaitsReview(state, t.n) && !isDone(state, t.n));
   const result: Task[][] = [];
   const outputsOf = (ts: Task[]) => new Set(ts.flatMap((t) => t.outputs.map((o) => o.file)));
   while (pending.length > 0) {
@@ -349,6 +359,7 @@ const leaks = (task: Task) => readsOf(task).filter((f) => task.hidden.includes(f
 function make(task: Task): void {
   const dir = workspaceOf(task);
   if (task.held !== undefined) throw new Error(`task ${task.n} is held: ${task.held}`);
+  if (awaitsReview(loadState(), task.n)) throw new Error(`task ${task.n} is collected and waits for its phase 2b review: node task.ts review ${task.n}`);
   if (existsSync(dir)) throw new Error(`${dir} exists; delete it first, or collect it`);
   if (leaks(task).length > 0) throw new Error(`task ${task.n} would read hidden files: ${leaks(task).join(", ")}`);
   const reads = readsOf(task);
@@ -554,10 +565,75 @@ function collect(task: Task): void {
   console.log(`collected task ${task.n}: ${m.outputs.map((o) => o.file).join(", ")}, ${reportFile}`);
 }
 
+// ---- Phase 2b ---------------------------------------------------------------
+
+const choiceDispositions = ["open", "adopt", "respecify", "reading"];
+const noteOutcomes = ["spec fix", "decision", "nothing"];
+
+/** The top-level bullets of a section of a markdown file, each with its continuation lines. */
+function bullets(text: string, heading: string): string[] | undefined {
+  const m = new RegExp(`^## ${heading}\\s*$([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m").exec(text);
+  if (!m) return undefined;
+  return m[1].split(/^(?=- )/m).filter((b) => b.startsWith("- ")).map((b) => b.trim());
+}
+
+/**
+ * The form of a phase 2b review: it starts with Status: reviewed, and has
+ * one bullet per bullet of the report's Choices and Notes, in the same
+ * order, each starting with a disposition in bold.
+ */
+function reviewProblems(reportText: string, reviewText: string): string[] {
+  const problems: string[] = [];
+  const first = reviewText.split(/\r?\n/).find((l) => l.trim() !== "");
+  if (!/^Status: reviewed\s*$/.test(first ?? "")) problems.push("the review must start with the line Status: reviewed");
+  for (const [heading, allowed] of [["Choices", choiceDispositions], ["Notes", noteOutcomes]] as const) {
+    const reported = bullets(reportText, heading) ?? [];
+    const reviewed = bullets(reviewText, heading) ?? [];
+    if (reviewed.length !== reported.length) {
+      problems.push(`## ${heading}: the report has ${reported.length} bullets and the review ${reviewed.length}; review each, in order`);
+      continue;
+    }
+    reviewed.forEach((b, i) => {
+      const d = /^- \*\*([a-z ]+)\*\*/.exec(b)?.[1];
+      if (!d || !allowed.includes(d)) problems.push(`## ${heading}, bullet ${i + 1}: start with one of ${allowed.map((a) => `**${a}**`).join(", ")}`);
+    });
+  }
+  return problems;
+}
+
+/**
+ * Records a task's phase 2b review. A review with no respecify or reading
+ * marks the task done; otherwise the task goes back for another attempt,
+ * and its collected outputs stay until one replaces them.
+ */
+function review(task: Task): void {
+  const state = loadState();
+  const entry = state[task.n];
+  if (!entry?.collected || !entry.report) throw new Error(`task ${task.n} has no collected attempt to review`);
+  const reviewFile = `reports/task-${task.n}.review.md`;
+  if (!existsSync(join(repo, reviewFile))) throw new Error(`write ${reviewFile} first`);
+  const reviewText = read(join(repo, reviewFile));
+  report(reviewProblems(read(join(repo, entry.report)), reviewText), "");
+  const again = (bullets(reviewText, "Choices") ?? []).some((b) => /^- \*\*(respecify|reading)\*\*/.test(b));
+  if (again) {
+    const requeues = entry.requeues ?? [];
+    const kept = `reports/task-${task.n}.review-${requeues.length + 1}.md`;
+    copyFileSync(join(repo, reviewFile), join(repo, kept));
+    rmSync(join(repo, reviewFile));
+    state[task.n] = { ...entry, collected: undefined, reviewed: undefined, requeues: [...requeues, { requeued: new Date().toISOString(), review: kept }] };
+    for (const f of [workspaceOf(task), manifestOf(task), `${workspaceOf(task)}.run.json`, policyOf(task)]) rmSync(f, { recursive: true, force: true });
+    console.log(`task ${task.n} goes back for another attempt (${kept}); its collected outputs stay until one replaces them`);
+  } else {
+    state[task.n] = { ...entry, reviewed: new Date().toISOString(), review: reviewFile };
+    console.log(`task ${task.n} reviewed: done`);
+  }
+  writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n");
+}
+
 /** The output checks, applied in the repo to every collected task's outputs. */
 function lintRepo(): string[] {
   const state = loadState();
-  const tasks = parseTasks().filter((t) => isDone(state, t.n));
+  const tasks = parseTasks().filter((t) => state[t.n]?.collected);
   // A file written by several tasks is linted under the latest.
   const owner = new Map<string, Task>();
   for (const t of tasks) for (const o of t.outputs) if (!o.headerOnly) owner.set(o.file, t);
@@ -586,6 +662,7 @@ function list(): void {
   const state = loadState();
   for (const t of tasks) if (isDone(state, t.n)) console.log(`done     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}`);
   const { waves: ws, waiting } = waves(tasks, state);
+  for (const t of tasks) if (awaitsReview(state, t.n)) console.log(`review   ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (collected; needs reports/task-${t.n}.review.md, then node task.ts review ${t.n})`);
   for (const t of tasks) if (t.held !== undefined && !isDone(state, t.n)) console.log(`held     ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (${t.held})`);
   ws.forEach((wave, i) => {
     for (const t of wave) {
@@ -593,7 +670,7 @@ function list(): void {
       console.log(`wave ${i + 1}   ${t.n}. ${t.outputs.map((o) => o.file + (o.headerOnly ? " (header)" : "")).join(", ")}  reads ${readsOf(t).length} files${leak.length ? `  READS HIDDEN ${leak.join(", ")}` : ""}${state[t.n]?.stops?.length ? `  stopped ${state[t.n].stops!.length}x` : ""}`);
     }
   });
-  for (const t of waiting) console.log(`waits    ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (reads the outputs of a held task)`);
+  for (const t of waiting) console.log(`waits    ${t.n}. ${t.outputs.map((o) => o.file).join(", ")}  (reads the outputs of a task that is held or waits for review)`);
 }
 
 function main(args: string[]): void {
@@ -608,12 +685,13 @@ function main(args: string[]): void {
       return report(checkWorkspace(workspaceOf(task), JSON.parse(read(manifestOf(task))), true), `task ${task.n}: every check passes`);
     }
     case "collect": return collect(findTask(arg));
+    case "review": return review(findTask(arg));
     case "lint": return report(lintRepo(), "every collected output passes");
     // Inside a workspace, against its own manifest.
     case "lint-here": return report(lintWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json")))), "outputs pass the lint");
     case "check-here": return report(checkWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json"))), true), "every check passes");
     default:
-      console.error("usage: node task.ts list | make <n> | run <n> | check <n> | collect <n> | lint");
+      console.error("usage: node task.ts list | make <n> | run <n> | check <n> | collect <n> | review <n> | lint");
       process.exit(2);
   }
 }
