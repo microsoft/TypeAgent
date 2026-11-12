@@ -339,7 +339,7 @@ string IDs too, and otherwise stay as they are.
   and `color` (r, g, b and a only), so later changes to the caller's
   objects don't reach it.
 - **Decided behavior:** `kind` is `"circle"`. `boundingBox()` returns the
-  same rectangle every time.
+  same object every time.
 - **Left to the implementer:** how `intersects` finds the nearest point,
   as long as an exact touch is decided by `contains`, as the rule says.
 - **Contract:** `circle.contract.ts`, wired in `circle.test.ts`.
