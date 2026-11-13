@@ -7,20 +7,30 @@ import { getEnvSetting } from "./common.js";
 
 export type ApiSettings = {
     apiKey: string;
+    /**
+     * Base URL that /search and /images/search are appended to.
+     * Defaults to DEFAULT_BING_ENDPOINT.
+     */
+    endpoint?: string;
     maxRetryAttempts?: number;
     retryPauseMs?: number;
 };
 
+export const DEFAULT_BING_ENDPOINT = "https://api.bing.microsoft.com/v7.0";
+
 export enum EnvVars {
     BING_API_KEY = "BING_API_KEY",
+    BING_ENDPOINT = "BING_ENDPOINT",
 }
 
 export function apiSettingsFromEnv(
     env?: Record<string, string | undefined>,
 ): ApiSettings {
     env ??= process.env;
+    const endpoint = env[EnvVars.BING_ENDPOINT]?.trim();
     return {
         apiKey: getEnvSetting(env, EnvVars.BING_API_KEY),
+        ...(endpoint ? { endpoint } : {}),
     };
 }
 
@@ -138,7 +148,10 @@ export async function createBingSearch(
         return error(`Could not create Bing Client:\n${e}`);
     }
 
-    const baseUrl = "https://api.bing.microsoft.com/v7.0";
+    const baseUrl = (settings.endpoint || DEFAULT_BING_ENDPOINT).replace(
+        /\/+$/,
+        "",
+    );
     const webEndpoint = baseUrl + "/search";
     const imageEndpoint = baseUrl + "/images/search";
     const headers = createApiHeaders(settings);
