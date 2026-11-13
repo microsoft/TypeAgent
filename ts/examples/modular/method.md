@@ -183,3 +183,51 @@ should say.
 - **A task that waits for its review blocks the tasks that read its
   outputs,** as a held task does, so no task builds on code whose spec is
   about to change.
+
+## 3. Distinguish (two fresh agents, then a third)
+
+Phase 3 measures how well the spec pins down the implementations. If two
+implementations that both finished phase 2 from the same spec can be told
+apart by a valid test written against the interfaces, the spec leaves
+that behavior open. Phase 3b decides whether it meant to.
+
+- **A second run.** `npm run task make <n>.2`, then `npm run task run
+  <n>.2 --model <m>`, runs the task again with a fresh agent and the same
+  `TASK.md`, on a different model from the first run so that the two
+  implementations are as independent as we can make them. It needs the
+  first run done, and never sees its output. It stops, is collected and
+  is reviewed (2b) like any run, until it is done. Its output goes to
+  `alternates/<file>.run-2.ts`, outside the wiring.
+- **A reference adapter,** `<file>.ref.ts`, written by the design agent:
+  the task's exports, exactly, over the reference part. `refs.test.ts`
+  runs the task's contracts on it.
+- **The distinguishing agent.** `npm run task make <n>.d` puts both
+  implementations in a workspace as `a/<file>` and `b/<file>`, in an order
+  chosen at random and recorded only outside it, with the reference
+  adapter as `<file>`. A fresh agent (`npm run task run <n>.d`) reads both
+  and writes `distinguish.test.ts`: top-level tests, each passing on one
+  of A and B and failing on the other. Its report lists each test, what
+  differs, and the spec text it thinks decides it.
+- **Enforced.** The tests compile against the reference adapter, so they
+  use only the interfaces and the spec's exports. The lint holds them to
+  the workspace's files, Node built-ins and fast-check. `check` runs every
+  test as A, as B and as the reference, and fails any test that passes or
+  fails on both. A test that breaks a `@requires` would tell them apart
+  trivially; the reference's result and the review catch those.
+- **Collecting** keeps the tests as `distinguish/task-<n>.distinguish.ts`,
+  the report as `reports/task-<n>.d.md`, and in `tasks.json` which run was
+  A, and each test's result as A, B and the reference.
+
+## 3b. Review the distinguishing tests (human and design agent)
+
+The review, `reports/task-<n>.d.review.md`, has a Tests section with one
+bullet per test and a Notes section, as in 2b:
+
+| Finding | Meaning | What follows |
+|---|---|---|
+| **freedom** | The difference is in something the spec leaves open | Nothing; it should match a choice 2b marked open in one of the two reports, and if neither report listed it, that report was incomplete |
+| **spec gap** | The difference is in behavior the spec meant to decide | Phase 1: a rule or decided behavior, a contract test, and an adversary from the implementation that loses; the loser goes back for another attempt |
+| **contract gap** | One implementation breaks an existing rule no contract caught | Phase 1: a stronger contract and an adversary; that implementation goes back for another attempt |
+
+Spec gaps and contract gaps per task, against the task's rule count, are
+the measure. Freedoms show how much the spec leaves to the implementer.

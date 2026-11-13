@@ -14,6 +14,26 @@ import { acknowledged, knew } from "./dataModel.vocab.ts";
 export * from "./shape.vocab.ts";
 export * from "./dataModel.vocab.ts";
 
+/** ShapeCollection's members: all that a read facet may have. */
+export const collectionMembers: readonly string[] = ["get", "size", "forEach", "compareZ", "inRect", "atPoint", "on", "off"];
+
+/**
+ * Whether every property of o, its own and those along its prototype chain
+ * short of Object.prototype, is one of members (a class's constructor
+ * aside). Properties that hold the writer, or anything else, fail. A
+ * TypeScript private field is a property at run time and fails; a
+ * JavaScript #private field isn't one.
+ */
+export function onlyMembers(o: object, members: readonly string[]): boolean {
+  for (let p: object | null = o; p !== null && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+    for (const key of Reflect.ownKeys(p)) {
+      if (key === "constructor" && p !== o) continue;
+      if (!members.includes(String(key))) return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Bottom to top: acknowledged operations by seq, then pending local
  * operations by clientSeq. Negative if a comes first.

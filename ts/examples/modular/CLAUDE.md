@@ -22,7 +22,8 @@ Where things stand now, and what has been deferred, is in `STATE.md`.
 ## The method
 
 - `method.md` is the procedure in brief: phase 1 (agree), 1b (challenge),
-  2 (generate), platform subsets, scenarios and tasks.
+  2 (generate), 2b (review), 3 (distinguish two runs), 3b, platform
+  subsets, scenarios and tasks.
 - `moduleTooling.md` is the full version: roles, files, commands, the rule
   format, each phase step by step, and why the procedure looks like this.
 - `impl-specs.md` holds the implementation tasks by round, with their
@@ -83,6 +84,8 @@ needs.
   - Contracts: `<name>.contract.ts`.
   - Test doubles and reference parts: `*kit.ts`, one reference part per
     file.
+  - Reference adapters for phase 3: `<impl>.ref.ts`, exactly a task's
+    exports over its reference part, checked by `refs.test.ts`.
   - Wiring: `<impl>.test.ts`.
   - Platform subsets: `canvas.ts` and `dom.ts`, checked against the real
     platform types in `platform/`.

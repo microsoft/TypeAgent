@@ -61,7 +61,8 @@ waves and refuses to make it, and only the human removes the field).
 - **Measured numbers** in headers are ratios and crossover points (for
   example "10x faster inRect at 1,000 shapes; faster from about 100"), each
   naming the script that measures it. Absolute times depend on the machine
-  and belong in the script's output, not in headers.
+  and belong in the script's output, not in headers. Ratios move between
+  processes, so give each as the range over several runs of the script.
 
 - **Done** means `npm test` passes and `npm run typecheck` reports no errors.
   Don't change the contract tests (`*.contract.ts`), the `*.test.ts` files,
@@ -200,7 +201,10 @@ budget for model updates, a circle, and a canvas view that draws circles.
   anything else is outside the rules.
 - **Costs** (`ShapeCollectionWriter.log-amortized`): `get` and `size` take
   constant time; `add` and `compareZ` amortized logarithmic time;
-  `remove` amortized logarithmic time per ID listed, plus the locator's;
+  `remove` amortized logarithmic time per ID listed, plus the locator's.
+  Expected time over the structure's own random choices (a treap's
+  priorities) counts as amortized here; expected time over the pattern of
+  adds does not;
   `forEach` time in proportion to the number of shapes.
 - **Decided behavior:**
   - `add` has the locator's `in-range` requirement, as its own rule says,
@@ -267,10 +271,11 @@ budget for model updates, a circle, and a canvas view that draws circles.
 
 ## 10. A budget for model updates in `bench.ts`
 
-- **Outputs:** `bench.ts`, `mapShapeCollection.ts` (header only), `shapeProcessor.ts` (header only)
+- **Outputs:** `bench.ts`, `mapShapeCollection.ts` (header only), `shapeProcessor.ts` (header only), `listLocator.ts` (header only), `quadTreeLocator.ts` (header only)
 - **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`,
   `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`,
-  `mapShapeCollection.ts`, `shapeProcessor.ts`, and Node built-ins
+  `mapShapeCollection.ts`, `shapeProcessor.ts`, `frames.ts`, and Node
+  built-ins
 - **Binds:** node
 
 Each input event's operations are sent, and processed, within a small
@@ -311,16 +316,33 @@ operation at 100,000 divided by the time at 1,000:
 
 - adds, each directly below the same shape;
 - adds, each directly below the one added before it;
-- adds at the bottom;
+- adds at the bottom: each add goes directly below the current lowest
+  shape, so it becomes the new bottom;
 - adds below random present shapes;
-- removes of random present shapes, mixed with adds;
+- removes of random present shapes, mixed with adds: one add on top, then
+  one remove, so the size stays about the same; each counts as one
+  operation;
 - `compareZ` on random pairs;
 - through a `ShapeProcessor` with the stand-in infrastructure: remote
-  adds arriving while one local add is pending, then local adds.
+  adds arriving while one local add is pending, then local adds;
+- through a `ShapeProcessor` with the stand-in infrastructure: remote
+  clears that remove nothing, from a client that made no adds and knew
+  none of the shapes present (its refSeq is from before they were added),
+  while all of them stay. The budget allows a clear time in proportion to
+  the shapes it removes, not to the shapes present, so this ratio is
+  logarithmic too.
 
-Logarithmic growth gives a ratio of about 2, and linear growth about 100.
-Unlike the frame budget, a ratio above 4 is a failure: print it and make
+Logarithmic growth gives a ratio of about 2 in the number of steps, and
+linear growth about 100. Measured times grow more than the steps do,
+because 100,000 shapes don't fit in the processor's caches and 1,000 do;
+ratios of 4 to 9 are what a logarithmic structure measures here. Unlike
+the frame budget, a ratio above 16 is a failure: print it and make
 `bench.ts` exit with a nonzero status.
+
+Run `npm run bench` and record its numbers in the Cost fields, as
+"Measured numbers" describes, including the ratios and crossover points
+in the Cost fields of `listLocator.ts` and `quadTreeLocator.ts`, each
+naming `bench.ts`, with absolute times left to the script's output.
 
 `ShapeId` is now a string (`shape.ts`); the locator measurements must use
 string IDs too, and otherwise stay as they are.
@@ -363,7 +385,7 @@ string IDs too, and otherwise stay as they are.
   whole model is visible.
 - **Decided behavior:**
   - Each circle is drawn as `beginPath()`, one `arc(center.x, center.y, radius, 0, 2 * Math.PI)`,
-    then `fill()`, with `fillStyle` set first to
+    then `fill()`, with `fillStyle` set, at any point before that `fill()`, to
     `` `rgba(${r}, ${g}, ${b}, ${a})` `` from the circle's color. The
     recording context in `viewkit.ts` accepts only this form.
   - `viewport` always reads as the identity, `{ scale: 1, rotation: 0, tx: 0, ty: 0 }`.
@@ -411,8 +433,10 @@ The router and tap recognizer tasks (17 and 18) were removed with
 - **Outputs:** `rectangleOps.ts`
 - **Imports:** `geometry.ts`
 - **Approach:** add `cut`, `splitHoriz`, `splitVert`, `inset` and `place`
-  to the existing `rectangleOps`, keeping `contains` and `intersects` as
-  they are. Each new operation is defined exactly by its reference
+  to the existing `rectangleOps`, keeping `contains` as it is. Change
+  `intersects`'s test for an empty rectangle: a rectangle is now empty as
+  computed (`geometry.ts`), so `x + width <= x` rather than `width === 0`,
+  and likewise for height. Each new operation is defined exactly by its reference
   function in `geometry.vocab.ts`; write it directly, without importing
   that file.
 - **Decided behavior:** the largest-remainder method for splits, as the

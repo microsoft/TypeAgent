@@ -135,6 +135,10 @@ export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp
  * @requires infrastructure-only  Only the message infrastructure enqueues and calls process; controllers send through a LocalSend.
  * @requires remote-seq  Each remote operation has an assigned seq, greater than any earlier remote operation's.
  * @requires unique-identity  No two operations share a clientId and clientSeq, except a local operation and its acknowledgment.
+ * @requires client-order  Each client's operations arrive on remote in clientSeq order, as a protocol that sequences each client's operations in the order sent delivers them; so acknowledgments arrive in the order the local operations were enqueued.
+ * @deferred client-reorder  A protocol may sequence a client's operations out of clientSeq order, and processors still converge.
+ *   when: a collaboration protocol that reorders a client's operations is specified.
+ *   how: each DDS says what an acknowledgment that arrives out of order does (for shapes, whether it may move a shape, or z-order is defined by something other than seq); client-order is dropped; the processor contract delivers acknowledgments out of clientSeq order, with an adversary that matches an acknowledgment to the oldest pending operation without checking clientSeq.
  * @requires not-reentrant  While a call to process is pending, nothing enqueues on either queue or calls process again.
  * @ensures stamps  enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
  * @deferred snapshot  A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules.

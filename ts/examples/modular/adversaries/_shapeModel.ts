@@ -136,7 +136,8 @@ export type ProcessorBug =
   | "ack-reapplies"       // an acknowledgment removes the shape and adds it again on top
   | "one-at-a-time"       // a remove calls the writer once per listed ID
   | "counter-ids"         // newShapeId uses a counter without the clientId
-  | "exposes-writer";     // model is the writer itself
+  | "exposes-writer"      // model is the writer itself
+  | "facet-keeps-writer"; // model is a facet that keeps the writer in a property
 
 export class TestShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
@@ -159,7 +160,10 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
     this.clientSeq = bug === "client-seq-from-minus-one" ? -2 : 0;
     this.lastSeq = bug === "refseq-minus-two" ? -2 : -1;
     const facet = readFacet(this.writer);
-    this.model = bug === "exposes-writer" ? this.writer : bug === "applies-on-read" ? this.lazy(facet) : facet;
+    this.model = bug === "exposes-writer" ? this.writer
+      : bug === "applies-on-read" ? this.lazy(facet)
+      : bug === "facet-keeps-writer" ? Object.assign(Object.create(facet) as ShapeCollection, { writer: this.writer })
+      : facet;
   }
 
   /** A facet that applies what is queued before each read. */

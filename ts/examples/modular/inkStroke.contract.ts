@@ -135,6 +135,11 @@ export function inkStrokeContract(make: Make): void {
         assert.equal(distPolylineToRect(s.points, r), 1, `${name}: the case really is a touch`);
         assert.equal(s.intersects(r), expected, name);
       }
+      // r is empty as computed: 2^52 + 0.25 rounds back to 2^52 (phase 3, task 11).
+      const across = make({ points: [{ x: 2 ** 52 - 2, y: 0 }, { x: 2 ** 52 + 2, y: 0 }], thickness: 2, color: black });
+      const absorbed: Rectangle = { x: 2 ** 52, y: -0.5, width: 0.25, height: 1 };
+      assert.ok(isEmpty(absorbed), "the case really is empty as computed");
+      assert.equal(across.intersects(absorbed), false, "r is empty as computed");
 
       fc.assert(fc.property(fields, rect(14), (f, r) => {
         const s = make(f);

@@ -30,8 +30,10 @@ export interface Point {
  * An axis-aligned rectangle covering the half-open region
  * [x, x + width) × [y, y + height). (x, y) is the top-left corner. The left
  * and top edges are inside, and the right and bottom edges are not, so two
- * rectangles that share only an edge do not overlap. A rectangle with width 0
- * or height 0 is empty and contains no points.
+ * rectangles that share only an edge do not overlap. A rectangle is empty,
+ * and contains no points, when x + width <= x or y + height <= y as
+ * computed: when its width or height is 0, or so small beside x or y that
+ * the sum rounds back to it.
  *
  * @valid non-negative-size  Width and height are never negative.
  *   this.width >= 0 && this.height >= 0

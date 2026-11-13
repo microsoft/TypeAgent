@@ -198,7 +198,7 @@ classDiagram
 |---|---|---|---|---|
 | `frames.complete` | ensures | Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model. | tested | 3 |
 | `frames.processed-before-frame` | deferred | The message infrastructure processes what an input event's handler sent after the handler returns and before the next frame begins, never inside a frame callback, so that the first frame after the event shows it and frames.complete holds on every platform. | deferred: when the message infrastructure is specified. |  |
-| `frames.fraction-of-frame` | budget | Forming (including any query of the model), sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: not measured yet |  |
+| `frames.fraction-of-frame` | budget | Forming (including any query of the model), sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: measured by bench.ts |  |
 
 ## EventEmitter
 
@@ -301,7 +301,7 @@ No rules of its own.
 | `Circle.positive-radius` | valid | The radius is greater than 0. | tested |  |
 | `Circle.box` | ensures | The bounding box is the center grown by the radius. | tested | 1 |
 | `Circle.disk` | ensures | Covers every point within the radius of the center that lies in its bounding box as computed. | tested | 2 |
-| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 3 |
+| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 4 |
 
 ## ShapeLocatorQueries
 
@@ -387,6 +387,8 @@ No rules of its own.
 | `MessageProcessor.infrastructure-only` | requires | Only the message infrastructure enqueues and calls process; controllers send through a LocalSend. | caller's obligation |  |
 | `MessageProcessor.remote-seq` | requires | Each remote operation has an assigned seq, greater than any earlier remote operation's. | caller's obligation |  |
 | `MessageProcessor.unique-identity` | requires | No two operations share a clientId and clientSeq, except a local operation and its acknowledgment. | caller's obligation |  |
+| `MessageProcessor.client-order` | requires | Each client's operations arrive on remote in clientSeq order, as a protocol that sequences each client's operations in the order sent delivers them; so acknowledgments arrive in the order the local operations were enqueued. | caller's obligation |  |
+| `MessageProcessor.client-reorder` | deferred | A protocol may sequence a client's operations out of clientSeq order, and processors still converge. | deferred: when a collaboration protocol that reorders a client's operations is specified. |  |
 | `MessageProcessor.not-reentrant` | requires | While a call to process is pending, nothing enqueues on either queue or calls process again. | caller's obligation |  |
 | `MessageProcessor.stamps` | ensures | enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
 | `MessageProcessor.snapshot` | deferred | A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
@@ -420,7 +422,7 @@ No rules of its own.
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `ShapeCollectionWriter.notifies` | ensures | Each call that changes the shapes emits change once, after the change is complete, so that every observer and query already shows it; a call that changes nothing emits nothing. | tested | 3 |
-| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take amortized time logarithmic in the number of shapes, whatever the pattern of adds; bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 4. | budget: not measured yet |  |
+| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take amortized or expected time logarithmic in the number of shapes, whatever the pattern of adds (expected over the implementation's own random choices, as in a treap, never over the pattern of adds); bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 16 (cache misses at 100,000 shapes put a logarithmic structure at 4 to 9; linear growth gives about 100). | budget: measured by bench.ts |  |
 | `ShapeCollectionWriter.add.new-id` | requires | id isn't present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.below-present` | requires | below, when given, is present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.in-range` | requires | The shape's bounding box lies within ±1e300, right and bottom edges included. | caller's obligation |  |
@@ -461,7 +463,7 @@ No rules of its own.
 | `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 2 |
 | `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 2 |
 | `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes, and every observer and query, already show its whole effect; one that changes nothing emits nothing. | tested | 1 |
-| `ShapeMessageProcessor.log-amortized` | budget | process takes amortized time per operation logarithmic in the number of shapes, plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized. | budget: not measured yet |  |
+| `ShapeMessageProcessor.log-amortized` | budget | process takes amortized or expected time per operation logarithmic in the number of shapes (as for ShapeCollectionWriter.log-amortized), plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized. | budget: measured by bench.ts |  |
 
 ## FrameHandler
 

@@ -82,18 +82,30 @@ deferred.
   that reading `region` or calling `locate` leaves the registrations as
   they were (`observer-tables.md`). It's left for the human to decide.
 
+- **Phase 3 on round 4** (2026-11-12): tasks 8, 9, 11 and 12 ran a second
+  time on Sonnet, and a fresh agent per task wrote tests that tell the two
+  runs apart. Of 20 tests, 17 were freedoms. The other three: a spec gap
+  (emptiness is now computed, `geometry.ts`), and two contract gaps (the
+  read facet may hold only `ShapeCollection`'s members; `bench.ts` measures
+  clears that remove nothing). 2b of the reruns found one more
+  (`Circle.disk` at the boundary). Every loser was rerun and is done. The
+  reports and reviews are `reports/task-<n>.d.md` and `.d.review.md`;
+  round 4 cost $47.40 at list prices over 20 attempts (`node task.ts
+  costs`).
+
 ## Expected failures until phase 2 finishes
 
 These failures are expected because phase 2 hasn't produced the parts yet.
 
-- **`npm test`:** 303 tests, 295 pass, 8 fail.
+- **`npm test`:** 9 failing tests, all for parts not yet written or rewritten.
   - `rectDistributor.test.ts` can't find the module task 19 will write.
-  - Seven tests fail because `rectangleOps.ts` doesn't have the carving
-    operations yet; task 16 adds them. The seventh is
-    `Rectangle.non-negative-size`, run on the carving results.
-- **`npx tsc -p .`:** one TS2307 error (`rectDistributor.ts`), one TS2739
-  (`rectangleOps.ts` lacks the new members), and two TS2352 in `bench.ts`,
-  which still makes numeric `ShapeId`s; task 10 rewrites it.
+  - Seven tests fail on `rectangleOps.ts`: six because it doesn't have the
+    carving operations yet (task 16 adds them; one of the six is
+    `Rectangle.non-negative-size`, run on the carving results), and
+    `RectangleOps.intersects.nonzero-area`, because emptiness is now
+    computed (phase 3, task 11) and task 16 also makes that change.
+- **`npx tsc -p .`:** one TS2307 error (`rectDistributor.ts`) and one TS2739
+  (`rectangleOps.ts` lacks the new members).
 
 Anything else failing is a real problem.
 

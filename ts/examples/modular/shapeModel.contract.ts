@@ -20,7 +20,7 @@ import type { Shape, ShapeId } from "./shape.ts";
 import type { OperationContent } from "./dataModel.ts";
 import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
 import {
-  addOf, compareOrder, deepEqual, entries, ids, isAdd, isClear, isRemove, isStrictlySorted, knew, removedBy, sameSet, unique,
+  collectionMembers, onlyMembers, addOf, compareOrder, deepEqual, entries, ids, isAdd, isClear, isRemove, isStrictlySorted, knew, removedBy, sameSet, unique,
 } from "./shapeModel.vocab.ts";
 import { messageProcessorContract, play, ruleTest, steps, type Client, type Hooks, type ProcessorSubject, type Step } from "./messageProcessor.contract.ts";
 import { eventEmitterContract } from "./eventEmitter.contract.ts";
@@ -307,8 +307,9 @@ const hooks: Hooks<ShapeCollection, ShapeOp> = {
     const events = c.events - eventsBefore;
 
     const f = () => {};
-    check("ShapeMessageProcessor.read-facet", !("add" in model) && !("remove" in model) &&
-      model.on("change", f) === model && model.off("change", f) === model, "the model has writer members, or its on or off returns something else");
+    check("ShapeMessageProcessor.read-facet", onlyMembers(model, collectionMembers) &&
+      model.on("change", f) === model && model.off("change", f) === model,
+      `the model has a property beyond ShapeCollection's members (${Object.keys(model).join(", ")}), or its on or off returns something else`);
     check("ShapeMessageProcessor.add-on-z",
       now.every(([id]) => addOf(applied, id) !== undefined) &&
         isStrictlySorted(now.map(([id]) => id), (a, b) => compareOrder(addOf(applied, a)!, addOf(applied, b)!)),

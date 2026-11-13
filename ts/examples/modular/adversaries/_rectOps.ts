@@ -16,7 +16,8 @@ export type RectBug =
   | "inset-unclamped"       // inset can make a negative size
   | "inset-at-corner"       // a too-small inset sits at the top left plus d, not the center
   | "place-center-up"       // centering rounds up
-  | "place-unclamped";      // a size larger than r isn't reduced
+  | "place-unclamped"       // a size larger than r isn't reduced
+  | "empty-by-width";       // a rectangle is empty only when its width or height is 0, not when x + width rounds back to x
 
 function shares(total: number, weights: readonly number[], bug: RectBug): number[] {
   const sum = weights.reduce((a, b) => a + b, 0);
@@ -49,7 +50,11 @@ function split(r: Rectangle, horizontal: boolean, weights: readonly number[], bu
 export function makeTestRectOps(bug: RectBug = "none"): RectangleOps {
   return {
     contains: (r: Rectangle, p: Point) => rectContains(r, p),
-    intersects: (a: Rectangle, b: Rectangle) => rectIntersects(a, b),
+    intersects: (a: Rectangle, b: Rectangle) =>
+      bug === "empty-by-width"
+        ? a.width !== 0 && a.height !== 0 && b.width !== 0 && b.height !== 0 &&
+          a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        : rectIntersects(a, b),
     cut(r: Rectangle, edge: Edge, size: number): [Rectangle, Rectangle] {
       if (bug === "cut-right-from-left" && edge === "right") {
         const [piece, rest] = cutRect(r, "left", size);

@@ -1,0 +1,21 @@
+[
+  {
+    "date": "2026-11-11",
+    "round": 4,
+    "phase": "1b",
+    "what": "challenge agent on round 4: 21 findings, 13 adversaries; total tokens from the Agent tool, no dollar figure",
+    "tokens": 205000
+  },
+  {
+    "date": "2026-11-12",
+    "round": 4,
+    "phase": "plan",
+    "what": "Ultra plan: 3% of the weekly limit since Mon 2026-11-09 21:00, covering about 2/3 of the design sessions to date, the round 4 1b agent and round 4 phase 2 ($13.94 list)"
+  },
+  {
+    "date": "2026-11-12",
+    "round": 4,
+    "phase": "plan",
+    "what": "Ultra plan: 3% to 4% of the week across task 10 attempt 3 (Opus, $3.82 list) and the four Sonnet second runs ($4.16 list), plus design work; the human estimates 0.5% for the $7.98 of runs, so a week is roughly $1,600 at list prices"
+  }
+]

@@ -52,7 +52,7 @@ export interface ShapeCollection<S extends Shape = Shape> extends DataModelReade
  * The write side. Only a ShapeMessageProcessor holds it.
  *
  * @ensures notifies  Each call that changes the shapes emits change once, after the change is complete, so that every observer and query already shows it; a call that changes nothing emits nothing.
- * @budget log-amortized  add, remove (per ID listed) and compareZ take amortized time logarithmic in the number of shapes, whatever the pattern of adds; bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 4.
+ * @budget log-amortized  add, remove (per ID listed) and compareZ take amortized or expected time logarithmic in the number of shapes, whatever the pattern of adds (expected over the implementation's own random choices, as in a treap, never over the pattern of adds); bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 16 (cache misses at 100,000 shapes put a logarithmic structure at 4 to 9; linear growth gives about 100).
  */
 export interface ShapeCollectionWriter<S extends Shape = Shape> extends ShapeCollection<S>, DataModel {
   /**
@@ -128,8 +128,8 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * @requires fresh-add-id  Each add's id came from newShapeId, and no other add has it.
  * @requires in-range  Each add's shape has its bounding box within ±1e300, right and bottom edges included.
  * @ensures new-ids  newShapeId never returns an ID that it, or any processor with a different clientId, has returned.
- * @ensures read-facet  model has none of the writer's members, and its on and off return the model itself, so whoever holds it can't change the shapes through it.
- *   (f: () => void) => !("add" in this.model) && !("remove" in this.model) &&
+ * @ensures read-facet  model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it.
+ *   (f: () => void) => onlyMembers(this.model, collectionMembers) &&
  *     this.model.on("change", f) === this.model && this.model.off("change", f) === this.model
  * @ensures add-on-z  The shapes are in compareOrder of their adds (shapeModel.vocab.ts).
  *   isStrictlySorted(ids(this.model), (a, b) => compareOrder(addOf(applied(this), a)!, addOf(applied(this), b)!))
@@ -141,7 +141,7 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  *   applied(this).filter(isClear).every((c) => ids(this.model).every((id) => !knew(c, addOf(applied(this), id)!)))
  * @ensures ack-keeps-z  Applying an acknowledgment doesn't change the shapes or their z-order, or emit change.
  * @ensures one-change  Each operation that changes the shapes emits change once, when the shapes, and every observer and query, already show its whole effect; one that changes nothing emits nothing.
- * @budget log-amortized  process takes amortized time per operation logarithmic in the number of shapes, plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized.
+ * @budget log-amortized  process takes amortized or expected time per operation logarithmic in the number of shapes (as for ShapeCollectionWriter.log-amortized), plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized.
  * @refines MessageProcessor.local-order  add-on-z
  * @refines MessageProcessor.remote-order  add-on-z
  * @refines MessageProcessor.once  ack-keeps-z

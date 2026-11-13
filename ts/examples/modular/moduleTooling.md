@@ -618,7 +618,7 @@ model, which is why no separate differential test is needed.
     `process`, the placement rule), at about a fifth of the agent's tool
     calls. The human decided: logarithmic amortized costs for the writer
     and processor, as `@budget` rules that `bench.ts` measures as a
-    scaling ratio and fails above 4 (task 8 names a balanced tree or local
+    scaling ratio and fails above 4, raised to 16 after task 10 measured cache effects (task 8 names a balanced tree or local
     relabeling; renumbering every key breaks the cost); `not-reentrant`;
     processing outside frame callbacks; `Operation.seq` readonly, with
     processors keeping acknowledged seqs in their own state; and the

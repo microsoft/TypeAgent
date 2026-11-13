@@ -17,7 +17,23 @@
  * ShapeCollectionWriter.log-amortized; a clear walks the records it removes,
  * at most twice each, and calls remove once. local.enqueue, remote.enqueue
  * and newShapeId are constant time apart from copying the operation. State
- * is one record per present shape.
+ * is one record per present shape. Measured by npm run bench (bench.ts),
+ * which prints each number below with its rule's ID, and keeps the machine's
+ * absolute times in its output: for ShapeMessageProcessor.log-amortized, the
+ * time per operation at 100,000 shapes divided by the time at 1,000, over a
+ * batch of 1,000 operations through a MapShapeCollection over a
+ * QuadTreeLocator in the pattern that makes every remote add land in the same
+ * place — remote adds arriving while one local add is pending, then local
+ * adds — is 2.6-2.8 over four runs, and 0.5-0.8 for remote clears that remove
+ * nothing, from a client that made no adds and knew none of the shapes
+ * present, which cost the same at either size because a clear walks only the
+ * records it removes; about 2 is the growth in steps of such a writer, 4 to 9
+ * is what that measures at these two sizes, because 100,000 shapes miss the
+ * caches that hold 1,000, and above 16 fails. For frames.fraction-of-frame,
+ * with this processor over that collection holding 10,000 ink strokes, sending
+ * and processing a finished stroke's add takes 0.4-0.5% of the budget (5% of a
+ * 120 Hz frame), and an eraser move's query and remove 1.7-2.1%, both inside
+ * it.
  * AdditionalSemantics: process applies everything before the promise it
  * returns settles, and takes the whole local queue before the remote one,
  * repeating until both are empty; a remote operation whose clientId is this
@@ -25,7 +41,9 @@
  * that clientSeq, and records a seq only for an add whose shape is still
  * present, since nothing else can observe one; a clear with nothing to
  * remove still calls the writer's remove, with an empty list.
- * Parts: the read-only facet of the writer, and the bookkeeping of the adds
+ * Parts: the read-only facet of the writer, which keeps it in a private
+ * field (#writer), so that no property of the facet, own or inherited, shows
+ * that it holds a writer at all, and the bookkeeping of the adds
  * of present shapes (the chains and maps below), which a processor for
  * another shape-like model could share.
  * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts
@@ -79,46 +97,49 @@ function stamped(content: OperationContent<ShapeOp>, clientId: string, clientSeq
 /**
  * The read-only facet of a writer: ShapeCollection's members, delegating to
  * the writer, with on and off returning the facet so that whoever holds it
- * never reaches the writer.
+ * never reaches the writer. The writer is a private field (#writer), which
+ * is not a property, so the facet has no property beyond those members: not
+ * only is the writer unreachable through the facet, nothing shows that the
+ * facet holds one.
  */
 class WriterFacet implements ShapeCollection {
-  private readonly writer: ShapeCollectionWriter;
+  readonly #writer: ShapeCollectionWriter;
 
   constructor(writer: ShapeCollectionWriter) {
-    this.writer = writer;
+    this.#writer = writer;
   }
 
   get size(): number {
-    return this.writer.size;
+    return this.#writer.size;
   }
 
   get(id: ShapeId): Shape | undefined {
-    return this.writer.get(id);
+    return this.#writer.get(id);
   }
 
   forEach(visit: (id: ShapeId, shape: Shape) => void): void {
-    this.writer.forEach(visit);
+    this.#writer.forEach(visit);
   }
 
   compareZ(a: ShapeId, b: ShapeId): number {
-    return this.writer.compareZ(a, b);
+    return this.#writer.compareZ(a, b);
   }
 
   inRect(r: Rectangle, out: ShapeId[]): number {
-    return this.writer.inRect(r, out);
+    return this.#writer.inRect(r, out);
   }
 
   atPoint(p: Point, out: ShapeId[]): number {
-    return this.writer.atPoint(p, out);
+    return this.#writer.atPoint(p, out);
   }
 
   on<E extends keyof ShapeCollectionEvents & string>(event: E, listener: (...args: ShapeCollectionEvents[E]) => void): this {
-    this.writer.on(event, listener);
+    this.#writer.on(event, listener);
     return this;
   }
 
   off<E extends keyof ShapeCollectionEvents & string>(event: E, listener: (...args: ShapeCollectionEvents[E]) => void): this {
-    this.writer.off(event, listener);
+    this.#writer.off(event, listener);
     return this;
   }
 }

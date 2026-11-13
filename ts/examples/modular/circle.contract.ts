@@ -98,6 +98,19 @@ export function circleContract(make: Make): void {
         fc.pre(!inBox || Math.abs(d - c.radius) > tie);
         return c.contains(p) === (d <= c.radius && inBox);
       }));
+      // The rule is exact as computed, ties included: comparing squared
+      // distances rounds differently from distToPolyline at the boundary.
+      // This point's distance rounds to just under the radius (phase 2b,
+      // task 11.2).
+      const edge = make({ center: { x: 37.402773233408865, y: 38.00226293832716 }, radius: 17.275314187141277, color: black });
+      const onEdge = { x: 21.876258685413738, y: 30.42837184752447 };
+      assert.ok(distToPolyline(onEdge, [edge.center]) <= edge.radius && rectContains(edge.boundingBox(), onEdge), "the case really is inside as computed");
+      assert.equal(edge.contains(onEdge), true, "a point whose distance rounds to just under the radius");
+      fc.assert(fc.property(fields, fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }), (f, angle) => {
+        const c = make(f);
+        const p = { x: c.center.x + c.radius * Math.cos(angle), y: c.center.y + c.radius * Math.sin(angle) };
+        return c.contains(p) === (distToPolyline(p, [c.center]) <= c.radius && rectContains(c.boundingBox(), p));
+      }));
     });
 
     test("Circle.exact-intersects", () => {
@@ -125,6 +138,21 @@ export function circleContract(make: Make): void {
       const corner: Rectangle = { x: -5, y: 2, width: 3.5, height: 1 };
       assert.equal(distPolylineToRect([wide.center], corner), 2.5, "the corner case really is a touch");
       assert.equal(wide.intersects(corner), false, "touches r at its top-right corner, on its excluded right edge");
+      // A rectangle starting at the bounding box's excluded right edge, as
+      // rounded: 0.4 + 0.71 rounds to a point nearer the center than 0.71,
+      // so recomputing the distance there finds it inside the disk (phase 2
+      // task 11.2).
+      const rounded = make({ center: { x: 0.4, y: 0 }, radius: 0.71, color: black });
+      const bb = rounded.boundingBox();
+      const past: Rectangle = { x: bb.x + bb.width, y: -0.5, width: 1, height: 1 };
+      assert.ok(past.x - 0.4 < 0.71, "the case really puts the box's edge inside the disk");
+      assert.equal(rounded.intersects(past), false, "r starts at the bounding box's excluded right edge");
+      // r is empty as computed: 2^52 + 0.25 rounds back to 2^52, so no point
+      // is in it, though its width isn't 0 (phase 3, task 11).
+      const big = make({ center: { x: 2 ** 52, y: 0 }, radius: 4, color: black });
+      const absorbed: Rectangle = { x: 2 ** 52, y: -0.5, width: 0.25, height: 1 };
+      assert.ok(isEmpty(absorbed), "the case really is empty as computed");
+      assert.equal(big.intersects(absorbed), false, "r is empty as computed");
       fc.assert(fc.property(fields, rect(14), (f, r) => {
         const c = make(f);
         const d = distPolylineToRect([c.center], r);

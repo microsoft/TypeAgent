@@ -20,8 +20,9 @@ export function validViewport(v: Viewport): boolean {
   return v.scale > 0;
 }
 
+/** Empty as computed: width or height 0, or so small that x + width rounds back to x (geometry.ts). */
 export function isEmpty(r: Rectangle): boolean {
-  return r.width === 0 || r.height === 0;
+  return right(r) <= r.x || bottom(r) <= r.y;
 }
 
 export function right(r: Rectangle): number {

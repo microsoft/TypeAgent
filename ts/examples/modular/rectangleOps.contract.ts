@@ -39,6 +39,10 @@ export function rectangleOpsContract(ops: RectangleOps): void {
       assert.equal(ops.intersects(square, { x: 10, y: 10, width: 10, height: 10 }), false, "shared corner");
       assert.equal(ops.intersects(square, { x: 5, y: 0, width: 0, height: 10 }), false, "empty inside");
       assert.equal(ops.intersects(square, square), true, "itself");
+      // Empty as computed: 2^52 + 0.25 rounds back to 2^52 (phase 3, task 11).
+      const absorbed: Rectangle = { x: 2 ** 52, y: -0.5, width: 0.25, height: 1 };
+      assert.equal(absorbed.x + absorbed.width, absorbed.x, "the case really rounds back");
+      assert.equal(ops.intersects({ x: 2 ** 52 - 4, y: -1, width: 8, height: 2 }, absorbed), false, "empty as computed");
       fc.assert(fc.property(rect(), rect(), (a, b) =>
         ops.intersects(a, b) === (!isEmpty(a) && !isEmpty(b) &&
           a.x < b.x + b.width && b.x < a.x + a.width &&
