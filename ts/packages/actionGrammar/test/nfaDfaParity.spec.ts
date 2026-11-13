@@ -485,6 +485,88 @@ describe("NFA/DFA Parity", () => {
         });
     });
 
+    describe("optional rule reference", () => {
+        const { grammar, nfa, dfa } = compile(
+            "optionalRuleReference",
+            `
+            <Start> = add $(item:wildcard) to <Owner>? $(playlist:wildcard) playlist
+                -> { actionName: "add", parameters: { item, playlist } };
+            <Owner> = the | my;
+            `,
+        );
+
+        it.each([
+            ["add track to the favorites playlist"],
+            ["add track to my favorites playlist"],
+            ["add track to favorites playlist"],
+        ])("matches '%s' in both matchers", (request) => {
+            assertMatchParity(grammar, nfa, dfa, request);
+            expect(matchGrammarWithNFA(grammar, nfa, request)).not.toHaveLength(
+                0,
+            );
+            expect(
+                matchDFAWithSplitting(dfa, tokenizeRequest(request)).matched,
+            ).toBe(true);
+        });
+
+        it("does not make an unsuffixed rule reference optional", () => {
+            const required = compile(
+                "requiredRuleReference",
+                `
+                <Start> = add $(item:wildcard) to <Owner> $(playlist:wildcard) playlist
+                    -> { actionName: "add", parameters: { item, playlist } };
+                <Owner> = the | my;
+                `,
+            );
+
+            expect(
+                matchGrammarWithNFA(
+                    required.grammar,
+                    required.nfa,
+                    "add track to favorites playlist",
+                ),
+            ).toHaveLength(0);
+            expect(
+                matchDFAWithSplitting(
+                    required.dfa,
+                    tokenizeRequest("add track to favorites playlist"),
+                ).matched,
+            ).toBe(false);
+        });
+
+        it.each(["the play", "play"])(
+            "keeps AST evaluation in parity for '%s'",
+            (request) => {
+                const noCaptures = compile(
+                    "optionalRuleReferenceAST",
+                    `
+                    <Start> = <Owner>? play -> { actionName: "play" };
+                    <Owner> = the | my;
+                    `,
+                );
+
+                assertASTMatchParity(
+                    noCaptures.grammar,
+                    noCaptures.nfa,
+                    noCaptures.dfa,
+                    request,
+                );
+            },
+        );
+
+        it("offers both the optional rule and the following wildcard", () => {
+            const completions = getDFACompletions(dfa, ["add", "track", "to"]);
+
+            expect(completions.completions).toEqual(
+                expect.arrayContaining(["the", "my"]),
+            );
+            expect(completions.properties).toContainEqual({
+                actionName: "add",
+                propertyPath: "parameters.playlist",
+            });
+        });
+    });
+
     // -----------------------------------------------------------------------
     // 7. Kleene plus (one-or-more)
     // -----------------------------------------------------------------------
@@ -1812,6 +1894,53 @@ describe("PhraseSet Completion Parity", () => {
         <Start> = <schedule> | <find>;
         `,
     );
+
+    const optionalPhraseSet = compile(
+        "optionalPhraseSetReference",
+        `
+        <Start> = <Polite>? schedule $(desc:wildcard)
+            -> { actionName: "scheduleEvent", parameters: { desc } };
+        `,
+    );
+
+    it.each(["please schedule meeting", "schedule meeting"])(
+        "matches an optional phrase-set reference in '%s'",
+        (request) => {
+            assertMatchParity(
+                optionalPhraseSet.grammar,
+                optionalPhraseSet.nfa,
+                optionalPhraseSet.dfa,
+                request,
+            );
+            assertASTMatchParity(
+                optionalPhraseSet.grammar,
+                optionalPhraseSet.nfa,
+                optionalPhraseSet.dfa,
+                request,
+            );
+            expect(
+                matchGrammarWithNFA(
+                    optionalPhraseSet.grammar,
+                    optionalPhraseSet.nfa,
+                    request,
+                ),
+            ).not.toHaveLength(0);
+            expect(
+                matchDFAWithSplitting(
+                    optionalPhraseSet.dfa,
+                    tokenizeRequest(request),
+                ).matched,
+            ).toBe(true);
+        },
+    );
+
+    it("suggests both the optional phrase set and the following token", () => {
+        const completions = getDFACompletions(optionalPhraseSet.dfa, []);
+
+        expect(completions.completions).toEqual(
+            expect.arrayContaining(["please", "schedule"]),
+        );
+    });
 
     it("empty prefix: DFA suggests phraseSet first-tokens", () => {
         const comp = getDFACompletions(dfa, []);

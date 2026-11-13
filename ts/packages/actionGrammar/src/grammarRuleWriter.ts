@@ -925,6 +925,7 @@ function writeSingleExpr(
         }
         case "ruleReference":
             writeBracketedName(result, expr.refName);
+            if (expr.optional) result.write("?");
             break;
         case "rules": {
             result.write("(");

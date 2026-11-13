@@ -82,19 +82,26 @@ separated by `|`:
 
 #### Expression types
 
-| Syntax              | Meaning                                |
-| ------------------- | -------------------------------------- |
-| `word`              | Literal token (case-insensitive match) |
-| `$(var:wildcard)`   | Capture any tokens as string           |
-| `$(var:number)`     | Capture numeric token                  |
-| `$(var:EntityType)` | Capture with entity validation         |
-| `$(var:<RuleName>)` | Capture via sub-rule match             |
-| `<RuleName>`        | Reference another rule (no capture)    |
-| `( expr )`          | Grouping                               |
-| `expr?`             | Optional (zero or one)                 |
-| `expr*`             | Zero or more                           |
-| `expr+`             | One or more                            |
-| `alt1 \| alt2`      | Alternation                            |
+| Syntax               | Meaning                                |
+| -------------------- | -------------------------------------- |
+| `word`               | Literal token (case-insensitive match) |
+| `$(var:wildcard)`    | Capture any tokens as string           |
+| `$(var:number)`      | Capture numeric token                  |
+| `$(var:EntityType)`  | Capture with entity validation         |
+| `$(var:type)?`       | Optional captured variable             |
+| `$(var:<RuleName>)`  | Capture via sub-rule match             |
+| `$(var:<RuleName>)?` | Optional captured sub-rule             |
+| `<RuleName>`         | Reference another rule (no capture)    |
+| `<RuleName>?`        | Optional rule reference                |
+| `( expr )`           | Grouping                               |
+| `( expr )?`          | Optional group (zero or one)           |
+| `( expr )*`          | Zero or more                           |
+| `( expr )+`          | One or more                            |
+| `alt1 \| alt2`       | Alternation                            |
+
+The `?` suffix must immediately follow the closing `)` or `>`. A literal
+question mark immediately after a rule reference must be escaped as `\?`;
+a question mark separated by whitespace remains literal.
 
 #### Value expressions
 
