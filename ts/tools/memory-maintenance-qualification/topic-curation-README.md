@@ -13,7 +13,8 @@ installation. Native receipt validation remains unchanged.
 
 The LLM driver remains an LLM engine adapter. The separate
 [`topic-decision-replay.mjs`](./topic-decision-replay.mjs) uses the existing
-Decision generator and its native scheduling, not the LLM speculative scheduler.
+Decision generator and its unchanged native scheduling, not generative frozen
+preparation.
 Both use small shared loading, hashing, implementation-identity, atomic-progress
 and disposable-storage utilities. No plugin/scheduler framework is introduced.
 
@@ -21,41 +22,60 @@ Run commands from `ts` after `pnpm run build`. Use private, **new** output
 directories outside the original corpus store. Captured requests/responses
 contain source evidence; do not upload them to public systems.
 
-## Production defaults and experimental options
+## Production defaults and migration
 
 Evidence selection, ownership validation and lexical nomination use snapshot-local
 indexes while retaining citation ordering and the existing top-24 nomination
 policy. Similarity nominates comparisons; the model still judges equivalence.
 
-Default curation retains legacy packing (up to 24 raw nodes, 32,000 payload
-characters) and one worker. Hosts using `getConfiguredMemoryViewOptions` can opt
-into the following settings; programmatic callers can use `topicCuration` on
-`FileMemoryServiceOptions`.
+Generative curation always prepares up to two raw-only packets concurrently,
+then reconciles and commits each window serially. There is no serial or
+speculative scheduler selection. Production policy is `curated-lazy-v10:<hash>`;
+`resolveTopicCurationSettings(settings?)` resolves the configurable defaults
+below. Hosts use `getConfiguredMemoryViewOptions`; programmatic callers use
+`topicCuration` on `FileMemoryServiceOptions`.
+Packet budgets preserve existing behavior: without an explicit input-token
+target, packets retain the up-to-24-node / 32,000-payload-character bounds,
+with no reserved prior fraction. Enabling frozen scheduling does not require
+request inspection on an existing injected model. Explicit context-aware token
+budgets still require the model's configured request inspection.
 
-| Environment variable                    | Values                               | Effect                                                                                                          |
-| --------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`   | Positive integer                     | Packs against the complete serialized request, including instructions and schema, using native model inspection |
-| `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION` | 0 through 0.5; requires input target | Reserves input and estimated output room for prior-concept comparisons                                          |
-| `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY`    | 1 or 2                               | Bounds speculative proposals; commits remain in canonical order                                                 |
+| Environment variable                    | Values (default)          | Effect                                                                                                              |
+| --------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`   | Positive integer (unset)  | Opts into packing the complete serialized request, including instructions and schema, using native model inspection |
+| `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION` | 0 through 0.5 (unset / 0) | Reserves input and estimated output room for prior-concept comparisons with explicit token packing                  |
+| `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`   | Explicit boolean (true)   | Allows unchanged prior concepts to remain read-only context                                                         |
+| `TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`    | Explicit boolean (true)   | Uses compact wire identifiers while preserving host IDs                                                             |
 
-Invalid settings fail explicitly. Experimental settings change policy/input
-identity. Unset the variables to retain defaults.
+Invalid settings fail explicitly. Settings change policy/input identity.
+Unset the variables to use the frozen defaults.
+The 24000-token / 0.25-fraction settings used in historical live candidate
+trials remain explicit configurable treatments, not production defaults.
 
-The generative replay CLI accepts `--input-tokens`, `--prior-fraction` and
-`--concurrency` for those same production settings. It also passes these opt-in
-production treatments through unchanged:
+The generative replay CLI accepts `--input-tokens`, `--prior-fraction`,
+`--prior-deltas` and `--compact-ids` for those same production settings:
 
-| CLI flag               | `TopicCurationSettings` field |
-| ---------------------- | ----------------------------- |
-| `--prior-deltas`       | `priorDeltas: true`           |
-| `--compact-ids`        | `compactIds: true`            |
-| `--frozen-preparation` | `frozenPreparation: true`     |
+| CLI flag         | `TopicCurationSettings` field |
+| ---------------- | ----------------------------- |
+| `--prior-deltas` | `priorDeltas: true`           |
+| `--compact-ids`  | `compactIds: true`            |
 
-Omitted treatments remain unset, preserving production defaults. Negative
-forms (`--no-prior-deltas`, `--no-compact-ids`, `--no-frozen-preparation`) record
-explicit false settings. Production validates combinations; frozen preparation
-requires concurrency 2. Effective settings are saved in both result and replay
-identity, so recordings/checkpoints from different policies cannot be mixed.
+Omitted options resolve to production defaults. Negative forms
+`--no-prior-deltas` and `--no-compact-ids` record explicit false settings.
+`--concurrency`, `--frozen-preparation` and `--no-frozen-preparation` have been
+removed and fail explicitly. Remove them rather than substituting another mode.
+The host variables `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
+`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` likewise fail even when set to their
+former candidate values. The corresponding programmatic fields `concurrency`
+and `frozenPreparation` are no longer accepted.
+
+Effective settings are saved in result and replay identity. Recorded replay
+requires the original `result.json` identity as well as exact request bindings.
+Old tapes, progress files, captured inputs and native receipts retain their
+original identities: do not edit their policy labels, fingerprints or settings
+to make them appear compatible. Generate fresh artifacts for the new policy.
+The low-level `curateTopicEvidence` parser supports native resolution and frozen
+preparation/reconciliation only; it is not an alternate host build mode.
 
 Frozen preparation prepares two raw-only packets concurrently, then serially
 reconciles their proposed groups and every deferred raw candidate against the
@@ -64,9 +84,8 @@ atomically, with one final fingerprinted receipt per window. It is not two
 concurrent canonical commits. Prior deltas make unchanged prior concepts
 read-only context that can be omitted from responses; compact IDs change only
 wire node identifiers and schema enums, preserving factual fields and host IDs.
-The host equivalents are `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`,
-`TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`, and
-`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` (explicit booleans, default unset).
+The configurable host equivalents are `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`
+and `TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS` (explicit booleans, default true).
 Unchanged prior objects, including audited summaries, also survive receipt
 replay without being reconstructed as new pending concepts.
 
@@ -84,10 +103,8 @@ curated by this first treatment.
 
 `TYPEAGENT_MEMORY_TOPIC_WATERMARK=true` (programmatic `topicWatermark: true`)
 adds private pinned-generation checkpoints and exact packet-prefix replay.
-It requires curation reuse and ordered generative curated topics: either one
-worker or explicit frozen preparation with two workers. Native Decision and
-ordinary speculative two-worker execution still reject this option. Defaults
-remain unchanged.
+It requires curation reuse and generative curated topics. Native Decision still
+rejects this option. Reuse and watermark remain opt-in.
 
 Source additions may leave one old build running while the existing maintenance
 scheduler coalesces one latest topic demand. Old curation checkpoints are durable
@@ -98,8 +115,7 @@ prefix. Instructions, payload, schema and hidden original membership must match;
 the first changed ordering, packet boundary, qualification or nomination ends
 replay. Cached responses pass the production parser without provider repairs.
 Receipts store packet-local candidate/evidence IDs rather than repeated expanded
-concept membership. Legacy first/every-eighth/final checkpoint frequency stays unchanged.
-Frozen preparation checkpoints every completed reconciliation window; partially
+concept membership. Frozen curation checkpoints every completed reconciliation window; partially
 prepared windows never become resumable installed decisions.
 
 Source removal/replacement, suppression, events and model identity changes fail
@@ -177,11 +193,9 @@ admission guard. Packing also checks an experimental output estimate of
 This is not a proven worst-case schema bound or a new provider output cap.
 A larger input target cannot cure output-bound prior starvation.
 
-Speculative responses are reusable only if rebuilt instructions, payload,
-schema, packet boundary and hidden original membership still match. Newly
-created targets can invalidate later proposals even across disjoint sources.
-Stale calls are aborted/drained and rerun. Failure and cancellation cannot
-publish pending speculative work.
+Frozen receipts are reusable only if rebuilt instructions, payload, schema,
+packet boundary and hidden original membership still match. Failure and
+cancellation cannot publish a partially prepared or unreconciled window.
 
 Context-budgeted packets explicitly bind permitted evidence to all original
 member sources, not only a prior concept's retained citations. Strict validation
@@ -199,7 +213,8 @@ and bounded repairs remain in force. Detailed summaries stay lazy.
 | `live`              | Bounded configured-model curation                                | Requires `--live` |
 
 Choose `--history <view-history.git> --commit <hash>` (and `--job` if needed)
-or `--input <captured-build-input.json>`. Capture uses one worker.
+or `--input <captured-build-input.json>`. Capture saves the first frozen
+preparation request without initializing a provider; it does not install a window.
 
 ```powershell
 if (Test-Path $PROFILE) { . $PROFILE }
@@ -211,12 +226,12 @@ node $tool --mode cpu --history $history --commit $commit `
     --samples 5 --warmups 1 --output $newCpuDirectory
 
 node $tool --mode recorded --history $history --commit $commit `
-    --nodes 96 --input-tokens 32000 --prior-fraction 0.25 --concurrency 1 `
+    --nodes 96 --input-tokens 24000 --prior-fraction 0.25 `
     --max-calls 8 --responses $matchingResponses --output $newReplayDirectory
 
 # Only after authorizing provider calls:
 node $tool --mode live --live --history $history --commit $commit `
-    --nodes 96 --input-tokens 32000 --prior-fraction 0.25 --concurrency 1 `
+    --nodes 96 --input-tokens 24000 --prior-fraction 0.25 `
     --max-calls 8 --timeout-ms 240000 --output $newLiveDirectory
 ```
 
@@ -229,7 +244,9 @@ across machines when provider capacity is shared.
 ## Progress, organization and persistence
 
 - `--nodes` selects a canonical subset but retains full source evidence context.
-- `--resume` uses historical validated progress and cannot combine with `--nodes`.
+- `--resume` uses historical validated progress only when its saved recipe
+  matches the current frozen policy and effective settings; it cannot combine
+  with `--nodes`. Legacy-policy progress is rejected rather than relabeled.
 - `--progress <progress.json>` resumes atomic private checkpoints only under
   matching input, node selection, implementation, endpoint and settings; cannot
   combine with `--resume`. Progress includes a curation/state digest.
@@ -332,14 +349,15 @@ $common = @('--mode', 'live', '--live', '--history', $history,
     '--commit', $commit, '--job', $job, '--deadline', $deadline,
     '--endpoint', $endpoint, '--expected-model-binding', $modelBinding.hash,
     '--timeout-ms', '10800000', '--max-calls', '10000', '--organize')
-node $tool @common --output $newBaselineDirectory
-node $tool @common --output $newCandidateDirectory `
-    --concurrency 2 --input-tokens 24000 --prior-fraction 0.25 `
-    --prior-deltas --compact-ids --frozen-preparation
+node $tool @common --output $newDefaultDirectory
+node $tool @common --output $newSettingsDirectory `
+    --input-tokens 12000 --prior-fraction 0.25 `
+    --no-prior-deltas --no-compact-ids
 ```
 
-The candidate changes multiple policies; it is a paired treatment, not an
-attribution experiment for individual flags. An incomplete arm is reported as
+Both arms use frozen preparation. The second changes multiple configurable
+settings; it is not a legacy-serial baseline or an attribution experiment for
+individual flags. An incomplete arm is reported as
 incomplete even if structural coverage is high. No live trial is part of the
 offline regression tests:
 
@@ -363,7 +381,7 @@ Thus metadata, local adjudication, maintenance and
 organization use the same generator as production, and every native or
 generative completion consumes the same explicit call budget/deadline. Native
 execution settings are passed unchanged; concurrency 24 is supported and never
-replaced with the LLM one/two-worker scheduler.
+replaced with the generative frozen preparation schedule.
 
 Supply `--identity-file` with a frozen JSON manifest:
 
@@ -476,10 +494,11 @@ semantic quality or fresh end-to-end readiness.
 
 Corrected-contract 96-node ABBA trials averaged 133.229 seconds with one worker
 and 134.979 with two; stale proposals increased work. Two samples per condition
-are not enough for a general performance conclusion. No experimental defaults
-were promoted. Human admission/merge review, fresh full-input runs and native
+are not enough for a general performance conclusion. At that historical
+checkpoint no experimental defaults were promoted; it does not describe the
+current frozen defaults. Human admission/merge review, fresh full-input runs and native
 readiness/answer qualification remain required.
 
 Run offline regression coverage with `pnpm run test:memory-quality`. Relevant
 service tests cover budget boundaries, indexed parity, hidden-member evidence,
-ordered commits, stale proposals, cancellation and checkpoint failures.
+frozen preparation, serial reconciliation/commit, cancellation and checkpoint failures.

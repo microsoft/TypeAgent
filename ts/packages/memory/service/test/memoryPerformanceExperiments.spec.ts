@@ -105,7 +105,6 @@ describe("bounded serving experiments", () => {
     test.each([
         "fast-models",
         "fast-models,embedding-parallel",
-        "fast-models,topic-parallel",
         "fast-models,synopsis-parallel",
         "fast-models,indexing-parallel",
     ])(
@@ -212,7 +211,6 @@ describe("bounded serving experiments", () => {
         expect(memoryPerformanceExperiments("p3").size).toBe(4);
         expect(memoryPerformanceExperiments("p2,p3").size).toBe(9);
         for (const treatment of [
-            "topic-parallel",
             "synopsis-parallel",
             "embedding-parallel",
         ] as const) {

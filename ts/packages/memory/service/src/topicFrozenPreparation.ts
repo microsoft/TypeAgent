@@ -6,12 +6,17 @@ import type {
     TopicCurationCandidate,
     TopicCurationCompletion,
     TopicCurationOptions,
-    curateTopics,
+    curateTopicEvidence,
 } from "./topicCuration.js";
 import type { TopicCuration, TopicNode, TopicSnapshot } from "./topicTypes.js";
 import type { ViewCitation } from "./viewTypes.js";
-import type { OrderedTopicPacket } from "./topicCurationScheduler.js";
 import { viewHash } from "./viewMerge.js";
+
+export interface OrderedTopicPacket {
+    start: number;
+    end: number;
+    fingerprint: string;
+}
 
 async function parallel<T>(
     work: Array<(signal: AbortSignal) => Promise<T>>,
@@ -83,13 +88,11 @@ export async function reconcileFrozenTopics(
     complete: TopicCurationCompletion,
     signal: AbortSignal,
     options: TopicCurationOptions,
-    curate: typeof curateTopics,
+    curate: typeof curateTopicEvidence,
     validate: (curation: TopicCuration) => void,
 ): Promise<TopicCuration> {
     const inner: TopicCurationOptions = {
         ...options,
-        frozenPreparation: false,
-        concurrency: 1,
     };
     delete inner.replayPackets;
     delete inner.onPacket;

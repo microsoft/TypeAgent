@@ -19,6 +19,14 @@ import {
 function curationSettings(
     environment: Readonly<Record<string, string | undefined>>,
 ): TopicCurationSettings | undefined {
+    for (const name of [
+        "TYPEAGENT_MEMORY_TOPIC_CONCURRENCY",
+        "TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION",
+    ])
+        if (environment[name] !== undefined)
+            throw new Error(
+                `${name} has been removed; generative topics always use frozen two-packet preparation`,
+            );
     function numeric(name: string): number | undefined {
         const raw = environment[name];
         if (raw === undefined) return undefined;
@@ -27,18 +35,13 @@ function curationSettings(
         return Number(raw);
     }
     const inputTokenTarget = numeric("TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS");
-    const concurrency = numeric("TYPEAGENT_MEMORY_TOPIC_CONCURRENCY");
     const priorContextFraction = numeric(
         "TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION",
     );
-    const flags: Pick<
-        TopicCurationSettings,
-        "priorDeltas" | "compactIds" | "frozenPreparation"
-    > = {};
+    const flags: Pick<TopicCurationSettings, "priorDeltas" | "compactIds"> = {};
     for (const [field, variable] of [
         ["priorDeltas", "TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS"],
         ["compactIds", "TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS"],
-        ["frozenPreparation", "TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION"],
     ] as const)
         if (environment[variable] !== undefined)
             flags[field] = parseViewDraftCapability(
@@ -47,17 +50,13 @@ function curationSettings(
             );
     if (
         inputTokenTarget === undefined &&
-        concurrency === undefined &&
         priorContextFraction === undefined &&
         Object.keys(flags).length === 0
     )
         return undefined;
-    if (concurrency !== undefined && concurrency !== 1 && concurrency !== 2)
-        throw new Error("Invalid TYPEAGENT_MEMORY_TOPIC_CONCURRENCY");
     const settings: TopicCurationSettings = {
         ...flags,
         ...(inputTokenTarget !== undefined ? { inputTokenTarget } : {}),
-        ...(concurrency !== undefined ? { concurrency } : {}),
         ...(priorContextFraction !== undefined ? { priorContextFraction } : {}),
     };
     validateTopicCurationSettings(settings);

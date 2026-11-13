@@ -110,11 +110,9 @@ function configuredGenerativeSettings(
             (key) =>
                 ![
                     "inputTokenTarget",
-                    "concurrency",
                     "priorContextFraction",
                     "priorDeltas",
                     "compactIds",
-                    "frozenPreparation",
                 ].includes(key),
         )
     )

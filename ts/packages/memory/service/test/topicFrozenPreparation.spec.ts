@@ -3,6 +3,7 @@
 
 import {
     curateTopics,
+    curateTopicEvidence,
     type TopicCurationCompletion,
     type TopicCurationOptions,
 } from "../src/topicCuration.js";
@@ -84,8 +85,6 @@ function merged(payload: unknown) {
 }
 
 const settings: TopicCurationOptions = {
-    concurrency: 2,
-    frozenPreparation: true,
     priorDeltas: true,
     compactIds: true,
 };
@@ -129,7 +128,7 @@ test("frozen preparation overlaps, reconciles serially and installs complete win
             );
         },
         undefined,
-        { ...settings, onPacket: (packet) => packets.push(packet) },
+        { onPacket: (packet) => packets.push(packet) },
     );
     expect(maximum).toBe(2);
     expect(checkpoints).toEqual([48, 50]);
@@ -259,7 +258,7 @@ test("cold continuation retains an installed window and resumes only unprocessed
 test("delta responses retain omitted priors exactly but still repair omitted new nodes", async () => {
     const value = snapshot(3);
     const first = snapshot(1);
-    const prior = await curateTopics(
+    const prior = await curateTopicEvidence(
         first,
         (node) => node.citations,
         async (_rules, payload) => merged(payload),
@@ -267,7 +266,7 @@ test("delta responses retain omitted priors exactly but still repair omitted new
         true,
     );
     let calls = 0;
-    const result = await curateTopics(
+    const result = await curateTopicEvidence(
         value,
         (node) => node.citations,
         async (_rules, payload, _schema, call) => {
@@ -387,7 +386,7 @@ test("delta window receipts retain audited prior summaries exactly on replay", a
 test("unknown compact response IDs use the existing bounded contract repair", async () => {
     let calls = 0;
     const value = snapshot(1);
-    const result = await curateTopics(
+    const result = await curateTopicEvidence(
         value,
         (node) => node.citations,
         async (_rules, payload, _schema, call) => {
@@ -409,11 +408,12 @@ test("unknown compact response IDs use the existing bounded contract repair", as
     expect(result.concepts[0].memberIds).toEqual([value.nodes[0].id]);
 });
 
-test("parallel preparation rejects non-lazy use and ordinary speculative watermark replay", async () => {
+test("frozen preparation rejects eager summaries and removed scheduler settings", async () => {
     const value = snapshot(1);
     const cases: Array<[boolean, TopicCurationOptions]> = [
         [false, settings],
-        [true, { concurrency: 2, replayPackets: [] }],
+        [true, Object.assign({}, settings, { concurrency: 1 })],
+        [true, Object.assign({}, settings, { frozenPreparation: false })],
     ];
     for (const [lazy, options] of cases)
         await expect(

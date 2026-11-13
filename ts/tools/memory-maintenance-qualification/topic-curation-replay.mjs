@@ -27,8 +27,11 @@ import {
     orderedTopicNodes,
     validateTopicCuration,
     validateTopicCurationProgress,
-    validateTopicCurationSettings,
 } from "../../packages/memory/service/dist/topicCuration.js";
+import {
+    resolveTopicCurationSettings,
+    topicCurationPolicy,
+} from "../../packages/memory/service/dist/topicCurationSettings.js";
 import {
     TopicEvidenceIndex,
     TopicNominationIndex,
@@ -41,6 +44,7 @@ import {
     loadCapturedTopicInput,
     positiveInteger as integer,
     compiledFileHashes,
+    assertReplayIdentity,
     readReplayProgress,
     writeReplayProgress,
 } from "./replay-artifacts.mjs";
@@ -137,6 +141,12 @@ export async function inspectConfiguredTopicReplayModelBinding(endpoint) {
 }
 
 export function topicReplaySettings(values) {
+    for (const option of ["concurrency", "frozen-preparation"])
+        assert.equal(
+            values[option],
+            undefined,
+            `--${option} has been removed; generative topics always use frozen preparation and serial reconciliation`,
+        );
     const settings = {
         ...(values["input-tokens"] !== undefined
             ? {
@@ -147,7 +157,6 @@ export function topicReplaySettings(values) {
                   ),
               }
             : {}),
-        concurrency: integer(values.concurrency, 1, "concurrency"),
         ...(values["prior-fraction"] !== undefined
             ? { priorContextFraction: Number(values["prior-fraction"]) }
             : {}),
@@ -155,15 +164,13 @@ export function topicReplaySettings(values) {
     for (const [option, field] of [
         ["prior-deltas", "priorDeltas"],
         ["compact-ids", "compactIds"],
-        ["frozen-preparation", "frozenPreparation"],
     ]) {
         if (values[option] !== undefined) {
             assert.ok(typeof values[option] === "boolean", `Invalid ${option}`);
             settings[field] = values[option];
         }
     }
-    validateTopicCurationSettings(settings);
-    return settings;
+    return resolveTopicCurationSettings(settings);
 }
 
 export function topicReplayDeadline(values, now = Date.now) {
@@ -278,7 +285,7 @@ export async function loadTopicReplay(values) {
     return { input, snapshot, state, inputHash, retainedCurationHash };
 }
 
-function offlineInspection(rules, payload, schema) {
+export function offlineInspection(rules, payload, schema) {
     const serializedRequest = JSON.stringify(
         wire.buildRequestBody({
             messages: [
@@ -579,12 +586,12 @@ async function callReplay(
         !recorded || values.responses,
         "Recorded mode requires --responses",
     );
-    assert.ok(
-        values.mode !== "capture" ||
-            settings.concurrency === 1 ||
-            settings.frozenPreparation,
-        "Capture mode requires concurrency 1 unless frozen preparation is enabled",
-    );
+    if (recorded) {
+        const recording = JSON.parse(
+            await readFile(path.join(values.responses, "result.json"), "utf8"),
+        );
+        assertReplayIdentity(recording.identity, identity);
+    }
     const maxCalls = integer(values["max-calls"], 1, "max-calls");
     const { controller } = budget;
     let model;
@@ -614,6 +621,10 @@ async function callReplay(
     const complete = async (rules, payload, schema, context) => {
         budget.check();
         context.signal.throwIfAborted();
+        if (!live && !recorded && calls.length > 0)
+            throw new CaptureComplete(
+                "First frozen preparation request captured without provider initialization",
+            );
         if (calls.length >= maxCalls)
             throw new CallLimit("Replay call limit reached");
         const request = inspect(rules, payload, schema);
@@ -914,8 +925,8 @@ export async function implementationIdentity() {
     identity.compiled = await compiledFileHashes(productRoot, [
         ...[
             "topicCuration",
+            "topicCurationSettings",
             "topicLookup",
-            "topicCurationScheduler",
             "topicGeneration",
             "topicCurationTransport",
             "topicFrozenPreparation",
@@ -994,6 +1005,12 @@ export async function runTopicReplay(
     );
     const { input, snapshot, state, inputHash, retainedCurationHash } =
         await loadTopicReplay(values);
+    if (values.resume)
+        assert.equal(
+            state.topics.recipe,
+            `${input.model}:editorial-v1:${topicCurationPolicy(true, settings)}`,
+            "Historical curation policy does not match frozen replay settings; capture fresh input instead of relabeling retained progress",
+        );
     const implementation = await implementationIdentity();
     const identity = {
         ...implementation,

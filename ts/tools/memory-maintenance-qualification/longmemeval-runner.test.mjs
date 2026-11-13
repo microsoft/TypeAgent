@@ -30,6 +30,7 @@ import {
     createBenchmarkMemoryService,
     createRetainedKnowledgeReader,
     recordBenchmarkArm,
+    benchmarkTopicCuration,
     recordKnowledgeAllowance,
     continuedBenchmarkState,
     createBenchmarkStateWriter,
@@ -301,6 +302,41 @@ test("effective product capabilities are recorded and configuration changes cann
         /Product memory configuration changed/,
     );
     assert.equal(state.arm.informationalViews, true);
+});
+
+test("benchmark topic identity records frozen defaults and rejects removed selectors", () => {
+    assert.deepEqual(benchmarkTopicCuration({}), {
+        engine: "generative",
+        scheduling: "frozen-two-packet-serial-reconciliation-v1",
+        priorDeltas: true,
+        compactIds: true,
+    });
+    const custom = benchmarkTopicCuration({
+        TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "12000",
+        TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.5",
+        TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS: "false",
+        TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "false",
+    });
+    assert.equal(custom.inputTokenTarget, 12000);
+    assert.equal(custom.priorContextFraction, 0.5);
+    assert.equal(custom.priorDeltas, false);
+    assert.equal(custom.compactIds, false);
+    for (const [key, value] of [
+        ["TYPEAGENT_MEMORY_TOPIC_CONCURRENCY", "1"],
+        ["TYPEAGENT_MEMORY_TOPIC_CONCURRENCY", "2"],
+        ["TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION", "true"],
+        ["TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION", "false"],
+    ])
+        assert.throws(
+            () => benchmarkTopicCuration({ [key]: value }),
+            new RegExp(key),
+        );
+    const decision = benchmarkTopicCuration({
+        TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+        TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "4",
+    });
+    assert.equal(decision.engine, "decision");
+    assert.equal(decision.execution.concurrency, 4);
 });
 
 for (const [field, key, lanes] of [

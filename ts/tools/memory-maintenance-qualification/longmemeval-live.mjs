@@ -8,6 +8,8 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
+import { getConfiguredMemoryViewOptions } from "../../packages/memory/service/dist/viewHostOptions.js";
+import { resolveTopicCurationSettings } from "../../packages/memory/service/dist/topicCurationSettings.js";
 import {
     assertCheckpoint,
     checkpointExpectationHash,
@@ -78,13 +80,7 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
         ),
         ingestion:
             "One Markdown source per original session position; dates, roles and turn text preserved",
-        topicCuration: {
-            inputTokenTarget:
-                process.env.TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS ?? null,
-            concurrency: process.env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY ?? null,
-            priorContextFraction:
-                process.env.TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION ?? null,
-        },
+        topicCuration: benchmarkTopicCuration(),
         wikiAssessmentConcurrency: Number(
             process.env.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY ?? 1,
         ),
@@ -131,6 +127,20 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
             "Product memory configuration changed",
         );
     state.arm = arm;
+}
+
+export function benchmarkTopicCuration(environment = process.env) {
+    const configured = getConfiguredMemoryViewOptions(environment);
+    return configured.decisionTopics
+        ? {
+              engine: "decision",
+              execution: configured.decisionTopicExecution ?? null,
+          }
+        : {
+              engine: "generative",
+              scheduling: "frozen-two-packet-serial-reconciliation-v1",
+              ...resolveTopicCurationSettings(configured.topicCuration),
+          };
 }
 
 async function benchmarkCheckpoint(productRoot) {

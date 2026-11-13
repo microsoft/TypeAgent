@@ -24,7 +24,19 @@ import {
     TopicNominationIndex,
     topicSourceKey,
 } from "./topicLookup.js";
-import { runOrderedTopicBatches } from "./topicCurationScheduler.js";
+import { yieldMaintenanceBuild } from "./maintenanceConcurrency.js";
+import {
+    resolveTopicCurationSettings,
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+} from "./topicCurationSettings.js";
+export {
+    resolveTopicCurationSettings,
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+} from "./topicCurationSettings.js";
 import {
     compactTopicCompletion,
     TopicCurationTransportError,
@@ -59,14 +71,6 @@ export type TopicCurationCompletion = ((
     inspectRequest?: TopicCurationOptions["inspectRequest"];
 };
 type Complete = TopicCurationCompletion;
-export interface TopicCurationSettings {
-    inputTokenTarget?: number;
-    concurrency?: 1 | 2;
-    priorContextFraction?: number;
-    priorDeltas?: boolean;
-    compactIds?: boolean;
-    frozenPreparation?: boolean;
-}
 export interface TopicCurationCall {
     ordinal?: number;
     phase?: "preparation" | "reconciliation";
@@ -103,57 +107,6 @@ export type TopicCurationCandidate = Pick<
     prior?: TopicConcept;
 };
 type Candidate = TopicCurationCandidate;
-export function validateTopicCurationSettings(
-    options: TopicCurationSettings,
-): void {
-    if (
-        (options.inputTokenTarget !== undefined &&
-            (!Number.isSafeInteger(options.inputTokenTarget) ||
-                options.inputTokenTarget < 1)) ||
-        (options.concurrency !== undefined &&
-            ![1, 2].includes(options.concurrency)) ||
-        [
-            options.priorDeltas,
-            options.compactIds,
-            options.frozenPreparation,
-        ].some((value) => value !== undefined && typeof value !== "boolean") ||
-        (options.frozenPreparation === true && options.concurrency !== 2) ||
-        (options.priorContextFraction !== undefined &&
-            (!Number.isFinite(options.priorContextFraction) ||
-                options.priorContextFraction < 0 ||
-                options.priorContextFraction > 0.5 ||
-                options.inputTokenTarget === undefined))
-    )
-        throw new Error("Invalid topic curation settings");
-}
-
-export function topicCurationPolicy(
-    curated: boolean,
-    settings?: TopicCurationSettings,
-): string {
-    if (!curated) return "raw-v1";
-    if (!settings) return "curated-lazy-v6";
-    validateTopicCurationSettings(settings);
-    if (
-        settings.priorDeltas ||
-        settings.compactIds ||
-        settings.frozenPreparation
-    )
-        return `curated-lazy-v9:${viewHash([
-            settings.inputTokenTarget ?? null,
-            settings.concurrency ?? 1,
-            settings.priorContextFraction ?? 0,
-            settings.priorDeltas ?? false,
-            settings.compactIds ?? false,
-            settings.frozenPreparation ?? false,
-        ]).slice(0, 16)}`;
-    return `curated-lazy-v8:${viewHash([
-        settings.inputTokenTarget ?? null,
-        settings.concurrency ?? 1,
-        settings.priorContextFraction ?? 0,
-    ]).slice(0, 16)}`;
-}
-
 export function orderedTopicNodes<
     T extends Pick<TopicNode, "id" | "label" | "scope" | "citations">,
 >(nodes: readonly T[], lazy = true) {
@@ -573,7 +526,7 @@ function normalizedPacketResponse(
     };
 }
 
-export async function curateTopics(
+function createTopicCuration(
     snapshot: TopicSnapshot,
     evidenceFor: (node: TopicNode) => ViewCitation[],
     complete: Complete,
@@ -582,15 +535,9 @@ export async function curateTopics(
     checkpoint?: (curation: TopicCuration) => Promise<void>,
     reusable?: TopicCuration,
     options: TopicCurationOptions = {},
-): Promise<TopicCuration> {
+) {
     validateTopicCurationSettings(options);
-    if (options.frozenPreparation && !lazy)
-        throw new Error("Frozen topic preparation requires lazy curation");
-    if (
-        (options.onPacket || options.replayPackets) &&
-        (!lazy ||
-            ((options.concurrency ?? 1) !== 1 && !options.frozenPreparation))
-    )
+    if ((options.onPacket || options.replayPackets) && !lazy)
         throw new Error(
             "Topic packet replay requires lazy curation with ordered installation",
         );
@@ -935,8 +882,7 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
         }
         if (
             checkpoint &&
-            (options.frozenPreparation ||
-                completed === 1 ||
+            (completed === 1 ||
                 completed % 8 === 0 ||
                 packet.end === nodes.length)
         ) {
@@ -945,124 +891,178 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
         }
         return false;
     };
-    if (options.frozenPreparation)
-        await runFrozenTopicWindows(
-            nodes.length,
-            signal,
-            (start, ordinal) =>
-                prepareTopicPacket(
-                    nodes,
-                    start,
-                    ordinal,
-                    new TopicNominationIndex(),
-                    evidenceFor,
-                    lazy,
-                    evidenceIndex,
-                    options,
-                ),
-            (packets) => {
-                recordSearchTiming("topic.curation.frozen.window", 0, {
-                    start: packets[0].start,
-                    end: packets[packets.length - 1].end,
-                });
-                for (const [dependency, value] of Object.entries({
-                    recipe: snapshot.recipe,
-                    prior: result,
-                    preparation: packets.map((packet) => packet.fingerprint),
-                }))
-                    recordSearchTiming(
-                        `topic.curation.frozen.window.${dependency}`,
-                        0,
-                        { fingerprint: viewHash(value) },
-                    );
-                const batch: Candidate[] = [
-                    ...packets.flatMap((packet) => packet.batch),
-                    ...result.concepts.map((concept) => ({
-                        ...concept,
-                        prior: concept,
-                    })),
-                ];
-                const supplied = [
-                    ...new Map(
-                        [
-                            ...packets.flatMap((packet) => packet.supplied),
-                            ...result.concepts.flatMap(
-                                (concept) => concept.citations,
-                            ),
-                        ].map((citation) => [viewHash(citation), citation]),
-                    ).values(),
-                ];
-                const payload = curationPayload(
-                    batch,
-                    supplied,
-                    evidenceIndex,
-                    options.priorDeltas,
+    return {
+        nodes,
+        result,
+        decide,
+        commit,
+        validate: (curation: TopicCuration) =>
+            validateTopicCurationProgress(
+                { ...snapshot, curationProgress: curation },
+                evidenceIndex,
+            ),
+        prepare: (start: number, ordinal: number, priors = nominations) =>
+            prepareTopicPacket(
+                nodes,
+                start,
+                ordinal,
+                priors,
+                evidenceFor,
+                lazy,
+                evidenceIndex,
+                options,
+            ),
+        combine: (packets: Packet[]) => {
+            recordSearchTiming("topic.curation.frozen.window", 0, {
+                start: packets[0].start,
+                end: packets[packets.length - 1].end,
+            });
+            for (const [dependency, value] of Object.entries({
+                recipe: snapshot.recipe,
+                prior: result,
+                preparation: packets.map((packet) => packet.fingerprint),
+            }))
+                recordSearchTiming(
+                    `topic.curation.frozen.window.${dependency}`,
+                    0,
+                    { fingerprint: viewHash(value) },
                 );
-                const schema = curationSchema(batch, supplied, lazy);
-                return {
-                    ...packets[0],
-                    end: packets[packets.length - 1].end,
-                    batch,
-                    reconsidered: [...result.concepts],
-                    supplied,
+            const batch: Candidate[] = [
+                ...packets.flatMap((packet) => packet.batch),
+                ...result.concepts.map((concept) => ({
+                    ...concept,
+                    prior: concept,
+                })),
+            ];
+            const supplied = [
+                ...new Map(
+                    [
+                        ...packets.flatMap((packet) => packet.supplied),
+                        ...result.concepts.flatMap(
+                            (concept) => concept.citations,
+                        ),
+                    ].map((citation) => [viewHash(citation), citation]),
+                ).values(),
+            ];
+            const payload = curationPayload(
+                batch,
+                supplied,
+                evidenceIndex,
+                options.priorDeltas,
+            );
+            const schema = curationSchema(batch, supplied, lazy);
+            return {
+                ...packets[0],
+                end: packets[packets.length - 1].end,
+                batch,
+                reconsidered: [...result.concepts],
+                supplied,
+                payload,
+                schema,
+                ordinal: Math.ceil(packets[0].ordinal / 2),
+                fingerprint: viewHash([
+                    "frozen-window-v1",
+                    topicCurationPolicy(true, options),
+                    snapshot.recipe,
+                    rules,
                     payload,
                     schema,
-                    ordinal: Math.ceil(packets[0].ordinal / 2),
-                    fingerprint: viewHash([
-                        "frozen-window-v1",
-                        topicCurationPolicy(true, options),
-                        snapshot.recipe,
-                        rules,
-                        payload,
-                        schema,
-                        result,
-                        batch.map((node) => [
-                            node.id,
-                            node.memberIds ?? [node.id],
-                        ]),
-                        packets.map((packet) => packet.fingerprint),
-                    ]),
-                };
-            },
-            decide,
-            (packets, preparationSignal) =>
-                reconcileFrozenTopics(
-                    snapshot,
-                    packets.map((packet) => packet.batch),
                     result,
-                    evidenceFor,
-                    complete,
-                    preparationSignal,
-                    options,
-                    curateTopics,
-                    (curation) =>
-                        validateTopicCurationProgress(
-                            { ...snapshot, curationProgress: curation },
-                            evidenceIndex,
-                        ),
-                ),
-            commit,
-        );
-    else
-        await runOrderedTopicBatches(
-            nodes.length,
-            options.concurrency ?? 1,
-            signal,
-            (start, ordinal) =>
-                prepareTopicPacket(
-                    nodes,
-                    start,
-                    ordinal,
-                    nominations,
-                    evidenceFor,
-                    lazy,
-                    evidenceIndex,
-                    options,
-                ),
-            decide,
-            commit,
-        );
-    return result;
+                    batch.map((node) => [node.id, node.memberIds ?? [node.id]]),
+                    packets.map((packet) => packet.fingerprint),
+                ]),
+            };
+        },
+    };
+}
+
+// Single-pass evidence work is shared by frozen preparation, reconciliation and native resolution.
+export async function curateTopicEvidence(
+    snapshot: TopicSnapshot,
+    evidenceFor: (node: TopicNode) => ViewCitation[],
+    complete: Complete,
+    signal: AbortSignal,
+    lazy = false,
+    checkpoint?: (curation: TopicCuration) => Promise<void>,
+    reusable?: TopicCuration,
+    options: TopicCurationOptions = {},
+): Promise<TopicCuration> {
+    const work = createTopicCuration(
+        snapshot,
+        evidenceFor,
+        complete,
+        signal,
+        lazy,
+        checkpoint,
+        reusable,
+        options,
+    );
+    let position = 0;
+    let ordinal = 1;
+    while (position < work.nodes.length) {
+        signal.throwIfAborted();
+        const packet = work.prepare(position, ordinal);
+        const value = await work.decide(packet, signal);
+        signal.throwIfAborted();
+        if (await work.commit(packet, value, ordinal))
+            await yieldMaintenanceBuild(signal);
+        position = packet.end;
+        ordinal++;
+    }
+    return work.result;
+}
+
+export async function curateTopics(
+    snapshot: TopicSnapshot,
+    evidenceFor: (node: TopicNode) => ViewCitation[],
+    complete: Complete,
+    signal: AbortSignal,
+    lazy = true,
+    checkpoint?: (curation: TopicCuration) => Promise<void>,
+    reusable?: TopicCuration,
+    options: TopicCurationOptions = {},
+): Promise<TopicCuration> {
+    if (!lazy)
+        throw new Error("Frozen topic preparation requires lazy curation");
+    const resolved = { ...options, ...resolveTopicCurationSettings(options) };
+    const work = createTopicCuration(
+        snapshot,
+        evidenceFor,
+        complete,
+        signal,
+        true,
+        undefined,
+        reusable,
+        resolved,
+    );
+    await runFrozenTopicWindows(
+        work.nodes.length,
+        signal,
+        (start, ordinal) =>
+            work.prepare(start, ordinal, new TopicNominationIndex()),
+        work.combine,
+        work.decide,
+        (packets, preparationSignal) =>
+            reconcileFrozenTopics(
+                snapshot,
+                packets.map((packet) => packet.batch),
+                work.result,
+                evidenceFor,
+                complete,
+                preparationSignal,
+                resolved,
+                curateTopicEvidence,
+                work.validate,
+            ),
+        async (packet, value, ordinal) => {
+            await work.commit(packet, value, ordinal);
+            if (checkpoint) {
+                await checkpoint(structuredClone(work.result));
+                await yieldMaintenanceBuild(signal);
+            }
+        },
+    );
+    return work.result;
 }
 
 export function validateTopicCurationProgress(
