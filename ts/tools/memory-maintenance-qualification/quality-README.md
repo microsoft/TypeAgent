@@ -652,12 +652,19 @@ changed member models, endpoints or request constraints invalidate approval.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` before an explicitly authorized run to retain
 the existing native stage spans in worker stderr. The arm records this setting
-and the existing opt-in `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`,
-`TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION`
-settings; changing them is a different arm and cannot silently resume an older
-run. Production topic defaults are unchanged. Qualify packet admission and
-coverage before increasing concurrency; context capacity does not establish
-provider tokens-per-minute capacity.
+and effective topic settings: input target and prior fraction remain unset
+(existing node/character packing, no reserved prior fraction), while prior
+deltas and compact IDs default to true. Configure explicit token packing with
+`TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`, `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION`,
+`TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS` and `TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`.
+The historical 24000-token / 0.25-fraction candidate settings are not defaults.
+Generative topics always use frozen two-packet preparation and serial
+reconciliation/commit. Removed `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
+`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` settings fail explicitly.
+Changing settings creates a different arm; older arm identities cannot silently
+resume under the new defaults. Retain old reports as historical evidence and
+create fresh run artifacts. Native Decision scheduling remains unchanged.
+Context capacity does not establish provider tokens-per-minute capacity.
 
 During required-knowledge waits, an independent observer reads the authoritative
 checkpoint every 30 seconds. Progress records separate the wait outcome from

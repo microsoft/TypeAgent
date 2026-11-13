@@ -7,7 +7,10 @@ import {
     queryTopicSnapshot,
     validateTopicSnapshot,
 } from "../src/topicSnapshot.js";
-import { curateTopics } from "../src/topicCuration.js";
+import {
+    curateTopicEvidence as curateTopics,
+    curateTopics as curateFrozenTopics,
+} from "../src/topicCuration.js";
 import type { TopicSnapshot, TopicCuration } from "../src/topicTypes.js";
 import { openai } from "@typeagent/aiclient";
 import {
@@ -186,7 +189,7 @@ test("context packing exceeds 24 raw nodes and accounts for all tail nodes", asy
     validateTopicSnapshot(value);
 });
 
-test("context-sized concurrent packets preserve all nodes when completions finish out of order", async () => {
+test("context-sized frozen preparation preserves nodes when completions finish out of order", async () => {
     const value = snapshot(105);
     const sizes: number[] = [];
     let active = 0;
@@ -195,7 +198,7 @@ test("context-sized concurrent packets preserve all nodes when completions finis
     const first = new Promise<void>((resolve) => {
         releaseFirst = resolve;
     });
-    value.curation = await curateTopics(
+    value.curation = await curateFrozenTopics(
         value,
         (node) => node.citations,
         async (_rules, payload) => {
@@ -218,7 +221,7 @@ test("context-sized concurrent packets preserve all nodes when completions finis
         true,
         undefined,
         undefined,
-        { ...contextOptions(), concurrency: 2 },
+        contextOptions(),
     );
     expect(maxActive).toBe(2);
     expect(Math.max(...sizes)).toBeGreaterThan(24);
@@ -253,59 +256,61 @@ test("context packing rejects an oversized item or insufficient output capacity 
     expect(complete).not.toHaveBeenCalled();
 });
 
-test("speculative curation recomputes newly created targets and hidden membership before commit", async () => {
-    async function run(concurrency: 1 | 2) {
-        const value = snapshot(55);
-        let calls = 0;
-        const curation = await curateTopics(
-            value,
-            (node) => node.citations,
-            async (_rules, payload) => {
-                calls++;
-                const input = payload as {
-                    nodes: { id: string; evidenceIds: string[] }[];
-                };
-                return {
-                    concepts: [
-                        {
-                            label: "Mercury",
-                            scope: "Synthetic test",
-                            purpose: "Mercury reference",
-                            memberIds: input.nodes.map((node) => node.id),
-                            evidenceIds: [
-                                ...new Set(
-                                    input.nodes.flatMap(
-                                        (node) => node.evidenceIds,
-                                    ),
-                                ),
-                            ],
-                            salience: 6,
-                        },
-                    ],
-                    deferred: [],
-                };
-            },
-            new AbortController().signal,
-            true,
-            undefined,
-            undefined,
-            { concurrency },
-        );
-        validateTopicSnapshot({ ...value, curation });
-        return { curation, calls };
-    }
-    const serial = await run(1),
-        parallel = await run(2);
-    expect(parallel.curation).toEqual(serial.curation);
-    expect(parallel.calls).toBeGreaterThan(serial.calls);
-    expect(parallel.curation.concepts[0].memberIds).toHaveLength(55);
+test("frozen curation prepares raw evidence once across changing prior concepts", async () => {
+    const value = snapshot(55);
+    let calls = 0;
+    let prepared = 0;
+    const curation = await curateFrozenTopics(
+        value,
+        (node) => node.citations,
+        async (_rules, payload, _schema, call) => {
+            calls++;
+            if (call?.phase === "preparation") prepared += call.rawNodes ?? 0;
+            const input = payload as {
+                nodes: { id: string; evidenceIds: string[] }[];
+            };
+            return {
+                concepts: [
+                    {
+                        label: "Mercury",
+                        scope: "Synthetic test",
+                        purpose: "Mercury reference",
+                        memberIds: input.nodes.map((node) => node.id),
+                        evidenceIds: [
+                            ...new Set(
+                                input.nodes.flatMap((node) => node.evidenceIds),
+                            ),
+                        ],
+                        salience: 6,
+                    },
+                ],
+                deferred: [],
+            };
+        },
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+    );
+    validateTopicSnapshot({ ...value, curation });
+    expect(prepared).toBe(55);
+    expect(calls).toBe(5);
+    expect(curation.concepts[0].memberIds).toHaveLength(55);
 });
 
-test("experimental policies change input identity and preserve legacy defaults", () => {
-    expect(topicCurationPolicy(true)).toBe("curated-lazy-v6");
-    expect(topicCurationPolicy(true, { concurrency: 2 })).not.toBe(
-        topicCurationPolicy(true),
-    );
+test("frozen policy canonicalizes defaults and invalidates legacy scheduler identities", () => {
+    expect(topicCurationPolicy(true)).toMatch(/^curated-lazy-v10:/);
+    expect(
+        topicCurationPolicy(true, { priorDeltas: true, compactIds: true }),
+    ).toBe(topicCurationPolicy(true));
+    for (const settings of [
+        Object.assign({ priorDeltas: true }, { concurrency: 1 }),
+        Object.assign({ priorDeltas: true }, { concurrency: 2 }),
+        Object.assign({ priorDeltas: true }, { frozenPreparation: false }),
+    ])
+        expect(() => topicCurationPolicy(true, settings)).toThrow(
+            "Invalid topic curation settings",
+        );
     expect(topicCurationPolicy(true, { inputTokenTarget: 32000 })).not.toBe(
         topicCurationPolicy(true, { inputTokenTarget: 64000 }),
     );
@@ -688,80 +693,71 @@ test("lazy curation packs interleaved labels by source without discarding origin
     validateTopicSnapshot(value);
 });
 
-test.each([1, 2] as const)(
-    "curation resumes validated checkpoint membership after a later failure at concurrency %i",
-    async (concurrency) => {
-        const value = snapshot(55);
-        let checkpoint: TopicCuration | undefined;
-        let calls = 0;
-        const decide = async (_rules: string, payload: unknown) => {
-            const batch = payload as { nodes: Array<{ id: string }> };
-            return {
-                concepts: [],
-                deferred: batch.nodes.map(({ id }) => ({
-                    nodeId: id,
-                    reason: "Incidental mention",
-                })),
-            };
+test("single-pass evidence resumes validated checkpoint membership after a later failure", async () => {
+    const value = snapshot(55);
+    let checkpoint: TopicCuration | undefined;
+    let calls = 0;
+    const decide = async (_rules: string, payload: unknown) => {
+        const batch = payload as { nodes: Array<{ id: string }> };
+        return {
+            concepts: [],
+            deferred: batch.nodes.map(({ id }) => ({
+                nodeId: id,
+                reason: "Incidental mention",
+            })),
         };
-        await expect(
-            curateTopics(
-                value,
-                (node) => node.citations,
-                async (rules, payload) => {
-                    if (++calls === 3) throw new Error("Provider interrupted");
-                    return decide(rules, payload);
-                },
-                new AbortController().signal,
-                true,
-                async (progress) => {
-                    validateTopicSnapshot({
-                        ...value,
-                        curationProgress: progress,
-                    });
-                    checkpoint = progress;
-                },
-                undefined,
-                { concurrency },
-            ),
-        ).rejects.toThrow("Provider interrupted");
-        expect(checkpoint!.deferred).toHaveLength(24);
-        const saved = new Set(
-            checkpoint!.deferred.map((entry) => entry.nodeId),
-        );
-        const resumed = await curateTopics(
+    };
+    await expect(
+        curateTopics(
             value,
             (node) => node.citations,
             async (rules, payload) => {
-                const batch = payload as { nodes: Array<{ id: string }> };
-                expect(batch.nodes.every(({ id }) => !saved.has(id))).toBe(
-                    true,
-                );
+                if (++calls === 3) throw new Error("Provider interrupted");
                 return decide(rules, payload);
             },
             new AbortController().signal,
             true,
+            async (progress) => {
+                validateTopicSnapshot({
+                    ...value,
+                    curationProgress: progress,
+                });
+                checkpoint = progress;
+            },
             undefined,
-            checkpoint,
-            { concurrency },
-        );
-        expect(resumed.deferred).toHaveLength(55);
-        validateTopicSnapshot({ ...value, curation: resumed });
-        const invalid = structuredClone(checkpoint!);
-        invalid.deferred[0].nodeId = "invented";
-        await expect(
-            curateTopics(
-                value,
-                (node) => node.citations,
-                decide,
-                new AbortController().signal,
-                true,
-                undefined,
-                invalid,
-            ),
-        ).rejects.toThrow("Invalid partial topic curation membership");
-    },
-);
+        ),
+    ).rejects.toThrow("Provider interrupted");
+    expect(checkpoint!.deferred).toHaveLength(24);
+    const saved = new Set(checkpoint!.deferred.map((entry) => entry.nodeId));
+    const resumed = await curateTopics(
+        value,
+        (node) => node.citations,
+        async (rules, payload) => {
+            const batch = payload as { nodes: Array<{ id: string }> };
+            expect(batch.nodes.every(({ id }) => !saved.has(id))).toBe(true);
+            return decide(rules, payload);
+        },
+        new AbortController().signal,
+        true,
+        undefined,
+        checkpoint,
+    );
+    expect(resumed.deferred).toHaveLength(55);
+    validateTopicSnapshot({ ...value, curation: resumed });
+    const invalid = structuredClone(checkpoint!);
+    invalid.deferred[0].nodeId = "invented";
+    await expect(
+        curateTopics(
+            value,
+            (node) => node.citations,
+            decide,
+            new AbortController().signal,
+            true,
+            undefined,
+            invalid,
+        ),
+    ).rejects.toThrow("Invalid partial topic curation membership");
+});
 
 test("curation checkpoint persistence failure stops before another model request", async () => {
     const value = snapshot(55);

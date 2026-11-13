@@ -17,6 +17,7 @@ import {
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { validateTopicSnapshot } from "../src/topicSnapshot.js";
 import { topicClusterSignature } from "../src/topicDecision.js";
+import { topicCurationPolicy } from "../src/topicCuration.js";
 import { prioritizeTopicMaintenance } from "../src/topicClusterMaintenance.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { TypedViewStore } from "../src/viewStore.js";
@@ -193,7 +194,7 @@ test.each([false, true])(
                 if (reuse)
                     expect(
                         state.continuation?.curationPackets?.length,
-                    ).toBeGreaterThanOrEqual(2);
+                    ).toBeGreaterThanOrEqual(1);
                 else expect(state.continuation).toBeUndefined();
             }
             await service.close();
@@ -215,8 +216,8 @@ test.each([false, true])(
                 (await service.queryTopics({ corpusId, pageSize: 100 }))
                     .totalNodes,
             ).toBe(54);
-            expect(calls).toBe(reuse ? 5 : 6);
-            expect(processedNodes).toBe(reuse ? 60 : 126);
+            expect(calls).toBe(reuse ? 10 : 18);
+            expect(processedNodes).toBe(reuse ? 120 : 396);
             const current = await new TypedViewStore(root).getTopicState(
                 corpusId,
             );
@@ -270,7 +271,7 @@ async function priorSnapshot() {
     const witness = input.topicInput!.curationInputFingerprint;
     if (!witness) throw new Error("Expected captured dependency witness");
     snapshot.curationInputFingerprint = witness;
-    snapshot.recipe += ":curated-lazy-v6";
+    snapshot.recipe += `:${topicCurationPolicy(true)}`;
     snapshot.curationProgress = {
         concepts: [],
         deferred: [
@@ -479,9 +480,9 @@ function deferred() {
 }
 
 test.each([
-    [48, "zz-added", 1],
-    [55, "zz-added", 1],
-    [48, "aa-added", 3],
+    [48, "zz-added", 2],
+    [55, "zz-added", 2],
+    [48, "aa-added", 6],
 ] as const)(
     "packet prefix replay preserves current output and respects ordering and tail boundaries: %s %s",
     async (count, sourceId, remainingCalls) => {
@@ -528,7 +529,7 @@ test.each([
             topicWatermark: true,
         });
         const previous = await generate(input, new AbortController().signal);
-        expect(previous.curationPackets).toHaveLength(Math.ceil(count / 24));
+        expect(previous.curationPackets).toHaveLength(Math.ceil(count / 48));
         const added = indexedTopicOccurrence(
             {
                 sourceId,
@@ -551,7 +552,7 @@ test.each([
         });
         expect(next.topicInput?.reusableCuration).toBeUndefined();
         expect(next.topicInput?.reusableCurationPackets).toHaveLength(
-            Math.ceil(count / 24),
+            Math.ceil(count / 48),
         );
         const before = calls;
         const candidate = await generate(next, new AbortController().signal);
@@ -601,7 +602,7 @@ test.each([
 );
 
 test("packet receipts compact prior concept membership and replay exact consolidation", async () => {
-    const seed = Array.from({ length: 48 }, (_, ordinal) =>
+    const seed = Array.from({ length: 72 }, (_, ordinal) =>
         indexedTopicOccurrence(
             {
                 sourceId: "seed",
@@ -652,7 +653,7 @@ test("packet receipts compact prior concept membership and replay exact consolid
         }),
         new AbortController().signal,
     );
-    expect(previous.curation?.concepts[0].memberIds).toHaveLength(48);
+    expect(previous.curation?.concepts[0].memberIds).toHaveLength(72);
     expect(
         previous.curationPackets?.[1].response.concepts[0].memberIds,
     ).toHaveLength(25);
@@ -678,19 +679,15 @@ test("packet receipts compact prior concept membership and replay exact consolid
     });
     const before = calls;
     const candidate = await generate(next, new AbortController().signal);
-    expect(calls - before).toBe(1);
+    expect(calls - before).toBe(3);
     delete next.topicInput!.reusableCurationPackets;
     const control = await generate(next, new AbortController().signal);
     expect(candidate.curation).toEqual(control.curation);
 });
 
-test.each(
-    (["append", "correction", "forget", "staged-correction"] as const).flatMap(
-        (change) => [[change, false] as const, [change, true] as const],
-    ),
-)(
-    "production private watermark is durable, unpublished, and fails closed for %s (frozen: %s)",
-    async (change, frozen) => {
+test.each(["append", "correction", "forget", "staged-correction"] as const)(
+    "production frozen watermark is durable, unpublished, and fails closed for %s",
+    async (change) => {
         const directory = await mkdtemp(
             path.join(os.tmpdir(), "topic-watermark-"),
         );
@@ -723,16 +720,6 @@ test.each(
             },
             mode: {
                 kind: "generative",
-                ...(frozen
-                    ? {
-                          settings: {
-                              concurrency: 2,
-                              frozenPreparation: true,
-                              priorDeltas: true,
-                              compactIds: true,
-                          },
-                      }
-                    : {}),
             },
         });
         const adapter: ViewSynthesisAdapter = {
@@ -821,14 +808,12 @@ test.each(
                 corpusId,
             );
             if (change !== "correction") {
-                expect(state.continuation?.curationPackets).toHaveLength(
-                    frozen ? 1 : 2,
-                );
+                expect(state.continuation?.curationPackets).toHaveLength(1);
                 expect(state.snapshot?.curationProgress?.deferred).toHaveLength(
-                    frozen ? 48 : 24,
+                    48,
                 );
                 expect(state.family.dirty).toBe(true);
-                expect(calls).toBe(frozen ? 4 : 2);
+                expect(calls).toBe(4);
                 if (change === "forget") {
                     const preview = await service.previewForgetSource(
                         corpusId,
@@ -870,7 +855,7 @@ test.each(
                             corpusId,
                         )
                     ).continuation?.curationPackets?.length ?? 0,
-                ).toBe(change === "append" ? (frozen ? 1 : 2) : 0);
+                ).toBe(change === "append" ? 1 : 0);
             } else expect(state.continuation).toBeUndefined();
             const before = calls;
             if (change === "append") {
@@ -905,12 +890,7 @@ test.each(
                       ? 2
                       : 1;
             expect(calls - before).toBe(
-                // Custom adapters cannot certify a different host curation policy.
-                frozen && change === "append"
-                    ? 6
-                    : frozen
-                      ? expectedCalls * 2
-                      : expectedCalls,
+                change === "append" ? 2 : expectedCalls * 2,
             );
             const page = await service.queryTopics({ corpusId, pageSize: 100 });
             expect(page.totalNodes).toBe(
@@ -1027,10 +1007,10 @@ async function waitTopicJob(service: FileMemoryService, job: ViewBuildJob) {
 }
 
 test.each([
-    [false, "unrelated", 3],
+    [false, "unrelated", 6],
     [true, "unrelated", 2],
-    [true, "correction", 3],
-    [true, "new-topic", 3],
+    [true, "correction", 6],
+    [true, "new-topic", 6],
 ] as const)(
     "production checkpoint churn preserves only unaffected work and reaches current durable output: reuse=%s change=%s",
     async (reuse, change, expectedRemainingCalls) => {
@@ -1118,7 +1098,7 @@ test.each([
             await ingest("seed", "The pilot remains blocked.");
             const obsolete = await service.rebuildTopics(corpusId);
             await checkpointed.promise;
-            expect(calls).toBe(1);
+            expect(calls).toBe(4);
             await ingest(
                 change === "correction" ? "seed" : "additional",
                 change === "unrelated"
@@ -1165,7 +1145,7 @@ test.each([
                     )
                 ).state,
             ).toBe("complete");
-            expect(calls - completedCalls).toBe(reuse ? 0 : 3);
+            expect(calls - completedCalls).toBe(reuse ? 0 : 6);
             expect(
                 (await service.queryTopics({ corpusId, pageSize: 100 })).nodes,
             ).toEqual(page.nodes);

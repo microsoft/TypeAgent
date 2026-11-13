@@ -348,11 +348,11 @@ test("named generative settings and Decision factories retain distinct recipes",
                 };
             },
         },
-        mode: { kind: "generative", settings: { concurrency: 2 } },
+        mode: { kind: "generative" },
     });
     const result = await generate(input(1), new AbortController().signal);
-    expect(curationCalls).toBe(1);
-    expect(result.recipe).toMatch(/:curated-lazy-v8:[0-9a-f]{16}$/);
+    expect(curationCalls).toBe(2);
+    expect(result.recipe).toMatch(/:curated-lazy-v10:[0-9a-f]{16}$/);
     expect(result.curation?.deferred).toHaveLength(1);
 });
 
@@ -544,7 +544,7 @@ test.each([false, true])(
             input(7),
             new AbortController().signal,
         );
-        expect(calls).toBe(1);
+        expect(calls).toBe(2);
         expect(snapshot.curation?.deferred).toHaveLength(7);
         expect(
             snapshot.nodes.every(
@@ -681,8 +681,8 @@ test.each([
         const snapshot = await outcome;
         expect(stages).toEqual(
             mode === "valid"
-                ? ["curation", "organization"]
-                : ["curation", "organization", "organization"],
+                ? ["curation", "curation", "organization"]
+                : ["curation", "curation", "organization", "organization"],
         );
         expect(snapshot.parents).toHaveLength(1);
         expect(snapshot.parents[0].parentId).toMatch(/^concept:/);
@@ -752,7 +752,7 @@ test("curation checkpoints seed only unchanged policy and exact captured evidenc
         model: {
             completionSettings: {},
             complete: async (messages) => {
-                if (++calls === 2)
+                if (++calls === 5)
                     throw new Error("Curation provider interrupted");
                 const payload = JSON.parse(promptText(messages, 1));
                 return {
@@ -777,7 +777,7 @@ test("curation checkpoints seed only unchanged policy and exact captured evidenc
     expect(checkpoints).toHaveLength(1);
     const partial = checkpoints[0];
     expect(partial.curation).toBeUndefined();
-    expect(partial.curationProgress!.deferred).toHaveLength(24);
+    expect(partial.curationProgress!.deferred).toHaveLength(48);
     const resumed = await capture(frozen.topicInput!.occurrences, partial);
     expect(resumed.topicInput!.reusableCuration).toEqual(
         partial.curationProgress,

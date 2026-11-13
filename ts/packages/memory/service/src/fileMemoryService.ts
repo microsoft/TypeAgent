@@ -904,18 +904,9 @@ function configuredTopicCuration(
     options: FileMemoryServiceOptions,
     decisionTopics: boolean,
     curatedTopics: boolean,
-    parallel: boolean,
 ): TopicCurationSettings | undefined {
-    const parallelDefaults =
-        parallel &&
-        !decisionTopics &&
-        curatedTopics &&
-        !options.viewSynthesisAdapter?.generateTopics;
-    if (!options.topicCuration && !parallelDefaults) return undefined;
-    const settings: TopicCurationSettings = {
-        ...(parallelDefaults ? { concurrency: 2 } : {}),
-        ...options.topicCuration,
-    };
+    if (!options.topicCuration) return undefined;
+    const settings = { ...options.topicCuration };
     validateTopicCurationSettings(settings);
     if (
         decisionTopics ||
@@ -1481,18 +1472,11 @@ function configuredTopicWatermark(
     options: FileMemoryServiceOptions,
     curated: boolean,
     decision: boolean,
-    settings: TopicCurationSettings | undefined,
 ): boolean {
     if (options.topicWatermark !== true) return false;
-    if (
-        !options.topicCurationReuse ||
-        !curated ||
-        decision ||
-        ((settings?.concurrency ?? 1) !== 1 &&
-            settings?.frozenPreparation !== true)
-    )
+    if (!options.topicCurationReuse || !curated || decision)
         throw new Error(
-            "Topic watermark requires curation reuse and ordered generative curated topics; parallelism requires frozen preparation",
+            "Topic watermark requires curation reuse and generative curated topics",
         );
     return true;
 }
@@ -2035,13 +2019,11 @@ export class FileMemoryService
             options,
             this.decisionTopics,
             this.curatedTopics,
-            this.experiments.has("topic-parallel"),
         );
         this.topicWatermark = configuredTopicWatermark(
             options,
             this.curatedTopics,
             this.decisionTopics,
-            this.topicCuration,
         );
         this.topicPolicy = topicCurationPolicy(
             this.curatedTopics,
@@ -11862,9 +11844,7 @@ export class FileMemoryService
             model: this.topicModelIdentity(),
             curationRecipe: this.decisionTopics
                 ? topicDecisionRecipe
-                : this.curatedTopics
-                  ? this.topicPolicy
-                  : "curated-lazy-v6",
+                : this.topicPolicy,
             topicCurationReuse: this.topicCurationReuse,
             topicWatermark: this.topicWatermark,
             ...(this.topicWatermark && state.continuation

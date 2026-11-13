@@ -5,7 +5,7 @@ import {
     createMaintenanceBuildScheduler,
     yieldMaintenanceBuild,
 } from "../src/maintenanceConcurrency.js";
-import { runOrderedTopicBatches } from "../src/topicCurationScheduler.js";
+import { runFrozenTopicWindows } from "../src/topicFrozenPreparation.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
 import type { ViewBuildJob, ViewBuildSnapshot } from "../src/viewTypes.js";
 
@@ -362,7 +362,7 @@ test("failed checkpoint or drain does not admit a short job until native cleanup
     expect(entered).toEqual(["cleanup", "short"]);
 });
 
-test("generative curation drains started lookahead after a checkpoint before lending capacity", async () => {
+test("frozen curation drains its window before checkpointing and lending capacity", async () => {
     const schedule = createMaintenanceBuildScheduler(1, false, true);
     const both = gate();
     const slow = gate();
@@ -372,28 +372,48 @@ test("generative curation drains started lookahead after a checkpoint before len
     const order: string[] = [];
     const native = schedule(
         () =>
-            runOrderedTopicBatches(
+            runFrozenTopicWindows(
                 3,
-                2,
                 new AbortController().signal,
                 (start) => ({
                     start,
                     end: start + 1,
                     fingerprint: String(start),
                 }),
-                async ({ start }) => {
-                    active++;
-                    if (start === 1) both.resolve();
-                    await both.promise;
-                    if (start === 1) await slow.promise;
-                    active--;
-                    return start;
+                (packets) => ({
+                    start: packets[0].start,
+                    end: packets[packets.length - 1].end,
+                    fingerprint: packets
+                        .map((packet) => packet.fingerprint)
+                        .join(","),
+                }),
+                (_packet, _signal, work) => work(),
+                async (packets) => {
+                    await Promise.all(
+                        packets.map(async ({ start }) => {
+                            active++;
+                            if (start === 1) both.resolve();
+                            await both.promise;
+                            if (start === 1) await slow.promise;
+                            active--;
+                        }),
+                    );
+                    return {
+                        concepts: [],
+                        deferred: [
+                            {
+                                nodeId: String(packets[0].start),
+                                reason: "Synthetic checkpoint",
+                            },
+                        ],
+                    };
                 },
                 async (_packet, value) => {
                     durable++;
-                    order.push(`commit-${value}`);
-                    if (value === 0) committed.resolve();
-                    return true;
+                    const start = Number(value.deferred[0].nodeId);
+                    order.push(`commit-${start}`);
+                    if (start === 0) committed.resolve();
+                    await yieldMaintenanceBuild(new AbortController().signal);
                 },
             ),
         true,
@@ -404,12 +424,12 @@ test("generative curation drains started lookahead after a checkpoint before len
         expect(durable).toBe(1);
         order.push("short");
     }, false);
-    await committed.promise;
     await turn();
-    expect(order).toEqual(["commit-0"]);
+    expect(order).toEqual([]);
     slow.resolve();
+    await committed.promise;
     await Promise.all([native, short]);
-    expect(order).toEqual(["commit-0", "short", "commit-1", "commit-2"]);
+    expect(order).toEqual(["commit-0", "short", "commit-2"]);
 });
 
 test("conflicting explicit reservation and priority fail rather than reserving capacity silently", () => {
