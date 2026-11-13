@@ -1,4 +1,4 @@
-// A test double for the shape model: a locator, the simplest correct
+// A reference for the shape model: a locator, the simplest correct
 // version, so that a contract for something built on one (such as a
 // ShapeCollectionWriter) doesn't depend on any generated implementation.
 // helpers.check.ts runs the locator contract on it.

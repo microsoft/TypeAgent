@@ -18,7 +18,7 @@
  * task in the repo. For phase 3, <n>.2 is a second independent run whose
  * output is collected into alternates/, and <n>.d a workspace with both
  * runs as a/ and b/ in random order, where check runs the agent's tests as
- * A, as B and as the reference adapter (<file>.ref.ts) and requires each
+ * A, as B and as the reference (<file>.ref.ts) and requires each
  * to pass on exactly one of A and B.
  * Run: node task.ts list | make <n> | run <n> [--model <m>] | check <n> | collect <n> | review-check <n> | review <n> | lint | costs
  * Imports: node:fs, node:path, node:crypto, node:child_process, node:os
@@ -343,7 +343,7 @@ const suffixes = { 1: "", 2: "-run-2", d: "-distinguish" };
 const workspaceOf = (task: Task) => join(tasksDir, `task-${task.n}-${task.outputs[0].file.replace(/\.ts$/, "")}${suffixes[task.variant]}`);
 /** Where a second run's output is collected: beside the repo's parts, not in place of them. */
 const alternateOf = (file: string) => `alternates/${file.replace(/\.ts$/, ".run-2.ts")}`;
-/** The reference adapter phase 3 runs a distinguishing test against: exactly the task's exports. */
+/** The reference phase 3 runs a distinguishing test against: exactly the task's exports. */
 const refOf = (file: string) => file.replace(/\.ts$/, ".ref.ts");
 const manifestOf = (task: Task) => `${workspaceOf(task)}.manifest.json`;
 const bodyHash = (src: string) => createHash("sha256").update(splitHeader(src)[1]).digest("hex");
@@ -470,7 +470,7 @@ function seal(task: Task, manifest: Manifest, kept: Partial<Manifest> = {}): voi
 /**
  * Phase 3: a workspace holding both runs' implementations of a task as
  * a/<file> and b/<file>, in an order chosen at random and recorded only
- * outside, the reference adapter as <file>, and what the task's agent
+ * outside, the reference as <file>, and what the task's agent
  * read. The agent writes distinguish.test.ts and REPORT.md.
  */
 function makeDistinguish(task: Task): void {
@@ -1025,6 +1025,16 @@ function main(args: string[]): void {
     }
     case "collect": return collect(findTask(arg));
     case "review": return review(findTask(arg));
+    case "requeue": {
+      // A done task whose spec changed outside a review: why names the file that records the change.
+      const why = args[2];
+      if (!why || !existsSync(join(repo, why))) throw new Error("usage: node task.ts requeue <n> <file that records why>");
+      const state = loadState();
+      const task = findTask(arg);
+      if (!isDone(state, keyOf(task))) throw new Error(`task ${keyOf(task)} isn't done, so it can't go back`);
+      requeue(state, task, why);
+      return writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n");
+    }
     case "review-check": {
       // The form check alone, for a draft review: records nothing.
       const task = findTask(arg);

@@ -6,14 +6,15 @@
  *
  * How: Three sections, each labeled with the ID of the budget it measures. The
  * locator table times ListLocator and QuadTreeLocator building, querying and
- * bulk-removing 100, 1,000 and 10,000 scattered ink strokes.
- * frames.fraction-of-frame times finishing a stroke and an eraser move
- * through a stand-in for the message infrastructure over a ShapeProcessor on a
- * MapShapeCollection over a QuadTreeLocator holding 10,000 strokes, and prints
- * each median as a fraction of 5% of a 120 Hz frame; each move is timed from
- * the controller's first call to the end of process, with the stroke and the
- * swept rectangle made beforehand, as the view makes them while drawing, and
- * the model put back to 10,000 strokes afterward, untimed.
+ * bulk-removing 100, 1,000 and 10,000 scattered ink strokes, under string IDs.
+ * frames.fraction-of-frame times the circles app's two taps, one that draws a
+ * circle and one that erases the top circle under it, through a stand-in for
+ * the message infrastructure over a ShapeProcessor on a MapShapeCollection
+ * over a QuadTreeLocator holding 10,000 circles from makeCircle, and prints
+ * each median as a fraction of 5% of a 120 Hz frame; each tap is timed whole,
+ * from the first call the handler makes (newShapeId and makeCircle for a
+ * drawing tap, atPoint and compareZ for an erasing one) to the end of process,
+ * with the model put back to 10,000 circles afterward, untimed.
  * ShapeCollectionWriter.log-amortized and ShapeMessageProcessor.log-amortized
  * time a batch of operations on a collection holding 1,000 shapes and on one
  * holding 100,000, for eight add, remove, compareZ and clear patterns, and
@@ -24,20 +25,22 @@
  * collections, and it prints its own elapsed time. It exits nonzero when a
  * log-amortized ratio exceeds 16 (4 to 9 is what a logarithmic structure
  * measures at these two sizes), when the two locators disagree on what their
- * queries found, or when a clear that should remove nothing removes something,
- * which would make its measurement another measurement entirely; exceeding the
- * frame budget is printed, not a failure, because timing is flaky.
- * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts, listLocator.ts, quadTreeLocator.ts, inkStroke.ts, mapShapeCollection.ts, shapeProcessor.ts, node:os
+ * queries found, when a clear that should remove nothing removes something, or
+ * when a timed erasing tap finds no circle to erase, each of which would make
+ * its measurement another measurement entirely; exceeding the frame budget is
+ * printed, not a failure, because timing is flaky.
+ * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts, listLocator.ts, quadTreeLocator.ts, inkStroke.ts, circle.ts, mapShapeCollection.ts, shapeProcessor.ts, node:os
  */
 
 import { cpus, release, type as osType } from "node:os";
 import type { Point, Rectangle } from "./geometry.ts";
-import type { InkStroke, Shape, ShapeId, ShapeLocator } from "./shape.ts";
+import type { Circle, InkStroke, Shape, ShapeId, ShapeLocator } from "./shape.ts";
 import type { OperationContent } from "./dataModel.ts";
 import type { ShapeCollection, ShapeOp } from "./shapeModel.ts";
 import { ListLocator } from "./listLocator.ts";
 import { QuadTreeLocator } from "./quadTreeLocator.ts";
 import { makeInkStroke } from "./inkStroke.ts";
+import { makeCircle } from "./circle.ts";
 import { MapShapeCollection } from "./mapShapeCollection.ts";
 import { ShapeProcessor } from "./shapeProcessor.ts";
 
@@ -55,14 +58,14 @@ const PROCESSOR_RULE = "ShapeMessageProcessor.log-amortized";
 
 /** 5% of a 120 Hz frame, in milliseconds: the frame budget. */
 const FRAME_BUDGET = (1000 / 120) * 0.05;
-/** The strokes in the model the frame budget is measured against. */
-const MODEL_STROKES = 10_000;
-/** The model's strokes lie one per cell of a GRID x GRID grid over the canvas. */
+/** The circles in the model the frame budget is measured against. */
+const MODEL_CIRCLES = 10_000;
+/** The model's circles lie one per cell of a GRID x GRID grid over the canvas. */
 const GRID = 100;
 const CELL = CANVAS / GRID;
-/** Timed moves, and the moves run first to warm the code up. */
-const MOVES = 101;
-const MOVE_WARMUP = 20;
+/** Timed taps, and the taps run first to warm the code up. */
+const TAPS = 101;
+const TAP_WARMUP = 20;
 
 /** The two sizes the log-amortized ratios compare, and the batch timed at each. */
 const SMALL = 1_000;
@@ -90,6 +93,12 @@ let checksum = 0;
  * clear that removed some would be measuring something else, so the run fails.
  */
 let clearsRemovedNothing = true;
+
+/**
+ * Whether every timed erasing tap found a circle under it. A tap that found
+ * none would erase nothing, which is another measurement, so the run fails.
+ */
+let everyTapErased = true;
 
 /** mulberry32: a small seeded generator returning numbers in [0, 1). */
 function seeded(seed: number): () => number {
@@ -245,7 +254,7 @@ function locatorTable(): boolean {
   return agree;
 }
 
-// ---- The shapes the model measurements use --------------------------------
+// ---- The strokes the log-amortized measurements use -----------------------
 
 /** Black ink, for every stroke these measurements make. */
 const INK = { r: 0, g: 0, b: 0, a: 1 };
@@ -266,20 +275,45 @@ function walkFrom(rand: () => number, x: number, y: number, n: number, thickness
   return makeInkStroke({ points, thickness, color: INK });
 }
 
-/** A stroke a hand would draw in one cell of the grid: 2 to 20 points, thickness 1 to 8. */
-function cellStroke(rand: () => number, x: number, y: number): InkStroke {
-  return walkFrom(rand, x, y, 2 + Math.floor(rand() * 19), 1 + Math.floor(rand() * 8));
-}
+// ---- The circles app's circles --------------------------------------------
+//
+// Their sizes, colors and layout are this script's to choose; the output
+// states them. A model circle sits in its own cell of the grid, its center
+// within JITTER of the cell's center, and is wide enough beside the cell that
+// neighbours often overlap, so that a tap finds more than one circle and
+// compareZ has something to decide.
 
-/** The eraser is a round pen of this diameter, dragged along a move. */
-const ERASER_PEN = ERASER;
-
+/** The colors the circles app paints the model's circles with, taken in turn. */
+const PALETTE = [
+  { r: 220, g: 70, b: 70, a: 1 },
+  { r: 60, g: 140, b: 220, a: 1 },
+  { r: 90, g: 180, b: 100, a: 1 },
+  { r: 240, g: 190, b: 60, a: 1 },
+  { r: 150, g: 90, b: 200, a: 1 },
+];
+/** The color a tap draws with: the app's current pen. */
+const DRAW_COLOR = { r: 40, g: 40, b: 45, a: 1 };
+/** How far a model circle's center lies from its cell's center, at most, on each axis. */
+const JITTER = CELL / 4;
 /**
- * The rectangle an eraser move sweeps: the extents of the pen dragged from a
- * to b, which are those of a two-point stroke of the pen's thickness.
+ * A model circle's radius lies in this range, which reaches past a cell, so
+ * that a tap finds two or three circles and compareZ has something to decide.
  */
-function swept(a: Point, b: Point): Rectangle {
-  return makeInkStroke({ points: [a, b], thickness: ERASER_PEN, color: INK }).boundingBox();
+const MIN_RADIUS = CELL * 0.3;
+const MAX_RADIUS = CELL * 1.3;
+/** The radius a tap draws with. */
+const DRAW_RADIUS = CELL * 0.8;
+
+/** The circle of cell i of the grid: jittered within its cell, in the next color. */
+function cellCircle(rand: () => number, i: number): Circle {
+  return makeCircle({
+    center: {
+      x: (i % GRID) * CELL + CELL / 2 + (rand() - 0.5) * 2 * JITTER,
+      y: Math.floor(i / GRID) * CELL + CELL / 2 + (rand() - 0.5) * 2 * JITTER,
+    },
+    radius: MIN_RADIUS + rand() * (MAX_RADIUS - MIN_RADIUS),
+    color: PALETTE[i % PALETTE.length],
+  });
 }
 
 // ---- The stand-in for the message infrastructure --------------------------
@@ -371,7 +405,7 @@ function wired(): Infra {
 }
 
 /** Adds shapes through infra, acknowledged, settling every chunk operations. */
-async function fill(infra: Infra, shapes: readonly InkStroke[], chunk: number, made?: Map<ShapeId, Shape>): Promise<void> {
+async function fill(infra: Infra, shapes: readonly Shape[], chunk: number, made?: Map<ShapeId, Shape>): Promise<void> {
   for (let i = 0; i < shapes.length; i++) {
     const id = infra.newId();
     made?.set(id, shapes[i]);
@@ -385,84 +419,92 @@ async function fill(infra: Infra, shapes: readonly InkStroke[], chunk: number, m
 
 interface Budgeted {
   label: string;
-  /** Milliseconds, median over the timed moves. */
+  /** Milliseconds, median over the timed taps. */
   median: number;
 }
 
 /**
- * Times what one input event sends and processes, with MODEL_STROKES strokes
- * in the model: finishing a stroke, and an eraser move. Each move puts the
- * model back to MODEL_STROKES strokes afterward, untimed, so that every timed
- * move sees the same number of shapes.
+ * Times what one of the circles app's taps forms, sends and processes, with
+ * MODEL_CIRCLES circles in the model: a tap that draws a circle, and a tap
+ * that erases the top circle under it. Each tap puts the model back to
+ * MODEL_CIRCLES circles afterward, untimed, so that every timed tap sees the
+ * same number of shapes.
  */
-async function frameBudget(): Promise<{ results: Budgeted[]; hits: number }> {
+async function frameBudget(): Promise<{ results: Budgeted[]; found: number }> {
   const rand = seeded(0x1cebabe);
   const infra = wired();
   const made = new Map<ShapeId, Shape>();
-  const model: InkStroke[] = [];
-  for (let cell = 0; cell < MODEL_STROKES; cell++) {
-    const x = (cell % GRID) * CELL + rand() * CELL * 0.6;
-    const y = Math.floor(cell / GRID) * CELL + rand() * CELL * 0.6;
-    model.push(cellStroke(rand, x, y));
-  }
+  const model: Circle[] = [];
+  for (let cell = 0; cell < MODEL_CIRCLES; cell++) model.push(cellCircle(rand, cell));
   await fill(infra, model, FILL_CHUNK, made);
 
-  // The strokes a pen finishes, and the rectangles an eraser sweeps: each at
-  // its own place on the canvas, so that no two moves work the same cells.
-  // Each move starts on a stroke of the model, so that every move erases.
-  const drawn = Array.from({ length: MOVE_WARMUP + MOVES }, (_, i) =>
-    cellStroke(rand, ((i * 131) % (CANVAS - 200)) + 100, ((i * 71) % (CANVAS - 200)) + 100));
-  const sweeps = Array.from({ length: MOVE_WARMUP + MOVES }, (_, i) => {
-    const a = model[(i * 97) % MODEL_STROKES].points[0];
-    return swept(a, { x: a.x + 15, y: a.y + 10 });
-  });
+  // Where the taps land: a drawing tap anywhere on the canvas, and an erasing
+  // tap on the center of one of the model's circles, which that circle
+  // contains, so that every timed erasing tap erases one. The two sequences
+  // walk the canvas, so that no two taps work the same cells.
+  const draws = Array.from({ length: TAP_WARMUP + TAPS }, (): Point => ({
+    x: rand() * CANVAS, y: rand() * CANVAS,
+  }));
+  const erases = Array.from({ length: TAP_WARMUP + TAPS }, (_, i) => model[(i * 97) % MODEL_CIRCLES].center);
 
-  // Finishing a stroke: the add of the stroke the view has been drawing.
-  const finishing: number[] = [];
-  for (let i = 0; i < MOVE_WARMUP + MOVES; i++) {
-    const shape = drawn[i];
+  // A tap that draws: a new ID, the circle, the add, and processing it and
+  // its acknowledgment.
+  const drawing: number[] = [];
+  for (let i = 0; i < TAP_WARMUP + TAPS; i++) {
+    const at = draws[i];
     const start = performance.now();
     const id = infra.newId();
+    const shape = makeCircle({ center: at, radius: DRAW_RADIUS, color: DRAW_COLOR });
     infra.sendAcked({ type: "add", id, shape });
     await infra.settle();
     const ms = performance.now() - start;
-    if (i >= MOVE_WARMUP) finishing.push(ms);
+    if (i >= TAP_WARMUP) drawing.push(ms);
+    // Untimed, so that every timed tap sees MODEL_CIRCLES circles.
     infra.sendAcked({ type: "remove", ids: [id] });
     await infra.settle();
   }
 
-  // An eraser move: what the swept rectangle hits, removed.
+  // A tap that erases: the circles under the tap, the top one of them, the
+  // remove, and processing it and its acknowledgment.
   const erasing: number[] = [];
-  const hit: ShapeId[] = [];
-  let hits = 0;
-  for (let i = 0; i < MOVE_WARMUP + MOVES; i++) {
-    const rect = sweeps[i];
-    hit.length = 0;
+  const under: ShapeId[] = [];
+  let found = 0;
+  for (let i = 0; i < TAP_WARMUP + TAPS; i++) {
+    const at = erases[i];
+    under.length = 0;
     const start = performance.now();
-    infra.model.inRect(rect, hit);
-    infra.sendAcked({ type: "remove", ids: hit });
+    const n = infra.model.atPoint(at, under);
+    let top: ShapeId | undefined;
+    for (let k = 0; k < n; k++) {
+      const id = under[k];
+      if (top === undefined || infra.model.compareZ(id, top) > 0) top = id;
+    }
+    if (top !== undefined) infra.sendAcked({ type: "remove", ids: [top] });
     await infra.settle();
     const ms = performance.now() - start;
-    if (i >= MOVE_WARMUP) {
+    if (i >= TAP_WARMUP) {
       erasing.push(ms);
-      hits += hit.length;
+      found += n;
+      if (top === undefined) everyTapErased = false;
     }
-    for (const id of hit) {
-      const shape = made.get(id)!;
-      made.delete(id);
+    // Untimed: the erased circle goes back, under a fresh ID, so that every
+    // timed tap sees MODEL_CIRCLES circles.
+    if (top !== undefined) {
+      const shape = made.get(top)!;
+      made.delete(top);
       const fresh = infra.newId();
       made.set(fresh, shape);
       infra.sendAcked({ type: "add", id: fresh, shape });
+      await infra.settle();
     }
-    await infra.settle();
   }
 
   return {
     results: [
-      { label: "finishing a stroke", median: median(finishing) },
-      { label: "an eraser move", median: median(erasing) },
+      { label: "a tap that draws", median: median(drawing) },
+      { label: "a tap that erases", median: median(erasing) },
     ],
-    hits,
+    found,
   };
 }
 
@@ -676,8 +718,8 @@ console.log("");
 const agree = locatorTable();
 
 const frames = await frameBudget();
-console.log(`\n${FRAME_RULE}: sending and processing one input event's operations, budget ${fmt(FRAME_BUDGET, 3)} ms (5% of a 120 Hz frame)`);
-console.log(`${count(MODEL_STROKES)} ink strokes of 2 to 20 points and thickness 1 to 8 in the model, one per cell of a ${GRID} x ${GRID} grid over the ${CANVAS} x ${CANVAS} canvas, through a ShapeProcessor over a MapShapeCollection over a QuadTreeLocator; median of ${MOVES} moves after ${MOVE_WARMUP} warm-up moves. A finished stroke is one more such stroke; an eraser move drags a ${ERASER_PEN}-unit round pen 15 units right and 10 down from a point on a stroke, and hit ${fmt(frames.hits / MOVES, 2)} strokes per move on average.\n`);
+console.log(`\n${FRAME_RULE}: forming, sending and processing one input event's operations, budget ${fmt(FRAME_BUDGET, 3)} ms (5% of a 120 Hz frame)`);
+console.log(`The circles app's taps, with ${count(MODEL_CIRCLES)} circles from makeCircle in the model: one per cell of a ${GRID} x ${GRID} grid over the ${CANVAS} x ${CANVAS} canvas, each centered within ${fmt(JITTER, 0)} units of its cell's center, of radius ${fmt(MIN_RADIUS, 0)} to ${fmt(MAX_RADIUS, 0)} units, in ${PALETTE.length} colors taken in turn, so that neighbours often overlap; through a ShapeProcessor over a MapShapeCollection over a QuadTreeLocator; median of ${TAPS} taps after ${TAP_WARMUP} warm-up taps. A drawing tap makes a circle of radius ${fmt(DRAW_RADIUS, 0)} anywhere on the canvas; an erasing tap lands on the center of one of the model's circles, finds ${fmt(frames.found / TAPS, 2)} circles there on average, and erases the topmost.\n`);
 const budgetRows = [["measurement", "median ms", "fraction of budget", ""]];
 for (const r of frames.results) {
   budgetRows.push([
@@ -724,5 +766,9 @@ if (!agree) {
 }
 if (!clearsRemovedNothing) {
   console.error("\nA clear that knew none of the shapes present removed some of them, so its measurement isn't of a clear that removes nothing.");
+  process.exitCode = 1;
+}
+if (!everyTapErased) {
+  console.error("\nA timed erasing tap found no circle under it, so its measurement isn't of a tap that erases.");
   process.exitCode = 1;
 }

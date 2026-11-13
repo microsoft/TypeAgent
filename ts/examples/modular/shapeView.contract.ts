@@ -1,6 +1,6 @@
 // Contract tests for ShapeView (shapeView.ts) and the View rules it can be
 // checked against (view.ts). Every ShapeView implementation runs this suite,
-// whatever surface it draws on: its fixture reports what each point shows.
+// whatever surface it draws on: its driver reports what each point shows.
 // Test names are rule IDs.
 //
 // The suite gives the view the read side of a RefShapeWriter
@@ -27,12 +27,12 @@ import { ManualScheduler, testCircle } from "./viewkit.ts";
 import { readFacet, RefShapeWriter } from "./shapewriterkit.ts";
 
 /** A view, and what its surface shows at each point. */
-export interface ShapeViewFixture {
+export interface ShapeViewDriver {
   view: ShapeView;
   painted(p: Point): Color;
 }
 
-export type MakeShapeView = (model: ShapeCollection, scheduler: FrameScheduler, width: number, height: number) => ShapeViewFixture;
+export type MakeShapeView = (model: ShapeCollection, scheduler: FrameScheduler, width: number, height: number) => ShapeViewDriver;
 
 const width = 12;
 const height = 12;

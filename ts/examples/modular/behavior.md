@@ -50,10 +50,10 @@ visual.
 | File | Role |
 |---|---|
 | `scenarios.ts` | The behavior: `Action` (tap, color, radius, mode, clear), `Step` (an action, or "painted at p is a color"), `CirclesSettings` and `demoSettings` (palette, radius range, initial radius, drawing size), and the scenarios themselves |
-| `scenario.contract.ts` | `AppFixture`, the only thing a platform writes for these tests (`act`, `painted`, `dispose`). Runs each scenario under its ID, `frames.complete` on random actions, and `Scenario.random` against a reference |
-| `driver.ts` | The test platform's fixture. Its controls are methods (`TestCirclesApp`), and a tap is an event given to an `EventDistributor` for the window, at the drawing's offset (48 units down, where a platform would put its controls). It is also the message infrastructure: it owns the processor, gives the controller the model's read side and a `LocalSend`, sequences each sent operation and returns its acknowledgment. After each action it processes what was sent, runs the frames anything asks for, processes again, and throws if the model changed after the first processing (`frames.complete`) |
+| `scenario.contract.ts` | `Driver`, the only thing a platform writes for these tests (`act`, `painted`, `dispose`). Runs each scenario under its ID, `frames.complete` on random actions, and `Scenario.random` against a reference |
+| `driver.ts` | The test platform's driver, for my app and a peer's, with a sequencer between them. Its controls are methods (`TestCirclesApp`), and a tap is an event given to an `EventDistributor` for the window, at the drawing's offset (48 units down, where a platform would put its controls). It is also the message infrastructure: it owns the processor, gives the controller the model's read side and a `LocalSend`, sequences each sent operation and returns its acknowledgment. After each action it processes what was sent, runs the frames anything asks for, processes again, and throws if the model changed after the first processing (`frames.complete`) |
 | `circleskit.ts` | The reference controller: registers with the distributor, with the view's surface as its target, and converts taps from window to view coordinates (canonical too, since ShapeView's viewport is the identity). It sends an add to draw, finds the top circle at the point with `atPoint` and sends a remove to erase, and sends a clear |
-| `scenariokit.ts` | The reference assembly, every part a double. `kitFixture({ part: … })` swaps one part |
+| `scenariokit.ts` | The reference assembly, every part a reference. `kitDriver({ part: … })` swaps one part |
 | `adversaries/_circles.ts` | The reference controller with switchable bugs, for scenario adversaries |
 
 Scenario points are in the drawing's coordinates, at least a unit from any
@@ -73,7 +73,7 @@ The scenarios, as of 2026-11-10: `starts`, `draw-one`, `color-and-radius`,
 3. Add a bug to `adversaries/_circles.ts` (or to another part's helper,
    such as `_view.ts`) that the scenario must catch, and an adversary
    `adversaries/Scenario.<slug>--<bug>.adversary.ts`:
-   `scenarioContract(() => kitFixture({ app: makeTestCircles("<bug>") }), () => kitFixture())`.
+   `scenarioContract(() => kitDriver({ app: makeTestCircles("<bug>") }), () => kitDriver())`.
 4. Check it on seeds 1 to 3: `FC_SEED=n npm run adversaries -- Scenario`.
    If it escapes, make the scenario hit the boundary directly, as
    `largest-radius` does for radii the random run rarely reaches.
@@ -81,19 +81,46 @@ The scenarios, as of 2026-11-10: `starts`, `draw-one`, `color-and-radius`,
    `driver.ts`'s `act`, to `TestCirclesApp` and the reference controller,
    and to the action generator in `scenario.contract.ts`.
 
+## Changes after the review of 2026-11-13
+
+- `Scenario.random` compares only grid points a unit or more from every
+  edge of the reference's circles (`Driver.circles`), as the
+  scenarios' own points are, so a platform's antialiasing can't fail it.
+- `frames.fraction-of-frame` budgets one input event's operations with
+  10,000 shapes, and `bench.ts` measures the circles app's taps (task 10).
+  The ink app is deferred, so the budget no longer names strokes.
+- `Scenario.tap-outside`: a tap above the drawing, where the controls are,
+  draws nothing.
+- **A collaborator.** Every driver runs two apps on one drawing, mine and
+  a peer's, and sequences what each sends. A step can say `by: "peer"`, an
+  expectation `on: "peer"`, and network steps make operations pending and
+  choose their order: `hold`, `release` (one app's held operations, or the
+  first `count` of them) and `sync` (`NetStep` in `scenarios.ts`). Seven
+  scenarios use them: `peer-draw-shows`, `remote-under-pending`,
+  `concurrent-overlap-converges`, `clear-keeps-unseen`,
+  `clear-erases-own-pending`, `pending-stack-in-order` and
+  `clear-removes-seen`. `Scenario.random` includes the peer's actions and
+  network steps, ends with a sync, and checks that both drawings are then
+  the same (`MessageProcessor.converges`). Their adversaries are processor
+  bugs seen through the app (`kitDriver({ processor })`).
+- **An in-memory server is deferred.** `driver.ts`'s sequencer stands in
+  for one; a server like Fluid's tinylicious waits for the collaboration
+  protocol.
+
 ## Open questions
 
 - **Reading pixels on each platform.** `painted` assumes a platform's
-  fixture can read what the view's surface shows at a point. The test
-  platform does it through `RecordingContext`. A browser fixture could
-  read the canvas; mobile fixtures need their own way. The alternative is
+  driver can read what the view's surface shows at a point. The test
+  platform does it through `RecordingContext`. A browser driver could
+  read the canvas; mobile drivers need their own way. The alternative is
   to check the model's circles, which tests the model instead of the core
   visual.
-- **The web app.** No phase 2 task yet. It needs a platform fixture that
-  does the actions with real widgets, the DOM members those widgets use
+- **The web app.** No phase 2 task yet. It needs a platform driver that
+  does the actions with real widgets and hosts a peer (a test-platform app
+  in the same process will do), the DOM members those widgets use
   added to `dom.ts`, and a recording document for them (the old
   `domkit.ts` went with the web renderer). This waits for the discussion
-  of the device context (the platform subsets).
+  of the platform subsets.
 - **Viewport gestures.** Pinch, pan and rotate are a controller's now: it
   sets the view's viewport. No scenario covers them, and ShapeView
   supports only the identity viewport (`View.viewport.set-redraws` and

@@ -19,7 +19,7 @@ import { eventDistributorContract } from "../eventDistributor.contract.ts";
 import { RefDistributor } from "../distributorkit.ts";
 import { makeTestDistributor } from "./_distributor.ts";
 import { scenarioContract } from "../scenario.contract.ts";
-import { kitFixture } from "../scenariokit.ts";
+import { kitDriver } from "../scenariokit.ts";
 import { makeTestCircles } from "./_circles.ts";
 import { QuadTree } from "./_quadtree.ts";
 import { shapeCollectionWriterContract, shapeMessageProcessorContract } from "../shapeModel.contract.ts";
@@ -41,7 +41,7 @@ shapeViewContract(kitView);
 // The locator double.
 shapeLocatorContract(() => new ListIndex());
 
-// The emitters: the one test doubles are built on, and the adversaries' helper.
+// The emitters: the one doubles are built on, and the adversaries' helper.
 eventEmitterContract(() => {
   const emitter = new Events<{ change: [] }>();
   return { emitter, change: () => emitter.emit("change") };
@@ -61,8 +61,8 @@ test("RecordingContext.context allows only DrawingContext's members", () => {
 });
 
 // The scenarios, on the reference app and on the adversaries' helper: a scenario that fails here disagrees with itself.
-scenarioContract(() => kitFixture(), () => kitFixture());
-scenarioContract(() => kitFixture({ app: makeTestCircles() }), () => kitFixture());
+scenarioContract(() => kitDriver(), () => kitDriver());
+scenarioContract(() => kitDriver({ app: makeTestCircles() }), () => kitDriver());
 
 // The reference rectangle operations.
 rectangleOpsContract(makeTestRectOps());
@@ -78,7 +78,7 @@ frameSchedulerContract(makeTestScheduler());
 eventDistributorContract((region, locate) => new RefDistributor(region, locate));
 eventDistributorContract(makeTestDistributor());
 
-// The shape model: the reference parts and the adversaries' helpers.
+// The shape model: the references and the adversaries' helpers.
 shapeCollectionWriterContract(() => new RefShapeWriter());
 shapeMessageProcessorContract((id) => new RefShapeProcessor(id));
 shapeCollectionWriterContract(() => new TestShapeWriter());

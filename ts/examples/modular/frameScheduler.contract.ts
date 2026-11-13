@@ -1,5 +1,5 @@
 // Contract tests for FrameScheduler (frames.ts). Every implementation runs
-// this suite through a fixture that runs one display frame on demand: a test
+// this suite through a driver that runs one display frame on demand: a test
 // clock for a platform scheduler, or runFrame for ManualScheduler
 // (viewkit.ts). Test names are rule IDs.
 //
@@ -15,7 +15,7 @@ import type { FrameHandler, FrameScheduler } from "./frames.ts";
 import { deepEqual } from "./rules.ts";
 
 /** A scheduler, and a way to run its next display frame. */
-export interface FrameSchedulerFixture {
+export interface FrameSchedulerDriver {
   scheduler: FrameScheduler;
   runFrame(): void;
 }
@@ -44,7 +44,7 @@ interface Step {
   expected: number[];
 }
 
-function run(make: () => FrameSchedulerFixture, { animating, ops }: Run, check: (s: Step) => void): void {
+function run(make: () => FrameSchedulerDriver, { animating, ops }: Run, check: (s: Step) => void): void {
   const { scheduler, runFrame } = make();
   let calls = new Array<number>(handlers).fill(0);
   let pending = new Set<number>();
@@ -69,7 +69,7 @@ function run(make: () => FrameSchedulerFixture, { animating, ops }: Run, check: 
   }
 }
 
-export function frameSchedulerContract(make: () => FrameSchedulerFixture): void {
+export function frameSchedulerContract(make: () => FrameSchedulerDriver): void {
   const rule = (id: string, check: (s: Step) => boolean) =>
     test(id, () => {
       fc.assert(fc.property(runArb, (r) => {

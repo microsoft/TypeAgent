@@ -1,4 +1,4 @@
-// Test doubles for views: a canvas context that records what it is asked to
+// Doubles for views: a canvas context that records what it is asked to
 // draw and computes what each point shows, a frame scheduler stepped by
 // hand, and a circle. Each is correct by construction or checked:
 // helpers.check.ts runs the FrameScheduler and Circle contracts on

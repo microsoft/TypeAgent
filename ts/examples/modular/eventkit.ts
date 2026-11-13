@@ -1,6 +1,6 @@
-// An EventEmitter (events.ts) for test doubles: Node's semantics, plus emit and
+// An EventEmitter (events.ts) for references and doubles: Node's semantics, plus emit and
 // a count of registrations, which the contracts' one-listener rules read.
-// Checked through the doubles built on it: helpers.check.ts runs their
+// Checked through the references and doubles built on it: helpers.check.ts runs their
 // contracts.
 
 import type { EventEmitter, EventMap } from "./events.ts";

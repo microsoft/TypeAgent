@@ -22,9 +22,9 @@
  * - @valid: which values are legal members of a type. Like finite numbers
  *   (below), it holds of every value of the type passed to or returned by
  *   an interface. Passing an invalid one is outside the rules; returning one
- *   breaks the implementation's obligation. Tests check it wherever a
- *   contract gets values of the type from an implementation, or, for a type
- *   that only flows into implementations, on the contract's generators.
+ *   breaks the implementation's obligation. Tests check it wherever an
+ *   implementation returns values of the type, or, for a type that only
+ *   flows into implementations, on the values the tests make.
  * - @abstract: the implementation's, stated for an interface that others
  *   extend, but testable only for each of them. Each interface that
  *   extends it, directly or through others, names the rule of its own that

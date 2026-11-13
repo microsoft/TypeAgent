@@ -6,10 +6,9 @@
  *
  * Two checks keep it honest. platform/canvas.check.ts compiles with the DOM
  * library and fails unless the browser's context types fit DrawingContext.
- * The recording context in viewkit.ts gives implementations a view of
- * itself that throws on any other member, so an implementation that needs
- * more fails its tests; the fix is to add the member here and teach the
- * recording context what it does.
+ * The tests give implementations a context that throws on any other
+ * member, so an implementation that needs more fails its tests; the fix is
+ * to add the member here, and to the tests' context.
  *
  * Members are added when an implementation spec decides to use them, not
  * before.

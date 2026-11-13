@@ -11,8 +11,8 @@
  * @ensures complete  Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model.
  * @deferred processed-before-frame  The message infrastructure processes what an input event's handler sent after the handler returns and before the next frame begins, never inside a frame callback, so that the first frame after the event shows it and frames.complete holds on every platform.
  *   when: the message infrastructure is specified.
- *   how: the infrastructure's contract drives a processor, a ManualScheduler and a view; after a handler sends, it runs one frame and checks that the frame shows the operation's effect, as driver.ts's fixture does now; with an adversary that processes only on a timer.
- * @budget fraction-of-frame  Forming (including any query of the model), sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model.
+ *   how: the infrastructure's contract drives a processor, a ManualScheduler and a view; after a handler sends, it runs one frame and checks that the frame shows the operation's effect, as driver.ts's driver does now; with an adversary that processes only on a timer.
+ * @budget fraction-of-frame  Forming (including any query of the model), sending and processing the operations of one input event takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 shapes in the model. bench.ts measures the circles app's taps: one that draws a circle, and one that erases the top circle at a point.
  * @module
  */
 

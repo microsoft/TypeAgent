@@ -32,7 +32,7 @@ deferred.
   entry under "Status" in `moduleTooling.md`):
   - The platforms define their events. `layout.ts` (`LayoutObject`,
     `EventDistributor`) replaced `pointer.ts`, with a case-based
-    contract, a reference part (`distributorkit.ts`) and 16 adversaries.
+    contract, a reference (`distributorkit.ts`) and 16 adversaries.
   - `View` takes no input. `TapSource` and `interactive` are gone, and
     a controller gets events through a distributor, with the view's
     surface as its target.
@@ -41,7 +41,7 @@ deferred.
     what the user does and whose expectations are only what the drawing
     shows (the human's orientation: specify the controller–model and
     model–view relationships, not the means of control). Each platform
-    writes an `AppFixture` (`scenario.contract.ts`). The test platform's
+    writes a `Driver` (`scenario.contract.ts`). The test platform's
     is `driver.ts`, with the reference controller in `circleskit.ts`.
     `behavior.md` has the orientation, the files, how to add a behavior,
     and the open questions.
@@ -59,7 +59,7 @@ deferred.
 - **Phase 1 waits for the human's review** of round 6, and of round 5 as
   it now stands (scenarios only). Round 4 was reviewed on 2026-11-11.
 - **Phase 1b has not run on rounds 5 and 6.** It was deferred until the
-  device context (the platform subsets) is discussed. When it runs, it
+  platform subsets are discussed. When it runs, it
   challenges the blueprint only; `canvas.ts` and `dom.ts` are out of
   scope.
 - **Rule tags:** `@requires`, `@ensures`, `@invariant` (state only),
@@ -92,6 +92,13 @@ deferred.
   reports and reviews are `reports/task-<n>.d.md` and `.d.review.md`;
   round 4 cost $47.40 at list prices over 20 attempts (`node task.ts
   costs`).
+
+- **Round 5 review** (2026-11-13): scenarios now have a collaborator (a
+  peer app, and network steps to hold and release operations), plus
+  `tap-outside`; `Scenario.random` compares only points clear of edges;
+  `frames.fraction-of-frame` is measured on the circles app's taps (ink is
+  deferred). `behavior.md` lists the changes. 18 scenarios; the
+  open questions wait on the discussion of the platform subsets.
 
 ## Expected failures until phase 2 finishes
 
@@ -127,7 +134,7 @@ decision.
 
 ## Deferred
 
-- **Phase 1b** on rounds 5 and 6, after the device-context discussion.
+- **Phase 1b** on rounds 5 and 6, after the discussion of the platform subsets.
 - **Phase 2:** rounds 3 to 6, wave 1 then wave 2.
 - **The message infrastructure:** the interface that owns a processor,
   with `localSend` (`LocalSend` is its agreed part) and `OperationQueue`.
@@ -143,7 +150,7 @@ decision.
   blueprint, run like `tsc`, with the catalog only presenting what it
   finds.
 - **A demo page and its static server**, to be designed with the method.
-- **The web circles app:** a platform fixture for the scenarios, with the
+- **The web circles app:** a platform driver for the scenarios, with the
   DOM widgets it needs added to `dom.ts`, and a new recording document
   for them (`domkit.ts` went with the web renderer).
 - **Checking the doubles against a real browser:** `RecordingContext` in

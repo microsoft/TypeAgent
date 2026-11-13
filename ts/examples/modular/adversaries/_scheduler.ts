@@ -3,7 +3,7 @@
 // contract against it with no bug.
 
 import type { FrameHandler, FrameScheduler } from "../frames.ts";
-import type { FrameSchedulerFixture } from "../frameScheduler.contract.ts";
+import type { FrameSchedulerDriver } from "../frameScheduler.contract.ts";
 
 export type SchedulerBug =
   | "none"
@@ -48,7 +48,7 @@ class TestScheduler implements FrameScheduler {
   }
 }
 
-export function makeTestScheduler(bug: SchedulerBug = "none"): () => FrameSchedulerFixture {
+export function makeTestScheduler(bug: SchedulerBug = "none"): () => FrameSchedulerDriver {
   return () => {
     const scheduler = new TestScheduler(bug);
     return { scheduler, runFrame: () => scheduler.runFrame() };

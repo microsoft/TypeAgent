@@ -7,11 +7,11 @@ The full procedure, with its reasons, is in `moduleTooling.md`.
 
 - **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`.
 - **Members for tests are allowed.** When a rule can't be checked without seeing more, add the member or event that shows it rather than weakening the rule. Put it on its own small interface that the main one extends, where feasible. Better still, a return value that production code uses too: `OperationSink.enqueue` in `dataModel.ts` returns the stamped operation, which the infrastructure sends and the tests check, where an earlier draft had an event for tests.
-- **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a test double for its platform (see below).
+- **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.
 - **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class.
 - **An observer table** for each stateful interface (`observer-tables.md`): every call against everything observable afterward, each cell settled by a rule.
-- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. An action says what the user does, not which control does it. They run through a fixture each platform writes, which does the actions with its own controls (`AppFixture` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and test doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among reference parts, are named after the scenario that must catch them.
+- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. An action says what the user does, not which control does it. They run through a driver each platform writes, which does the actions with its own controls (`Driver` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among references, are named after the scenario that must catch them.
 
 ### Platform subsets
 
@@ -19,7 +19,7 @@ An interface such as `canvas.ts` is a slice of one platform's API that an
 implementation may use. It is not part of the blueprint, which holds for
 every platform.
 
-- **It needs a reason.** Either a test double stands in for a surface that
+- **It needs a reason.** Either a double stands in for a surface that
   is costly to observe, or the subset deliberately limits implementations to
   what every target platform offers. Otherwise, test against the platform.
 - **It copies the platform.** Same names, signatures and types, so the
@@ -113,7 +113,7 @@ system's information flow can be reasoned about. `task.ts` does this.
   against (`node`, `dom`), and by default there are none.
 - **Implementations depend only on interfaces.** What one needs from another
   comes in through its constructor, and pieces are put together only in
-  wiring: tests, scripts, pages. Each contract is wired to test doubles
+  wiring: tests, scripts, pages. Each contract is wired to doubles
   (`modelkit.ts`, `viewkit.ts`), so one task's tests never depend on
   another generated implementation. `*.integration.test.ts` files wire the
   real ones together, outside any task.
@@ -198,8 +198,8 @@ that behavior open. Phase 3b decides whether it meant to.
   first run done, and never sees its output. It stops, is collected and
   is reviewed (2b) like any run, until it is done. Its output goes to
   `alternates/<file>.run-2.ts`, outside the wiring.
-- **A reference adapter,** `<file>.ref.ts`, written by the design agent:
-  the task's exports, exactly, over the reference part. `refs.test.ts`
+- **A reference,** `<file>.ref.ts`, written by the design agent:
+  the task's exports, exactly, over the reference. `refs.test.ts`
   runs the task's contracts on it.
 - **The distinguishing agent.** `npm run task make <n>.d` puts both
   implementations in a workspace as `a/<file>` and `b/<file>`, in an order
@@ -208,7 +208,7 @@ that behavior open. Phase 3b decides whether it meant to.
   and writes `distinguish.test.ts`: top-level tests, each passing on one
   of A and B and failing on the other. Its report lists each test, what
   differs, and the spec text it thinks decides it.
-- **Enforced.** The tests compile against the reference adapter, so they
+- **Enforced.** The tests compile against the reference, so they
   use only the interfaces and the spec's exports. The lint holds them to
   the workspace's files, Node built-ins and fast-check. `check` runs every
   test as A, as B and as the reference, and fails any test that passes or

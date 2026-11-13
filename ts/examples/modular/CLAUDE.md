@@ -42,7 +42,7 @@ needs.
   implementation gets a mechanical check, so the system's information flow
   can be reasoned about. Examples: `task.ts` makes read-only, hashed
   workspaces and lints the outputs; Hidden fields stop a task from reading
-  its own reference part; test doubles stop an implementation from using
+  its own reference; doubles stop an implementation from using
   platform members outside the platform subset. When you add a rule for
   agents, add the check that enforces it too.
 - **Dependencies.** Ask before adding any dependency. Keep `.npmrc` as it
@@ -53,8 +53,8 @@ needs.
   without the human's go-ahead. Phase 1 decisions are made with the human,
   not by the design agent alone.
 - **Design agents don't write implementations.** In phase 1 the design
-  agent writes interfaces, rules, vocabulary, contracts, test doubles,
-  reference parts, scenarios and adversaries. Implementations come from
+  agent writes interfaces, rules, vocabulary, contracts, doubles,
+  references, scenarios and adversaries. Implementations come from
   fresh phase 2 agents.
 - **Every adversary is a real fault.** If an adversary escapes, decide
   whether the fault is real. If it is, strengthen the test, often with a
@@ -78,14 +78,20 @@ needs.
   says what each tag means; there is no tag for an untested rule. A
   rule's ID is `Interface.member.slug`, and the test that checks it
   has that ID as its name.
+- **Two vocabularies.** The design is the interface files, their
+  vocabularies, `rules.ts`, `scenarios.ts` and the platform subsets. The
+  test harness is everything that checks it: contracts, references,
+  doubles, drivers and adversaries. Design files import only design files
+  and never use harness words (a `@deferred` rule's `how:` line aside);
+  `npm run catalog` refuses to write when one does. The glossaries are in
+  `moduleTooling.md` under "Vocabulary".
 - **Files by role.**
   - Interfaces: `<name>.ts`.
   - Vocabulary: `<name>.vocab.ts`, one per interface file.
   - Contracts: `<name>.contract.ts`.
-  - Test doubles and reference parts: `*kit.ts`, one reference part per
-    file.
-  - Reference adapters for phase 3: `<impl>.ref.ts`, exactly a task's
-    exports over its reference part, checked by `refs.test.ts`.
+  - References and doubles: `*kit.ts`, one reference per file.
+  - References with a task's exports, for phase 3: `<impl>.ref.ts`,
+    checked by `refs.test.ts`.
   - Wiring: `<impl>.test.ts`.
   - Platform subsets: `canvas.ts` and `dom.ts`, checked against the real
     platform types in `platform/`.

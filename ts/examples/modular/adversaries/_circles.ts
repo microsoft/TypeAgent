@@ -4,6 +4,7 @@
 
 import type { Point } from "../geometry.ts";
 import type { ShapeId } from "../shape.ts";
+import type { LayoutObject } from "../layout.ts";
 import type { AppMakers, CirclesParts, TapEvent, TestCirclesApp } from "../driver.ts";
 import type { Mode } from "../scenarios.ts";
 import { ids } from "../rules.ts";
@@ -11,6 +12,7 @@ import { ids } from "../rules.ts";
 export type CirclesBug =
   | "none"
   | "drops-taps"            // never registers for taps
+  | "whole-window"          // registers for taps on the whole window, not the drawing's surface
   | "window-points"         // uses a tap's window point as is, so circles land a controls-height too low
   | "color-off-by-one"      // choosing a color picks the next one
   | "draws-initial-radius"  // always draws with the initial radius
@@ -28,6 +30,7 @@ class TestCircles implements TestCirclesApp {
   private current: Mode = "draw";
   private colorIndex = 0;
   private radiusNow: number;
+  private readonly target: LayoutObject;
   private readonly onTap = (_: "tap", event: TapEvent) => {
     if (this.bug === "edit-in-frame") this.parts.scheduler.requestFrame({ frame: () => this.edit(event) });
     else if (this.bug === "sends-later") queueMicrotask(() => this.edit(event));
@@ -38,7 +41,9 @@ class TestCircles implements TestCirclesApp {
     this.parts = parts;
     this.bug = bug;
     this.radiusNow = parts.settings.radius.initial;
-    if (bug !== "drops-taps") parts.distributor.on("tap", this.onTap, parts.surface);
+    const s = parts.surface.region;
+    this.target = bug === "whole-window" ? { region: { x: 0, y: 0, width: s.x + s.width, height: s.y + s.height } } : parts.surface;
+    if (bug !== "drops-taps") parts.distributor.on("tap", this.onTap, this.target);
   }
 
   private edit(event: TapEvent): void {
@@ -83,7 +88,7 @@ class TestCircles implements TestCirclesApp {
   }
 
   dispose(): void {
-    this.parts.distributor.off("tap", this.onTap, this.parts.surface);
+    this.parts.distributor.off("tap", this.onTap, this.target);
   }
 }
 

@@ -18,17 +18,19 @@
  * prints each number below with its rule's ID, and keeps the machine's
  * absolute times in its output: for ShapeCollectionWriter.log-amortized, the
  * time per operation at 100,000 shapes divided by the time at 1,000, over
- * batches of 1,000 operations and four runs, is 2.6-5.9 for adds all
- * directly below one shape, 3.2-6.0 for adds each below the one added before
- * it, 3.1-6.3 for adds at the bottom, 5.2-8.9 for adds below random shapes,
- * 4.3-6.2 for removes of random shapes mixed with adds, and 8.4-10.1 for
+ * batches of 1,000 operations and eight runs, is 3.0-4.2 for adds all
+ * directly below one shape, 2.5-6.4 for adds each below the one added before
+ * it, 4.6-5.6 for adds at the bottom, 6.0-9.1 for adds below random shapes,
+ * 4.0-5.7 for removes of random shapes mixed with adds, and 6.9-10.0 for
  * compareZ on random pairs; about 2 is the growth in steps this collection is
  * built for, 4 to 9 is what that measures at these two sizes, because 100,000
  * shapes miss the caches that hold 1,000, and above 16 fails. For
  * frames.fraction-of-frame, with this collection under a ShapeProcessor over
- * a QuadTreeLocator holding 10,000 ink strokes, finishing a stroke takes
- * 0.4-0.5% of the budget (5% of a 120 Hz frame) and an eraser move 1.7-2.1%,
- * both inside it.
+ * a QuadTreeLocator holding 10,000 circles from makeCircle, the circles app's
+ * tap that draws a circle takes 0.5-0.8% of the budget (5% of a 120 Hz frame)
+ * and its tap that erases the top circle under it, which an atPoint on this
+ * collection and compareZ on what it found pick out, 2.0-2.5%, both inside
+ * it.
  * AdditionalSemantics: a call that breaks a @requires rule throws an Error
  * rather than corrupting the collection: add with an ID that is present or
  * a below that is not, and compareZ with an ID that is not present. remove

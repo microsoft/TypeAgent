@@ -430,6 +430,36 @@ export function tagProblems(): string[] {
   }));
 }
 
+/**
+ * The design: the interface files, their vocabularies, the rule language,
+ * the app's behavior and the platform subsets. Everything else is the test
+ * harness (contracts, references, doubles, drivers, adversaries) or
+ * tooling.
+ */
+const designFiles = [
+  ...sources, ...sources.map((s) => s.replace(/\.ts$/, ".vocab.ts")).filter((f) => existsSync(f)),
+  "rules.ts", "scenarios.ts", "canvas.ts", "dom.ts",
+];
+
+/** Harness words a design file must not use: the harness checks the design, and the design doesn't know it. */
+const harnessWords = /\b(fixtures?|kits?|\w+kit\.ts|[\w.]+\.contract\.ts|contracts?|drivers?|adversar\w*|test doubles?|doubles|reference parts?|sequencer|helpers\.check\.ts)\b/i;
+
+/**
+ * Where the design reaches into the harness: a design file that imports a
+ * file outside the design, or whose text uses a harness word. A @deferred
+ * rule's how: line is exempt, since it is the plan for testing the rule.
+ */
+export function boundaryProblems(): string[] {
+  return designFiles.flatMap((file) => readFileSync(file, "utf8").split(/\r?\n/).flatMap((line, n) => {
+    const where = `${file}:${n + 1}`;
+    const imported = /\bfrom\s+"\.\/([^"]+)"/.exec(line)?.[1];
+    if (imported && !designFiles.includes(imported)) return [`${where} imports ${imported}, which is outside the design`];
+    if (/^\s*\*\s+how:/.test(line)) return [];
+    const word = harnessWords.exec(line)?.[0];
+    return word ? [`${where} uses "${word}", a word of the test harness`] : [];
+  }));
+}
+
 const statusLabel: Record<Shown, string> = {
   tested: "tested", abstract: "abstract", budget: "budget", deferred: "deferred", caller: "caller's obligation",
 };
@@ -486,7 +516,7 @@ if (import.meta.main) {
   if (untested.length > 0) {
     throw new Error(`No test has the ID of ${untested.join(", ")}. Add one, or mark the rule @deferred with when: and how: lines. The catalog was not written.`);
   }
-  const problems = [...tagProblems(), ...refinementProblems(all), ...planProblems(all)];
+  const problems = [...tagProblems(), ...boundaryProblems(), ...refinementProblems(all), ...planProblems(all)];
   if (problems.length > 0) throw new Error(`${problems.join("; ")}. The catalog was not written.`);
   writeFileSync("catalog.md", markdown(all));
   const template = readFileSync("catalog.template.html", "utf8");

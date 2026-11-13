@@ -5,7 +5,7 @@ import { RefShapeProcessor } from "./shapeprocessorkit.ts";
 import { RefDistributor } from "./distributorkit.ts";
 import { RefCircles } from "./circleskit.ts";
 import { scenarioContract } from "./scenario.contract.ts";
-import { makeFixture } from "./driver.ts";
+import { makeDriver } from "./driver.ts";
 import { demoSettings } from "./scenarios.ts";
 
 shapeViewContract((model, scheduler, width, height) => {
@@ -13,8 +13,8 @@ shapeViewContract((model, scheduler, width, height) => {
   return { view: new CanvasShapeView(model, recording.context, scheduler), painted: (p) => recording.painted(p) };
 });
 
-// The scenarios, with every other part a test double. This task never sees the reference for its own part, so there is no comparison with the reference assembly here.
-scenarioContract(() => makeFixture({
+// The scenarios, with every other part a reference. This task never sees the reference for its own part, so there is no comparison with the reference assembly here.
+scenarioContract(() => makeDriver({
   processor: (clientId) => new RefShapeProcessor(clientId),
   makeCircle: testCircle,
   view: (model, scheduler, width, height) => {

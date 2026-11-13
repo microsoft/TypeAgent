@@ -35,18 +35,18 @@ it reads the spec the way a future implementer will.
 | `rules.ts` | The rule format, and the generic vocabulary of rule expressions: `old`, `implies`, `sameSet`, `deepEqual` and the like. Imports nothing |
 | `<file>.vocab.ts` | The vocabulary of rule expressions about an interface file's domain: ghost state such as `indexed(locator)` and `painted(view, p)`, and reference functions such as `rectContains` and `over`. Each re-exports `rules.ts` and the vocabulary of the files its interface file imports, and imports nothing else |
 | `testkit.ts` | Shared test helpers: fast-check seeding (`FC_SEED`), `prevDouble`, test shapes, and `coverage`, which checks that generators reach each input class |
-| `eventkit.ts` | `Events`, an EventEmitter with `emit` and `listenerCount`, for test doubles |
-| `driver.ts` | The test platform's app fixture: assembles a circles app from any mix of real parts and doubles, does the scenarios' actions with its controls (methods), taps through an EventDistributor at the drawing's offset, and reads what the view shows. It is also the message infrastructure for one client: it owns the processor, gives the app a `LocalSend`, and is the only caller of `process` |
+| `eventkit.ts` | `Events`, an EventEmitter with `emit` and `listenerCount`, for references and doubles |
+| `driver.ts` | The test platform's driver: assembles a circles app from any mix of real parts and references, does the scenarios' actions with its controls (methods), taps through an EventDistributor at the drawing's offset, and reads what the view shows. It is also the message infrastructure for one client: it owns the processor, gives the app a `LocalSend`, and is the only caller of `process` |
 | `scenarios.ts` | Scenarios as data: named stories of actions (what the user does, not which control) and what the drawing then shows, and the demo's settings |
-| `scenario.contract.ts` | `AppFixture`, which each platform writes; runs each scenario by ID, `frames.complete`, and random sequences compared against the reference assembly |
-| `scenariokit.ts` | The reference assembly: every part a test double |
+| `scenario.contract.ts` | `Driver`, which each platform writes; runs each scenario by ID, `frames.complete`, and random sequences compared against the reference assembly |
+| `scenariokit.ts` | The reference assembly: every part a reference |
 | `shapewriterkit.ts`, `shapeprocessorkit.ts`, `shapeviewkit.ts`, `distributorkit.ts`, `circleskit.ts` | The reference ShapeCollectionWriter (with `readFacet`), ShapeMessageProcessor, ShapeView, EventDistributor and circles controller, one per file, so that each task can be kept from reading the reference for its own part |
-| `modelkit.ts` | A test double for the shape model: `ListIndex`, a locator, so that contracts for things built on one depend on no generated implementation. Checked by `helpers.check.ts` |
-| `viewkit.ts` | Test doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler` and `testCircle`. Checked by `helpers.check.ts` |
+| `modelkit.ts` | A reference locator, `ListIndex`, so that contracts for things built on one depend on no generated implementation. Checked by `helpers.check.ts` |
+| `viewkit.ts` | Doubles for views: `RecordingContext` (a canvas context that computes what each point shows, and hands implementations a view of itself that allows only `DrawingContext`'s members), `ManualScheduler` and `testCircle`. Checked by `helpers.check.ts` |
 | `behavior.md` | How the app's behavior is specified: the orientation, the files, adding a behavior, open questions |
 | `observer-tables.md` | For each stateful interface, every call against every observer, with the rules that settle each cell |
 | `<interface>.contract.ts` | A contract suite for each interface, a function taking a factory. Test names are rule IDs. `shape.contract.ts` holds the rules every Shape has, which each shape type's contract runs |
-| `<impl>.test.ts` | Wires an implementation to its contract over test doubles, plus tests of behavior the spec decides for that implementation only |
+| `<impl>.test.ts` | Wires an implementation to its contract over references and doubles, plus tests of behavior the spec decides for that implementation only |
 | `<impl>.integration.test.ts` | Wires real implementations together; part of no task |
 | `task.ts` | `npm run task`: turns spec sections into tasks with enforced information flow (`list`, `make`, `run`, `check`, `collect`, `lint`); see "Tasks" in `method.md` |
 | `tasks.json`, `reports/` | Collected tasks: output hashes, token use, and each agent's report |
@@ -78,6 +78,35 @@ Ask before adding any dependency. `.npmrc` turns off install scripts,
 requires releases at least 30 days old, saves exact versions and refuses
 git dependencies. Implementations import no npm packages and no Node
 built-ins; scripts may use Node built-ins.
+
+## Vocabulary
+
+Two vocabularies, kept apart. The design's words are the ones a reader of
+the architecture needs. The harness's words are for checking it, and
+never appear in a design file (`npm run catalog` checks).
+
+**The design**: the interface files and their rules, their `*.vocab.ts`
+files, `rules.ts`, `scenarios.ts` and the platform subsets.
+
+| Term | Meaning |
+|---|---|
+| Interface, rule | A TypeScript interface, and a tagged statement about it (`rules.ts`) |
+| Vocabulary | Reference functions and ghost state that rule expressions use (`*.vocab.ts`) |
+| Scenario | A named story, as data, of what users do and what the drawing then shows (`scenarios.ts`) |
+| Peer, network step | A second person's app on the same drawing, and when the collaboration protocol sequences operations (hold, release, sync) |
+| Platform subset | The platform members an implementation may use (`canvas.ts`, `dom.ts`) |
+| Message infrastructure | What sequences operations and calls `process`; unspecified, and deferred |
+
+**The harness**: everything else that checks the design.
+
+| Term | Meaning |
+|---|---|
+| Contract | The tests of an interface's rules, each named by the rule's ID (`*.contract.ts`) |
+| Reference | A correct implementation of a design interface, kept for testing: `RefShapeWriter`, `testCircle`, `ListIndex`, and the `*.ref.ts` files that give a reference a task's exports |
+| Double | A test instrument that isn't an implementation of the design: `RecordingContext`, `ManualScheduler` |
+| Driver | What runs scenarios on a platform: does each step with the platform's controls and reads what the drawing shows (`Driver` in `scenario.contract.ts`; `driver.ts` is the test platform's, with a sequencer standing in for the message infrastructure). A contract's factory returns a driver for its part too (`ShapeViewDriver`, `FrameSchedulerDriver`) |
+| Wiring | A test file that runs a contract on an implementation (`<impl>.test.ts`) |
+| Adversary | A reference with one bug switched on, which some test must catch |
 
 ## The rule format
 
@@ -428,7 +457,7 @@ model, which is why no separate differential test is needed.
     and `DrawingContext`. `ItemRenderer` was removed: a view for a data model
     draws its own items. The demo page and its static server are deferred,
     to be designed with the method. Added: `circle.contract.ts` and
-    `shapeView.contract.ts`, whose fixture reports what each point of the
+    `shapeView.contract.ts`, whose driver reports what each point of the
     surface shows, so the contract doesn't depend on the surface; test
     doubles in `viewkit.ts`; `View.read-only`, from the ShapeView observer
     table; implementation specs 11 (`circle.ts`) and 12
@@ -575,7 +604,7 @@ model, which is why no separate differential test is needed.
     target. `chrome.ts`, `ui.ts` and `app.ts` were removed: an app's
     controls are the platform's, and its behavior is the scenarios, whose
     actions say what the user does and whose expectations are only what
-    the drawing shows. Each platform writes an `AppFixture`. Tasks 13 to
+    the drawing shows. Each platform writes a `Driver`. Tasks 13 to
     15, 17 and 18 went; task 19 (`rectDistributor.ts`) is new. 11
     scenario adversaries, rebuilt on a bugged controller (`_circles.ts`).
   - Renames and a prose review (2026-11-10). `Layer` became `RenderGroup`,

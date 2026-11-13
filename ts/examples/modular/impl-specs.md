@@ -266,14 +266,14 @@ budget for model updates, a circle, and a canvas view that draws circles.
   which also runs `messageProcessor.contract.ts`), wired in
   `shapeProcessor.test.ts` over `RefShapeWriter` (`shapewriterkit.ts`). The
   same file runs the scenarios (`scenarios.ts`) with this processor and
-  test doubles for every other part. `shapeModel.integration.test.ts`, which
+  references for every other part. `shapeModel.integration.test.ts`, which
   is not part of this task, runs it over `MapShapeCollection`.
 
 ## 10. A budget for model updates in `bench.ts`
 
 - **Outputs:** `bench.ts`, `mapShapeCollection.ts` (header only), `shapeProcessor.ts` (header only), `listLocator.ts` (header only), `quadTreeLocator.ts` (header only)
 - **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`,
-  `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`,
+  `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`, `circle.ts`,
   `mapShapeCollection.ts`, `shapeProcessor.ts`, `frames.ts`, and Node
   built-ins
 - **Binds:** node
@@ -281,8 +281,12 @@ budget for model updates, a circle, and a canvas view that draws circles.
 Each input event's operations are sent, and processed, within a small
 fraction of a frame (the `@budget` rule `frames.fraction-of-frame` in
 `frames.ts`). Add a measurement to `bench.ts` that checks the budget:
-**sending and processing a move's operations takes under 5% of a 120 Hz
-frame (about 0.42 ms)**, with 10,000 strokes in the model. Label the
+**forming, sending and processing an input event's operations takes
+under 5% of a 120 Hz frame (about 0.42 ms)**, with 10,000 shapes in the
+model. Measure it on the circles app's taps (round 5), with 10,000
+circles from `makeCircle` in the model. The ink app is deferred, so the
+frame budget no longer measures finishing a stroke or an eraser move;
+remove those two measurements. The locator table keeps its strokes. Label the
 printed results with the rule's ID, `frames.fraction-of-frame`;
 `npm run catalog` looks for that ID in `bench.ts` to show the budget as
 measured.
@@ -293,14 +297,13 @@ in `bench.ts`: it sends with `local.enqueue`, gives the operation that
 returns the next seq and enqueues it on `remote` as its acknowledgment, and
 calls `process`. Time, as a whole:
 
-- **Finishing a stroke:** sending an add of one stroke, then processing
-  until the add and its acknowledgment are applied.
-- **An eraser move:** an `inRect` query on the model for the eraser's swept
-  rectangle, sending a remove of what it hit, then processing until the
-  remove and its acknowledgment are applied.
-
-Ink still being drawn is the view's alone (`view.ts`), so a pen move
-before the stroke ends sends nothing and isn't measured.
+- **A tap that draws:** `newShapeId`, making the circle with
+  `makeCircle`, sending its add, then processing until the add and its
+  acknowledgment are applied.
+- **A tap that erases:** an `atPoint` query on the model at the tap,
+  `compareZ` to find the top circle there, sending a remove of it, then
+  processing until the remove and its acknowledgment are applied. Each
+  timed tap lands on a circle, so it erases one.
 
 Print each measurement's median time as a fraction of the budget, marking
 any that exceeds it. Record the results in the Cost fields as "Measured
@@ -347,9 +350,9 @@ naming `bench.ts`, with absolute times left to the script's output.
 `ShapeId` is now a string (`shape.ts`); the locator measurements must use
 string IDs too, and otherwise stay as they are.
 
-- **Left to the implementer:** the shapes used for the strokes and the
-  eraser, and how the 10,000 strokes are laid out, as long as they are
-  stated in the output.
+- **Left to the implementer:** the circles' sizes, colors and layout, and
+  the strokes the locator table uses, as long as they are stated in the
+  output.
 
 ## 11. `circle.ts`
 
@@ -401,20 +404,20 @@ string IDs too, and otherwise stay as they are.
   AdditionalSemantics.
 - **Contract:** `shapeView.contract.ts`, wired in `canvasShapeView.test.ts`
   with a `RecordingContext` from `viewkit.ts` as the surface. The same file
-  runs the scenarios (`scenarios.ts`) with this view and test doubles for
+  runs the scenarios (`scenarios.ts`) with this view and references for
   every other part.
 
 # Round 5: the circles app
 
 The app's controls are each platform's own, and its behavior is the
 scenarios in `scenarios.ts`: what the user does, and what the drawing then
-shows. Each platform writes a fixture (`AppFixture` in
+shows. Each platform writes a driver (`Driver` in
 `scenario.contract.ts`) that does the scenarios' actions with its controls.
 On the test platform (`driver.ts`) the controls are methods, and the
 reference app (`circleskit.ts`) is a controller that gets taps from an
 EventDistributor with the view's surface as their target. A controller
 holds the model's read side and a `LocalSend` (`dataModel.ts`); the
-fixture is the message infrastructure, and the only caller of `process`. No task yet: the
+driver is the message infrastructure, and the only caller of `process`. No task yet: the
 web app waits until the DOM subset (`dom.ts`) is revisited. The earlier
 chrome, renderer and wiring tasks (13 to 15) were removed with `chrome.ts`,
 `ui.ts` and `app.ts`.

@@ -198,7 +198,7 @@ classDiagram
 |---|---|---|---|---|
 | `frames.complete` | ensures | Each input event's handler sends every operation of its action (LocalSend, dataModel.ts) before it returns, so no frame shows part of an action: once the message infrastructure has processed what was sent, running the frames and processing again don't change the model. | tested | 3 |
 | `frames.processed-before-frame` | deferred | The message infrastructure processes what an input event's handler sent after the handler returns and before the next frame begins, never inside a frame callback, so that the first frame after the event shows it and frames.complete holds on every platform. | deferred: when the message infrastructure is specified. |  |
-| `frames.fraction-of-frame` | budget | Forming (including any query of the model), sending and processing the operations of an eraser move, or of finishing a pen stroke, takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 strokes in the model. | budget: measured by bench.ts |  |
+| `frames.fraction-of-frame` | budget | Forming (including any query of the model), sending and processing the operations of one input event takes under 5% of a 120 Hz frame (about 0.42 ms), with 10,000 shapes in the model. bench.ts measures the circles app's taps: one that draws a circle, and one that erases the top circle at a point. | budget: measured by bench.ts |  |
 
 ## EventEmitter
 
@@ -221,7 +221,7 @@ No rules of its own.
 
 ## Rectangle
 
-`geometry.ts`. An axis-aligned rectangle covering the half-open region [x, x + width) × [y, y + height). (x, y) is the top-left corner. The left and top edges are inside, and the right and bottom edges are not, so two rectangles that share only an edge do not overlap. A rectangle with width 0 or height 0 is empty and contains no points.
+`geometry.ts`. An axis-aligned rectangle covering the half-open region [x, x + width) × [y, y + height). (x, y) is the top-left corner. The left and top edges are inside, and the right and bottom edges are not, so two rectangles that share only an edge do not overlap. A rectangle is empty, and contains no points, when x + width <= x or y + height <= y as computed: when its width or height is 0, or so small beside x or y that the sum rounds back to it.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
@@ -235,7 +235,7 @@ No rules of its own.
 |---|---|---|---|---|
 | `RectangleOps.no-mutation` | ensures | Never modifies its arguments. | tested |  |
 | `RectangleOps.contains.half-open` | ensures | Left and top edges are inside; right and bottom edges are not. | tested |  |
-| `RectangleOps.intersects.nonzero-area` | ensures | True only for overlap of nonzero area; shared edges, corners and empty rectangles don't count. | tested |  |
+| `RectangleOps.intersects.nonzero-area` | ensures | True only for overlap of nonzero area; shared edges, corners and empty rectangles don't count. | tested | 1 |
 | `RectangleOps.intersects.symmetric` | ensures | The order of the arguments doesn't matter. | tested |  |
 | `RectangleOps.cut.non-negative` | requires | size is at least 0. | caller's obligation |  |
 | `RectangleOps.cut.exact` | ensures | Returns the strip and the rest as cutRect defines them. | tested | 2 |
@@ -300,8 +300,8 @@ No rules of its own.
 |---|---|---|---|---|
 | `Circle.positive-radius` | valid | The radius is greater than 0. | tested |  |
 | `Circle.box` | ensures | The bounding box is the center grown by the radius. | tested | 1 |
-| `Circle.disk` | ensures | Covers every point within the radius of the center that lies in its bounding box as computed. | tested | 2 |
-| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 4 |
+| `Circle.disk` | ensures | Covers every point within the radius of the center that lies in its bounding box as computed. | tested | 3 |
+| `Circle.exact-intersects` | ensures | Intersects r exactly when some point it contains is in r; when the circle only touches r, contains() decides. | tested | 5 |
 
 ## ShapeLocatorQueries
 
@@ -456,7 +456,7 @@ No rules of its own.
 | `ShapeMessageProcessor.fresh-add-id` | requires | Each add's id came from newShapeId, and no other add has it. | caller's obligation |  |
 | `ShapeMessageProcessor.in-range` | requires | Each add's shape has its bounding box within ±1e300, right and bottom edges included. | caller's obligation |  |
 | `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID that it, or any processor with a different clientId, has returned. | tested | 2 |
-| `ShapeMessageProcessor.read-facet` | ensures | model has none of the writer's members, and its on and off return the model itself, so whoever holds it can't change the shapes through it. | tested | 2 |
+| `ShapeMessageProcessor.read-facet` | ensures | model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it. | tested | 3 |
 | `ShapeMessageProcessor.add-on-z` | ensures | The shapes are in compareOrder of their adds (shapeModel.vocab.ts). | tested | 1 |
 | `ShapeMessageProcessor.kept` | ensures | Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add. | tested | 4 |
 | `ShapeMessageProcessor.remove-listed` | ensures | No shape that an applied remove lists is present. | tested | 1 |

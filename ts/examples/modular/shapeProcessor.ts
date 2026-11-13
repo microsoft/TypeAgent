@@ -24,16 +24,18 @@
  * batch of 1,000 operations through a MapShapeCollection over a
  * QuadTreeLocator in the pattern that makes every remote add land in the same
  * place — remote adds arriving while one local add is pending, then local
- * adds — is 2.6-2.8 over four runs, and 0.5-0.8 for remote clears that remove
+ * adds — is 2.5-2.9 over eight runs, and 0.5-0.9 for remote clears that remove
  * nothing, from a client that made no adds and knew none of the shapes
  * present, which cost the same at either size because a clear walks only the
  * records it removes; about 2 is the growth in steps of such a writer, 4 to 9
  * is what that measures at these two sizes, because 100,000 shapes miss the
  * caches that hold 1,000, and above 16 fails. For frames.fraction-of-frame,
- * with this processor over that collection holding 10,000 ink strokes, sending
- * and processing a finished stroke's add takes 0.4-0.5% of the budget (5% of a
- * 120 Hz frame), and an eraser move's query and remove 1.7-2.1%, both inside
- * it.
+ * with this processor over that collection holding 10,000 circles from
+ * makeCircle, forming, sending and processing the circles app's tap that draws
+ * a circle — newShapeId, the circle, its add, and the add and its
+ * acknowledgment applied — takes 0.5-0.8% of the budget (5% of a 120 Hz
+ * frame), and its tap that erases, whose atPoint and compareZ on the model
+ * pick the top circle the remove names, 2.0-2.5%, both inside it.
  * AdditionalSemantics: process applies everything before the promise it
  * returns settles, and takes the whole local queue before the remote one,
  * repeating until both are empty; a remote operation whose clientId is this

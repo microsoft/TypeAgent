@@ -1,4 +1,4 @@
-// The phase 3 reference adapters (*.ref.ts) must pass the contracts their
+// The phase 3 references (*.ref.ts) must pass the contracts their
 // tasks' outputs pass, wired the same way; otherwise their vote on a
 // distinguishing test means nothing.
 import { MapShapeCollection } from "./mapShapeCollection.ref.ts";

@@ -6,9 +6,9 @@
  *
  * Two checks keep it honest, as for canvas.ts. platform/dom.check.ts
  * compiles with the DOM library and fails unless the browser's types fit.
- * The second, a recording document that implements only these members, so
- * that an implementation that needs more fails to compile, went with the
- * web renderer (domkit.ts); a new one comes with the web app (STATE.md).
+ * The second, a test document that implements only these members, so
+ * that an implementation that needs more fails its tests, went with the
+ * web renderer; a new one comes with the web app (STATE.md).
  *
  * Members are added when an implementation spec decides to use them, not
  * before.
