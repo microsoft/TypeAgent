@@ -28,7 +28,7 @@ describe.each(["typeagent", "copilot-local"])(
                         "The default TypeAgent author must not run for this job.",
                     );
                 }
-                await query(prompt, signal);
+                return query(prompt, signal);
             };
             return {
                 withAuthorQuery: (override) => runtime(override),
@@ -46,9 +46,12 @@ describe.each(["typeagent", "copilot-local"])(
                     };
                 },
                 build: async (_recipe, _trace, baseline, signal) => {
-                    await ask(`build:${baseline.macroId}`, signal);
+                    const answer = await ask(
+                        `build:${baseline.macroId}`,
+                        signal,
+                    );
                     return {
-                        name: "Read file",
+                        name: answer === "revised" ? "Read text" : "Read file",
                         description: baseline.description,
                         inputs: baseline.inputs,
                         steps: baseline.steps,
@@ -171,6 +174,196 @@ describe.each(["typeagent", "copilot-local"])(
             sessionId: "host",
             workerId: "worker",
             cwd: directory,
+        });
+
+        async function author(
+            jobId: string,
+            feedback?: string,
+            answer = "accepted",
+        ) {
+            for (let index = 0; index < 4; index++) {
+                await waiting(jobId, "awaitingAuthor");
+                const request =
+                    (await manager.claimMacroAuthoringRequest(claim()))!;
+                if (feedback) {
+                    expect(request.prompt).toContain(feedback);
+                    expect(request.prompt).toContain("PREVIOUS DRAFT");
+                }
+                await manager.submitMacroAuthoringResponse({
+                    ...claim(),
+                    requestId: request.requestId,
+                    leaseId: request.leaseId,
+                    promptDigest: request.promptDigest,
+                    outcome: {
+                        status: "completed",
+                        text: answer,
+                        childId: `child-${index}`,
+                    },
+                });
+            }
+        }
+
+        it("revises immutable drafts across restart, accumulates feedback and requires explicit approval even under All", async () => {
+            await manager.setMacroLearningPreference({
+                cwd: directory,
+                mode: "prepare",
+            });
+            const summary = await recorded();
+            const jobId = summary.learningJobId!;
+            await author(jobId);
+            const first = (await waiting(jobId, "needsReview")).macro!;
+            const original = await manager.inspectMacro(first);
+            const feedback = "Rename the macro to Read text";
+            const queued = await manager.reviseMacro({ ...first, feedback });
+            expect(queued).toMatchObject({
+                jobId,
+                status: "queued",
+                review: { draftVersion: 2, feedback: [feedback] },
+            });
+            await expect(manager.approveMacro(first)).rejects.toThrow(
+                "immutable staged draft",
+            );
+            await waiting(jobId, "awaitingAuthor");
+            await expect(
+                manager.reviseMacro({ ...first, feedback: "Another change" }),
+            ).rejects.toThrow("Wait for");
+            await manager.close();
+            manager = new MacroManager(directory, undefined, profileId);
+            await manager.configureLearning(runtime());
+            await manager.setMacroLearningPreference({
+                cwd: directory,
+                mode: "all",
+            });
+            await author(jobId, feedback, "revised");
+            const revised = (await waiting(jobId, "needsReview")).macro!;
+            expect(revised.version).toBe(2);
+            expect(await manager.inspectMacro(first)).toEqual(original);
+            const draft = await manager.inspectMacro(revised);
+            expect(draft.name).toBe("Read text");
+            expect(draft.learning?.reviewFeedback).toEqual([feedback]);
+            expect(draft.learning?.grammarRules[0]).toContain(`_v3"`);
+            expect(await manager.getApprovedMacros()).toEqual([]);
+            await expect(manager.approveMacro(first)).rejects.toThrow(
+                "Only the current draft",
+            );
+            await expect(
+                manager.reviseMacro({ ...first, feedback }),
+            ).rejects.toThrow("Only the current draft");
+            const nextFeedback =
+                "Keep the text name and clarify the description";
+            await manager.reviseMacro({ ...revised, feedback: nextFeedback });
+            await author(jobId, nextFeedback, "revised");
+            const final = await waiting(jobId, "needsReview");
+            expect(final.review?.feedback).toEqual([feedback, nextFeedback]);
+            expect(final.macro?.version).toBe(3);
+            expect(
+                (await manager.inspectMacro(final.macro!)).learning
+                    ?.grammarRules[0],
+            ).toContain(`_v4"`);
+            expect(await manager.approveMacro(final.macro!)).toMatchObject({
+                version: 4,
+                state: "approved",
+            });
+            expect(await manager.getApprovedMacros()).toHaveLength(1);
+            await expect(
+                manager.reviseMacro({
+                    macroId: jobId,
+                    version: 4,
+                    feedback,
+                }),
+            ).rejects.toThrow("Only the current draft");
+            expect(fallbackCalls).toBe(0);
+        });
+
+        it("rejects invalid feedback and cancels in-progress revisions without approving the old draft", async () => {
+            await manager.setMacroLearningPreference({
+                cwd: directory,
+                mode: "prepare",
+            });
+            const summary = await recorded();
+            const jobId = summary.learningJobId!;
+            await author(jobId);
+            const first = (await waiting(jobId, "needsReview")).macro!;
+            for (const feedback of [" ", "x".repeat(16_385)]) {
+                await expect(
+                    manager.reviseMacro({ ...first, feedback }),
+                ).rejects.toThrow("Review feedback");
+            }
+            await manager.reviseMacro({
+                ...first,
+                feedback: "Clarify the name",
+            });
+            await waiting(jobId, "awaitingAuthor");
+            const request =
+                (await manager.claimMacroAuthoringRequest(claim()))!;
+            await manager.setMacroLearningPreference({
+                cwd: directory,
+                mode: "off",
+            });
+            expect((await manager.getMacroLearningJob(jobId)).status).toBe(
+                "cancelled",
+            );
+            await expect(
+                manager.submitMacroAuthoringResponse({
+                    ...claim(),
+                    requestId: request.requestId,
+                    leaseId: request.leaseId,
+                    promptDigest: request.promptDigest,
+                    outcome: {
+                        status: "completed",
+                        text: "late",
+                        childId: "late",
+                    },
+                }),
+            ).rejects.toThrow("scoped lease");
+            await expect(manager.approveMacro(first)).rejects.toThrow();
+            expect(await manager.getApprovedMacros()).toEqual([]);
+        });
+
+        it("keeps a failed correction inspectable and accepts a new correction without reusing the failed author reply", async () => {
+            await manager.setMacroLearningPreference({
+                cwd: directory,
+                mode: "prepare",
+            });
+            const summary = await recorded();
+            const jobId = summary.learningJobId!;
+            await author(jobId);
+            const first = (await waiting(jobId, "needsReview")).macro!;
+            await manager.reviseMacro({
+                ...first,
+                feedback: "Clarify the output",
+            });
+            await waiting(jobId, "awaitingAuthor");
+            const request =
+                (await manager.claimMacroAuthoringRequest(claim()))!;
+            await manager.submitMacroAuthoringResponse({
+                ...claim(),
+                requestId: request.requestId,
+                leaseId: request.leaseId,
+                promptDigest: request.promptDigest,
+                outcome: { status: "failed", error: "Unsupported correction" },
+            });
+            const failed = await waiting(jobId, "failed");
+            expect(failed.error).toContain("Unsupported correction");
+            expect((await manager.inspectMacro(first)).state).toBe("draft");
+            await expect(manager.approveMacro(first)).rejects.toThrow(
+                "immutable staged draft",
+            );
+            await manager.reviseMacro({
+                ...first,
+                feedback: "Only rename the macro to Read text",
+            });
+            await author(jobId, "Only rename", "revised");
+            expect(await waiting(jobId, "needsReview")).toMatchObject({
+                macro: { version: 2, state: "draft" },
+                review: {
+                    feedback: [
+                        "Clarify the output",
+                        "Only rename the macro to Read text",
+                    ],
+                },
+            });
+            expect(await manager.getApprovedMacros()).toEqual([]);
         });
 
         it("wakes bounded IPC waits on durable changes and reconciles missed hints after reconnect", async () => {

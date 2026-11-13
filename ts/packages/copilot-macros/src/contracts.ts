@@ -190,6 +190,7 @@ export interface CopilotToolMacro {
         exampleInputs: Record<string, unknown>;
         requests: string[];
         authoring: MacroChildAuthoringIdentity;
+        reviewFeedback?: string[];
     };
 }
 
@@ -242,6 +243,16 @@ export interface MacroLearningJob {
     createdAt: string;
     updatedAt: string;
     authoring: MacroChildAuthoringIdentity;
+    review?: {
+        draftVersion: number;
+        feedback: string[];
+    };
+}
+
+export interface ReviseMacroRequest {
+    macroId: string;
+    version: number;
+    feedback: string;
 }
 
 export interface MacroChildAuthoringIdentity {

@@ -29,6 +29,7 @@ type ManagerMethodMap = {
     getMacroRequirements: "getMacroRequirements";
     validateMacro: "validateMacro";
     approveMacro: "approveMacro";
+    reviseMacro: "reviseMacro";
     disableMacro: "disableMacro";
     deleteMacro: "deleteMacro";
     runMacro: "runMacro";
@@ -53,6 +54,7 @@ export const macroOwnerMethods = [
     "getMacroRequirements",
     "validateMacro",
     "approveMacro",
+    "reviseMacro",
     "disableMacro",
     "deleteMacro",
     "runMacro",
@@ -118,6 +120,7 @@ export async function connectToMacroOwner(
             invoke("getMacroRequirements", request),
         validateMacro: (request) => invoke("validateMacro", request),
         approveMacro: (request) => invoke("approveMacro", request),
+        reviseMacro: (request) => invoke("reviseMacro", request),
         disableMacro: (request) => invoke("disableMacro", request),
         deleteMacro: (request) => invoke("deleteMacro", request),
         runMacro: (request) => invoke("runMacro", request),

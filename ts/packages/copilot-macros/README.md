@@ -172,6 +172,18 @@ run. Approval writes a new immutable version and checks the combined current
 grammar catalog. The grammar targets that anticipated approved version, not the
 authoring draft version.
 
+`MacroManager.reviseMacro({ macroId, version, feedback })` queues a
+plain-language correction of the current learned draft. The original recording
+and saved versions remain immutable; a new version goes through grounded
+authoring, regenerated grammar, independent fixtures and checked compilation.
+`MacroLearningJob.review` records the accumulated feedback and target draft
+version. The independent verifier receives `learning.reviewFeedback`, not a
+previous implementation. Revised drafts always stop at `needsReview` for
+explicit approval, regardless of the workspace's automatic publication mode.
+Pending or failed corrections cannot approve the original draft. Unsupported
+changes fail explicitly without executing business tools or weakening the
+captured capability contracts.
+
 Grounded `MacroStep`, `ValueExpression`, execution-class and postcondition
 metadata remain as authoring/audit evidence. `replayable` means the captured tool
 was inspectable by TypeAgent; `agentRequired` denotes an unavailable capability.
