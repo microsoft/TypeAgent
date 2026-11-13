@@ -15,10 +15,12 @@
     ".": "./dist/index.js",
     "./rpc": "./dist/rpcFacade.js",
     "./benchmark": "./dist/benchmarkBridge.js",
+    "./performance-experiments": "./dist/memoryPerformanceExperimentConfig.js",
     "./agent-edition-validation": "./dist/agentEditionValidation.js",
     "./procedure-markdown": "./dist/procedureMarkdown.js",
     "./procedureMarkdown": "./dist/procedureMarkdown.js",
     "./view-text": "./dist/viewText.js",
+    "./view-detail": "./dist/viewDetail.js",
     "./view-types": "./dist/viewTypes.js",
     "./view-packages": "./dist/viewPackages.js"
   },

@@ -590,6 +590,12 @@ These switches do not alter models or relax required readiness, publication,
 editorial, correction or forgetting checks. They are not included in the existing
 experiment aliases. A combined treatment is not an isolated-factor measurement.
 
+Consumers that only parse these switches can import
+`memoryPerformanceExperiments` from `@typeagent/memory-service/performance-experiments`.
+This shares the same validation without loading the memory/indexing runtime during
+browser view-server startup. The `@typeagent/memory-service/view-detail` entry point
+similarly exposes the paging contract and bounds without loading the service.
+
 | Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments.                                                                                                                                                         |
