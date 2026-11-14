@@ -32,8 +32,11 @@ type ResponsesUsage = {
     input_tokens_details?: { cached_tokens?: number };
 };
 
+type ResponsesError = { message?: string };
+
 type ResponsesResult = {
     status?: string;
+    error?: ResponsesError | null;
     output_text?: string;
     output?: ResponsesOutputItem[];
     usage?: ResponsesUsage;
@@ -102,6 +105,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
         if (res.status === "incomplete") {
             return error(incompleteOutputMessage);
         }
+        if (res.status === "failed" || res.status === "cancelled") {
+            return error(res.error?.message || `Response ${res.status}`);
+        }
         if (typeof res.output_text === "string") {
             return success(res.output_text);
         }
@@ -131,13 +137,25 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                 const evt = JSON.parse(raw) as {
                     type?: string;
                     delta?: string;
+                    message?: string;
                     response?: {
+                        error?: ResponsesError | null;
                         usage?: ResponsesUsage;
                     };
                 };
                 const piece: StreamPiece = {};
                 if (evt.type === "response.incomplete") {
                     throw new Error(incompleteOutputMessage);
+                }
+                if (evt.type === "error") {
+                    piece.error = new Error(evt.message || "Response error");
+                    return piece;
+                }
+                if (evt.type === "response.failed") {
+                    piece.error = new Error(
+                        evt.response?.error?.message || "Response failed",
+                    );
+                    return piece;
                 }
                 if (
                     evt.type === "response.output_text.delta" &&

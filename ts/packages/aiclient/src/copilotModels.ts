@@ -1357,9 +1357,9 @@ export function createCopilotTransportModel(
                     let piece;
                     try {
                         piece = decoder.push(evt.data);
-                    } catch {
-                        // Ignore non-JSON keep-alive/comment lines.
-                        continue;
+                    } catch (e) {
+                        if (e instanceof SyntaxError) continue;
+                        throw e;
                     }
                     if (piece.text) {
                         fullResponseText += piece.text;

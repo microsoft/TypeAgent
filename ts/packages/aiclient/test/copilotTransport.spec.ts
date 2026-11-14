@@ -837,6 +837,38 @@ describe("createCopilotTransportModel", () => {
         ]);
     });
 
+    test.each([
+        [{ type: "error", code: "server_error", message: "Boom" }, "Boom"],
+        [{ type: "response.incomplete" }, "Model response is incomplete"],
+    ])(
+        "surfaces responses API stream error %j after partial text",
+        async (event, message) => {
+            (globalThis as any).fetch = async () =>
+                sseResponse([
+                    "keep-alive",
+                    { type: "response.output_text.delta", delta: "Partial" },
+                    event,
+                ]);
+            const { provider } = makeProvider([makeLunaEndpoint()]);
+            const model = createCopilotTransportModel(
+                makeSettings(),
+                {},
+                undefined,
+                undefined,
+                provider,
+            );
+
+            const result = await model.completeStream!("what time is it");
+            expect(result.success).toBe(true);
+            if (!result.success) return;
+            const chunks: string[] = [];
+            await expect(async () => {
+                for await (const c of result.data) chunks.push(c);
+            }).rejects.toThrow(message);
+            expect(chunks).toEqual(["Partial"]);
+        },
+    );
+
     test("refreshes the endpoint once when the stream fails to connect", async () => {
         let call = 0;
         (globalThis as any).fetch = async () => {

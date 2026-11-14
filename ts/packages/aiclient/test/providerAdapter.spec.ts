@@ -666,6 +666,63 @@ describe("ResponsesWireApiProvider", () => {
         });
     });
 
+    test.each([
+        [{ type: "error", code: "server_error", message: "Boom" }, false],
+        [{ type: "error", code: "server_error", message: "Boom" }, true],
+        [
+            {
+                type: "response.failed",
+                response: { status: "failed", error: { message: "Boom" } },
+            },
+            false,
+        ],
+        [
+            {
+                type: "response.failed",
+                response: { status: "failed", error: { message: "Boom" } },
+            },
+            true,
+        ],
+    ])(
+        "stream reports %j as an error (partial text: %s)",
+        (event, partialText) => {
+            const decoder = adapter.createStreamDecoder!(makeRequest());
+            if (partialText) {
+                expect(
+                    decoder.push(
+                        JSON.stringify({
+                            type: "response.output_text.delta",
+                            delta: "Partial answer",
+                        }),
+                    ).text,
+                ).toBe("Partial answer");
+            }
+            const piece = decoder.push(JSON.stringify(event));
+            expect(piece.error).toBeInstanceOf(Error);
+            expect(piece.error?.message).toBe("Boom");
+            expect(piece.text).toBeUndefined();
+        },
+    );
+
+    test.each(["failed", "cancelled"])(
+        "parseResponse errors when status is %s",
+        (status) => {
+            const r = adapter.parseResponse(
+                {
+                    status,
+                    error: status === "failed" ? { message: "Boom" } : null,
+                    output_text: "Partial answer",
+                },
+                makeRequest(),
+            );
+            expect(r.success).toBe(false);
+            if (!r.success)
+                expect(r.message).toBe(
+                    status === "failed" ? "Boom" : "Response cancelled",
+                );
+        },
+    );
+
     test("streaming decoder emits response.output_text.delta content", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const piece = decoder.push(
