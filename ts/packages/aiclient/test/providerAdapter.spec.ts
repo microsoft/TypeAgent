@@ -666,24 +666,16 @@ describe("ResponsesWireApiProvider", () => {
         });
     });
 
-    test.each([
-        [{ type: "error", code: "server_error", message: "Boom" }, false],
-        [{ type: "error", code: "server_error", message: "Boom" }, true],
+    test.each(
         [
+            { type: "error", code: "server_error", message: "Boom" },
+            { type: "error", error: { code: "server_error", message: "Boom" } },
             {
                 type: "response.failed",
                 response: { status: "failed", error: { message: "Boom" } },
             },
-            false,
-        ],
-        [
-            {
-                type: "response.failed",
-                response: { status: "failed", error: { message: "Boom" } },
-            },
-            true,
-        ],
-    ])(
+        ].flatMap((event) => [false, true].map((p) => [event, p] as const)),
+    )(
         "stream reports %j as an error (partial text: %s)",
         (event, partialText) => {
             const decoder = adapter.createStreamDecoder!(makeRequest());
@@ -703,6 +695,11 @@ describe("ResponsesWireApiProvider", () => {
             expect(piece.text).toBeUndefined();
         },
     );
+
+    test.each(["null", "1", '"text"'])("stream skips a %s event", (raw) => {
+        const decoder = adapter.createStreamDecoder!(makeRequest());
+        expect(decoder.push(raw)).toEqual({});
+    });
 
     test.each(["failed", "cancelled"])(
         "parseResponse errors when status is %s",
