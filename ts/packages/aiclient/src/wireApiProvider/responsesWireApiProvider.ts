@@ -138,17 +138,23 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     type?: string;
                     delta?: string;
                     message?: string;
+                    error?: ResponsesError | null;
                     response?: {
                         error?: ResponsesError | null;
                         usage?: ResponsesUsage;
                     };
-                };
+                } | null;
                 const piece: StreamPiece = {};
+                if (typeof evt !== "object" || evt === null) {
+                    return piece;
+                }
                 if (evt.type === "response.incomplete") {
                     throw new Error(incompleteOutputMessage);
                 }
                 if (evt.type === "error") {
-                    piece.error = new Error(evt.message || "Response error");
+                    piece.error = new Error(
+                        evt.message || evt.error?.message || "Response error",
+                    );
                     return piece;
                 }
                 if (evt.type === "response.failed") {
