@@ -798,6 +798,76 @@ describe("createCopilotTransportModel", () => {
         expect(body.stream_options).toEqual({ include_usage: true });
     });
 
+    test("skips chat completions chunks with no choices or null data", async () => {
+        (globalThis as any).fetch = async () =>
+            sseResponse([
+                deltaChunk("Hello"),
+                "null",
+                {
+                    usage: {
+                        prompt_tokens: 3,
+                        completion_tokens: 1,
+                        total_tokens: 4,
+                    },
+                },
+                "[DONE]",
+            ]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
+        const usage: any[] = [];
+        const model = createCopilotTransportModel(
+            makeSettings("gpt-5.6-luna"),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.completeStream!("hi", (u) => usage.push(u));
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        expect((await drain(result.data)).text).toBe("Hello");
+        expect(usage).toEqual([
+            { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        ]);
+    });
+
+    test("surfaces a chat completions content filter error", async () => {
+        (globalThis as any).fetch = async () =>
+            sseResponse([
+                deltaChunk("Partial"),
+                {
+                    choices: [
+                        {
+                            delta: {},
+                            finish_reason: "content_filter_error",
+                            content_filter_results: {
+                                code: "filtered",
+                                message: "Blocked",
+                            },
+                        },
+                    ],
+                },
+                "[DONE]",
+            ]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
+        const model = createCopilotTransportModel(
+            makeSettings("gpt-5.6-luna"),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.completeStream!("hi");
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        const chunks: string[] = [];
+        await expect(async () => {
+            for await (const c of result.data) chunks.push(c);
+        }).rejects.toThrow("content filter error (filtered): Blocked");
+        expect(chunks).toEqual(["Partial"]);
+    });
+
     test("streams responses API deltas", async () => {
         (globalThis as any).fetch = async () =>
             sseResponse([
@@ -836,6 +906,38 @@ describe("createCopilotTransportModel", () => {
             },
         ]);
     });
+
+    test.each([
+        [{ type: "error", code: "server_error", message: "Boom" }, "Boom"],
+        [{ type: "response.incomplete" }, "Model response is incomplete"],
+    ])(
+        "surfaces responses API stream error %j after partial text",
+        async (event, message) => {
+            (globalThis as any).fetch = async () =>
+                sseResponse([
+                    "keep-alive",
+                    { type: "response.output_text.delta", delta: "Partial" },
+                    event,
+                ]);
+            const { provider } = makeProvider([makeLunaEndpoint()]);
+            const model = createCopilotTransportModel(
+                makeSettings(),
+                {},
+                undefined,
+                undefined,
+                provider,
+            );
+
+            const result = await model.completeStream!("what time is it");
+            expect(result.success).toBe(true);
+            if (!result.success) return;
+            const chunks: string[] = [];
+            await expect(async () => {
+                for await (const c of result.data) chunks.push(c);
+            }).rejects.toThrow(message);
+            expect(chunks).toEqual(["Partial"]);
+        },
+    );
 
     test("refreshes the endpoint once when the stream fails to connect", async () => {
         let call = 0;
