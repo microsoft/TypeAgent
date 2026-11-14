@@ -126,12 +126,14 @@ deferred.
   present shapes" after review found a Sonnet run (9.2) whose removes
   were linear: a ratio of 28.4 against the limit of 16, not measured by
   any workload.
-- **Task 9.2 is in progress**: requeued by its review
-  (`reports/task-9.2.review-3.md`), rerunning on Sonnet. One run was
-  wasted on a stale workspace ($2.77, in `design-costs.json`). Next:
-  check, collect and review 9.2 (measure its removes with `npm run bench`
-  after collecting, or the remove pattern on its file), then requeue and
-  rerun 9.d, review it (3b), and commit.
+- **Task 9.2 is collected and awaits review** (2b). Its earlier attempt
+  was sent back (`reports/task-9.2.review-3.md`); one run was wasted on a
+  stale workspace ($2.77, in `design-costs.json`). The new attempt
+  ($1.51) passes every check. A quick test of removes (1,000 against
+  100,000 shapes) gives a ratio of 11.8: inside the limit of 16, but far
+  above task 9's 1.5 and the 4 to 9 a logarithmic structure measures, so
+  the review should read its remove path before accepting it. Then
+  requeue and rerun 9.d, and review it (3b).
 - **Catalog:** 31 interfaces, 137 rules. **Adversaries:** 173, none
   escaped on seeds 1 to 3. **Tests:** 422, with the 9 expected failures
   below.
@@ -148,7 +150,7 @@ deferred.
 
 ## Next session
 
-1. Finish 9.2 and 9.d as above, and commit.
+1. Review 9.2 (read its remove path), then 9.d as above, and commit.
 2. Step 0 for the docgent: a `project.json` per project, so the tooling
    serves circles and `docgent/` (interface lists are hardcoded in
    `task.ts`, `catalog.ts` and `ruleGen.ts`; `ruleCheck.ts` must take each

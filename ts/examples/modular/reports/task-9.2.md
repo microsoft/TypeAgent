@@ -2,81 +2,70 @@ Status: done
 
 ## Choices
 
-Everything here is "Left to the implementer: how pending operations and
-each shape's add are kept" (the only thing the spec leaves open for this
-task); each choice is recorded in `shapeProcessor.ts`'s header.
+- **newShapeId format**: `` `${clientId}#${n}` `` with `n` a per-instance
+  counter starting at 0, incremented on every call (header: Cost field).
+  This is literally what "Decided behavior" specifies, not a choice, but
+  noting it here since it's the only state `newShapeId` keeps.
 
-- **How pending operations are kept (Parts, How).** The local and remote
-  queues are plain arrays, drained FIFO. Besides the writer, I keep: an
-  `addInfo` map from shape ID to its add's `{clientId, clientSeq, seq}`
-  (`seq` is `-1` while the add is this client's own and still pending);
-  `globalAcked`, the present acknowledged shapes sorted ascending by
-  `seq` (the acknowledged, bottom part of the z-order); `remoteClientAdds`,
-  each remote client's present shapes sorted ascending by `clientSeq`; and
-  `pendingLocalAdds`, this client's own present pending adds in applied
-  order (so its first element is "the lowest shape of a pending local
-  add" the spec asks to track rather than search for).
+- **How pending adds and each shape's add are kept** (left to the
+  implementer): one `AddNode` per currently-present shape, holding its
+  `clientId`, `clientSeq` and `seq` (-1 while unacknowledged). Each node is
+  linked into two doubly linked lists:
+  - a per-`clientId` list, in `clientSeq` order (append-only as that
+    client's adds are applied/arrive; needed for `knew`'s own-client
+    clause and, for this client's own list, for tracking which add is
+    "the lowest pending local add").
+  - one global list, in `seq` order, holding every acknowledged add from
+    any client (append-only, since every remote delivery's `seq` is
+    greater than the last, including this client's own acknowledgments);
+    needed for `knew`'s refSeq clause.
+  Both lists support O(1) removal of an arbitrary node (by direct link
+  manipulation, via a `Map<ShapeId, AddNode>`), so forgetting a removed
+  shape's add, acknowledging a pending add, and finding the lowest still-
+  pending local add are all O(1), and a `clear` walks only the prefixes of
+  these two lists it actually removes (bounded by the shapes removed, not
+  by shapes present). Documented as "Parts" in the header.
 
-- **Finding what a clear knew, within the log-amortized budget
-  (`ShapeMessageProcessor.log-amortized`).** The budget's own workloads
-  include "remote clears that remove nothing, from a client that knew no
-  shape", and the rule says *process* must stay logarithmic per operation
-  even then, so a clear can't scan every present shape to find zero
-  matches. I use: a client's own `seq` grows with its `clientSeq` (each
-  client's operations are sequenced, and so acknowledged, in `clientSeq`
-  order), so within one client's `remoteClientAdds` entry, both "`seq` at
-  most the clear's `refSeq`" (knew, directly) and "`clientSeq` less than
-  the clear's" (knew, as the client's own earlier operation) are each a
-  prefix of the same `clientSeq`-ordered list; their union is the longer
-  prefix. Shapes from other clients can only be known through the first
-  condition, found as a prefix of `globalAcked` by `refSeq`. A client's
-  own pending (never-yet-acknowledged) adds exist only in this
-  processor's own `pendingLocalAdds`, since every other client's
-  operations arrive already sequenced; for this client's own clear, that
-  whole list is known (every pending add is already applied, so has a
-  smaller `clientSeq` than the clear just formed from the same local
-  queue). This finds and removes exactly what a clear knows in time
-  logarithmic in the number of shapes, plus linear in the number removed,
-  with no full scan.
-  I treated this as something the spec requires rather than a free choice
-  (the budget's workload fixes it), but the specific structures
-  (`globalAcked`, `remoteClientAdds`, `pendingLocalAdds`) are my design.
+- **Queue representation**: `local`/`remote` are plain arrays, drained with
+  `shift()` in `process`. Queue length is bounded by operations enqueued
+  between `process` calls, not by shapes present, so this doesn't conflict
+  with the no-time-proportional-to-shapes-present budget.
 
-- **Calling the writer's `remove` for an empty clear.** When a clear knows
-  no shape, I don't call `writer.remove([])` at all (rather than calling
-  it with an empty array). Either is consistent with the rules
-  (`ShapeCollectionWriter.notifies` doesn't require a call, only that one
-  that changes nothing emits nothing); I chose not to call it since
-  nothing is being removed.
+- **Recognizing an acknowledgment**: any operation arriving on `remote`
+  whose `clientId` equals this processor's own is treated as the
+  acknowledgment of an already-applied local operation (per
+  `unique-identity`, no other operation can share that pairing), so only
+  bookkeeping happens (recording the seq, and for an add, retiring it from
+  the pending-local-adds tracking) — never a writer call. This generalizes
+  the spec's "acknowledgment of a local operation" text, which illustrates
+  it for adds, to remove and clear as well, consistent with "process never
+  schedules itself" and "operations are never changed".
 
-- **`logOperations`.** Implemented with a small private `Emitter` class
-  (Node's `on`/`off`/snapshot-on-emit semantics), reimplemented locally
-  since this task can't import `eventkit.ts`; it matches that file's
-  `Events` class, which the rest of the repo already relies on for the
-  same semantics.
-
-- **`model`.** A plain object literal with exactly `ShapeCollection`'s
-  members, built the same way `shapewriterkit.ts`'s `readFacet` does
-  (which I could read but not import), so `on`/`off` return the facet
-  itself.
-
-- **IDs.** `newShapeId` returns `` `${clientId}#${n}` `` as the spec's
-  "Decided behavior" section already fixes; `n` is a counter starting at
-  0, held per instance.
+- **`AdditionalSemantics: none`**: I didn't find any behavior to add beyond
+  what the rules require.
 
 ## Notes
 
-- The hardest part was seeing that, for a single client, `seq` and
-  `clientSeq` grow together (because a client's own operations are
-  delivered to everyone, including itself, in `clientSeq` order, and
-  `seq` is assigned in delivery order): that's what lets "knew by refSeq"
-  and "knew as the author's own earlier operation" collapse into one
-  prefix search per clear, instead of a structure keyed on both fields at
-  once. Nothing in the files here states this directly; I derived it from
-  `dataModel.ts`'s `client-order` and `remote-seq` requirements together.
-- I verified the design against the budget by reasoning through
-  `shapeModel.vocab.ts`'s `processorWorkloads` by hand (no bench script is
-  part of this task's outputs), rather than measuring; `npm test` and
-  `npm run check` both pass, including the random-run suites in
-  `messageProcessor.contract.ts` and `shapeModel.contract.ts` and the
-  scenario and `frames.complete` suites in `scenario.contract.ts`.
+- Working out `ShapeMessageProcessor.clear-known`'s exact removal set took
+  the most care. `knew(op, other)` has two clauses (`other` acknowledged
+  with `seq <= op.refSeq`, or same client with smaller `clientSeq`), and
+  for a *remote* clear from another client X, X's own earlier add can
+  satisfy the second clause while failing the first (if X formed the add
+  and the clear in the same burst, before its own add's acknowledgment
+  came back to X, the add's eventual seq can land after X's clear's
+  refSeq). I convinced myself this is still answerable in O(shapes
+  removed) time because `client-order` guarantees X's earlier add always
+  reaches this processor's `remote` queue (and gets applied) before X's
+  clear does, so by the time the clear is processed, X's qualifying adds
+  already sit in X's per-client list, in clientSeq order, as a prefix.
+  Running the global-seq scan first and the per-client scan second avoids
+  double-removing (and double-counting towards the single `writer.remove`
+  call) a shape that both scans would otherwise name.
+- Checked, by hand-tracing a few sequences of local/remote adds and acks,
+  that always placing a remote add directly below the *current* lowest
+  pending local add (never searching for it) keeps the writer's physical
+  order equal to `compareOrder`'s sort at every point, including right
+  after an acknowledgment moves the pending/acknowledged boundary without
+  touching the writer (`ack-keeps-z`).
+- `npm test`, `npm run typecheck` and `npm run check` (apart from the
+  then-missing `REPORT.md`) all pass.
