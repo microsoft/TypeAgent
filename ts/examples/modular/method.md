@@ -3,21 +3,93 @@
 Work alternates between agreeing on a design and generating code from it.
 The full procedure, with its reasons, is in `moduleTooling.md`.
 
+## The design (agreed 2026-11-13)
+
+The design is what the human and the agents agree on: the interface
+files, their vocabularies, `scenarios.ts` and the platform subsets.
+Everything that checks it (contracts, references, doubles, drivers,
+adversaries) is the test harness. These principles govern phase 1.
+
+1. **Every design statement is formal.** A statement is one of:
+   - a TypeScript declaration (interfaces, types, vocabulary functions,
+     platform subsets), checked by the compiler;
+   - a rule's expression, evaluated on the calls a contract makes;
+   - a test, where an expression isn't practical. A test is an
+     unambiguous statement of what must happen, so it is a formal
+     statement.
+2. **Every scenario has a test, and the test, not the prose, defines the
+   scenario.**
+3. **Prose is only a gloss.** A gloss is attached to a formal statement
+   and references it (by rule ID, scenario ID, test name or declaration).
+   It adds nothing; where they disagree, the formal statement wins. It
+   names only declared symbols, besides plain English. Prose that glosses
+   no formal statement doesn't belong in the design.
+4. **The human agrees to the design's statements; its terms follow from
+   them.** Adding or changing an interface, a member, a rule or a scenario
+   takes the human's agreement. Every term of the design is derived from
+   those: a declaration in a design file, so the list of terms can be
+   generated from the design. Vocabulary a rule needs comes with the rule;
+   a change to vocabulary that changes what a rule means is a change to
+   the rule.
+5. **Observability is design.** Members and interfaces for logging,
+   tracing and observation serve debugging, testing and analysis alike, so
+   they belong in the design. When a rule can't be checked without seeing
+   more, add the member that shows it rather than weakening the rule, and
+   design it like everything else: formal rules, agreed with the human.
+   Put it on its own small interface that the main one extends, as
+   `OperationLogging` in `dataModel.ts` is for `MessageProcessor`. Better
+   still, a return value that production code uses too:
+   `OperationSink.enqueue` returns the stamped operation, which the
+   infrastructure sends and the tests check.
+6. **"Checkable" means a test that a violating implementation can fail,**
+   not a proof. Rules over all time (such as
+   `ShapeMessageProcessor.new-ids`) are checked by sampling. Budgets are
+   more pragmatic: a budget names a complexity class (`Complexity` in
+   `rules.ts`), which has its mathematical meaning, and a measurement over
+   named workloads stands in for it. Passing the measurement with an
+   algorithm outside the class still breaks the rule.
+
+Outside the design:
+
+- **`rules.ts`** defines the rule language: the tags, `old`, `atEvent`,
+  `history`, and the generic vocabulary. It is part of the method, like a
+  language spec, and may explain itself in prose.
+- **Rationale** (why a threshold is 16, why a decision went one way) is a
+  decision record, in `behavior.md` or a review, not a design statement.
+  A rule keeps only its statement.
+- **`@deferred` rules** are a backlog: they carry their expression where
+  one can be written, and aren't design until they are checked.
+
 ## 1. Agree (human and agent)
 
 - **Interfaces** in `events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`, with rules in the format described in `rules.ts`.
-- **Members for tests are allowed.** When a rule can't be checked without seeing more, add the member or event that shows it rather than weakening the rule. Put it on its own small interface that the main one extends, where feasible. Better still, a return value that production code uses too: `OperationSink.enqueue` in `dataModel.ts` returns the stamped operation, which the infrastructure sends and the tests check, where an earlier draft had an event for tests.
+- **Rules are compiled.** For each interface file in `ruleGen.ts`'s list
+  (`dataModel.ts` and `shapeModel.ts` so far), `node ruleGen.ts` compiles
+  every rule expression into `rules.gen.ts`, so tsc checks it, and
+  `ruleCheck.ts` evaluates the rules that apply to each call a contract
+  makes through it. The only state a rule may use beyond what the
+  interfaces expose is the object's history (`history` in `rules.ts`): the
+  calls made on it and the events emitted during them. Vocabulary defines
+  everything else a rule needs from that history.
+- **New statements are the human's decisions.** The agent proposes each
+  new or changed interface, member, rule or scenario for the human to
+  agree to, and never writes one into a design file first; the terms come
+  with it. In design discussion the agent uses only declared design terms,
+  and names a harness term as one when it must use it ("the test
+  driver").
 - **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.
-- **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class.
+- **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class. Where rules are compiled, the suite only generates the calls and never restates an expression: the design's own expressions decide pass or fail.
 - **An observer table** for each stateful interface (`observer-tables.md`): every call against everything observable afterward, each cell settled by a rule.
-- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. An action says what the user does, not which control does it. They run through a driver each platform writes, which does the actions with its own controls (`Driver` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among references, are named after the scenario that must catch them.
+- **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. Every scenario has a test, and the test defines it; a scenario's story is a gloss. An action says what the user does, not which control does it. They run through a driver each platform writes, which does the actions with its own controls (`Driver` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among references, are named after the scenario that must catch them.
 
 ### Platform subsets
 
 An interface such as `canvas.ts` is a slice of one platform's API that an
 implementation may use. It is not part of the blueprint, which holds for
-every platform.
+every platform. (Open: whether that makes it outside the design. It is
+made of formal declarations that implementations depend on, so "The
+design" above counts it in; see `vocabulary-proposal.md`.)
 
 - **It needs a reason.** Either a double stands in for a surface that
   is costly to observe, or the subset deliberately limits implementations to
@@ -171,6 +243,9 @@ should say.
 
 - **Each note** in its Notes leads to a **spec fix**, a **decision** for
   the human, or **nothing**.
+- **Budgets are read, not only measured.** For a task with a `@budget`
+  rule, the review checks that the algorithm is in the rule's complexity
+  class. Passing the measurement isn't enough.
 - **The review is a file,** `reports/task-<n>.review.md`. It starts with
   `Status: reviewed`, and has a Choices and a Notes section with one bullet
   per bullet of the report, in order, each starting with its disposition in

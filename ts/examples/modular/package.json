@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc -p platform && node task.ts lint && tsc -p .",
+    "typecheck": "tsc -p platform && node task.ts lint && node ruleGen.ts --check && tsc -p .",
     "adversaries": "node adversaries.ts",
     "bench": "node bench.ts",
     "catalog": "node catalog.ts",

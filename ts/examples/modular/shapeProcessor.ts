@@ -7,13 +7,15 @@
  * present shape in two chains, acknowledged adds by seq and this client's
  * pending adds by clientSeq, so that placing a remote add, acknowledging a
  * local one and finding what a clear knew each touch only the records they
- * concern.
+ * concern. Each operation it applies goes to logOperations, an event emitter
+ * of its own, once the writer holds the operation's effect and has emitted
+ * its change.
  * Choose when: Pick it with any ShapeCollectionWriter: it holds no shapes of
  * its own and asks the writer for nothing beyond its interface, so the
  * writer decides how the shapes are stored and queried.
  * Cost: process does constant work per add, remove (per ID listed) and
- * acknowledgment, plus one writer call each, so it is amortized logarithmic
- * per operation with a writer that meets
+ * acknowledgment, plus one writer call and one applied event each, so it is
+ * amortized logarithmic per operation with a writer that meets
  * ShapeCollectionWriter.log-amortized; a clear walks the records it removes,
  * at most twice each, and calls remove once. local.enqueue, remote.enqueue
  * and newShapeId are constant time apart from copying the operation. State
@@ -42,19 +44,27 @@
  * processor's is taken as the acknowledgment of the local operation with
  * that clientSeq, and records a seq only for an add whose shape is still
  * present, since nothing else can observe one; a clear with nothing to
- * remove still calls the writer's remove, with an empty list.
+ * remove still calls the writer's remove, with an empty list; each applied
+ * event carries the processor's own copy of the operation, equal to the one
+ * local.enqueue returned or the one remote.enqueue was given, and applied is
+ * the only event logOperations has.
  * Parts: the read-only facet of the writer, which keeps it in a private
  * field (#writer), so that no property of the facet, own or inherited, shows
- * that it holds a writer at all, and the bookkeeping of the adds
+ * that it holds a writer at all, the operation log, an EventEmitter of one
+ * event that any producer could keep, and the bookkeeping of the adds
  * of present shapes (the chains and maps below), which a processor for
  * another shape-like model could share.
- * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts
+ * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts, events.ts
  */
 
 import type { Point, Rectangle } from "./geometry.ts";
 import type { Shape, ShapeId } from "./shape.ts";
-import type { OperationContent, OperationSink } from "./dataModel.ts";
+import type { EventEmitter } from "./events.ts";
+import type { OperationContent, OperationLogEvents, OperationSink } from "./dataModel.ts";
 import type { AddShape, ClearShapes, ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+
+/** What the processor's log emits: each operation as it is applied. */
+type LogEvents = OperationLogEvents<ShapeOp>;
 
 /**
  * What the processor remembers about the add that made a present shape: the
@@ -94,6 +104,34 @@ function stamped(content: OperationContent<ShapeOp>, clientId: string, clientSeq
   if (content.type === "add") return { type: "add", id: content.id, shape: content.shape, ...marks };
   if (content.type === "remove") return { type: "remove", ids: [...content.ids], ...marks };
   return { type: "clear", ...marks };
+}
+
+/**
+ * The processor's log of the operations it applies: an EventEmitter with
+ * Node's behavior, over the one event applied. Each on adds a registration,
+ * even of a listener that has one already, and off takes the most recent
+ * away. An emit calls the registrations it found, in order: on and off
+ * replace the list rather than change it, so a listener registered during an
+ * emit isn't called by it, and one removed during it still is.
+ */
+class OperationLog implements EventEmitter<LogEvents> {
+  #applied: readonly ((op: ShapeOp) => void)[] = [];
+
+  on<E extends keyof LogEvents & string>(event: E, listener: (...args: LogEvents[E]) => void): this {
+    this.#applied = [...this.#applied, listener as (op: ShapeOp) => void];
+    return this;
+  }
+
+  off<E extends keyof LogEvents & string>(event: E, listener: (...args: LogEvents[E]) => void): this {
+    const at = this.#applied.lastIndexOf(listener as (op: ShapeOp) => void);
+    if (at >= 0) this.#applied = this.#applied.filter((_, i) => i !== at);
+    return this;
+  }
+
+  /** Reports op, which the processor has just applied. */
+  emit(op: ShapeOp): void {
+    for (const listener of this.#applied) listener(op);
+  }
 }
 
 /**
@@ -151,9 +189,12 @@ export class ShapeProcessor implements ShapeMessageProcessor {
   readonly model: ShapeCollection;
   readonly local: OperationSink<OperationContent<ShapeOp>, ShapeOp>;
   readonly remote: OperationSink<ShapeOp>;
+  readonly logOperations: EventEmitter<LogEvents>;
 
   /** The write side, this processor's from now on. */
   private readonly writer: ShapeCollectionWriter;
+  /** The same object as logOperations, which only the processor emits on. */
+  private readonly log = new OperationLog();
   private localQueue: ShapeOp[] = [];
   private remoteQueue: ShapeOp[] = [];
   /** The counter newShapeId follows the last # with. */
@@ -178,6 +219,7 @@ export class ShapeProcessor implements ShapeMessageProcessor {
     this.clientId = clientId;
     this.writer = writer;
     this.model = new WriterFacet(writer);
+    this.logOperations = this.log;
     this.local = { enqueue: (content) => this.enqueueLocal(content) };
     this.remote = { enqueue: (op) => this.enqueueRemote(op) };
   }
@@ -216,17 +258,22 @@ export class ShapeProcessor implements ShapeMessageProcessor {
 
   // ---- Applying -----------------------------------------------------------
 
-  /** A local add goes on top. */
+  /**
+   * A local add goes on top. The log reports the operation last, once the
+   * writer holds its effect and has emitted its change.
+   */
   private applyLocal(op: ShapeOp): void {
     if (op.type === "add") this.applyAdd(op, undefined);
     else if (op.type === "remove") this.applyRemove(op.ids);
     else this.applyClear(op);
+    this.log.emit(op);
   }
 
   /**
    * A remote add goes directly below the lowest shape of a pending local
    * add, or on top if none is pending. An operation of this client's is its
-   * acknowledgment, which applies nothing.
+   * acknowledgment, which applies nothing. The log reports every one of
+   * them, acknowledgments included, once its effect is in the writer.
    */
   private applyRemote(op: ShapeOp): void {
     this.lastApplied = op.seq;
@@ -234,6 +281,7 @@ export class ShapeProcessor implements ShapeMessageProcessor {
     else if (op.type === "add") this.applyAdd(op, this.pendingFirst?.id);
     else if (op.type === "remove") this.applyRemove(op.ids);
     else this.applyClear(op);
+    this.log.emit(op);
   }
 
   private applyAdd(op: AddShape, below: ShapeId | undefined): void {

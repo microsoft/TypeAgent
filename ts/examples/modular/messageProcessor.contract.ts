@@ -24,6 +24,7 @@ import fc from "fast-check";
 import type { DataModelReader, MessageProcessor, Operation, OperationContent } from "./dataModel.ts";
 import { deepEqual } from "./dataModel.vocab.ts";
 import { coverage } from "./testkit.ts";
+import { observe } from "./ruleCheck.ts";
 
 /** What a DDS gives the suite. */
 export interface ProcessorSubject<TR extends DataModelReader, TOp extends Operation> {
@@ -34,6 +35,14 @@ export interface ProcessorSubject<TR extends DataModelReader, TOp extends Operat
   snapshot(model: TR): unknown;
   /** The names of the model's events. */
   readonly events: readonly string[];
+  /**
+   * The interface the processors are, such as "ShapeMessageProcessor", when
+   * its rules are compiled (rules.gen.ts): each processor is then observed,
+   * and the compiled rules are checked on each call the run makes.
+   */
+  readonly as?: string;
+  /** Values for the compiled rules written as arrow functions, given the run's processors. */
+  samples?(rule: string, processors: readonly MessageProcessor<TR, TOp>[]): readonly (readonly unknown[])[];
 }
 
 export type Step =
@@ -98,9 +107,16 @@ export async function play<TR extends DataModelReader, TOp extends Operation>(
   const violation: Violation = (rule, detail) => violations.set(rule, [...(violations.get(rule) ?? []), detail]);
   const snap = (c: Client<TR, TOp>) => subject.snapshot(c.p.model);
 
+  const processors: MessageProcessor<TR, TOp>[] = [];
   const newClient = (id: string): Client<TR, TOp> => {
+    const made = subject.make(id);
+    processors.push(made);
+    const p = subject.as === undefined ? made : observe(made, {
+      as: subject.as, violation, through: ["local", "remote"], unobserved: ["model", "clientId", "logOperations"],
+      events: { model: subject.events, logOperations: ["applied"] }, samples: (rule) => subject.samples?.(rule, processors) ?? [],
+    });
     const c: Client<TR, TOp> = {
-      id, p: subject.make(id), applied: [], enqueued: [], delivered: [], outbox: [], sent: [],
+      id, p, applied: [], enqueued: [], delivered: [], outbox: [], sent: [],
       lastApplied: -1, lastClientSeq: -Infinity, events: 0,
     };
     for (const e of subject.events) {
@@ -329,7 +345,8 @@ export function messageProcessorContract<TR extends DataModelReader, TOp extends
       "Operation.seq-range", "Operation.client-seq-range", "Operation.ref-seq-range",
       "OperationSink.enqueue.own-copy",
       "MessageProcessor.stamps", "MessageProcessor.sole-writer", "MessageProcessor.enqueue-defers",
-      "MessageProcessor.converges",
+      "MessageProcessor.converges", "MessageProcessor.process.logs-each",
+      "MessageProcessor.local-order", "MessageProcessor.remote-order",
     ]) ruleTest(id, subject, hooks);
     ruleTest("MessageProcessor.passive", subject, hooks, true);
 

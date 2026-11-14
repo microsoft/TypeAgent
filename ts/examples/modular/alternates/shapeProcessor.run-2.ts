@@ -1,69 +1,83 @@
 /**
  * ShapeProcessor implements ShapeMessageProcessor.
  *
- * How: Keeps a local and a remote queue of ShapeOps; process drains local
- * then remote, repeating until both are empty. An add from the local queue
- * goes on top; a genuinely remote add goes directly below the oldest
- * pending local add (tracked as the head of a small linked list, never
- * searched for); a remote item carrying this client's own clientId is its
- * acknowledgment and only updates bookkeeping. For each present shape, a
- * record of its add's clientId, clientSeq and seq is kept in two more
- * linked lists ordered by seq (across every client) and by clientSeq
- * (per client), so a clear walks only the shapes it knows and removes them
- * in one writer.remove call, never scanning the shapes it doesn't know.
- * Choose when: it's the only implementation of ShapeMessageProcessor the
- * spec names; use it wherever a ShapeCollectionWriter needs a processor.
- * Cost: newShapeId, local.enqueue and remote.enqueue are constant time
- * apart from copying the operation. process applies each add or remove in
- * the writer's own amortized-logarithmic time, and a clear in time
- * proportional to the shapes it removes, since the seq-ordered and
- * clientSeq-ordered lists are walked only over matching, present entries.
+ * How: Keeps three small sorted structures besides the writer: the present
+ * acknowledged shapes by seq (the acknowledged, bottom part of the
+ * z-order), each remote client's present shapes by clientSeq, and this
+ * client's own present pending (unacknowledged) adds, in the order they
+ * were applied. A remote add's place and a clear's knowledge are found
+ * from these by binary search, never by scanning every present shape.
+ * Choose when: always; it is the only implementation of
+ * ShapeMessageProcessor.
+ * Cost: newShapeId, local.enqueue and remote.enqueue are constant time,
+ * apart from copying the operation's fields. process is amortized
+ * logarithmic per operation (binary searches over the structures above),
+ * plus time proportional to the shapes a clear removes (each found and
+ * removed in logarithmic time).
  * AdditionalSemantics: none.
- * Parts: none.
- * Imports: shape.ts, dataModel.ts, shapeModel.ts
+ * Parts: a seq-ordered index of present acknowledged shapes, and a
+ * clientSeq-ordered index per remote client, used to tell what a clear
+ * knew without scanning every present shape; each could stand alone as
+ * an interface.
+ * Imports: shape.ts, dataModel.ts, shapeModel.ts, events.ts
  */
 
-import type { Shape, ShapeId } from "./shape.ts";
-import type { OperationContent, OperationSink } from "./dataModel.ts";
-import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+import type { ShapeId } from "./shape.ts";
+import type { OperationContent, OperationLogEvents, OperationSink } from "./dataModel.ts";
+import type { AddShape, ClearShapes, RemoveShapes, ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
+import type { EventEmitter, EventMap } from "./events.ts";
 
-/** A clone of op, with its own copy of any array field, independent of op. */
-function cloneOp(op: ShapeOp): ShapeOp {
-  if (op.type === "remove") return { ...op, ids: [...op.ids] };
-  return { ...op };
+/** Node's EventEmitter semantics (events.ts), reimplemented here since this task can't import eventkit.ts. */
+class Emitter<M extends EventMap> implements EventEmitter<M> {
+  private readonly listeners = new Map<string, unknown[]>();
+
+  on<E extends keyof M & string>(event: E, listener: (...args: M[E]) => void): this {
+    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
+    return this;
+  }
+
+  off<E extends keyof M & string>(event: E, listener: (...args: M[E]) => void): this {
+    const list = this.listeners.get(event) ?? [];
+    const i = list.lastIndexOf(listener);
+    if (i >= 0) this.listeners.set(event, list.filter((_, j) => j !== i));
+    return this;
+  }
+
+  emit<E extends keyof M & string>(event: E, ...args: M[E]): void {
+    for (const listener of this.listeners.get(event) ?? []) (listener as (...a: M[E]) => void)(...args);
+  }
 }
 
-/** content stamped with base's processor-assigned fields. */
-function stamp(base: { clientId: string; clientSeq: number; seq: number; refSeq: number }, content: OperationContent<ShapeOp>): ShapeOp {
-  if (content.type === "add") return { ...base, type: "add", id: content.id, shape: content.shape };
-  if (content.type === "remove") return { ...base, type: "remove", ids: [...content.ids] };
-  return { ...base, type: "clear" };
+/** The first index whose key is at least value, in an array sorted ascending by key. */
+function lowerBound<T>(arr: readonly T[], key: (t: T) => number, value: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (key(arr[mid]) < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
-/** Per-client adds, oldest first, in clientSeq order. */
-interface ClientList {
-  head: AddRecord | null;
-  tail: AddRecord | null;
+/** Removes the one entry at this exact seq, if present, from an array sorted ascending by seq. */
+function removeBySeq(arr: { seq: number }[], seq: number): void {
+  const i = lowerBound(arr, (e) => e.seq, seq);
+  if (i < arr.length && arr[i].seq === seq) arr.splice(i, 1);
 }
 
-/** What is kept about one present shape's add, and its membership in the lists that find it again. */
+/** Removes the one entry at this exact clientSeq, if present, from an array sorted ascending by clientSeq. */
+function removeByClientSeq(arr: { clientSeq: number }[], clientSeq: number): void {
+  const i = lowerBound(arr, (e) => e.clientSeq, clientSeq);
+  if (i < arr.length && arr[i].clientSeq === clientSeq) arr.splice(i, 1);
+}
+
+/** What this processor records of an applied add, to place remote adds and decide what a clear knew. */
 interface AddRecord {
-  readonly id: ShapeId;
-  readonly clientId: string;
-  readonly clientSeq: number;
-  /** -1 until acknowledged. */
+  clientId: string;
+  clientSeq: number;
+  /** -1 while the add is this client's own and still pending. */
   seq: number;
-  // The global list of acknowledged, present adds, oldest seq first.
-  seqPrev: AddRecord | null;
-  seqNext: AddRecord | null;
-  inSeq: boolean;
-  // This client's list (clientLists.get(clientId)), oldest clientSeq first.
-  clientPrev: AddRecord | null;
-  clientNext: AddRecord | null;
-  // The pending local adds, oldest (lowest) first; only this processor's own, unacknowledged adds.
-  pendingPrev: AddRecord | null;
-  pendingNext: AddRecord | null;
-  inPending: boolean;
 }
 
 export class ShapeProcessor implements ShapeMessageProcessor {
@@ -71,178 +85,205 @@ export class ShapeProcessor implements ShapeMessageProcessor {
   readonly model: ShapeCollection;
   readonly local: OperationSink<OperationContent<ShapeOp>, ShapeOp>;
   readonly remote: OperationSink<ShapeOp>;
+  readonly logOperations: EventEmitter<OperationLogEvents<ShapeOp>>;
 
+  private readonly logEmitter = new Emitter<OperationLogEvents<ShapeOp>>();
   private readonly writer: ShapeCollectionWriter;
   private readonly localQueue: ShapeOp[] = [];
   private readonly remoteQueue: ShapeOp[] = [];
-  private nextClientSeq = 0;
-  private nextIdCounter = 0;
-  private lastAppliedSeq = -1;
 
-  private readonly addRecords = new Map<ShapeId, AddRecord>();
-  private readonly clientLists = new Map<string, ClientList>();
-  private seqHead: AddRecord | null = null;
-  private seqTail: AddRecord | null = null;
-  private pendingHead: AddRecord | null = null;
-  private pendingTail: AddRecord | null = null;
+  /** Every present shape's add, by id. */
+  private readonly addInfo = new Map<ShapeId, AddRecord>();
+  /** Present acknowledged shapes, sorted ascending by seq: the acknowledged part of the z-order. */
+  private readonly globalAcked: { seq: number; id: ShapeId }[] = [];
+  /** Each remote client's present shapes, sorted ascending by clientSeq. */
+  private readonly remoteClientAdds = new Map<string, { clientSeq: number; seq: number; id: ShapeId }[]>();
+  /** This client's own present, unacknowledged adds, in the order applied (so the first is the lowest). */
+  private readonly pendingLocalAdds: ShapeId[] = [];
+
+  private lastRemoteSeq = -1;
+  private nextClientSeq = 0;
+  private nextShapeNum = 0;
 
   constructor(clientId: string, writer: ShapeCollectionWriter) {
     this.clientId = clientId;
     this.writer = writer;
-
-    const w = writer;
-    this.model = {
-      get(id) { return w.get(id); },
-      get size() { return w.size; },
-      forEach(visit) { w.forEach(visit); },
-      compareZ(a, b) { return w.compareZ(a, b); },
-      inRect(r, out) { return w.inRect(r, out); },
-      atPoint(p, out) { return w.atPoint(p, out); },
-      on(event, listener) { w.on(event, listener); return this; },
-      off(event, listener) { w.off(event, listener); return this; },
-    };
-
+    this.logOperations = this.logEmitter;
     this.local = {
-      enqueue: (content: OperationContent<ShapeOp>): ShapeOp => {
-        const stamped = stamp({ clientId: this.clientId, clientSeq: this.nextClientSeq++, seq: -1, refSeq: this.lastAppliedSeq }, content);
-        this.localQueue.push(stamped);
-        return cloneOp(stamped);
+      enqueue: (content) => {
+        const op = this.stamp(content);
+        this.localQueue.push(op);
+        return op;
       },
     };
     this.remote = {
-      enqueue: (op: ShapeOp): ShapeOp => {
-        this.remoteQueue.push(cloneOp(op));
-        return cloneOp(op);
+      enqueue: (op) => {
+        this.remoteQueue.push(op);
+        return op;
+      },
+    };
+    this.model = {
+      get: (id) => writer.get(id),
+      get size() {
+        return writer.size;
+      },
+      forEach: (visit) => writer.forEach(visit),
+      compareZ: (a, b) => writer.compareZ(a, b),
+      inRect: (r, out) => writer.inRect(r, out),
+      atPoint: (p, out) => writer.atPoint(p, out),
+      on(event, listener) {
+        writer.on(event, listener);
+        return this;
+      },
+      off(event, listener) {
+        writer.off(event, listener);
+        return this;
       },
     };
   }
 
   newShapeId(): ShapeId {
-    return `${this.clientId}#${this.nextIdCounter++}` as ShapeId;
+    return `${this.clientId}#${this.nextShapeNum++}` as ShapeId;
   }
 
   async process(): Promise<void> {
     while (this.localQueue.length > 0 || this.remoteQueue.length > 0) {
-      while (this.localQueue.length > 0) this.apply(this.localQueue.shift()!);
+      while (this.localQueue.length > 0) {
+        const op = this.localQueue.shift();
+        if (op) this.applyOne(op, true);
+      }
       while (this.remoteQueue.length > 0) {
-        const op = this.remoteQueue.shift()!;
-        if (op.clientId === this.clientId) this.acknowledge(op);
-        else this.apply(op);
+        const op = this.remoteQueue.shift();
+        if (op) this.applyOne(op, false);
       }
     }
   }
 
-  /** Applies a freshly dequeued op: a local one (always its own) or a genuinely remote one (never its own). */
-  private apply(op: ShapeOp): void {
-    const own = op.clientId === this.clientId;
-    if (op.type === "add") {
-      const below = own ? undefined : this.pendingHead?.id;
-      this.writer.add(op.id, op.shape, below);
-      const record: AddRecord = {
-        id: op.id, clientId: op.clientId, clientSeq: op.clientSeq, seq: op.seq,
-        seqPrev: null, seqNext: null, inSeq: false,
-        clientPrev: null, clientNext: null,
-        pendingPrev: null, pendingNext: null, inPending: false,
-      };
-      this.addRecords.set(op.id, record);
-      this.appendClient(record);
-      if (op.seq === -1) this.appendPending(record); else this.appendSeq(record);
-    } else if (op.type === "remove") {
-      for (const id of op.ids) {
-        const record = this.addRecords.get(id);
-        if (record) this.removeAdd(record);
-      }
-      this.writer.remove(op.ids);
+  private stamp(content: OperationContent<ShapeOp>): ShapeOp {
+    return {
+      ...content,
+      clientId: this.clientId,
+      clientSeq: this.nextClientSeq++,
+      refSeq: this.lastRemoteSeq,
+      seq: -1,
+    } as ShapeOp;
+  }
+
+  private applyOne(op: ShapeOp, isLocal: boolean): void {
+    if (isLocal) {
+      this.apply(op, true);
     } else {
-      const toRemove: ShapeId[] = [];
-      let node = this.seqHead;
-      while (node && node.seq <= op.refSeq) {
-        const next = node.seqNext;
-        toRemove.push(node.id);
-        this.removeAdd(node);
-        node = next;
-      }
-      let cnode = this.clientLists.get(op.clientId)?.head ?? null;
-      while (cnode && cnode.clientSeq < op.clientSeq) {
-        const next = cnode.clientNext;
-        toRemove.push(cnode.id);
-        this.removeAdd(cnode);
-        cnode = next;
-      }
-      this.writer.remove(toRemove);
+      this.lastRemoteSeq = op.seq;
+      if (op.clientId === this.clientId) this.applyAck(op);
+      else this.apply(op, false);
     }
-    if (op.seq !== -1) this.lastAppliedSeq = op.seq;
+    this.logEmitter.emit("applied", op);
   }
 
-  /** Records a local operation's assigned seq; applies nothing. */
-  private acknowledge(op: ShapeOp): void {
-    if (op.type === "add") {
-      const record = this.addRecords.get(op.id);
-      if (record) {
-        record.seq = op.seq;
-        this.unlinkPending(record);
-        this.appendSeq(record);
-      }
+  /** Applies a local operation, or a genuine remote one (never one of this client's own acknowledgments). */
+  private apply(op: ShapeOp, isLocal: boolean): void {
+    switch (op.type) {
+      case "add":
+        this.applyAdd(op, isLocal);
+        break;
+      case "remove":
+        this.applyRemove(op);
+        break;
+      case "clear":
+        this.applyClear(op, isLocal);
+        break;
     }
-    this.lastAppliedSeq = op.seq;
   }
 
-  private removeAdd(record: AddRecord): void {
-    this.unlinkSeq(record);
-    this.unlinkPending(record);
-    this.unlinkClient(record);
-    this.addRecords.delete(record.id);
+  /** The acknowledgment of one of this client's own operations: records its seq, applies nothing else. */
+  private applyAck(op: ShapeOp): void {
+    if (op.type !== "add") return;
+    const info = this.addInfo.get(op.id);
+    if (!info) return;
+    info.seq = op.seq;
+    const i = this.pendingLocalAdds.indexOf(op.id);
+    if (i >= 0) this.pendingLocalAdds.splice(i, 1);
+    this.globalAcked.push({ seq: op.seq, id: op.id });
   }
 
-  private appendSeq(record: AddRecord): void {
-    record.seqPrev = this.seqTail;
-    record.seqNext = null;
-    if (this.seqTail) this.seqTail.seqNext = record; else this.seqHead = record;
-    this.seqTail = record;
-    record.inSeq = true;
-  }
-
-  private unlinkSeq(record: AddRecord): void {
-    if (!record.inSeq) return;
-    if (record.seqPrev) record.seqPrev.seqNext = record.seqNext; else this.seqHead = record.seqNext;
-    if (record.seqNext) record.seqNext.seqPrev = record.seqPrev; else this.seqTail = record.seqPrev;
-    record.seqPrev = record.seqNext = null;
-    record.inSeq = false;
-  }
-
-  private appendPending(record: AddRecord): void {
-    record.pendingPrev = this.pendingTail;
-    record.pendingNext = null;
-    if (this.pendingTail) this.pendingTail.pendingNext = record; else this.pendingHead = record;
-    this.pendingTail = record;
-    record.inPending = true;
-  }
-
-  private unlinkPending(record: AddRecord): void {
-    if (!record.inPending) return;
-    if (record.pendingPrev) record.pendingPrev.pendingNext = record.pendingNext; else this.pendingHead = record.pendingNext;
-    if (record.pendingNext) record.pendingNext.pendingPrev = record.pendingPrev; else this.pendingTail = record.pendingPrev;
-    record.pendingPrev = record.pendingNext = null;
-    record.inPending = false;
-  }
-
-  private appendClient(record: AddRecord): void {
-    let list = this.clientLists.get(record.clientId);
-    if (!list) {
-      list = { head: null, tail: null };
-      this.clientLists.set(record.clientId, list);
+  private applyAdd(op: AddShape, isLocal: boolean): void {
+    if (isLocal) {
+      this.writer.add(op.id, op.shape);
+      this.addInfo.set(op.id, { clientId: this.clientId, clientSeq: op.clientSeq, seq: -1 });
+      this.pendingLocalAdds.push(op.id);
+      return;
     }
-    record.clientPrev = list.tail;
-    record.clientNext = null;
-    if (list.tail) list.tail.clientNext = record; else list.head = record;
-    list.tail = record;
+    const below = this.pendingLocalAdds.length > 0 ? this.pendingLocalAdds[0] : undefined;
+    this.writer.add(op.id, op.shape, below);
+    this.addInfo.set(op.id, { clientId: op.clientId, clientSeq: op.clientSeq, seq: op.seq });
+    this.globalAcked.push({ seq: op.seq, id: op.id });
+    const forClient = this.remoteClientAdds.get(op.clientId) ?? [];
+    forClient.push({ clientSeq: op.clientSeq, seq: op.seq, id: op.id });
+    this.remoteClientAdds.set(op.clientId, forClient);
   }
 
-  private unlinkClient(record: AddRecord): void {
-    const list = this.clientLists.get(record.clientId);
-    if (!list) return;
-    if (record.clientPrev) record.clientPrev.clientNext = record.clientNext; else list.head = record.clientNext;
-    if (record.clientNext) record.clientNext.clientPrev = record.clientPrev; else list.tail = record.clientPrev;
-    record.clientPrev = record.clientNext = null;
+  private applyRemove(op: RemoveShapes): void {
+    this.writer.remove(op.ids);
+    for (const id of op.ids) this.forgetShape(id);
+  }
+
+  private applyClear(op: ClearShapes, isLocal: boolean): void {
+    const ids = isLocal ? this.knownForLocalClear(op) : this.knownForRemoteClear(op);
+    if (ids.length > 0) this.writer.remove(ids);
+  }
+
+  /**
+   * What a local clear knew: the present acknowledged shapes with seq at
+   * most its refSeq, and all of this client's own currently pending adds
+   * (each has a clientSeq less than the clear's, since it was applied
+   * from the same local queue, in order, before the clear).
+   */
+  private knownForLocalClear(op: ClearShapes): readonly ShapeId[] {
+    const cut = lowerBound(this.globalAcked, (e) => e.seq, op.refSeq + 1);
+    const removedGlobal = this.globalAcked.splice(0, cut);
+    const removedPending = this.pendingLocalAdds.splice(0, this.pendingLocalAdds.length);
+    for (const e of removedGlobal) this.addInfo.delete(e.id);
+    for (const id of removedPending) this.addInfo.delete(id);
+    return [...removedGlobal.map((e) => e.id), ...removedPending];
+  }
+
+  /**
+   * What a remote clear knew: the present acknowledged shapes with seq at
+   * most its refSeq, from any client, plus its own author's present
+   * shapes with a clientSeq less than its own (which, since a client's
+   * own seq grows with its clientSeq, extends the author's part of the
+   * first set only when the author formed the clear before an earlier
+   * add of its own was acknowledged).
+   */
+  private knownForRemoteClear(op: ClearShapes): readonly ShapeId[] {
+    const authored = this.remoteClientAdds.get(op.clientId) ?? [];
+    const bySeq = lowerBound(authored, (e) => e.seq, op.refSeq + 1);
+    const byClientSeq = lowerBound(authored, (e) => e.clientSeq, op.clientSeq);
+    const cut = Math.max(bySeq, byClientSeq);
+    const removedAuthored = authored.splice(0, cut);
+    const globalCut = lowerBound(this.globalAcked, (e) => e.seq, op.refSeq + 1);
+    const removedGlobal = this.globalAcked.splice(0, globalCut);
+    // The author's shapes beyond bySeq aren't in removedGlobal (their seq is past refSeq); remove them too.
+    for (const e of removedAuthored.slice(bySeq)) removeBySeq(this.globalAcked, e.seq);
+    const ids = new Set<ShapeId>([...removedGlobal.map((e) => e.id), ...removedAuthored.map((e) => e.id)]);
+    for (const id of ids) this.addInfo.delete(id);
+    return [...ids];
+  }
+
+  /** Drops id's bookkeeping, wherever it is kept, when a remove takes it (or a clear, through the two methods above). */
+  private forgetShape(id: ShapeId): void {
+    const info = this.addInfo.get(id);
+    if (!info) return;
+    this.addInfo.delete(id);
+    if (info.seq === -1) {
+      const i = this.pendingLocalAdds.indexOf(id);
+      if (i >= 0) this.pendingLocalAdds.splice(i, 1);
+      return;
+    }
+    removeBySeq(this.globalAcked, info.seq);
+    if (info.clientId !== this.clientId) {
+      const forClient = this.remoteClientAdds.get(info.clientId);
+      if (forClient) removeByClientSeq(forClient, info.clientSeq);
+    }
   }
 }

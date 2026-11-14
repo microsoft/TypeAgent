@@ -9,12 +9,12 @@
 import type { Shape, ShapeId } from "./shape.ts";
 import type { Operation } from "./dataModel.ts";
 import type { AddShape, ClearShapes, RemoveShapes, ShapeOp } from "./shapeModel.ts";
-import { acknowledged, knew } from "./dataModel.vocab.ts";
+import { acknowledged, history, knew, returned } from "./dataModel.vocab.ts";
 
 export * from "./shape.vocab.ts";
 export * from "./dataModel.vocab.ts";
 
-/** ShapeCollection's members: all that a read facet may have. */
+/** ShapeCollection's members, its own and those it inherits: all that a read facet may have. */
 export const collectionMembers: readonly string[] = ["get", "size", "forEach", "compareZ", "inRect", "atPoint", "on", "off"];
 
 /**
@@ -63,3 +63,30 @@ export function shapesAfter(ops: readonly ShapeOp[]): [ShapeId, Shape][] {
   return ops.filter(isAdd).filter((a) => !removedBy(ops, a))
     .sort(compareOrder).map((a) => [a.id, a.shape]);
 }
+
+/** The IDs p's newShapeId has returned, in order. */
+export function newIds(p: object): ShapeId[] {
+  return returned(p, "newShapeId") as ShapeId[];
+}
+
+/** The adds enqueued on p's local queue, as stamped, in order. */
+export function localAdds(p: object): AddShape[] {
+  return history(p).filter((c) => c.member === "local.enqueue").map((c) => c.result as ShapeOp).filter(isAdd);
+}
+
+/** The workloads ShapeCollectionWriter.log-amortized is measured on. */
+export const writerWorkloads = [
+  "adds, each directly below the same shape",
+  "adds, each directly below the one added before it",
+  "adds at the bottom",
+  "adds below random present shapes",
+  "removes of random present shapes, mixed with adds",
+  "compareZ on random pairs",
+] as const;
+
+/** The workloads ShapeMessageProcessor.log-amortized is measured on. */
+export const processorWorkloads = [
+  "remote adds while one local add is pending, then local adds",
+  "remote removes of random present shapes",
+  "remote clears that remove nothing, from a client that knew no shape",
+] as const;

@@ -43,6 +43,7 @@ import { makeInkStroke } from "./inkStroke.ts";
 import { makeCircle } from "./circle.ts";
 import { MapShapeCollection } from "./mapShapeCollection.ts";
 import { ShapeProcessor } from "./shapeProcessor.ts";
+import { processorWorkloads, writerWorkloads } from "./shapeModel.vocab.ts";
 
 const CANVAS = 10_000;
 const ERASER = 20;
@@ -53,8 +54,8 @@ const COUNTS = [100, 1_000, 10_000];
 
 /** The budgets this script measures, by rule ID (rules.ts). */
 const FRAME_RULE = "frames.fraction-of-frame";
-const WRITER_RULE = "ShapeCollectionWriter.log-amortized";
-const PROCESSOR_RULE = "ShapeMessageProcessor.log-amortized";
+const WRITER_RULE = "ShapeCollectionWriter.log-amortized" as const;
+const PROCESSOR_RULE = "ShapeMessageProcessor.log-amortized" as const;
 
 /** 5% of a 120 Hz frame, in milliseconds: the frame budget. */
 const FRAME_BUDGET = (1000 / 120) * 0.05;
@@ -386,6 +387,12 @@ class Infra {
     this.target.remote.enqueue(withSeq(op, this.seq++));
   }
 
+  /** Queues a remove of the peer's listing ids, sequenced next. */
+  deliverRemove(ids: readonly ShapeId[]): void {
+    const op = this.peer.local.enqueue({ type: "remove", ids });
+    this.target.remote.enqueue(withSeq(op, this.seq++));
+  }
+
   /** Applies everything queued. */
   settle(): Promise<void> {
     return this.target.process();
@@ -519,8 +526,9 @@ interface Batch {
 
 interface Pattern {
   /** The budget the pattern measures. */
-  rule: string;
-  label: string;
+  rule: typeof WRITER_RULE | typeof PROCESSOR_RULE;
+  /** The workload, named as the budget's rule names it (shapeModel.vocab.ts). */
+  label: (typeof writerWorkloads)[number] | (typeof processorWorkloads)[number];
   /** Times one batch over a collection holding n of the pooled shapes. */
   run(n: number, pool: readonly InkStroke[], rand: () => number): Promise<Batch>;
 }
@@ -664,6 +672,29 @@ const patterns: Pattern[] = [
   },
   {
     rule: PROCESSOR_RULE,
+    label: "remote removes of random present shapes",
+    run: async (n, pool, rand) => {
+      const infra = wired();
+      const made = new Map<ShapeId, Shape>();
+      await fill(infra, pool.slice(0, n + BATCH), FILL_CHUNK, made);
+      // BATCH distinct present shapes, chosen before the clock starts, so
+      // the collection holds between n and n + BATCH shapes throughout.
+      const ids = [...made.keys()];
+      for (let i = 0; i < BATCH; i++) {
+        const j = i + Math.floor(rand() * (ids.length - i));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      const before = infra.model.size;
+      const start = performance.now();
+      for (let i = 0; i < BATCH; i++) infra.deliverRemove([ids[i]]);
+      await infra.settle();
+      const ms = performance.now() - start;
+      checksum += before - infra.model.size;
+      return { ms, ops: BATCH };
+    },
+  },
+  {
+    rule: PROCESSOR_RULE,
     label: "remote clears that remove nothing, from a client that knew no shape",
     run: async (n, pool) => {
       const infra = wired();
@@ -683,6 +714,12 @@ const patterns: Pattern[] = [
     },
   },
 ];
+
+// Each workload a budget names is measured, under that budget.
+for (const [rule, names] of [[WRITER_RULE, writerWorkloads], [PROCESSOR_RULE, processorWorkloads]] as const) {
+  const missing = names.filter((name) => !patterns.some((p) => p.rule === rule && p.label === name));
+  if (missing.length > 0) throw new Error(`${rule} names workloads bench.ts doesn't measure: ${missing.join("; ")}`);
+}
 
 interface Ratio {
   rule: string;

@@ -100,6 +100,64 @@ deferred.
   deferred). `behavior.md` lists the changes. 18 scenarios; the
   open questions wait on the discussion of the platform subsets.
 
+- **A formal design** (2026-11-13). The principles are agreed and in
+  `method.md` ("The design"): every design statement is formal (a
+  declaration, a rule's expression, or a test); prose is only a gloss;
+  the human agrees each new or changed interface, member, rule or
+  scenario, and terms are derived from those; observability is design;
+  budgets name a complexity class, with a measurement standing in for it.
+  The reasoning is in `moduleTooling.md` ("Why the design is formal");
+  what is still pending is in `vocabulary-proposal.md`.
+- **Rule expressions are compiled and evaluated** (the pilot,
+  `pilot-shapeModel.md`). Before this, nothing evaluated them: contracts
+  restated each by hand. `node ruleGen.ts` compiles the rules of
+  `dataModel.ts` and `shapeModel.ts` into `rules.gen.ts` (tsc checks
+  every expression); `ruleCheck.ts` records each object's history and
+  evaluates the rules that apply to each call. `rules.ts` gained
+  `history`, `atEvent`, `nested`, `emitted`, `Complexity` and `within`.
+  Every rule in `shapeModel.ts` now has an expression, and its contracts
+  only drive calls.
+- **The operation log.** `OperationLogging` (`dataModel.ts`), which
+  `MessageProcessor` extends, adds `logOperations`, which reports each
+  operation as it is applied. With it, `one-change` and `ack-keeps-z` are
+  exact, `local-order` and `remote-order` are `@ensures` with
+  expressions, and `process.logs-each` is new. Task 9 was rerun for it
+  (done, reviewed). `processorWorkloads` gained "remote removes of random
+  present shapes" after review found a Sonnet run (9.2) whose removes
+  were linear: a ratio of 28.4 against the limit of 16, not measured by
+  any workload.
+- **Task 9.2 is in progress**: requeued by its review
+  (`reports/task-9.2.review-3.md`), rerunning on Sonnet. One run was
+  wasted on a stale workspace ($2.77, in `design-costs.json`). Next:
+  check, collect and review 9.2 (measure its removes with `npm run bench`
+  after collecting, or the remove pattern on its file), then requeue and
+  rerun 9.d, review it (3b), and commit.
+- **Catalog:** 31 interfaces, 137 rules. **Adversaries:** 173, none
+  escaped on seeds 1 to 3. **Tests:** 422, with the 9 expected failures
+  below.
+- **Costs:** `costs.md` has the measured figures, the Ultra calibration
+  (all work to date about 6% of a week; a week's capacity is roughly
+  $1,600 at list prices, which is not a cost) and the whack-a-mole
+  estimate. Human time is recorded from 2026-11-13 in `design-costs.json`.
+- **The docgent** (`docgent/`): an agent that replaces a document. The
+  plan, a phase 1 proposal for its tools (questions open), and a draft
+  gold Q&A (16 items, plus 7 held back in `qa/holdout.md`, which
+  whoever writes its instructions must not see). Its first reader is a
+  colleague who works on the business around the method; we supply only
+  what is possible and what it costs.
+
+## Next session
+
+1. Finish 9.2 and 9.d as above, and commit.
+2. Step 0 for the docgent: a `project.json` per project, so the tooling
+   serves circles and `docgent/` (interface lists are hardcoded in
+   `task.ts`, `catalog.ts` and `ruleGen.ts`; `ruleCheck.ts` must take each
+   project's compiled rules instead of importing circles').
+3. The docgent's phase 1 (`docgent/phase1-proposal.md`, three questions)
+   and the human's edits to the gold Q&A.
+4. Later: assess extracting an existing repository into a blueprint (the
+   colleague's question); compile `shape.ts`'s rules next.
+
 ## Expected failures until phase 2 finishes
 
 These failures are expected because phase 2 hasn't produced the parts yet.

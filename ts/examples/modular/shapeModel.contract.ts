@@ -25,6 +25,7 @@ import {
 import { messageProcessorContract, play, ruleTest, steps, type Client, type Hooks, type ProcessorSubject, type Step } from "./messageProcessor.contract.ts";
 import { eventEmitterContract } from "./eventEmitter.contract.ts";
 import { coverage, TestBox, TestTriangle } from "./testkit.ts";
+import { checkInvariants, observe, type ObserveOptions } from "./ruleCheck.ts";
 
 type Check = (rule: string, ok: boolean, detail?: string) => void;
 
@@ -36,20 +37,6 @@ const queryRects: readonly Rectangle[] = [
   { x: 0, y: 0, width: 6, height: 6 }, { x: 1.5, y: 0, width: 1, height: 2 }, { x: 4.5, y: 4.5, width: 1, height: 1 },
 ];
 const queryPoints: readonly Point[] = [{ x: 1.5, y: 1.5 }, { x: 3.5, y: 3.5 }, { x: 5.5, y: 5.5 }];
-
-/** What a change listener can observe of c: its shapes, size and query results. */
-function look(c: ShapeCollection): unknown {
-  const sorted = (run: (out: ShapeId[]) => number) => {
-    const out: ShapeId[] = [];
-    run(out);
-    return out.sort();
-  };
-  return {
-    entries: entries(c), size: c.size,
-    rects: queryRects.map((r) => sorted((out) => c.inRect(r, out))),
-    points: queryPoints.map((p) => sorted((out) => c.atPoint(p, out))),
-  };
-}
 
 /** Each collection's recent query out arrays, with copies, for no-retain. */
 const filled = new WeakMap<ShapeCollection, [ShapeId[], ShapeId[]][]>();
@@ -76,17 +63,19 @@ function checkQueries(c: ShapeCollection, list: readonly [ShapeId, Shape][], che
   kept.splice(0, Math.max(0, kept.length - 24));
 }
 
-/** ShapeCollection's rules, checked on c as it is now. probes are IDs that may or may not be present, such as removed ones. */
-function checkCollection(c: ShapeCollection, check: Check, probes: readonly ShapeId[]): void {
-  const list = entries(c);
+/**
+ * ShapeCollection's rules, checked on c as it is now: its invariants
+ * (compiled), and its members called through the observing proxy c, so
+ * that read-only, zero-iff-same and antisymmetric (compiled) are checked
+ * on each call. The ShapeLocatorQueries rules are checked here by hand,
+ * until shape.ts's rules are compiled.
+ */
+function checkCollection(c: ShapeCollection, raw: ShapeCollection, options: ObserveOptions, check: Check): void {
+  const list = entries(raw);
   const events: string[] = [];
   const count = () => events.push("change");
-  c.on("change", count);
-  check("ShapeCollection.size", c.size === list.length, `size ${c.size}, ${list.length} visited`);
-  check("ShapeCollection.z-order", unique(list.map(([id]) => id)) && isStrictlySorted(list.map(([id]) => id), (a, b) => c.compareZ(a, b)));
-  const present = new Set(list.map(([id]) => id));
-  check("ShapeCollection.get-agrees", list.every(([id, s]) => c.get(id) === s) &&
-    [...probes, "absent" as ShapeId].every((id) => present.has(id) || c.get(id) === undefined));
+  raw.on("change", count);
+  checkInvariants(raw, options);
   checkQueries(c, list, check);
   // Every pair while the collection is small; past that, neighbors, and
   // each shape with the bottom and the top, to keep long runs fast.
@@ -94,14 +83,19 @@ function checkCollection(c: ShapeCollection, check: Check, probes: readonly Shap
   const pairs: [ShapeId, ShapeId][] = all.length <= 30
     ? all.flatMap((a) => all.map((b): [ShapeId, ShapeId] => [a, b]))
     : all.flatMap((a, i): [ShapeId, ShapeId][] => [[a, a], [a, all[0]], [a, all[all.length - 1]], ...(i > 0 ? [[all[i - 1], a] as [ShapeId, ShapeId]] : [])]);
-  for (const [a, b] of pairs) {
-    check("ShapeCollection.compareZ.zero-iff-same", (c.compareZ(a, b) === 0) === (a === b), `${a}, ${b}`);
-    check("ShapeCollection.compareZ.antisymmetric", Math.sign(c.compareZ(a, b)) === -Math.sign(c.compareZ(b, a)), `${a}, ${b}`);
-  }
-  c.off("change", count);
-  const unchanged = deepEqual(entries(c), list) && events.length === 0;
-  check("ShapeCollection.read-only", unchanged);
-  check("ShapeLocatorQueries.read-only", unchanged);
+  for (const [a, b] of pairs) c.compareZ(a, b);
+  raw.off("change", count);
+  check("ShapeLocatorQueries.read-only", deepEqual(entries(raw), list) && events.length === 0);
+}
+
+/** How the contracts observe a collection: its change events, and get-agrees checked on probes and an absent ID. */
+function collectionOptions(as: string, check: Check, probes: () => readonly ShapeId[]): ObserveOptions {
+  return {
+    as,
+    violation: (rule, detail) => check(rule, false, detail),
+    events: { "": ["change"] },
+    samples: (id) => (id === "ShapeCollection.get-agrees" ? [...probes(), "absent" as ShapeId].map((p) => [p]) : []),
+  };
 }
 
 // ---- The writer ------------------------------------------------------------
@@ -132,68 +126,47 @@ const queryRules = [
   "ShapeLocatorQueries.no-retain", "ShapeLocatorQueries.read-only",
 ];
 
-/** Plays ops on a writer, calling check after each. IDs are w0, w1, … in order of adding; below and removes pick among those. */
-function playWriter(make: () => ShapeCollectionWriter, ops: readonly WriterOp[], check: Check): Set<string> {
+/**
+ * Plays ops on a writer through an observing proxy, so that the compiled
+ * rules are checked on each call, and checks the collection after each op.
+ * IDs are w0, w1, … in order of adding; below and removes pick among those.
+ */
+function playWriter(make: () => ShapeCollectionWriter, ops: readonly WriterOp[], check: Check, checking = true): Set<string> {
   const labels = new Set<string>();
-  const w = make();
+  const raw = make();
   const made: ShapeId[] = [];
-  let events = 0;
-  let seenAtEvent: unknown;
-  w.on("change", () => {
-    events++;
-    const shown = entries(w);
-    seenAtEvent = look(w);
-    // A listener's reads and queries change nothing either.
-    const unchanged = deepEqual(entries(w), shown);
-    check("ShapeCollection.read-only", unchanged, "reading during a change event changed the shapes");
-    check("ShapeLocatorQueries.read-only", unchanged, "querying during a change event changed the shapes");
-  });
+  const options = collectionOptions("ShapeCollectionWriter", check, () => made);
+  const w = checking ? observe(raw, options) : raw;
+  // A query a listener makes during the change already agrees with the
+  // shapes, by the queries' own rules.
+  if (checking) w.on("change", () => checkQueries(w, entries(w), check));
   for (const o of ops) {
-    const before = entries(w);
-    const eventsBefore = events;
+    const before = entries(raw);
     if (o.op === "burst") {
       const present = before.map(([i]) => i);
       let below = present.length === 0 ? undefined : present[o.at % present.length];
       labels.add(o.newest ? "burst below each new shape" : "burst below one shape");
       for (let k = 0; k < o.n; k++) {
         const id = `w${made.length}` as ShapeId;
-        const shape = testShapes[k % testShapes.length];
-        const prev = entries(w);
-        const prevEvents = events;
-        w.add(id, shape, below);
+        w.add(id, testShapes[k % testShapes.length], below);
         made.push(id);
-        const expected = below === undefined ? [...prev, [id, shape]] : prev.flatMap((e) => (e[0] === below ? [[id, shape], e] : [e]));
-        check("ShapeCollectionWriter.add.placed", deepEqual(entries(w), expected), `burst add ${id} below ${below}`);
-        check("ShapeCollectionWriter.notifies", events - prevEvents === 1 && deepEqual(seenAtEvent, look(w)), `burst add ${id}`);
         if (o.newest) below = id;
       }
-      checkCollection(w, check, made);
-      continue;
-    }
-    if (o.op === "add") {
+    } else if (o.op === "add") {
       const id = `w${made.length}` as ShapeId;
       const present = before.map(([i]) => i);
       const below = o.below === undefined || present.length === 0 ? undefined : present[o.below % present.length];
       labels.add(below === undefined ? "add on top" : below === present[0] ? "add at the bottom" : "add in the middle");
       w.add(id, testShapes[o.shape], below);
       made.push(id);
-      const expected = below === undefined ? [...before, [id, testShapes[o.shape]]] :
-        before.flatMap((e) => (e[0] === below ? [[id, testShapes[o.shape]], e] : [e]));
-      check("ShapeCollectionWriter.add.placed", deepEqual(entries(w), expected), `add ${id} below ${below}`);
     } else {
       const listed = o.ids.map((n) => (n < made.length ? made[n] : (`absent${n}` as ShapeId)));
       if (listed.some((id) => before.some(([i]) => i === id))) labels.add("remove present");
       if (listed.some((id) => !before.some(([i]) => i === id))) labels.add("remove absent");
       if (!unique(listed)) labels.add("remove lists an ID twice");
-      const result = w.remove(listed);
-      const expected = before.filter(([i]) => !listed.includes(i));
-      check("ShapeCollectionWriter.remove.removed", deepEqual(entries(w), expected) && result === before.length - expected.length,
-        `remove ${listed.join(", ")} returned ${result}`);
+      w.remove(listed);
     }
-    const changed = !deepEqual(entries(w), before);
-    check("ShapeCollectionWriter.notifies", events - eventsBefore === (changed ? 1 : 0) && (!changed || deepEqual(seenAtEvent, look(w))),
-      `${events - eventsBefore} events for a ${changed ? "" : "non-"}change`);
-    checkCollection(w, check, made);
+    if (checking) checkCollection(w, raw, options, check);
   }
   return labels;
 }
@@ -233,7 +206,7 @@ export function shapeCollectionWriterContract(make: () => ShapeCollectionWriter)
     }
 
     test("ShapeCollectionWriter input coverage", () => {
-      coverage("writer ops", writerOps, (ops) => playWriter(make, ops, () => {}), {
+      coverage("writer ops", writerOps, (ops) => playWriter(make, ops, () => {}, false), {
         "add on top": 0.4, "add at the bottom": 0.2, "add in the middle": 0.2,
         "remove present": 0.3, "remove absent": 0.3, "remove lists an ID twice": 0.1,
         "burst below one shape": 0.05, "burst below each new shape": 0.05,
@@ -284,65 +257,45 @@ const subject = (make: (clientId: string) => ShapeMessageProcessor): ProcessorSu
   form: (p, pick) => form(p as ShapeMessageProcessor, pick),
   snapshot: (model) => entries(model),
   events: ["change"],
+  as: "ShapeMessageProcessor",
+  samples: (rule, processors) =>
+    rule === "ShapeMessageProcessor.new-ids" ? processors.map((q) => [q])
+    : rule === "ShapeMessageProcessor.read-facet" ? [[() => {}]]
+    : [],
 });
 
 type SC = Client<ShapeCollection, ShapeOp>;
-const atEvent = new WeakMap<SC, unknown>();
+
+/** Each client's model, observed as a ShapeCollection; get-agrees is checked on the IDs of the adds it applied. */
+const observedModels = new WeakMap<SC, { model: ShapeCollection; options: ObserveOptions }>();
+function observedModel(c: SC, violation: (rule: string, detail: string) => void): { model: ShapeCollection; options: ObserveOptions } {
+  let found = observedModels.get(c);
+  if (!found) {
+    const check: Check = (rule, ok, detail) => { if (!ok) violation(rule, `${c.id}: ${detail ?? ""}`); };
+    const options = collectionOptions("ShapeCollection", check, () => c.applied.filter(isAdd).map((a) => a.id));
+    found = { model: observe(c.p.model, options), options };
+    observedModels.set(c, found);
+  }
+  return found;
+}
 
 /** The shape rules, checked each time a client's process settles. */
 const hooks: Hooks<ShapeCollection, ShapeOp> = {
+  // A query a listener makes during a change agrees with the shapes, by
+  // the queries' own rules.
   event(c, violation) {
-    const shown = entries(c.p.model);
-    atEvent.set(c, look(c.p.model));
-    if (!deepEqual(entries(c.p.model), shown)) {
-      violation("ShapeCollection.read-only", `${c.id}: reading during a change event changed the shapes`);
-      violation("ShapeLocatorQueries.read-only", `${c.id}: querying during a change event changed the shapes`);
-    }
+    const check: Check = (rule, ok, detail) => { if (!ok) violation(rule, `${c.id}: ${detail ?? ""}`); };
+    const { model } = observedModel(c, violation);
+    checkQueries(model, entries(c.p.model), check);
   },
-  processed(c, newly, before, eventsBefore, violation) {
+  // read-facet, add-on-z, kept, remove-listed, clear-known, new-ids,
+  // ack-keeps-z and one-change are compiled, and checked as each call
+  // through c.p returns; here, the collection's own rules.
+  processed(c, _newly, _before, _eventsBefore, violation) {
     const check: Check = (rule, ok, detail) => { if (!ok) violation(rule, `${c.id}: ${detail ?? ""}`); };
     const model = c.p.model;
-    const applied = c.applied;
-    const now = entries(model);
-    const events = c.events - eventsBefore;
-
-    const f = () => {};
-    check("ShapeMessageProcessor.read-facet", onlyMembers(model, collectionMembers) &&
-      model.on("change", f) === model && model.off("change", f) === model,
-      `the model has a property beyond ShapeCollection's members (${Object.keys(model).join(", ")}), or its on or off returns something else`);
-    check("ShapeMessageProcessor.add-on-z",
-      now.every(([id]) => addOf(applied, id) !== undefined) &&
-        isStrictlySorted(now.map(([id]) => id), (a, b) => compareOrder(addOf(applied, a)!, addOf(applied, b)!)),
-      `z-order ${now.map(([id]) => id).join(", ")}`);
-    check("ShapeMessageProcessor.kept",
-      applied.filter(isAdd).every((a) => removedBy(applied, a) || deepEqual(model.get(a.id), a.shape)));
-    check("ShapeMessageProcessor.remove-listed",
-      applied.filter(isRemove).every((r) => r.ids.every((id) => model.get(id) === undefined)));
-    check("ShapeMessageProcessor.clear-known",
-      applied.filter(isClear).every((cl) => now.every(([id]) => !knew(cl, addOf(applied, id)!))));
-
-    const acks = newly.filter((op) => op.clientId === c.id && op.seq !== -1 &&
-      !newly.some((o) => o !== op && o.clientId === c.id && o.clientSeq === op.clientSeq));
-    if (newly.length > 0 && acks.length === newly.length) {
-      check("ShapeMessageProcessor.ack-keeps-z", deepEqual(now, before) && events === 0, "an acknowledgment changed the model");
-    }
-    // Whether an acknowledgment comes before or after its operation is
-    // applied, it applies nothing: no shape twice, and no more change
-    // events than operations other than acknowledgments.
-    const ackCount = newly.filter((op) => op.clientId === c.id && op.seq !== -1).length;
-    check("ShapeMessageProcessor.ack-keeps-z", unique(now.map(([id]) => id)) && events <= newly.length - ackCount,
-      `${events} change events for ${newly.length - ackCount} operations and ${ackCount} acknowledgments`);
-    if (newly.length === 1) {
-      const changed = !deepEqual(now, before);
-      check("ShapeMessageProcessor.one-change", events === (changed ? 1 : 0) && (!changed || deepEqual(atEvent.get(c), look(model))),
-        `${events} events for one ${newly[0].type} that ${changed ? "changed" : "didn't change"} the shapes`);
-    }
-    checkCollection(model, check, applied.filter(isAdd).map((a) => a.id));
-  },
-  end(clients, violation) {
-    const observer = clients[clients.length - 1];
-    const added = observer.applied.filter(isAdd).map((a) => a.id);
-    if (!unique(added)) violation("ShapeMessageProcessor.new-ids", "two adds have the same id");
+    const observed = observedModel(c, violation);
+    checkCollection(observed.model, model, observed.options, check);
   },
 };
 
@@ -352,13 +305,19 @@ export function shapeMessageProcessorContract(make: (clientId: string) => ShapeM
   describe("ShapeMessageProcessor", () => {
     // Client IDs that a careless join of client ID and counter confuses.
     test("ShapeMessageProcessor.new-ids", () => {
-      const made = ["a", "a1", "a#1", "1", "", "a#", "#"].flatMap((clientId) => {
-        const p = make(clientId);
-        return Array.from({ length: 20 }, () => p.newShapeId());
-      });
-      const seen = new Set<ShapeId>();
-      const repeated = made.filter((id) => seen.has(id) || !seen.add(id));
-      assert.deepEqual(repeated, [], "ShapeMessageProcessor.new-ids");
+      const found: string[] = [];
+      const processors: ShapeMessageProcessor[] = [];
+      const options: ObserveOptions = {
+        as: "ShapeMessageProcessor", violation: (rule, detail) => found.push(`${rule}: ${detail}`),
+        unobserved: ["model", "clientId", "logOperations"], samples: () => processors.map((q) => [q]),
+      };
+      for (const clientId of ["a", "a1", "a#1", "1", "", "a#", "#"]) {
+        const raw = make(clientId);
+        processors.push(raw);
+        const p = observe(raw, options);
+        for (let k = 0; k < 20; k++) p.newShapeId();
+      }
+      assert.deepEqual(found.slice(0, 3), []);
     });
 
     for (const id of [

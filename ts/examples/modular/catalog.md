@@ -89,6 +89,9 @@ classDiagram
   class OperationQueue {
     dequeue
   }
+  class OperationLogging {
+    logOperations
+  }
   class MessageProcessor {
     clientId
     model
@@ -163,6 +166,9 @@ classDiagram
   OperationSink ..> Operation
   OperationSink <|-- OperationQueue
   OperationQueue ..> Operation
+  OperationLogging ..> EventEmitter
+  OperationLogging ..> Operation
+  OperationLogging <|-- MessageProcessor
   MessageProcessor ..> DataModelReader
   MessageProcessor ..> Operation
   MessageProcessor ..> OperationSink
@@ -310,8 +316,8 @@ No rules of its own.
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `ShapeLocatorQueries.no-retain` | ensures | Never keeps a reference to out after returning: later calls leave earlier out arrays unchanged. | tested | 2 |
-| `ShapeLocatorQueries.read-only` | ensures | Queries never change what is indexed. | tested | 3 |
-| `ShapeLocatorQueries.inRect.exact` | ensures | Reports exactly the indexed shapes that intersect r. | tested | 9 |
+| `ShapeLocatorQueries.read-only` | ensures | Queries never change what is indexed. | tested | 2 |
+| `ShapeLocatorQueries.inRect.exact` | ensures | Reports exactly the indexed shapes that intersect r. | tested | 10 |
 | `ShapeLocatorQueries.inRect.once` | ensures | Reports each ID at most once. | tested | 2 |
 | `ShapeLocatorQueries.inRect.append` | ensures | Leaves what was already in out unchanged. | tested | 1 |
 | `ShapeLocatorQueries.inRect.count` | ensures | Returns the number of IDs appended. | tested | 2 |
@@ -377,6 +383,12 @@ No rules of its own.
 
 No rules of its own.
 
+## OperationLogging
+
+`dataModel.ts`. A log of the operations a processor applies, for logging, debugging, testing and analysis. Every MessageProcessor has one; its rules are on MessageProcessor and the processors that extend it.
+
+No rules of its own.
+
 ## MessageProcessor
 
 `dataModel.ts`. Applies operations to a data model: the only thing that changes it. The message infrastructure enqueues to local what controllers send through a LocalSend, and to remote what the collaboration protocol delivers, including the acknowledgments of local operations. The processor holds the model's write side privately and exposes only the read side.
@@ -391,15 +403,16 @@ No rules of its own.
 | `MessageProcessor.client-reorder` | deferred | A protocol may sequence a client's operations out of clientSeq order, and processors still converge. | deferred: when a collaboration protocol that reorders a client's operations is specified. |  |
 | `MessageProcessor.not-reentrant` | requires | While a call to process is pending, nothing enqueues on either queue or calls process again. | caller's obligation |  |
 | `MessageProcessor.stamps` | ensures | enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
-| `MessageProcessor.snapshot` | deferred | A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
+| `MessageProcessor.session` | deferred | A collaboration session: within one, clientIds are unique, and so (by ShapeMessageProcessor.new-ids) are shape IDs; between sessions, only the last snapshot defines the data. A processor can start from a snapshot, a model with the seq of the last operation it includes: its first refSeq is that seq, and the IDs in the snapshot count as already made. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
 | `MessageProcessor.sole-writer` | ensures | The model changes only during process: reading it changes nothing and emits none of its events. | tested | 1 |
 | `MessageProcessor.passive` | ensures | Never calls process itself: until the infrastructure calls it, queued operations stay unapplied. | tested | 2 |
 | `MessageProcessor.enqueue-defers` | ensures | enqueue on either queue doesn't change the model or emit any of the model's events before it returns. | tested | 1 |
-| `MessageProcessor.local-order` | abstract | Local operations are applied in the order they were enqueued. | abstract: refined by `ShapeMessageProcessor.add-on-z` |  |
-| `MessageProcessor.remote-order` | abstract | Remote operations are applied in the order they were enqueued. | abstract: refined by `ShapeMessageProcessor.add-on-z` |  |
+| `MessageProcessor.local-order` | ensures | Local operations are applied in the order they were enqueued. | tested | 1 |
+| `MessageProcessor.remote-order` | ensures | Remote operations are applied in the order they were enqueued, which is seq order. | tested | 1 |
 | `MessageProcessor.once` | abstract | Each operation is applied once: the acknowledgment of a local operation, recognized by its clientId and clientSeq, gives it its assigned seq and isn't applied as another operation, whether it arrives before or after the local operation is applied. | abstract: refined by `ShapeMessageProcessor.ack-keeps-z` |  |
 | `MessageProcessor.atomic` | abstract | A change listener never sees part of an operation's effect: each change event is emitted after the operation it reports is fully applied. | abstract: refined by `ShapeMessageProcessor.one-change` |  |
 | `MessageProcessor.converges` | ensures | Processors whose remote queues deliver the same operations in the same order reach equal models once each one's local operations are acknowledged and process has settled, whatever the interleaving of their local and remote queues. | tested | 1 |
+| `MessageProcessor.process.logs-each` | ensures | logOperations reports each operation queued since the last process call once, acknowledgments included, and nothing else. | tested | 1 |
 
 ## ShapeCollection
 
@@ -410,7 +423,8 @@ No rules of its own.
 | `ShapeCollection.size` | invariant | size counts the shapes forEach visits. | tested | 1 |
 | `ShapeCollection.z-order` | invariant | forEach visits each shape once, from bottom to top. | tested | 1 |
 | `ShapeCollection.get-agrees` | invariant | get returns exactly the shapes forEach visits, under the same IDs. | tested | 1 |
-| `ShapeCollection.read-only` | ensures | get, size, forEach, compareZ, inRect, atPoint, on and off never change the shapes. | tested | 1 |
+| `ShapeCollection.read-only` | ensures | Calling ShapeCollection's members (get, size, forEach, compareZ, inRect, atPoint, on and off) changes no shape and emits nothing. | tested | 2 |
+| `ShapeCollection.forEach.no-change` | requires | visit calls only ShapeCollection's members, so it changes nothing. | caller's obligation |  |
 | `ShapeCollection.compareZ.present` | requires | Both shapes are in the collection. | caller's obligation |  |
 | `ShapeCollection.compareZ.zero-iff-same` | ensures | Returns 0 only when comparing a shape with itself. | tested | 2 |
 | `ShapeCollection.compareZ.antisymmetric` | ensures | Swapping the arguments flips the sign. | tested | 1 |
@@ -421,8 +435,8 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `ShapeCollectionWriter.notifies` | ensures | Each call that changes the shapes emits change once, after the change is complete, so that every observer and query already shows it; a call that changes nothing emits nothing. | tested | 3 |
-| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take amortized or expected time logarithmic in the number of shapes, whatever the pattern of adds (expected over the implementation's own random choices, as in a treap, never over the pattern of adds); bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 16 (cache misses at 100,000 shapes put a logarithmic structure at 4 to 9; linear growth gives about 100). | budget: measured by bench.ts |  |
+| `ShapeCollectionWriter.notifies` | ensures | A call that changes the shapes emits change once, when the shapes are already final; a call that changes nothing emits nothing. (A listener's queries then agree with the shapes by the queries' own rules.) | tested | 2 |
+| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, on each of the writer's workloads, growing at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
 | `ShapeCollectionWriter.add.new-id` | requires | id isn't present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.below-present` | requires | below, when given, is present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.in-range` | requires | The shape's bounding box lies within ±1e300, right and bottom edges included. | caller's obligation |  |
@@ -453,17 +467,17 @@ No rules of its own.
 
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
-| `ShapeMessageProcessor.fresh-add-id` | requires | Each add's id came from newShapeId, and no other add has it. | caller's obligation |  |
+| `ShapeMessageProcessor.fresh-add-id` | requires | Each local add's id came from this processor's newShapeId, and no other local add has it. (Remote adds' IDs are their own processors' new-ids.) | caller's obligation |  |
 | `ShapeMessageProcessor.in-range` | requires | Each add's shape has its bounding box within ±1e300, right and bottom edges included. | caller's obligation |  |
-| `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID that it, or any processor with a different clientId, has returned. | tested | 2 |
+| `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID twice, nor one that a processor with a different clientId has returned. | tested | 2 |
 | `ShapeMessageProcessor.read-facet` | ensures | model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it. | tested | 3 |
 | `ShapeMessageProcessor.add-on-z` | ensures | The shapes are in compareOrder of their adds (shapeModel.vocab.ts). | tested | 1 |
 | `ShapeMessageProcessor.kept` | ensures | Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add. | tested | 4 |
 | `ShapeMessageProcessor.remove-listed` | ensures | No shape that an applied remove lists is present. | tested | 1 |
 | `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 2 |
 | `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 2 |
-| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes, and every observer and query, already show its whole effect; one that changes nothing emits nothing. | tested | 1 |
-| `ShapeMessageProcessor.log-amortized` | budget | process takes amortized or expected time per operation logarithmic in the number of shapes (as for ShapeCollectionWriter.log-amortized), plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized. | budget: measured by bench.ts |  |
+| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes already show its whole effect; one that changes nothing emits nothing; and no change is emitted apart from an operation. | tested | 2 |
+| `ShapeMessageProcessor.log-amortized` | budget | process takes time per operation logarithmic in the number of shapes, on each of the processor's workloads (in none of which a clear removes shapes), growing at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
 
 ## FrameHandler
 

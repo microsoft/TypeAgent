@@ -242,11 +242,22 @@ budget for model updates, a circle, and a canvas view that draws circles.
   - The acknowledgment of a local operation records its seq in the
     processor's own state, and applies nothing. Operations are never
     changed.
+  - Each client's operations are sequenced in clientSeq order
+    (`MessageProcessor.client-order`), so a client's seqs grow with its
+    clientSeqs.
   - `model` is a read-only facet of the writer: an object with only
     `ShapeCollection`'s members, delegating to the writer. Its `on` and
     `off` return the facet itself, not what the writer's return
     (`ShapeMessageProcessor.read-facet`). Never the writer itself.
   - The writer starts empty and belongs to the processor from then on.
+  - `logOperations` (`OperationLogging` in `dataModel.ts`) is an
+    `EventEmitter` of the processor's own, with Node's behavior
+    (`events.ts`). `process` emits `applied` once for each operation it
+    applies, acknowledgments included, after the operation's effect is
+    in the writer and the writer has emitted its change: a local
+    operation as `local.enqueue` returned it, a remote one as it was
+    enqueued (`MessageProcessor.process.logs-each`, `local-order`,
+    `remote-order`, `ShapeMessageProcessor.ack-keeps-z`, `one-change`).
 - **Decided behavior:**
   - `newShapeId` returns `` `${clientId}#${n}` ``, with n counting from 0
     on each processor. The counter follows the last `#`, so IDs from
@@ -258,7 +269,10 @@ budget for model updates, a circle, and a canvas view that draws circles.
     before its acknowledgment, which can only be enqueued after it.
 - **Costs** (`ShapeMessageProcessor.log-amortized`): `process` takes
   amortized logarithmic time per operation, plus time in proportion to
-  the shapes a clear removes; `local.enqueue`, `remote.enqueue` and
+  the shapes a clear removes. That holds for every operation, removes
+  included, whether or not a workload measures it: no step may take time
+  in proportion to the shapes present, such as splicing an array of
+  them; `local.enqueue`, `remote.enqueue` and
   `newShapeId` take constant time, apart from copying the operation.
 - **Left to the implementer:** how pending operations and each shape's add
   are kept.

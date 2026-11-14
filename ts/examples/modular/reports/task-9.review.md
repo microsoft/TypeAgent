@@ -1,20 +1,16 @@
 Status: reviewed
 
-Phase 2b review of task 9's second attempt (`shapeProcessor.ts`, Opus), sent back by phase 3 (`reports/task-9.d.review.md`) because its facet kept the writer in a property. Drafted by the design agent; no item needed the human's decision.
+Phase 2b review of task 9's third attempt (`shapeProcessor.ts`, Opus), sent back by `reports/task-9.respec-1.md` to add `logOperations` (`OperationLogging` in `dataModel.ts`). Drafted by the design agent; the human asked for the review.
 
 ## Choices
 
-- **open** One record per present shape, in an acknowledged chain and a chain per client: as in the first attempt.
-- **open** A pointer to the lowest pending local add, advanced along the client chain.
-- **open** Pending operations in two arrays, local first, repeating until both are empty, as task 9 decides.
-- **open** The facet is a separate class, now with the writer in a `#writer` field, which isn't a property.
-- **open** An acknowledgment matched by clientId and clientSeq.
-- **open** A clear with nothing to remove still calls `remove` with an empty list, which emits nothing.
-- **open** `process` does all its work synchronously.
-- **open** Copies down to the arrays on both queues.
+- **open** The log is a one-event emitter written in the file, since the task's imports don't include `eventkit.ts`; `on` and `off` replace its list, which gives Node's snapshot behavior.
+- **open** `applied` carries the processor's own copy of the operation; the spec fixes its values, not which object carries them.
+- **open** `applyLocal` and `applyRemote` emit last, after the writer call, and an acknowledgment as soon as its seq is recorded: what the spec asks.
+- **open** One object under two fields, typed as `EventEmitter` for others and as the log class for the processor.
 
 ## Notes
 
-- **nothing** The measured numbers in the Cost field are stale until task 10 runs again, which phase 3 has already requeued.
-- **spec fix** A TypeScript `private` field fails `onlyMembers` while a JavaScript `#` field passes, which the rule's text doesn't make obvious. `onlyMembers`'s doc comment now says so.
-- **nothing** The facet needs no import of `events.ts`.
+- **spec fix** The rules alone didn't say that the log reports an operation after its change event; only `steps` and the Approach text did, so the agent had to read the vocabulary to find it. `one-change`'s expression always enforced it; its headline now says so.
+- **nothing** The log has no facet rule like `read-facet`, so a holder that casts away the `EventEmitter` type can call `emit`. `read-facet` exists because the writer changes the shapes; a forged log entry changes no shape, and nothing the processor does reads its own log.
+- **nothing** The carried-over Cost numbers were checked: `npm run bench` on 2026-11-13 gives writer ratios of 4.4 to 7.4 and processor ratios of 2.4 and 0.8, against a limit of 16.

@@ -17,5 +17,25 @@
     "round": 4,
     "phase": "plan",
     "what": "Ultra plan: 3% to 4% of the week across task 10 attempt 3 (Opus, $3.82 list) and the four Sonnet second runs ($4.16 list), plus design work; the human estimates 0.5% for the $7.98 of runs, so a week is roughly $1,600 at list prices"
+  },
+  {
+    "date": "2026-11-13",
+    "round": 4,
+    "phase": "3 (wasted run)",
+    "what": "task 9.2 on Sonnet ran in a stale workspace (the remake failed because the old one existed, and the run started anyway); collection refused it because shapeModel.vocab.ts had changed since. Not collected, so not in tasks.json: $2.77 list, 39 turns, 21.3 min",
+    "usd": 2.77
+  },
+  {
+    "date": "2026-11-13",
+    "round": 5,
+    "phase": "design session",
+    "what": "formal-design principles, the shapeModel pilot (compiled rules), the operation log, task 9 and 9.2 reruns, docgent planning; human time about 3 hours",
+    "humanHours": 3
+  },
+  {
+    "date": "2026-11-13",
+    "round": 5,
+    "phase": "plan",
+    "what": "Ultra plan: all design and implementation work to date (the week since Mon 2026-11-09 21:00) has used about 6% of the weekly limit"
   }
 ]

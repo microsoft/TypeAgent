@@ -86,12 +86,15 @@ the architecture needs. The harness's words are for checking it, and
 never appear in a design file (`npm run catalog` checks).
 
 **The design**: the interface files and their rules, their `*.vocab.ts`
-files, `rules.ts`, `scenarios.ts` and the platform subsets.
+files, `scenarios.ts` and the platform subsets. `rules.ts` is the rule
+language, part of the method, and is held to the same boundary. The
+principles the design follows are in `method.md` under "The design".
 
 | Term | Meaning |
 |---|---|
 | Interface, rule | A TypeScript interface, and a tagged statement about it (`rules.ts`) |
-| Vocabulary | Reference functions and ghost state that rule expressions use (`*.vocab.ts`) |
+| Vocabulary | Reference functions that rule expressions use (`*.vocab.ts`), including what they derive from an object's history |
+| History | The calls made on an object and the events emitted during them (`history` in `rules.ts`): the only state a rule uses beyond the interfaces |
 | Scenario | A named story, as data, of what users do and what the drawing then shows (`scenarios.ts`) |
 | Peer, network step | A second person's app on the same drawing, and when the collaboration protocol sequences operations (hold, release, sync) |
 | Platform subset | The platform members an implementation may use (`canvas.ts`, `dom.ts`) |
@@ -107,6 +110,29 @@ files, `rules.ts`, `scenarios.ts` and the platform subsets.
 | Driver | What runs scenarios on a platform: does each step with the platform's controls and reads what the drawing shows (`Driver` in `scenario.contract.ts`; `driver.ts` is the test platform's, with a sequencer standing in for the message infrastructure). A contract's factory returns a driver for its part too (`ShapeViewDriver`, `FrameSchedulerDriver`) |
 | Wiring | A test file that runs a contract on an implementation (`<impl>.test.ts`) |
 | Adversary | A reference with one bug switched on, which some test must catch |
+
+### Why the design is formal
+
+The method's first goal is a shared understanding between the human and
+the agents of what the design is. Two things blurred it before the
+principles in `method.md` were agreed (2026-11-13):
+
+- **Harness words leaked into the design.** The design agent writes both
+  layers in one session, so the words of whatever it is working on become
+  the words it explains with. That is how "fixture" reached `scenarios.ts`
+  and `shapeView.vocab.ts`, and how `applied` and `indexed` came to be
+  defined as "tracked by the test harness".
+- **New terms entered without agreement.** "Device context" was coined in
+  conversation, written into `STATE.md`, and used as if agreed.
+
+Prose made both possible: it can use any word, and nothing checks it. A
+design made of formal statements, with prose only as glosses on them,
+leaves a term nowhere to enter except with a new interface, member, rule
+or scenario, which the human agrees to. And until the pilot on `shapeModel.ts`, nothing
+evaluated the rule expressions at all: each contract restated them by
+hand, so a rule meant whatever its contract's code did. Compiling the
+expressions and evaluating them on the contract's calls makes the
+design's statement the thing that is tested.
 
 ## The rule format
 

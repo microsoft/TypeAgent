@@ -1,80 +1,66 @@
 Status: done
 
-This run started from the `shapeProcessor.ts` the workspace was seeded with,
-which failed one contract rule, `ShapeMessageProcessor.read-facet`: its
-read-only facet was a class with a `private readonly writer` field, and that
-is an ordinary own property at run time, so `onlyMembers(model,
-collectionMembers)` (shapeModel.vocab.ts) saw a property beyond
-`ShapeCollection`'s members. The facet now keeps the writer in a private
-field, `#writer`, which is not a property at all, so the facet's own and
-inherited properties are exactly `get`, `size`, `forEach`, `compareZ`,
-`inRect`, `atPoint`, `on` and `off`, and nothing it exposes shows that it
-holds a writer. Nothing else about the implementation changed, and the header
-records the facet's private field under Parts.
-
-`npm test` passes (47 tests, 0 failures: the MessageProcessor and
-ShapeMessageProcessor contracts over `RefShapeWriter`, and the scenarios with
-doubles for every other part), and `npm run typecheck` reports no errors.
+The workspace seeded `shapeProcessor.ts` with the implementation collected
+before `OperationLogging` was added to `dataModel.ts`, so this round's work was
+the log: `logOperations`, an `EventEmitter` of the processor's own, and an
+`applied` event per operation `process` applies. Everything else — the stamps,
+the two queues, the z-order bookkeeping, the read-only facet and the clear —
+needed no change, and `npm test` (58 tests) and `npm run typecheck` pass.
 
 ## Choices
 
-- **How the adds of present shapes are kept** ("Left to the implementer"):
-  one `AddRecord` per present shape in a `Map` by `ShapeId`, holding the
-  add's `clientId`, `clientSeq` and the `seq` its acknowledgment gave it,
-  linked into two doubly-linked chains: the acknowledged adds in `seq` order
-  (`ackedFirst`/`ackedLast`), and, per client, that client's present adds in
-  `clientSeq` order (`byClient`). A clear then walks only records it removes
-  (the `seq <= refSeq` prefix of the acknowledged chain, and the clear's own
-  client's earlier adds), at most twice each, and no record it keeps.
-  Recorded in How, Cost and Parts.
-- **How the lowest pending local shape is kept**: a single `pendingFirst`
-  pointer, plus `ownPending` by `clientSeq`, so a remote add reads the ID to
-  pass as `below` without searching, and an acknowledgment or a removal
-  advances the pointer along the client chain (the acknowledged adds of this
-  client are a `clientSeq` prefix of that chain, by
-  `MessageProcessor.client-order` and local operations being applied in
-  enqueue order). Recorded in How and Cost.
-- **How pending operations are kept** ("Left to the implementer"): two
-  arrays, and `process` takes the whole local array, applies it, then takes
-  the whole remote array and applies it, repeating until both are empty. This
-  is one way to realize the decided "local queue first, then the remote queue,
-  and repeats"; recorded in AdditionalSemantics.
-- **The read-only facet is a separate class**, one per processor, built in the
-  constructor, delegating every member to the writer and returning itself
-  from `on` and `off`. Recorded in Parts (with the private field) and How.
-- **A remote operation whose `clientId` is this processor's is taken as the
-  acknowledgment of the local operation with that `clientSeq`**, and a `seq`
-  is recorded only when that add's shape is still present (nothing else can
-  observe one; `unique-identity` makes the match unambiguous). Recorded in
-  AdditionalSemantics.
-- **A clear with nothing to remove still calls the writer's `remove`**, with
-  an empty list, which changes nothing and so emits nothing. Recorded in
-  AdditionalSemantics.
-- **`process` applies everything before the promise it returns settles** (it
-  does no awaiting). Recorded in AdditionalSemantics.
-- **Copies are made down to the arrays**: `local.enqueue` and
-  `remote.enqueue` return a fresh object, and a `remove`'s `ids` array is
-  copied, so `OperationSink.enqueue.own-copy` holds even against a caller
-  that mutates what it passed or what it got back. Recorded in How (the queued
-  operation is the processor's own copy) and in the comment on `copyOp`.
+- **An emitter of one event, written in the file.** The task's imports don't
+  include `eventkit.ts`, so `logOperations` is a private `OperationLog` class
+  here. It holds one list of registrations, since `applied` is the only event
+  `OperationLogEvents` has, and it ignores the event name it is given, which
+  can only be `"applied"` under the types. `on` and `off` replace the list
+  rather than change it, which is what gives `EventEmitter.snapshot` and
+  `off`'s `removes-one` Node's behavior. Recorded under Parts, which names the
+  log as a part another producer of events could keep.
+- **What the `applied` event carries.** The processor's own copy of the
+  operation: for a local one the object it stamped, which is equal to the copy
+  `local.enqueue` returned, and for a remote one the copy `remote.enqueue`
+  made of what it was given. The spec asks for the operation "as
+  `local.enqueue` returned it" and "as it was enqueued", which fixes the
+  values but not which object carries them. A listener that changed the object
+  it gets would change nothing else, since the processor drops the operation
+  once it is applied and never changes one itself. Recorded under
+  AdditionalSemantics, with the note that `applied` is the log's only event.
+- **Where the emit goes.** `applyLocal` and `applyRemote` emit last, after the
+  writer call they make, so the shapes already show the whole effect and the
+  writer has emitted its change; an acknowledgment, which calls the writer not
+  at all, emits as soon as it has recorded its seq. Recorded in the header's
+  How, and in the comments on those two methods.
+- **One field, two names.** `logOperations` is typed as the `EventEmitter` the
+  interface asks for, and a private field holds the same object as an
+  `OperationLog`, so `emit` is the processor's alone. Nothing records this: it
+  is a detail of the data layout, which the task leaves to the implementer.
+
+Choices the collected implementation made, which this round kept and which its
+header still records, are not repeated here.
 
 ## Notes
 
-- The seeded file's Cost field carries measured numbers from `bench.ts`
-  (`ShapeMessageProcessor.log-amortized`, `frames.fraction-of-frame`). This
-  task's workspace has no `bench.ts` and no `npm run bench`, so I could not
-  re-measure them; I left them as they came, since the only change here —
-  moving the facet's writer into a private field — is a change of property
-  visibility, not of any operation's work. They should be re-measured in a
-  round that includes the benchmark.
-- What the read-facet rule costs an implementation is not obvious from its
-  text: "model has only `ShapeCollection`'s members, own or inherited" reads
-  as a statement about reachability, but `onlyMembers` enforces it over
-  `Reflect.ownKeys` along the prototype chain, so a TypeScript `private`
-  field fails it while a JavaScript `#` field passes. The contract's failure
-  message ("a property beyond ShapeCollection's members (writer)") says which
-  property, which is what made the cause clear.
-- `ShapeCollectionEvents` and the `ShapeCollection` members the facet
-  forwards come from `shapeModel.ts`, `shape.ts` and `geometry.ts`, so the
-  implementation never imports `events.ts` even though the task allows it;
-  the header's Imports field lists only what is imported, as the lint checks.
+- `ShapeMessageProcessor.one-change` and `ack-keeps-z` are checked through
+  `steps` (`dataModel.vocab.ts`), which reads the model at each event of the
+  `process` call and asks that every `model.change` fall between two `applied`
+  events, with the model the same at the change and at the `applied` that
+  follows it. So the log isn't only a record: the order of the emits is what
+  makes those two rules checkable, and emitting `applied` before the writer
+  call, or emitting all of them at the end of `process`, would break them even
+  though the shapes would end up the same. The `Approach` text says this
+  ("after the operation's effect is in the writer and the writer has emitted
+  its change"); the rules alone don't, and I had to read `steps` to see it.
+- `observe` (`ruleCheck.ts`) reads `logOperations` off the raw processor and
+  calls `on` before any operation is applied, and `ShapeMessageProcessor`'s
+  own `read-facet` rule doesn't reach the log, so the log has no restriction
+  on its properties the way `model` does. `emit` as a public method of
+  `OperationLog` is therefore safe; it is only out of reach through the
+  `EventEmitter` type that `logOperations` has.
+- The header's `Cost` field keeps the measured numbers from the round that
+  collected this file. I could not re-measure them: `bench.ts` isn't among
+  this workspace's files and `npm run bench` isn't one of the commands this
+  task may run. The log adds one emit per operation, which is constant work
+  and doesn't move a ratio between 1,000 and 100,000 shapes, so the numbers
+  should still hold — but they are carried over, not checked here, and the
+  `Cost` field now names the applied event alongside the writer call.

@@ -77,14 +77,24 @@ needs.
   `@budget` or `@deferred`, each with a slug and a headline. `rules.ts`
   says what each tag means; there is no tag for an untested rule. A
   rule's ID is `Interface.member.slug`, and the test that checks it
-  has that ID as its name.
+  has that ID as its name. Rule expressions are compiled
+  (`node ruleGen.ts` writes `rules.gen.ts`; only `shapeModel.ts` so far)
+  and evaluated by `ruleCheck.ts` on the calls a contract makes, so
+  contracts drive calls and the design's expressions judge them. The
+  pilot and its open proposal are in `pilot-shapeModel.md`.
 - **Two vocabularies.** The design is the interface files, their
-  vocabularies, `rules.ts`, `scenarios.ts` and the platform subsets. The
+  vocabularies, `scenarios.ts` and the platform subsets; `rules.ts` is
+  the rule language, held to the same boundary. The design's principles
+  (every statement formal, prose only as glosses, new interfaces, members,
+  rules and scenarios the human's decisions with terms derived from them,
+  observability is design) are in `method.md` under "The
+  design". The
   test harness is everything that checks it: contracts, references,
   doubles, drivers and adversaries. Design files import only design files
   and never use harness words (a `@deferred` rule's `how:` line aside);
   `npm run catalog` refuses to write when one does. The glossaries are in
-  `moduleTooling.md` under "Vocabulary".
+  `moduleTooling.md` under "Vocabulary"; `vocabulary-proposal.md` holds
+  what is still pending.
 - **Files by role.**
   - Interfaces: `<name>.ts`.
   - Vocabulary: `<name>.vocab.ts`, one per interface file.

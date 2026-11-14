@@ -5,7 +5,7 @@
 
 import type { Point, Rectangle } from "../geometry.ts";
 import type { Shape, ShapeId, ShapeLocator } from "../shape.ts";
-import type { OperationContent } from "../dataModel.ts";
+import type { OperationContent, OperationLogEvents } from "../dataModel.ts";
 import type {
   ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp,
 } from "../shapeModel.ts";
@@ -121,6 +121,7 @@ export type FacetProcessorBug =
 /** A ShapeMessageProcessor with its own read facet, as task 9 describes. */
 export class FacetProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
+  readonly logOperations = new Events<OperationLogEvents<ShapeOp>>();
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
   readonly remote = { enqueue: (op: ShapeOp) => this.enqueueRemote(op) };
@@ -159,12 +160,24 @@ export class FacetProcessor implements ShapeMessageProcessor {
 
   async process(): Promise<void> {
     if (this.bug === "remote-first-twice") {
-      for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
-      for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) this.apply(op);
+      for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) {
+      this.applyRemote(op);
+      this.logOperations.emit("applied", op);
+    }
+      for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) {
+      this.apply(op);
+      this.logOperations.emit("applied", op);
+    }
       return;
     }
-    for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) this.apply(op);
-    for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
+    for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) {
+      this.apply(op);
+      this.logOperations.emit("applied", op);
+    }
+    for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) {
+      this.applyRemote(op);
+      this.logOperations.emit("applied", op);
+    }
   }
 
   private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {

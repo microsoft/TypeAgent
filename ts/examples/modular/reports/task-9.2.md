@@ -2,49 +2,81 @@ Status: done
 
 ## Choices
 
-- **Z-order bookkeeping (Approach, "Left to the implementer").** I keep, per
-  present shape, a record of its add's `clientId`, `clientSeq` and `seq`
-  (`-1` until acknowledged). These records sit in three linked lists so
-  that both `add`'s placement and `clear`'s "shapes it knew" can be found
-  directly rather than scanned: a global list of acknowledged, present adds
-  in `seq` order (for `add-on-z`/`clear`'s `seq <= refSeq` side), a list per
-  `clientId` in `clientSeq` order (for `clear`'s same-client,
-  earlier-`clientSeq` side), and a list of this processor's own pending
-  (unacknowledged) adds in `clientSeq` order, whose head is the "lowest
-  pending shape" the spec says to track rather than search for. Recorded in
-  the header's `How` and `Cost` fields.
-- **`newShapeId`'s format.** Used exactly `` `${clientId}#${n}` `` with `n`
-  from 0 per processor, as the spec's "Decided behavior" states; no choice
-  left here.
-- **Acknowledgments of `remove` and `clear`.** The spec says only an add's
-  acknowledgment is described ("records its seq... applies nothing"); I
-  apply the same rule uniformly to every operation type, since
-  `MessageProcessor`'s rules (`once`, `ack-keeps-z`) are about any
-  operation, not just adds. A remove or clear's own `seq` isn't needed
-  again afterward (nothing later keys off a remove's or clear's `seq`), so
-  its acknowledgment only advances `lastAppliedSeq` (used for the next
-  local operation's `refSeq`) and otherwise does nothing.
-- **Detecting an acknowledgment.** Any operation arriving on `remote` whose
-  `clientId` equals this processor's own is treated as the acknowledgment
-  of an operation this processor already applied from its local queue
-  (never a fresh operation to apply), since a processor's own operations
-  reach `remote` only as acknowledgments of what `local.enqueue` already
-  queued. `AdditionalSemantics: none` for this, as it's just how the
-  stated rule is read, not an addition to it.
-- **Defensive copies.** `local.enqueue` and `remote.enqueue` each build a
-  fresh object (cloning a `RemoveShapes`'s `ids` array) for the queue and a
-  separate fresh clone for the returned value, so neither the queued
-  operation nor the caller's own copy can be changed by anything done to
-  the other afterward (`OperationSink.enqueue.own-copy`).
+Everything here is "Left to the implementer: how pending operations and
+each shape's add are kept" (the only thing the spec leaves open for this
+task); each choice is recorded in `shapeProcessor.ts`'s header.
+
+- **How pending operations are kept (Parts, How).** The local and remote
+  queues are plain arrays, drained FIFO. Besides the writer, I keep: an
+  `addInfo` map from shape ID to its add's `{clientId, clientSeq, seq}`
+  (`seq` is `-1` while the add is this client's own and still pending);
+  `globalAcked`, the present acknowledged shapes sorted ascending by
+  `seq` (the acknowledged, bottom part of the z-order); `remoteClientAdds`,
+  each remote client's present shapes sorted ascending by `clientSeq`; and
+  `pendingLocalAdds`, this client's own present pending adds in applied
+  order (so its first element is "the lowest shape of a pending local
+  add" the spec asks to track rather than search for).
+
+- **Finding what a clear knew, within the log-amortized budget
+  (`ShapeMessageProcessor.log-amortized`).** The budget's own workloads
+  include "remote clears that remove nothing, from a client that knew no
+  shape", and the rule says *process* must stay logarithmic per operation
+  even then, so a clear can't scan every present shape to find zero
+  matches. I use: a client's own `seq` grows with its `clientSeq` (each
+  client's operations are sequenced, and so acknowledged, in `clientSeq`
+  order), so within one client's `remoteClientAdds` entry, both "`seq` at
+  most the clear's `refSeq`" (knew, directly) and "`clientSeq` less than
+  the clear's" (knew, as the client's own earlier operation) are each a
+  prefix of the same `clientSeq`-ordered list; their union is the longer
+  prefix. Shapes from other clients can only be known through the first
+  condition, found as a prefix of `globalAcked` by `refSeq`. A client's
+  own pending (never-yet-acknowledged) adds exist only in this
+  processor's own `pendingLocalAdds`, since every other client's
+  operations arrive already sequenced; for this client's own clear, that
+  whole list is known (every pending add is already applied, so has a
+  smaller `clientSeq` than the clear just formed from the same local
+  queue). This finds and removes exactly what a clear knows in time
+  logarithmic in the number of shapes, plus linear in the number removed,
+  with no full scan.
+  I treated this as something the spec requires rather than a free choice
+  (the budget's workload fixes it), but the specific structures
+  (`globalAcked`, `remoteClientAdds`, `pendingLocalAdds`) are my design.
+
+- **Calling the writer's `remove` for an empty clear.** When a clear knows
+  no shape, I don't call `writer.remove([])` at all (rather than calling
+  it with an empty array). Either is consistent with the rules
+  (`ShapeCollectionWriter.notifies` doesn't require a call, only that one
+  that changes nothing emits nothing); I chose not to call it since
+  nothing is being removed.
+
+- **`logOperations`.** Implemented with a small private `Emitter` class
+  (Node's `on`/`off`/snapshot-on-emit semantics), reimplemented locally
+  since this task can't import `eventkit.ts`; it matches that file's
+  `Events` class, which the rest of the repo already relies on for the
+  same semantics.
+
+- **`model`.** A plain object literal with exactly `ShapeCollection`'s
+  members, built the same way `shapewriterkit.ts`'s `readFacet` does
+  (which I could read but not import), so `on`/`off` return the facet
+  itself.
+
+- **IDs.** `newShapeId` returns `` `${clientId}#${n}` `` as the spec's
+  "Decided behavior" section already fixes; `n` is a counter starting at
+  0, held per instance.
 
 ## Notes
 
-- `shapeModel.contract.ts`'s `onlyMembers` check walks the model facet's own
-  prototype chain, so `model` had to be a plain object literal (not a
-  class instance) with exactly `ShapeCollection`'s members and no stored
-  reference to the writer as a property; the writer is reached only
-  through a closure variable captured in the constructor.
-- The facet's object-literal methods rely on contextual typing from the
-  `readonly model: ShapeCollection` field's declared type (as
-  `shapewriterkit.ts`'s `readFacet` does) rather than explicit parameter
-  types, which meant `geometry.ts` and `events.ts` never needed importing.
+- The hardest part was seeing that, for a single client, `seq` and
+  `clientSeq` grow together (because a client's own operations are
+  delivered to everyone, including itself, in `clientSeq` order, and
+  `seq` is assigned in delivery order): that's what lets "knew by refSeq"
+  and "knew as the author's own earlier operation" collapse into one
+  prefix search per clear, instead of a structure keyed on both fields at
+  once. Nothing in the files here states this directly; I derived it from
+  `dataModel.ts`'s `client-order` and `remote-seq` requirements together.
+- I verified the design against the budget by reasoning through
+  `shapeModel.vocab.ts`'s `processorWorkloads` by hand (no bench script is
+  part of this task's outputs), rather than measuring; `npm test` and
+  `npm run check` both pass, including the random-run suites in
+  `messageProcessor.contract.ts` and `shapeModel.contract.ts` and the
+  scenario and `frames.complete` suites in `scenario.contract.ts`.

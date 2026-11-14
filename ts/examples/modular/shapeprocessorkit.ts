@@ -3,16 +3,18 @@
 // queues to a writer when process is called. helpers.check.ts runs the
 // processor contracts against it.
 
-import type { OperationContent } from "./dataModel.ts";
+import type { OperationContent, OperationLogEvents } from "./dataModel.ts";
 import type { ShapeId } from "./shape.ts";
 import type { ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "./shapeModel.ts";
 import { compareOrder, knew } from "./shapeModel.vocab.ts";
 import { readFacet, RefShapeWriter } from "./shapewriterkit.ts";
+import { Events } from "./eventkit.ts";
 
 type Stamped = ShapeOp;
 
 export class RefShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
+  readonly logOperations = new Events<OperationLogEvents<ShapeOp>>();
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
   readonly remote = { enqueue: (op: ShapeOp) => this.enqueueRemote(op) };
@@ -40,8 +42,14 @@ export class RefShapeProcessor implements ShapeMessageProcessor {
   async process(): Promise<void> {
     // Local operations first, so that each is applied before its
     // acknowledgment, which can only be enqueued after it; then remote.
-    for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) this.apply(op);
-    for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
+    for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) {
+      this.apply(op);
+      this.logOperations.emit("applied", op);
+    }
+    for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) {
+      this.applyRemote(op);
+      this.logOperations.emit("applied", op);
+    }
   }
 
   private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {

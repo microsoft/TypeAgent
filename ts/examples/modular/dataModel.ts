@@ -114,6 +114,23 @@ export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp
     dequeue(): TOp | undefined;
 }
 
+/** What an operation log emits: each operation, as given to the processor, when it is applied. */
+export type OperationLogEvents<TOp extends Operation> = { applied: [op: TOp] };
+
+/**
+ * A log of the operations a processor applies, for logging, debugging,
+ * testing and analysis. Every MessageProcessor has one; its rules are on
+ * MessageProcessor and the processors that extend it.
+ */
+export interface OperationLogging<TOp extends Operation> {
+    /**
+     * Emits applied for each operation as it is applied: a local one as
+     * its enqueue returned it, a remote one (an acknowledgment included)
+     * as it was enqueued.
+     */
+    readonly logOperations: EventEmitter<OperationLogEvents<TOp>>;
+}
+
 /**
  * Applies operations to a data model: the only thing that changes it.
  * The message infrastructure enqueues to local what controllers send
@@ -121,6 +138,9 @@ export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp
  * delivers, including the acknowledgments of local operations. The
  * processor holds the model's write side privately and exposes only the
  * read side.
+ *
+ * Every processor logs each operation as it applies it (OperationLogging),
+ * so the order and count of what it applies are rules here.
  *
  * Rules marked @abstract are observable only through the semantics of a
  * distributed data structure (DDS); each DDS's processor refines them.
@@ -141,19 +161,21 @@ export interface OperationQueue<TOp extends Operation> extends OperationSink<TOp
  *   how: each DDS says what an acknowledgment that arrives out of order does (for shapes, whether it may move a shape, or z-order is defined by something other than seq); client-order is dropped; the processor contract delivers acknowledgments out of clientSeq order, with an adversary that matches an acknowledgment to the oldest pending operation without checking clientSeq.
  * @requires not-reentrant  While a call to process is pending, nothing enqueues on either queue or calls process again.
  * @ensures stamps  enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
- * @deferred snapshot  A processor can start from a snapshot: a model with the seq of the last operation it includes. Its first refSeq is that seq, and the IDs in the snapshot count as already made, for a DDS's ID rules.
+ * @deferred session  A collaboration session: within one, clientIds are unique, and so (by ShapeMessageProcessor.new-ids) are shape IDs; between sessions, only the last snapshot defines the data. A processor can start from a snapshot, a model with the seq of the last operation it includes: its first refSeq is that seq, and the IDs in the snapshot count as already made.
  *   when: the collaboration protocol, or saving and loading a model, is specified.
- *   how: the processor contract gains a factory that takes a snapshot; it checks that a processor loaded from a snapshot taken after some operations then reaches the same model as one that applied those operations, given the same later remote operations, and that stamps' refSeq starts at the snapshot's seq; with adversaries that start refSeq at -1 and that reuse a snapshot ID.
+ *   how: the processor contract gains sessions and a factory that takes a snapshot; it checks that a processor loaded from a snapshot taken after some operations reaches the same model as one that applied those operations, given the same later remote operations, that stamps' refSeq starts at the snapshot's seq, and that new IDs differ from the snapshot's; with adversaries that start refSeq at -1 and that reuse a snapshot ID.
  * @ensures sole-writer  The model changes only during process: reading it changes nothing and emits none of its events.
  * @ensures passive  Never calls process itself: until the infrastructure calls it, queued operations stay unapplied.
  * @ensures enqueue-defers  enqueue on either queue doesn't change the model or emit any of the model's events before it returns.
- * @abstract local-order  Local operations are applied in the order they were enqueued.
- * @abstract remote-order  Remote operations are applied in the order they were enqueued.
+ * @ensures local-order  Local operations are applied in the order they were enqueued.
+ *   isStrictlySorted(logged(this).filter((op) => op.seq === -1), (a, b) => a.clientSeq - b.clientSeq)
+ * @ensures remote-order  Remote operations are applied in the order they were enqueued, which is seq order.
+ *   isStrictlySorted(logged(this).filter((op) => op.seq !== -1), (a, b) => a.seq - b.seq)
  * @abstract once  Each operation is applied once: the acknowledgment of a local operation, recognized by its clientId and clientSeq, gives it its assigned seq and isn't applied as another operation, whether it arrives before or after the local operation is applied.
  * @abstract atomic  A change listener never sees part of an operation's effect: each change event is emitted after the operation it reports is fully applied.
  * @ensures converges  Processors whose remote queues deliver the same operations in the same order reach equal models once each one's local operations are acknowledged and process has settled, whatever the interleaving of their local and remote queues.
  */
-export interface MessageProcessor<TR extends DataModelReader, TOp extends Operation> {
+export interface MessageProcessor<TR extends DataModelReader, TOp extends Operation> extends OperationLogging<TOp> {
     /** The client whose local operations this processor applies. */
     readonly clientId: string;
 
@@ -170,6 +192,9 @@ export interface MessageProcessor<TR extends DataModelReader, TOp extends Operat
      * Applies the queued operations, interleaving local and remote, and
      * emits the model's change events. Only the message infrastructure
      * calls it; it settles once the queues are empty.
+     *
+     * @ensures logs-each  logOperations reports each operation queued since the last process call once, acknowledgments included, and nothing else.
+     *   sameOps(logged(this), queuedSince(this))
      */
     process(): Promise<void>;
 }

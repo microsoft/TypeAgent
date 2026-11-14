@@ -4,7 +4,7 @@
 
 import type { Point, Rectangle } from "../geometry.ts";
 import type { Shape, ShapeId } from "../shape.ts";
-import type { OperationContent } from "../dataModel.ts";
+import type { OperationContent, OperationLogEvents } from "../dataModel.ts";
 import type { ShapeCollection, ShapeCollectionEvents, ShapeCollectionWriter, ShapeMessageProcessor, ShapeOp } from "../shapeModel.ts";
 import { compareOrder, knew, rectContains } from "../shapeModel.vocab.ts";
 import { Events } from "../eventkit.ts";
@@ -135,12 +135,17 @@ export type ProcessorBug =
   | "forgets-own-pending" // a clear knows only acknowledged adds up to its refSeq, not its client's own earlier ones
   | "ack-reapplies"       // an acknowledgment removes the shape and adds it again on top
   | "one-at-a-time"       // a remove calls the writer once per listed ID
+  | "log-skips-acks"      // logOperations doesn't report acknowledgments
+  | "local-lifo"          // applies the local queue newest first
+  | "remote-lifo"         // applies the remote queue newest first
+  | "logs-before-apply"   // logOperations reports an operation before applying it
   | "counter-ids"         // newShapeId uses a counter without the clientId
   | "exposes-writer"      // model is the writer itself
   | "facet-keeps-writer"; // model is a facet that keeps the writer in a property
 
 export class TestShapeProcessor implements ShapeMessageProcessor {
   readonly clientId: string;
+  readonly logOperations = new Events<OperationLogEvents<ShapeOp>>();
   readonly model: ShapeCollection;
   readonly local = { enqueue: (content: OperationContent<ShapeOp>) => this.enqueueLocal(content) };
   readonly remote = { enqueue: (op: ShapeOp) => this.enqueueRemote(op) };
@@ -190,8 +195,20 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
   }
 
   private drain(): void {
-    for (let op = this.localQueue.shift(); op; op = this.localQueue.shift()) this.apply(op);
-    for (let op = this.remoteQueue.shift(); op; op = this.remoteQueue.shift()) this.applyRemote(op);
+    const local = this.localQueue.splice(0);
+    if (this.bug === "local-lifo") local.reverse();
+    for (const op of local) this.step(op, () => this.apply(op));
+    const remote = this.remoteQueue.splice(0);
+    if (this.bug === "remote-lifo") remote.reverse();
+    for (const op of remote) this.step(op, () => this.applyRemote(op));
+  }
+
+  /** Applies op with run, and logs it. */
+  private step(op: ShapeOp, run: () => void): void {
+    if (this.bug === "logs-before-apply") this.logOperations.emit("applied", op);
+    run();
+    if (this.bug === "logs-before-apply" || (this.bug === "log-skips-acks" && op.clientId === this.clientId && op.seq !== -1)) return;
+    this.logOperations.emit("applied", op);
   }
 
   private enqueueLocal(content: OperationContent<ShapeOp>): ShapeOp {

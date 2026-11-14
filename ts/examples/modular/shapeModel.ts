@@ -26,7 +26,8 @@ export type ShapeCollectionEvents = { change: [] };
  * @invariant get-agrees  get returns exactly the shapes forEach visits, under the same IDs.
  *   (id: ShapeId) => entries(this).every(([i, s]) => this.get(i) === s) &&
  *     implies(this.get(id) !== undefined, ids(this).includes(id))
- * @ensures read-only  get, size, forEach, compareZ, inRect, atPoint, on and off never change the shapes.
+ * @ensures read-only  Calling ShapeCollection's members (get, size, forEach, compareZ, inRect, atPoint, on and off) changes no shape and emits nothing.
+ *   deepEqual(entries(this), old(entries(this))) && emitted(this).length === 0
  */
 export interface ShapeCollection<S extends Shape = Shape> extends DataModelReader<ShapeCollectionEvents>, ShapeLocatorQueries {
   /** The shape with this ID, or undefined if no such shape exists. */
@@ -35,15 +36,23 @@ export interface ShapeCollection<S extends Shape = Shape> extends DataModelReade
   /** The number of shapes. */
   readonly size: number;
 
-  /** Calls visit for each shape, bottom to top. visit must not change the collection. */
+  /**
+   * Calls visit for each shape, bottom to top.
+   *
+   * @requires no-change  visit calls only ShapeCollection's members, so it changes nothing.
+   *   nested(this).every((c) => collectionMembers.includes(c.member))
+   */
   forEach(visit: (id: ShapeId, shape: S) => void): void;
 
   /**
    * Negative if a is below b, positive if above.
    *
    * @requires present  Both shapes are in the collection.
+   *   ids(this).includes(a) && ids(this).includes(b)
    * @ensures zero-iff-same  Returns 0 only when comparing a shape with itself.
+   *   (result === 0) === (a === b)
    * @ensures antisymmetric  Swapping the arguments flips the sign.
+   *   Math.sign(result) === -Math.sign(this.compareZ(b, a))
    */
   compareZ(a: ShapeId, b: ShapeId): number;
 }
@@ -51,8 +60,11 @@ export interface ShapeCollection<S extends Shape = Shape> extends DataModelReade
 /**
  * The write side. Only a ShapeMessageProcessor holds it.
  *
- * @ensures notifies  Each call that changes the shapes emits change once, after the change is complete, so that every observer and query already shows it; a call that changes nothing emits nothing.
- * @budget log-amortized  add, remove (per ID listed) and compareZ take amortized or expected time logarithmic in the number of shapes, whatever the pattern of adds (expected over the implementation's own random choices, as in a treap, never over the pattern of adds); bench.ts measures the time per operation at 100,000 shapes against 1,000, and fails above a ratio of 16 (cache misses at 100,000 shapes put a logarithmic structure at 4 to 9; linear growth gives about 100).
+ * @ensures notifies  A call that changes the shapes emits change once, when the shapes are already final; a call that changes nothing emits nothing. (A listener's queries then agree with the shapes by the queries' own rules.)
+ *   deepEqual(entries(this), old(entries(this))) ? emitted(this).length === 0
+ *     : deepEqual(emitted(this), ["change"]) && deepEqual(atEvent(0, entries(this)), entries(this))
+ * @budget log-amortized  add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, on each of the writer's workloads, growing at most 16 times from 1,000 shapes to 100,000.
+ *   within("logarithmic", 16, writerWorkloads)
  */
 export interface ShapeCollectionWriter<S extends Shape = Shape> extends ShapeCollection<S>, DataModel {
   /**
@@ -60,7 +72,9 @@ export interface ShapeCollectionWriter<S extends Shape = Shape> extends ShapeCol
    * below is undefined.
    *
    * @requires new-id  id isn't present.
+   *   !ids(this).includes(id)
    * @requires below-present  below, when given, is present.
+   *   below === undefined || ids(this).includes(below)
    * @requires in-range  The shape's bounding box lies within ±1e300, right and bottom edges included.
    *   inRange(shape.boundingBox(), 1e300)
    * @ensures placed  The shape is retrievable under id, directly below below or on top; the other shapes stay, in the same order.
@@ -125,9 +139,12 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * The rules use applied(this) (dataModel.vocab.ts), the operations the
  * processor has applied, and are checked whenever process settles.
  *
- * @requires fresh-add-id  Each add's id came from newShapeId, and no other add has it.
+ * @requires fresh-add-id  Each local add's id came from this processor's newShapeId, and no other local add has it. (Remote adds' IDs are their own processors' new-ids.)
+ *   localAdds(this).every((a) => newIds(this).includes(a.id)) && unique(localAdds(this).map((a) => a.id))
  * @requires in-range  Each add's shape has its bounding box within ±1e300, right and bottom edges included.
- * @ensures new-ids  newShapeId never returns an ID that it, or any processor with a different clientId, has returned.
+ *   applied(this).filter(isAdd).every((a) => inRange(a.shape.boundingBox(), 1e300))
+ * @ensures new-ids  newShapeId never returns an ID twice, nor one that a processor with a different clientId has returned.
+ *   (q: ShapeMessageProcessor) => unique(newIds(this)) && (q.clientId === this.clientId || disjoint(newIds(this), newIds(q)))
  * @ensures read-facet  model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it.
  *   (f: () => void) => onlyMembers(this.model, collectionMembers) &&
  *     this.model.on("change", f) === this.model && this.model.off("change", f) === this.model
@@ -140,10 +157,15 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * @ensures clear-known  No shape whose add an applied clear knew is present.
  *   applied(this).filter(isClear).every((c) => ids(this.model).every((id) => !knew(c, addOf(applied(this), id)!)))
  * @ensures ack-keeps-z  Applying an acknowledgment doesn't change the shapes or their z-order, or emit change.
- * @ensures one-change  Each operation that changes the shapes emits change once, when the shapes, and every observer and query, already show its whole effect; one that changes nothing emits nothing.
- * @budget log-amortized  process takes amortized or expected time per operation logarithmic in the number of shapes (as for ShapeCollectionWriter.log-amortized), plus time proportional to the shapes a clear removes; bench.ts measures it as for ShapeCollectionWriter.log-amortized.
- * @refines MessageProcessor.local-order  add-on-z
- * @refines MessageProcessor.remote-order  add-on-z
+ *   steps(this).every((s) => !isAckOf(this, s.op) || (s.changes.length === 0 &&
+ *     deepEqual(atEvent(s.at, entries(this.model)), s.from < 0 ? old(entries(this.model)) : atEvent(s.from, entries(this.model)))))
+ * @ensures one-change  Each operation that changes the shapes emits change once, when the shapes already show its whole effect, and before logOperations reports the operation; one that changes nothing emits nothing; and no change is emitted apart from an operation.
+ *   steps(this).every((s) => s.changes.length ===
+ *     (deepEqual(atEvent(s.at, entries(this.model)), s.from < 0 ? old(entries(this.model)) : atEvent(s.from, entries(this.model))) ? 0 : 1) &&
+ *     s.changes.every((i) => deepEqual(atEvent(i, entries(this.model)), atEvent(s.at, entries(this.model))))) &&
+ *   emitted(this).filter((e) => e.startsWith("model.")).length === steps(this).reduce((n, s) => n + s.changes.length, 0)
+ * @budget log-amortized  process takes time per operation logarithmic in the number of shapes, on each of the processor's workloads (in none of which a clear removes shapes), growing at most 16 times from 1,000 shapes to 100,000.
+ *   within("logarithmic", 16, processorWorkloads)
  * @refines MessageProcessor.once  ack-keeps-z
  * @refines MessageProcessor.atomic  one-change
  */
