@@ -89,6 +89,61 @@ const settings: TopicCurationOptions = {
     compactIds: true,
 };
 
+test("prepared-window diagnostics cannot mutate production state and failures stop before reconciliation", async () => {
+    const value = snapshot(2);
+    let reconciliations = 0;
+    const complete: TopicCurationCompletion = async (
+        _rules,
+        payload,
+        _schema,
+        call,
+    ) => {
+        if (call?.phase === "reconciliation") reconciliations++;
+        return merged(payload);
+    };
+    const result = await curateTopics(
+        value,
+        (node) => node.citations,
+        complete,
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        {
+            onPreparedWindow: async (window) => {
+                expect(window.prepared[0].concepts[0].memberIds).toHaveLength(
+                    2,
+                );
+                window.prepared[0].concepts.length = 0;
+                window.current.deferred.push({
+                    nodeId: "unknown",
+                    reason: "Diagnostic mutation must not affect curation",
+                });
+            },
+        },
+    );
+    expect(result.concepts[0].memberIds).toHaveLength(2);
+    expect(result.deferred).toEqual([]);
+    expect(reconciliations).toBe(1);
+    await expect(
+        curateTopics(
+            value,
+            (node) => node.citations,
+            complete,
+            new AbortController().signal,
+            true,
+            undefined,
+            undefined,
+            {
+                onPreparedWindow: async () => {
+                    throw new Error("capture failed");
+                },
+            },
+        ),
+    ).rejects.toThrow("capture failed");
+    expect(reconciliations).toBe(1);
+});
+
 test("frozen preparation overlaps, reconciles serially and installs complete windows only", async () => {
     const value = snapshot();
     const packets: TopicCurationPacket[] = [];

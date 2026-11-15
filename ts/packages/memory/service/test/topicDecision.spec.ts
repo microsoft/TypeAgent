@@ -31,6 +31,7 @@ import { executeTopicDecisionWave } from "../src/topicDecisionWave.js";
 import { TopicEvidenceIndex } from "../src/topicIndexes.js";
 import {
     buildTopicDecisionRequest,
+    executeTopicDecision,
     groundTopicCandidate,
     packTopicDecisions,
     topicDecisionIdentity,
@@ -61,6 +62,39 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createMaintenanceBuildScheduler } from "../src/maintenanceConcurrency.js";
+
+test("Decision receipts retain distributions and optional confidence without changing answers", async () => {
+    const task = {
+        candidate: groundTopicCandidate(
+            snapshot(1),
+            snapshot(1).nodes[0],
+            snapshot(1).nodes[0].citations,
+            "n0",
+        ),
+        targets: [],
+        score: true,
+    };
+    const native = model(async (request) => {
+        const data = answer(request, () => "standalone_new");
+        data.answers.disposition_n0.confidence = 0.83;
+        return { success: true, data };
+    });
+    const receipts: TopicDecisionReceipt[] = [];
+    const response = await executeTopicDecision(
+        { model: native, onReceipt: (receipt) => receipts.push(receipt) },
+        packTopicDecisions([task], native.model)[0],
+        new AbortController().signal,
+        "candidate-disposition",
+    );
+    expect(receipts[0].answerDetails).toEqual(response.answers);
+    expect(receipts[0].answers?.disposition_n0).toBe("standalone_new");
+    expect(receipts[0].answerDetails?.disposition_n0.confidence).toBe(0.83);
+    expect(receipts[0].answerDetails?.salience_n0).not.toHaveProperty(
+        "confidence",
+    );
+    response.answers.disposition_n0.confidence = 0.1;
+    expect(receipts[0].answerDetails?.disposition_n0.confidence).toBe(0.83);
+});
 
 test.each([false, true])(
     "native checkpoint yielding drains lookahead workers before releasing the slot (fullTransactions=%s)",

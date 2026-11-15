@@ -96,7 +96,12 @@ export interface DecisionModel {
     checkRequest?(request: DecisionRequest): void;
     decide(
         request: DecisionRequest,
-        options?: { signal?: AbortSignal; timeoutMs?: number },
+        options?: {
+            signal?: AbortSignal;
+            timeoutMs?: number;
+            onTransportFailure?: (message: string) => void;
+            onFailureResponseBody?: (body: string) => void;
+        },
     ): Promise<DecisionResult<DecisionResponse>>;
 }
 
@@ -207,6 +212,8 @@ export function createDecisionModel(options?: {
                 )
                     return failure("budget");
                 const started = performance.now();
+                const onTransportFailure = options?.onTransportFailure;
+                const onFailureResponseBody = options?.onFailureResponseBody;
                 const span = startDecisionSpan(
                     provider,
                     model,
@@ -305,6 +312,7 @@ export function createDecisionModel(options?: {
                                     signal: controller.signal,
                                     overallBudgetMs: timeoutMs,
                                     onAttempt,
+                                    onFailureResponseBody,
                                 },
                             );
                         } else {
@@ -332,6 +340,7 @@ export function createDecisionModel(options?: {
                         }
                         controller.signal.throwIfAborted();
                         if (!result.success) {
+                            onTransportFailure?.(result.message);
                             const c =
                                 otel.readTelemetryErrorClassification(result) ??
                                 otel.classifyTelemetryErrorIfRecognized(result);
@@ -429,6 +438,7 @@ export function createDecisionModel(options?: {
                             signal: controller.signal,
                             overallBudgetMs: timeoutMs,
                             onAttempt,
+                            onFailureResponseBody,
                         },
                     );
                 }

@@ -18,6 +18,11 @@ export interface OrderedTopicPacket {
     fingerprint: string;
 }
 
+export interface PreparedTopicWindow {
+    prepared: TopicCuration[];
+    current: TopicCuration;
+}
+
 async function parallel<T>(
     work: Array<(signal: AbortSignal) => Promise<T>>,
     signal: AbortSignal,
@@ -119,6 +124,18 @@ export async function reconcileFrozenTopics(
         signal,
     );
     signal.throwIfAborted();
+    if (options.onPreparedWindow)
+        await options.onPreparedWindow(structuredClone({ prepared, current }));
+    signal.throwIfAborted();
+    if (options.preparedReconciliation) {
+        const reconciled = await options.preparedReconciliation.reconcile(
+            structuredClone({ prepared, current }),
+            signal,
+        );
+        signal.throwIfAborted();
+        validate(reconciled);
+        return withoutRetainedDeferrals(current, reconciled);
+    }
     const raw = new Map(snapshot.nodes.map((node) => [node.id, node]));
     const candidates: TopicCurationCandidate[] = prepared.flatMap((result) => [
         ...result.concepts.map((concept) => ({
@@ -158,6 +175,13 @@ export async function reconcileFrozenTopics(
             ),
     );
     validate(reconciled);
+    return withoutRetainedDeferrals(current, reconciled);
+}
+
+function withoutRetainedDeferrals(
+    current: TopicCuration,
+    reconciled: TopicCuration,
+) {
     const retainedDeferrals = new Set(
         current.deferred.map(({ nodeId }) => nodeId),
     );

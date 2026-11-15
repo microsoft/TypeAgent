@@ -172,7 +172,7 @@ export class TopicEvidenceIndex {
         return this.evidenceFor(node);
     }
 
-    evidenceFor(node: TopicNode): ViewCitation[] {
+    private contextFor(node: TopicNode) {
         const keys = [
             ...new Set(
                 node.occurrenceIds.flatMap((id) => {
@@ -203,6 +203,15 @@ export class TopicEvidenceIndex {
             };
             this.contexts.set(key, context);
         }
+        return context;
+    }
+
+    sourceEvidence(node: TopicNode): ViewCitation[] {
+        return [...this.contextFor(node).citations];
+    }
+
+    evidenceFor(node: TopicNode): ViewCitation[] {
+        const context = this.contextFor(node);
         const result = [
             ...new Map(
                 [
@@ -257,11 +266,17 @@ export class TopicConceptIndex {
         added.forEach((concept) => this.upsert(concept));
     }
 
-    related(nodes: ReadonlyArray<{ label: string }>): TopicConcept[] {
-        return this.query(nodes);
+    related(
+        nodes: ReadonlyArray<{ label: string }>,
+        excludeId?: string,
+    ): TopicConcept[] {
+        return this.query(nodes, excludeId);
     }
 
-    query(nodes: ReadonlyArray<{ label: string }>): TopicConcept[] {
+    query(
+        nodes: ReadonlyArray<{ label: string }>,
+        excludeId?: string,
+    ): TopicConcept[] {
         const scores = new Map<string, number>();
         const exact = new Set<string>();
         for (const term of terms(nodes.map((node) => node.label).join(" ")))
@@ -273,6 +288,7 @@ export class TopicConceptIndex {
                 if (!scores.has(id)) scores.set(id, 0);
             }
 
+        if (excludeId) scores.delete(excludeId);
         return [...scores]
             .sort(
                 ([a, aScore], [b, bScore]) =>

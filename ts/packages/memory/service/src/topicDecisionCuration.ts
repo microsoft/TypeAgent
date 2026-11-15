@@ -36,7 +36,8 @@ import {
     packTopicDecisions,
     topicChoice,
     topicSalience,
-    TopicDecisionError,
+    withTopicDecisionRepacking,
+    planTopicDecisionChoice,
     topicDispositionCriteria,
     observeTopicDecisionWork,
     indexTopicDecisionEvidence,
@@ -92,8 +93,7 @@ async function classify(
     const choices = new Map<string, string[]>();
     const salience = new Map<string, number>();
     let fingerprint = "";
-    const run = async () => {
-        const tokenLimit = context.repack.used ? 16384 : 24576;
+    const run = async (tokenLimit: number) => {
         fingerprint = classificationFingerprint(context, tasks);
         choices.clear();
         salience.clear();
@@ -131,24 +131,12 @@ async function classify(
             }
         }
     };
-    try {
-        await run();
-    } catch (error) {
-        if (
-            !(error instanceof TopicDecisionError) ||
-            error.failure.httpStatus !== 422 ||
-            !["provider", "invalid_request"].includes(error.failure.code) ||
-            context.options.model.provider !== "azure" ||
-            context.repack.used
-        )
-            throw error;
-        context.signal.throwIfAborted();
-        context.repack.used = true;
-        console.warn(
-            "Topic Decision HTTP 422: repacking unchanged nominations once at 16384 tokens",
-        );
-        await run();
-    }
+    await withTopicDecisionRepacking(
+        context.options.model,
+        context.signal,
+        context.repack,
+        run,
+    );
     return { choices, salience, fingerprint };
 }
 
@@ -213,35 +201,6 @@ function tasksFor(context: BatchContext): TopicDecisionTask[] {
         };
     });
 }
-function choicePlan(
-    task: TopicDecisionTask,
-    values: string[],
-): string | TopicDecisionTask {
-    if (
-        !task.candidate.complete ||
-        task.targets.some((target) => target.complete === false)
-    )
-        return "uncertain_needs_synthesis";
-    const choices = [...new Set(values)];
-    if (choices.includes("uncertain_needs_synthesis"))
-        return "uncertain_needs_synthesis";
-    const concrete = choices.filter((key) =>
-        task.targets.some((target) => target.key === key),
-    );
-    if (choices.length === 1) return choices[0];
-    if (
-        concrete.length === 1 &&
-        choices.every((key) => key === concrete[0] || key === "standalone_new")
-    )
-        return concrete[0];
-    if (!concrete.length) return "uncertain_needs_synthesis";
-    return {
-        ...task,
-        score: false,
-        targets: task.targets.filter((target) => concrete.includes(target.key)),
-        reason: "conflicting-target-batches",
-    };
-}
 async function selectedChoices(
     context: BatchContext,
     tasks: TopicDecisionTask[],
@@ -252,7 +211,7 @@ async function selectedChoices(
     for (const task of tasks) {
         const values = choices.get(task.candidate.key);
         if (!values?.length) throw new Error("Missing Decision choices");
-        const plan = choicePlan(task, values);
+        const plan = planTopicDecisionChoice(task, values);
         if (typeof plan === "string") selected.set(task.candidate.key, plan);
         else conflicts.push(plan);
     }

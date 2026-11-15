@@ -367,10 +367,13 @@ async function getErrorMessage(
     response: Response,
     retries?: number | undefined,
     timeTaken?: number | undefined,
+    onFailureResponseBody?: (body: string) => void,
 ): Promise<string> {
     let bodyMessage = "";
+    let responseBody: string | undefined;
     try {
         const bodyText = await response.text();
+        responseBody = bodyText;
         debugError(bodyText);
         const bodyJson = JSON.parse(bodyText);
         bodyMessage = bodyJson.error;
@@ -383,6 +386,7 @@ async function getErrorMessage(
             }
         }
     } catch (e) {}
+    if (responseBody !== undefined) onFailureResponseBody?.(responseBody);
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? ` Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
 }
 
@@ -449,6 +453,7 @@ export async function fetchWithRetry(
     requestConstraints?: ModelRequestConstraints,
     onAttempt?: () => void,
     capacityOwner?: object,
+    onFailureResponseBody?: (body: string) => void,
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
@@ -508,7 +513,12 @@ export async function fetchWithRetry(
                 );
                 return fetchErrorWithEndpoint(
                     url,
-                    await getErrorMessage(result, retryCount, elapsed),
+                    await getErrorMessage(
+                        result,
+                        retryCount,
+                        elapsed,
+                        onFailureResponseBody,
+                    ),
                     otel.classifyTelemetryHttpStatus(result.status),
                 );
             } else if (debugError.enabled) {
@@ -758,6 +768,7 @@ export type PoolCallOptions = {
     retryPauseMs?: number | undefined;
     signal?: AbortSignal | undefined;
     onAttempt?: ((member: EndpointPoolMember) => void) | undefined;
+    onFailureResponseBody?: ((body: string) => void) | undefined;
 };
 
 // code-complexity-allow: endpoint-pool retry/cooldown flow needs explicit per-status handling.
@@ -806,6 +817,7 @@ async function fetchWithPool(
             settings.requestConstraints,
             () => options?.onAttempt?.(member),
             member,
+            options?.onFailureResponseBody,
         );
     }
 
@@ -958,6 +970,7 @@ async function fetchWithPool(
                     response,
                     attempts,
                     Date.now() - startTime,
+                    options?.onFailureResponseBody,
                 ),
                 otel.classifyTelemetryHttpStatus(response.status),
             );
@@ -974,6 +987,7 @@ async function fetchWithPool(
                     response,
                     attempts,
                     Date.now() - startTime,
+                    options?.onFailureResponseBody,
                 ),
                 otel.classifyTelemetryHttpStatus(response.status),
             );
@@ -984,7 +998,12 @@ async function fetchWithPool(
         // gets the same outcome from every endpoint.
         return fetchErrorWithEndpoint(
             member.settings.endpoint,
-            await getErrorMessage(response, attempts, Date.now() - startTime),
+            await getErrorMessage(
+                response,
+                attempts,
+                Date.now() - startTime,
+                options?.onFailureResponseBody,
+            ),
             otel.classifyTelemetryHttpStatus(response.status),
         );
     }

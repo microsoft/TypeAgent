@@ -22,6 +22,301 @@ Run commands from `ts` after `pnpm run build`. Use private, **new** output
 directories outside the original corpus store. Captured requests/responses
 contain source evidence; do not upload them to public systems.
 
+## Prepared-window reconciliation diagnostic
+
+[`topic-reconciliation-diagnostic.mjs`](./topic-reconciliation-diagnostic.mjs)
+captures fresh production-default generative windows from retained incidence,
+then asks the existing native Decision model about every raw member and deferred
+candidate against the captured prepared/prior definitions. It does not ingest
+sources again, install a native curation or change the configured production engine.
+The optional `onPreparedWindow` curation observer receives a deep copy before
+reconciliation; observation cannot mutate the canonical window.
+
+Run only with explicit live authorization, existing model configuration and a
+new private output directory:
+
+```powershell
+node .\tools\memory-maintenance-qualification\topic-reconciliation-diagnostic.mjs `
+    --live --history $history --commit $commit --job $job `
+    --endpoint $generativeModel --output $newOutputDirectory `
+    --windows 5 --max-calls 60 --timeout-ms 21600000 --deadline $absoluteDeadline
+```
+
+`--input` can replace the three history arguments. The absolute deadline is
+shared across initialization, capture and native dispatch; a relative timeout
+cannot extend it. `--max-calls` bounds combined logical generative/native calls,
+including generative repairs, not a provider's internal transport retries.
+Omitted limits default to five windows, 60 logical calls and three minutes.
+Timeout overrides remain process-local and are recorded separately from model
+identity. The script never changes endpoint configuration or acquires new keys.
+
+Artifacts include implementation/input/model identities, immutable prepared
+windows, exact requests, complete native answer distributions and optional
+confidence, provider durations, partial progress and explicit failures.
+Parallel preparation persists through a serialized atomic writer. A failed
+native packet remains uncertain and independent packets continue. If later
+generative capture fails, already validated windows remain available for native
+diagnostics while the deadline permits. Failed windows/candidates stay in the
+expected denominator; observed candidates are reported separately.
+`candidates` counts accounting rows, while `answeredCandidates` counts rows with
+native answers and `unobservedCandidates` retains missing-window rows.
+Budget/deadline interruption also writes complete-window accounting without
+dispatching more calls; earlier successful packet answers remain available.
+The CLI exits nonzero for partial/failed results after persisting the summary.
+Failed or missing target partitions cannot be hidden by a successful sibling:
+an admitted outcome requires complete grounded exposure to all offered targets.
+
+This low-level diagnostic records HTTP 422 failures; it does not run the
+production native generator's separate one-time 16,384-token repacking recovery.
+Estimated packet fit and actual provider admission are different checks.
+
+This is a **raw-level role diagnostic**, not a model-only paired experiment:
+generative reconciliation groups proposals and nominates comparisons, whereas
+the native diagnostic exposes all captured definitions to individual raws.
+Agreement with G0 is not accuracy. Missing answers and conflicting partition
+choices remain uncertain, never implicitly accepted. Confidence is preserved,
+not calibrated or used to change selection. Full-construction speedup and
+semantic quality remain unqualified; independent useful-coverage, membership
+and essential-distinction labels are required before a full-history treatment
+or promotion.
+
+## Prepared-group Decision investigation
+
+[`topic-prepared-decision-diagnostic.mjs`](./topic-prepared-decision-diagnostic.mjs)
+uses saved production prepared windows without ingestion or repeated preparation.
+Unlike the raw-level diagnostic above, its candidate unit is one prepared
+reference group, with original raw membership, evidence, roles and chronology.
+Prepared definitions remain fixed, self-targets are excluded, and the existing
+top-24 lexical index nominates comparisons.
+
+Native Decision and bounded generative control receive the **same external
+state, question instructions, criteria and effective partitions**. The control
+returns only selected strings, not fabricated confidence or probabilities.
+Provider-internal prompting still differs. G0 remains a practical reference,
+not an independent semantic label.
+Dispatch order alternates by captured window; `--control-first` inverts that
+order for a counterbalanced repeat. Successful pre-repair control calls that
+become superseded are still retained in call accounting.
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+node .\tools\memory-maintenance-qualification\topic-prepared-decision-diagnostic.mjs `
+    --live --snapshot $capturedSnapshot --prepared $capturedWindows `
+    --endpoint $generativeModel --output $newPrivateOutput `
+    --mode matched --native-concurrency 3 --deadline $authorizedAbsoluteDeadline
+```
+
+An explicit absolute deadline is required and cannot be extended by setup or
+retries. This tool has **no logical-call cap**; use it only when the authorization
+permits that scope. It never changes endpoint configuration or acquires keys.
+Failed/missing choices remain unresolved and all original groups/raws stay in
+the expected denominator. Valid generative sibling answers are retained.
+
+Factored-best-fit packing starts at 24,576 estimated serialized tokens. The
+existing Azure-only HTTP 422 recovery repacks unchanged nominations once at
+16,384 tokens. Controls are paired with the actual effective packets; failed
+and superseded native attempts remain in call accounting. These estimates do
+not bound a provider's internally expanded per-question prompt.
+Opt-in native observers capture failure response bodies and transport messages
+**only in private artifacts**; ordinary public Decision failures stay sanitized.
+
+Recipe `prepared-group-decision-v6` independently reviews original-raw reference
+usefulness, separate from adoption, novelty or duplicate coverage. Only negative
+or uncertain native usefulness receives a bounded generative second assessment;
+positive judgments are not re-asked. The control already uses generative
+usefulness and does not repeat that assessment. This is a hybrid investigation,
+not native-only construction.
+
+Prepared metadata is reused. Root components are certified against complete
+editable original members, including groups sharing an existing target; selected
+edges never imply transitive equivalence. Old-anchor health remains separate
+from incoming-member admission. Missing standalone metadata is batched under
+independent-partition checks. Independently required reference material is
+excluded from the deferred-output schema, including when generated concepts
+become later single-pass packet priors; parser guards still reject nonconforming
+output after bounded repair.
+
+Unresolved groups expose their original raws for explicit synthesis or splitting.
+Generation does **not** receive external read-only priors as editable inputs.
+Generated groups instead receive bounded equivalence review against nominated
+frozen definitions. The host appends members only after joint certification.
+That check includes all current-window originals already attached in earlier
+stages, not just the latest proposed attachments; true pre-window anchor health
+is still separate. Uncertain/rejected merges retain independently admitted
+generated groups without claiming global novelty, with explicit review records.
+
+Membership changes invalidate summaries/validation/maintenance, union original
+citations and preserve maximum available salience. Unchanged priors retain their
+exact audited metadata. Complete-window ownership is checked. Metadata,
+resolution, semantic review, repair and failed calls are persisted, retaining
+contract/omission repair kinds and completed reviews on canonical failure.
+Fallback events count unresolved candidates, not physical model calls; one batch
+may produce multiple bounded packets. Structural installation is not semantic
+qualification: generated definitions and native certifications can still be wrong.
+
+`--native-concurrency` defaults to 1 and accepts 1 through 24. Independent native
+review packets and native-only classification waves may overlap using the shared
+limiter; frozen-window commits remain serial. Matched initial packet pairs retain
+their counterbalanced dispatch order. Failed native-only waves drain before the
+one complete repack, and failed/superseded calls remain in accounting.
+
+`--mode native-curation` and `--mode control-curation` instead construct their
+own frozen preparations and evolving serial priors from the saved snapshot.
+Only the selected classification arm is dispatched; matched-control calls do
+not contaminate native construction wall time. Optional `--nodes` selects a
+declared prefix. Neither mode runs organization, installs into a corpus store
+or certifies required-view readiness. A successful curation file is not semantic
+qualification or production promotion.
+Prefix selection retains exactly the selected nodes' occurrence membership,
+labels the reduced scope, and validates before dispatch. Fresh construction
+discards prior curation, receipt and hierarchy state rather than reusing it.
+
+The low-level `preparedReconciliation` hook requires a distinct recipe identity
+and rejects generative packet replay/reusable curation. Production hosts and
+defaults are unchanged. Useful coverage, whole-group fit, nomination recall,
+scope/role/temporal distinctions and held-out confidence calibration require
+separate qualification before enabling an experimental treatment.
+
+### Exact-input Decision interface replay
+
+`topic-decision-interface-replay.mjs` performs an isolated spot comparison of
+saved native requests against the configured `gpt-6-luna` chat endpoint.
+It does not rerun curation, change providers in production, or install views.
+Supply `--inventory`, `--calls`, and a new private `--output` directory.
+Without `--live`, it only verifies source hashes/answers and freezes a
+17-packet, window-balanced seeded manifest. The native answer payload is read
+from `record.response.response.answers`, not its selected-key projection.
+
+Live execution additionally requires `--approval` and `--approved-at`.
+One persistent 80-logical-call cap and absolute 90-minute deadline cover the
+primary replay, eight-packet fresh repeats, choice-only schema ablation, and
+up to twelve blinded reviews. First-attempt invalid outputs remain failures;
+there is no response repair, semantic resampling, or expired-response cache.
+Terminal credential/configuration failures stop queued work. No credentials
+are provisioned or recorded by this driver.
+
+The unchanged serialized caller request is sent with a frozen protocol wrapper.
+The primary schema requires each answer's type, choice, complete probability
+distribution, and confidence. Native validation rejects incomplete/non-unit
+distributions rather than filling or renormalizing them. Chat scores are
+model-emitted, not interchangeable with native provider-reported scores.
+The internal native service prompt is not observable: this tests exact caller
+content and output shape, not proven hidden-prompt or model-weight identity.
+
+Artifacts retain full caller inputs, available client/wire responses, failures,
+actual bindings, latency, usage, and comparison identities. Keep them private;
+console progress contains only IDs and method outcomes. Agreement with native
+choices is not a semantic-quality, retained-raw, or end-to-end latency result.
+Valid full-shape replies also expose host-built `DecisionResponse` metadata with
+the actual chat model/provider and observed usage/timing, never native model
+identity or copied scores. Choice-only and failed replies are not interchangeable
+native responses.
+
+### Opt-in ownership and final-definition refinement
+
+`--treatment baseline|ownership|repair|combined` selects an explicit additional
+experimental step. The default is `baseline`, preserving the V6 behavior and
+construction identity. Other treatments add `prepared-topic-refinement-v1` and
+the treatment name to the identity; they do not activate production defaults.
+
+- **Ownership** revisits only incoming deferred originals. A source-only bounded
+  classification distinguishes substantive statements, reported episodes,
+  qualified explanations and articulated requests from incidental mentions and
+  uncertainty. It does not require novelty, a lasting personal fact or adoption
+  of advice. Negative/uncertain native judgments may receive an independent
+  bounded generative reassessment. Agreement on incidental content remains a
+  deferral; unresolved admission becomes explicit pending work.
+- Admitted references receive a separate bounded ownership decision over existing
+  lexical nominations. A useful duplicate is attached only after complete joint
+  fixed-definition certification, including earlier incoming attachments from
+  this window. Uncovered references require new metadata, not duplicate-based
+  deferral. No omitted nomination is treated as proof of global novelty.
+- **Repair** checks every final owner touched by incoming originals against its
+  actual authored definition and complete editable membership. Failed native
+  checks receive the existing strict, independent local collection review,
+  without showing native answers. Supported members are not dropped with a
+  rejected group.
+- Fixed prior definitions and old membership never become editable. For new
+  owners, an explicit bounded repair-kind decision chooses fixed-membership
+  metadata correction, original-member repartitioning, or unresolved work.
+  Correcting metadata cannot merge fixed partitions or create a generic umbrella.
+- At most two authoring rounds repair admitted originals under required-reference
+  schema/parser guards. Every changed version is rechecked. A final shrink-only
+  validation pass can isolate remaining misfits as pending, but cannot generate
+  again. Unchanged exact request versions reuse their successful certification
+  within the refinement; membership changes invalidate that reuse.
+
+The adapter exposes validated refinement progress before authoring, preserving
+all frozen-window raws even if a provider fails. Pending results are
+`needs-review`, never successful installations; evolving construction refuses to
+commit that window. Captured-window diagnostics retain partial artifacts and
+their complete denominators. These are exploratory operations, not a semantic
+quality or readiness certificate.
+
+The same treatments can be applied to an already captured canonical output via
+the exported `refinePreparedCanonical` helper to isolate the additional stages
+without repeating ingestion, preparation or initial reconciliation. Such a
+comparison uses a **frozen historical output**, not a fresh full-construction
+control, and must be reported accordingly. Call-limited campaign drivers must
+reserve one shared budget before every native, generative, audit and failed
+dispatch; the CLI itself still has no hidden logical-call cap.
+
+The typed helper additionally accepts opt-in `subjectMateriality`,
+`definitionAdequacy`, and `repairFirst` policies; the public CLI and defaults do
+not enable them. Subject-materiality adjudication reviews every deferred
+admission, including native positives, against the actual labeled subject.
+Source/revision adjacency augments lexical nominations but does not certify
+coverage. Definition adequacy requires native-answer-blind complete-member
+review and source-grounded per-member rationales even after a native pass.
+Essential developed dimensions and material qualifications must fit the
+definition; exhaustive enumeration of minor examples is not required.
+
+Strict policy recipes use `subject-materiality-v5` and
+`definition-adequacy-v5`. They reuse one snapshot-local index to supply the
+complete indexed evidence from each original's exact source/revision to native
+judgments, local reviews and authoring. This is contextual evidence, not extra
+membership or permission to borrow unrelated subjects. Explicit `subjectEvidence`
+source/revision/locator tuples retain each original's occurrence anchors;
+identically labeled originals must not become indistinguishable after context
+expansion. Authoring briefs include those anchors and original subject labels
+even for fixed-membership metadata groups. Newly authored strict concepts retain
+all original member citations alongside the author's selected supporting
+context; selecting context cannot replace original occurrence provenance.
+Existing context limits
+and explicit capacity failures still apply; evidence is not silently truncated.
+Default treatments retain their existing bounded evidence selection and recipe.
+Each member's developed substance must fit the definition, but a member need
+not independently establish every clause supported by the attached union.
+
+Strict complete-union review can adjudicate a negative native join, but only
+an explicitly compatible joint result keeping every incoming member permits
+attachment. Conflict, uncertainty, missing rationale and capacity failure are
+not certificates. Exact accepted union versions reuse their final-definition
+certificate; changed requests are reviewed again. Repair-first validates and
+repairs owners before admission, then validates after ownership recovery.
+Previously admitted originals isolated as pending by that first repair can
+receive a new ownership decision; an unresolved admission is never promoted
+this way. Single-original positive metadata mismatches select metadata
+correction, since repartitioning an indivisible original cannot fix the defect.
+All strict repair diagnostics reach the author, including individual missing
+dimensions. These policies are experimental and not a qualification result.
+
+An admitted source form is not an exhaustive role restriction: a supplied
+narrative or explanation must not disappear behind interpretation preferences
+or a request. Strict authors and reviewers share clause-level scope rules for
+coordinated subjects and follow-up intentions. Newly authored definitions must
+ground every material claim in the actual subjects of their attached originals,
+not unrelated facts elsewhere in the batch. Supported chronological context
+and coreference remain evidence for that same subject; a local omission does
+not establish source-wide absence. Preserve material local/current-information
+limitations in every definition they qualify. Metadata repair may narrow a
+rejected overbroad hypothesis rather than reproduce it. Strict repair briefs
+carry the review concern as a hypothesis to verify, not the rejected definition
+as a new authoring target or its negative assertions as source facts.
+This extra new-definition grounding
+check does not reopen a fixed prior's intrinsic health; incoming membership
+still requires the complete scope certificate.
+
 ## Production defaults and migration
 
 Evidence selection, ownership validation and lexical nomination use snapshot-local

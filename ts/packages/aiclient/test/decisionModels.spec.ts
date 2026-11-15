@@ -610,6 +610,28 @@ describe("native decision models", () => {
             }
         },
     );
+    test("transport diagnostics are opt-in and do not change bounded failure results", async () => {
+        globalThis.fetch = async () =>
+            new Response('{"detail":"input token capacity exceeded"}', {
+                status: 422,
+            });
+        const details: string[] = [];
+        const bodies: string[] = [];
+        const result = await model().decide(request, {
+            onTransportFailure: (message) => details.push(message),
+            onFailureResponseBody: (body) => bodies.push(body),
+        });
+        expect(result).toMatchObject({
+            success: false,
+            code: "invalid_request",
+            httpStatus: 422,
+        });
+        expect(details).toHaveLength(1);
+        expect(details[0]).toContain("422");
+        expect(bodies).toEqual(['{"detail":"input token capacity exceeded"}']);
+        if (result.success) throw new Error("Expected transport failure");
+        expect(result.message).not.toContain("input token capacity exceeded");
+    });
     test("malformed JSON response is classified", async () => {
         globalThis.fetch = async () => new Response("not-json");
         expect(await model().decide(request)).toMatchObject({

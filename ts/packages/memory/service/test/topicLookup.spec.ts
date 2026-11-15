@@ -143,6 +143,26 @@ test("validation refuses reuse after evidence, incidence or snapshot identity ch
     );
 });
 
+test("self-exclusion happens before the top-24 cutoff and preserves default ranking", () => {
+    const all = concepts();
+    const nodes = [{ label: "Reference" }];
+    const index = new TopicNominationIndex(all);
+    const original = index.related(nodes);
+    const excluded = original[0].id;
+    const selected = index.related(nodes, excluded);
+    expect(selected).toHaveLength(24);
+    expect(selected.some((concept) => concept.id === excluded)).toBe(false);
+    expect(selected).toEqual(
+        originalNomination(
+            all.filter((concept) => concept.id !== excluded),
+            nodes,
+        ),
+    );
+    expect(index.query(nodes, excluded)).toEqual(selected);
+    expect(index.related(nodes, "missing")).toEqual(original);
+    expect(index.related(nodes)).toEqual(originalNomination(all, nodes));
+});
+
 test("indexed evidence preserves scan ordering, qualification priority and interleaved multi-source context", () => {
     const value = fixture();
     value.nodes[0].occurrenceIds.push(value.occurrences[1].id);
@@ -193,6 +213,36 @@ test("indexed evidence preserves scan ordering, qualification priority and inter
     ).toBe(false);
     expect(() => index.memberSources(["missing"])).toThrow(
         "Unknown topic member",
+    );
+});
+
+test("complete indexed source context is revision-bound, ordered and non-mutating", () => {
+    const value = fixture();
+    const otherRevision = indexedTopicOccurrence(
+        {
+            sourceId: "s0",
+            revisionId: "r2",
+            blockOrdinal: 40,
+            text: "A different revision must not become source context.",
+            score: 1,
+        },
+        "Different revision",
+        0,
+    );
+    value.occurrences.push(otherRevision);
+    value.nodes.push(...initialTopicNodes("test", [otherRevision]));
+    const original = structuredClone(value);
+    const index = new TopicEvidenceIndex(value);
+    const expected = value.occurrences
+        .filter((entry) => entry.sourceId === "s0" && entry.revisionId === "r1")
+        .flatMap((entry) => entry.citations);
+    expect(expected).toHaveLength(14);
+    expect(index.sourceEvidence(value.nodes[0])).toEqual(expected);
+    index.sourceEvidence(value.nodes[0]).pop();
+    expect(index.sourceEvidence(value.nodes[0])).toEqual(expected);
+    expect(value).toEqual(original);
+    expect(index.evidence(value.nodes[0])).toEqual(
+        originalEvidence(value, value.nodes[0]),
     );
 });
 

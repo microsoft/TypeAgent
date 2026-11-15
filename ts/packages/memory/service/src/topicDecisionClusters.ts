@@ -16,6 +16,7 @@ import {
     groundTopicConcept,
     resolveTopicDecisionExecution,
     topicDispositionCriteria,
+    topicSubjectAnchorInstructions,
     type TopicDecisionCandidate,
     type TopicDecisionEvidenceContexts,
     type TopicDecisionOptions,
@@ -235,7 +236,7 @@ function choiceCriteria(
 }
 
 function clusterPacket(
-    runtime: ClusterRuntime,
+    runtime: Pick<ClusterRuntime, "options">,
     proposal: Proposal,
     final: boolean,
 ): TopicDecisionPacket {
@@ -259,7 +260,11 @@ function clusterPacket(
     const originalState = structuredClone(state);
     compactTopicDecisionState(state);
     state.cluster = {
-        rules,
+        rules: checkedMembers.some((member) =>
+            Array.isArray(member.grounding.subjectEvidence),
+        )
+            ? rules + topicSubjectAnchorInstructions
+            : rules,
         phase: proposal.search
             ? "alternatives"
             : final
@@ -360,6 +365,29 @@ function clusterPacket(
         fixedDefinitionTargetId:
             proposal.anchor.concept?.id ?? proposal.anchor.candidate!.node.id,
     };
+}
+
+export function buildTopicReferenceValidationPacket(
+    definition: TopicConcept,
+    members: TopicDecisionCandidate[],
+    options: TopicDecisionOptions,
+): TopicDecisionPacket {
+    if (!members.length || members.some((member) => !member.complete))
+        throw new Error(
+            "Fixed reference validation requires complete original members",
+        );
+    return clusterPacket(
+        { options },
+        {
+            key: definition.id,
+            fresh: members,
+            members,
+            anchor: { key: "fixed", concept: definition },
+            alternatives: [],
+            admissionOnly: true,
+        },
+        true,
+    );
 }
 
 function capacityReason(
