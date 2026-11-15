@@ -866,9 +866,31 @@ have been removed. The `concurrency` and `frozenPreparation` programmatic settin
 `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
 `TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` now fail explicitly.
 Remove these controls instead of selecting another scheduling mode.
-The `curated-lazy-v10:<hash>` recipe invalidates older-policy progress and receipts;
+The default recipe is
+`curated-lazy-v10:<hash>:generative-partition-v1:output-contract`.
+It invalidates original-policy progress and receipts;
 do not relabel saved artifacts. See the [topic curation guide](../../../tools/memory-maintenance-qualification/topic-curation-README.md)
 for remaining settings, checkpoint reuse and replay migration.
+
+Prepared-topic reconciliation now uses restricted-output generative decisions
+by default. The configured chat model (Luna by default) chooses admission,
+deferral and canonical group membership through typed `answers` with complete
+probability distributions and confidence. This is not a native Decision 1 call.
+Raw-only preparation, descriptive authoring, summaries, editorial validation
+and organization remain generative. Authoring must preserve the decided partition.
+Non-unit probabilities, inconsistent leaders, synthesis requests or changed
+authored membership produce a logged failure and explicit original-generative
+resolution; provider, admission and cancellation failures still propagate.
+Context-aware packing includes the decision schema, original fallback and a
+conservative bound on the authoring payload.
+
+To roll back, set
+`TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE=original`, or pass
+`topicCuration: { generativeDecisionStage: "original" }` to the service.
+`output-contract` is the default; `decomposed` retains a choice-only diagnostic
+control. All three are generative settings and conflict with native Decision
+activation. Switching stages changes the policy and packet identity, so start
+fresh work rather than relabeling receipts.
 
 The LLM decides semantic equivalence, compatible scope and whether a concept
 has a substantive, specific consumer purpose. Host rules validate supplied
@@ -919,7 +941,7 @@ catalog synchronization is still full-catalog work, not an incremental operation
 Set `FileMemoryServiceOptions.decisionTopics: true`, or
 `TYPEAGENT_MEMORY_DECISION_TOPICS=true` in the native/MCP/CLI/benchmark host,
 to select the experimental `curated-decision-v2` pipeline. The default remains
-the generative `curated-lazy-v10:<hash>` policy. Decision curation requires curated
+the restricted-output generative policy described above. Decision curation requires curated
 topics and explicitly rejects a conflicting custom `generateTopics` adapter;
 ordinary custom-adapter receiver/cancellation behavior is unchanged.
 

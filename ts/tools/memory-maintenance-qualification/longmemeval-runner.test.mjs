@@ -310,17 +310,20 @@ test("benchmark topic identity records frozen defaults and rejects removed selec
         scheduling: "frozen-two-packet-serial-reconciliation-v1",
         priorDeltas: true,
         compactIds: true,
+        generativeDecisionStage: "output-contract",
     });
     const custom = benchmarkTopicCuration({
         TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "12000",
         TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.5",
         TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS: "false",
         TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "false",
+        TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: "original",
     });
     assert.equal(custom.inputTokenTarget, 12000);
     assert.equal(custom.priorContextFraction, 0.5);
     assert.equal(custom.priorDeltas, false);
     assert.equal(custom.compactIds, false);
+    assert.equal(custom.generativeDecisionStage, "original");
     for (const [key, value] of [
         ["TYPEAGENT_MEMORY_TOPIC_CONCURRENCY", "1"],
         ["TYPEAGENT_MEMORY_TOPIC_CONCURRENCY", "2"],

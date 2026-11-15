@@ -518,7 +518,7 @@ function classificationCode(
           : c.errorCategory;
 }
 
-class DecisionValidationError extends Error {
+export class DecisionValidationError extends Error {
     constructor(readonly code: DecisionFailureCode = "invalid_response") {
         super(code);
     }
