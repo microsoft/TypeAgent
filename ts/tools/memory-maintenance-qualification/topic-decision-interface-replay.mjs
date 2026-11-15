@@ -768,15 +768,15 @@ export async function dispatchReplay(context, item) {
             ? { error: record.error, failureCode: record.failureCode }
             : {}),
     });
-    console.log(
-        JSON.stringify({
+    process.stdout.write(
+        `${JSON.stringify({
             callId: record.id,
             packetId: record.packetId,
             arm: record.arm,
             repeat: record.repeat,
             outcome: record.outcome,
             methodMs: record.methodMs,
-        }),
+        })}\n`,
     );
     return record;
 }
@@ -981,6 +981,6 @@ if (
         },
     });
     const result = await runInterfaceReplay(values);
-    console.log(JSON.stringify(result, null, 2));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (result.execution === "stopped") process.exitCode = 1;
 }
