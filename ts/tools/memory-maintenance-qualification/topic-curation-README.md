@@ -241,6 +241,57 @@ The tool records source/compiled identities and rejects implementation drift.
 Run conditions sequentially without competing bulk inference/builds, including
 across machines when provider capacity is shared.
 
+## GPT-only decision-output stages
+
+The default remains the original all-generative frozen preparation and
+reconciliation. The optional `--generative-decision-stage` applies only to
+reconciliation:
+
+| Stage                  | Reconciliation judgment                                          | Provider            |
+| ---------------------- | ---------------------------------------------------------------- | ------------------- |
+| Omitted (P0)           | Original combined membership and metadata response               | Configured GPT      |
+| `decomposed` (P0-R)    | Bounded `assignments`, then original-schema generative authoring | Same configured GPT |
+| `output-contract` (P1) | D1-shaped `answers`, then original-schema generative authoring   | Same configured GPT |
+
+For example, after authorizing live calls, add
+`--generative-decision-stage output-contract` to the live command above and use
+`--endpoint GPT_6_LUNA`. Run all three controls in separate fresh directories.
+Each whole-construction arm must generate its own preparations; sharing a saved
+preparation is only a separate isolation diagnostic. P0-R versus P0 measures
+decomposition; P1 versus P0-R measures the output-contract effect; P1 versus P0
+measures the total change.
+
+P1 keeps the original evidence and generative-style prompt, plus bounded
+assignment framing. It does not use native D1 input packing, token limits or
+transport. Groups select their lowest-index member as a canonical leader;
+authoring must preserve the selected partition and original deferral policy.
+New definitions, labels and deferral reasons remain generative.
+
+Every answer includes the selected option, every offered probability key and
+confidence. Values must be finite and within `[0,1]`, and probabilities must sum
+to one within the native validator's tolerance. The host does not renormalize
+probabilities, fabricate confidence or require an argmax choice.
+
+Invalid contracts, inconsistent partitions, synthesis requests and changed
+authored membership produce explicit failure receipts and original-generative
+resolution. Provider/authentication/budget/admission errors propagate, including
+durable-reservation failures; they do not authorize another attempt. An authoring or
+fallback `returned` receipt is not an installation certificate: the original
+host parser, validation and any explicit contract/omission repairs still run.
+Count those repairs, the first failure and all fallback costs separately.
+Stage-specific policy and packet fingerprints prevent cross-stage packet reuse.
+These stages are experimental, not native readiness or semantic qualification.
+
+A small initial GPT-6-Luna pilot used 96 originals from 12 previously untouched
+source origins, nine fresh whole constructions and 15 original-packet spot
+transactions. Only 6/10 P1 judgment packets passed the complete first-response
+contract: four had non-unit probability distributions despite valid JSON
+fields/types. Those packets used explicit original-generative resolution, not
+probability repair. All nine constructions accounted for every original exactly
+once. Whole-construction median latency was 35.6 seconds for P0, 41.1 for P0-R
+and 51.8 for P1 (three runs each); these small, source-correlated, cache-sensitive
+observations do not qualify promotion or a latency improvement.
+
 ## Progress, organization and persistence
 
 - `--nodes` selects a canonical subset but retains full source evidence context.

@@ -79,6 +79,14 @@ test("JavaScript callers reject obsolete positional arguments before model or en
     for (const mode of [
         { kind: "raw" },
         { kind: "generative", settings: { compactIds: false } },
+        {
+            kind: "generative",
+            settings: { generativeDecisionStage: "decomposed" },
+        },
+        {
+            kind: "generative",
+            settings: { generativeDecisionStage: "output-contract" },
+        },
         { kind: "decision", createOptions: factory },
     ])
         assert.equal(
@@ -106,6 +114,12 @@ test("named mode validation rejects mixed or malformed settings without silently
         { mode: { kind: "generative", createOptions: () => {} } },
         { mode: { kind: "generative", settings: null } },
         { mode: { kind: "generative", settings: { unknown: true } } },
+        {
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "native" },
+            },
+        },
         { mode: { kind: "generative", settings: { concurrency: 24 } } },
         { mode: { kind: "generative", settings: { concurrency: 1 } } },
         { mode: { kind: "generative", settings: { concurrency: 2 } } },

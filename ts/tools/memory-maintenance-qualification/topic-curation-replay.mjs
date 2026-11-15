@@ -148,6 +148,9 @@ export function topicReplaySettings(values) {
             `--${option} has been removed; generative topics always use frozen preparation and serial reconciliation`,
         );
     const settings = {
+        ...(values["generative-decision-stage"] !== undefined
+            ? { generativeDecisionStage: values["generative-decision-stage"] }
+            : {}),
         ...(values["input-tokens"] !== undefined
             ? {
                   inputTokenTarget: integer(
@@ -930,8 +933,10 @@ export async function implementationIdentity() {
             "topicGeneration",
             "topicCurationTransport",
             "topicFrozenPreparation",
+            "topicDecisionContract",
+            "topicGenerativeDecision",
         ].map((file) => `packages/memory/service/dist/${file}.js`),
-        ...["openai", "requestConstraints"].map(
+        ...["openai", "requestConstraints", "decisionModels"].map(
             (file) => `packages/aiclient/dist/${file}.js`,
         ),
         ...["segmentedJson", "searchTiming"].map(
@@ -1126,6 +1131,7 @@ if (
             "prior-fraction": { type: "string" },
             "prior-deltas": { type: "boolean" },
             "compact-ids": { type: "boolean" },
+            "generative-decision-stage": { type: "string" },
             "frozen-preparation": { type: "boolean" },
             "max-calls": { type: "string" },
             "timeout-ms": { type: "string" },

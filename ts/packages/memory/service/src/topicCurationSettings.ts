@@ -3,11 +3,14 @@
 
 import { viewHash } from "./viewMerge.js";
 
+export type TopicGenerativeDecisionStage = "decomposed" | "output-contract";
+
 export interface TopicCurationSettings {
     inputTokenTarget?: number;
     priorContextFraction?: number;
     priorDeltas?: boolean;
     compactIds?: boolean;
+    generativeDecisionStage?: TopicGenerativeDecisionStage | undefined;
 }
 
 export function validateTopicCurationSettings(
@@ -16,6 +19,10 @@ export function validateTopicCurationSettings(
     if (
         "concurrency" in options ||
         "frozenPreparation" in options ||
+        (options.generativeDecisionStage !== undefined &&
+            !["decomposed", "output-contract"].includes(
+                options.generativeDecisionStage,
+            )) ||
         (options.inputTokenTarget !== undefined &&
             (!Number.isSafeInteger(options.inputTokenTarget) ||
                 options.inputTokenTarget < 1)) ||
@@ -48,11 +55,14 @@ export function topicCurationPolicy(
 ): string {
     if (!curated) return "raw-v1";
     const resolved = resolveTopicCurationSettings(settings);
-    return `curated-lazy-v10:${viewHash([
+    const recipe = `curated-lazy-v10:${viewHash([
         resolved.inputTokenTarget ?? null,
         resolved.priorContextFraction ?? 0,
         resolved.priorDeltas,
         resolved.compactIds,
         "frozen-two-packet-windows",
     ]).slice(0, 16)}`;
+    return resolved.generativeDecisionStage
+        ? `${recipe}:generative-partition-v1:${resolved.generativeDecisionStage}`
+        : recipe;
 }

@@ -425,6 +425,22 @@ test("effective topic replay settings preserve defaults and every explicit treat
         priorDeltas: true,
         compactIds: true,
     });
+    for (const stage of ["decomposed", "output-contract"])
+        assert.deepEqual(
+            topicReplaySettings({ "generative-decision-stage": stage }),
+            {
+                priorDeltas: true,
+                compactIds: true,
+                generativeDecisionStage: stage,
+            },
+        );
+    assert.throws(
+        () =>
+            topicReplaySettings({
+                "generative-decision-stage": "native",
+            }),
+        /Invalid topic curation settings/,
+    );
     assert.deepEqual(
         topicReplaySettings({
             "input-tokens": "12000",
