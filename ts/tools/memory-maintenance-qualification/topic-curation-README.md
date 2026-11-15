@@ -30,7 +30,8 @@ policy. Similarity nominates comparisons; the model still judges equivalence.
 
 Generative curation always prepares up to two raw-only packets concurrently,
 then reconciles and commits each window serially. There is no serial or
-speculative scheduler selection. Production policy is `curated-lazy-v10:<hash>`;
+speculative scheduler selection. Production policy is
+`curated-lazy-v10:<hash>:generative-partition-v1:output-contract`;
 `resolveTopicCurationSettings(settings?)` resolves the configurable defaults
 below. Hosts use `getConfiguredMemoryViewOptions`; programmatic callers use
 `topicCuration` on `FileMemoryServiceOptions`.
@@ -40,12 +41,13 @@ with no reserved prior fraction. Enabling frozen scheduling does not require
 request inspection on an existing injected model. Explicit context-aware token
 budgets still require the model's configured request inspection.
 
-| Environment variable                    | Values (default)          | Effect                                                                                                              |
-| --------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`   | Positive integer (unset)  | Opts into packing the complete serialized request, including instructions and schema, using native model inspection |
-| `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION` | 0 through 0.5 (unset / 0) | Reserves input and estimated output room for prior-concept comparisons with explicit token packing                  |
-| `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`   | Explicit boolean (true)   | Allows unchanged prior concepts to remain read-only context                                                         |
-| `TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`    | Explicit boolean (true)   | Uses compact wire identifiers while preserving host IDs                                                             |
+| Environment variable                               | Values (default)                                      | Effect                                                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS`              | Positive integer (unset)                              | Opts into packing the complete serialized request, including instructions and schema, using native model inspection |
+| `TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION`            | 0 through 0.5 (unset / 0)                             | Reserves input and estimated output room for prior-concept comparisons with explicit token packing                  |
+| `TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS`              | Explicit boolean (true)                               | Allows unchanged prior concepts to remain read-only context                                                         |
+| `TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS`               | Explicit boolean (true)                               | Uses compact wire identifiers while preserving host IDs                                                             |
+| `TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE` | `output-contract` (default), `original`, `decomposed` | Selects restricted reconciliation, original-generative rollback or the decomposed diagnostic control                |
 
 Invalid settings fail explicitly. Settings change policy/input identity.
 Unset the variables to use the frozen defaults.
@@ -243,15 +245,17 @@ across machines when provider capacity is shared.
 
 ## GPT-only decision-output stages
 
-The default remains the original all-generative frozen preparation and
-reconciliation. The optional `--generative-decision-stage` applies only to
+The default uses restricted-output Luna (or the explicitly configured chat model)
+for prepared-topic reconciliation. Raw-only preparation, descriptive authoring,
+summaries, editorial validation and organization are unchanged. The optional
+`--generative-decision-stage` applies only to
 reconciliation:
 
-| Stage                  | Reconciliation judgment                                          | Provider            |
-| ---------------------- | ---------------------------------------------------------------- | ------------------- |
-| Omitted (P0)           | Original combined membership and metadata response               | Configured GPT      |
-| `decomposed` (P0-R)    | Bounded `assignments`, then original-schema generative authoring | Same configured GPT |
-| `output-contract` (P1) | D1-shaped `answers`, then original-schema generative authoring   | Same configured GPT |
+| Stage                            | Reconciliation judgment                                          | Provider            |
+| -------------------------------- | ---------------------------------------------------------------- | ------------------- |
+| `original` (P0 rollback)         | Original combined membership and metadata response               | Configured GPT      |
+| `decomposed` (P0-R)              | Bounded `assignments`, then original-schema generative authoring | Same configured GPT |
+| Omitted / `output-contract` (P1) | D1-shaped `answers`, then original-schema generative authoring   | Same configured GPT |
 
 For example, after authorizing live calls, add
 `--generative-decision-stage output-contract` to the live command above and use
@@ -280,9 +284,14 @@ fallback `returned` receipt is not an installation certificate: the original
 host parser, validation and any explicit contract/omission repairs still run.
 Count those repairs, the first failure and all fallback costs separately.
 Stage-specific policy and packet fingerprints prevent cross-stage packet reuse.
-These stages are experimental, not native readiness or semantic qualification.
+The host rollback is
+`TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE=original`; programmatic callers
+set `generativeDecisionStage: "original"`. This preserves the original recipe.
+Context-aware packing inspects the actual decision schema and original fallback,
+plus a conservative upper bound for any decided authoring partition.
+Changing the default does not establish native readiness or semantic qualification.
 
-A small initial GPT-6-Luna pilot used 96 originals from 12 previously untouched
+A historical initial GPT-6-Luna pilot used 96 originals from 12 previously untouched
 source origins, nine fresh whole constructions and 15 original-packet spot
 transactions. Only 6/10 P1 judgment packets passed the complete first-response
 contract: four had non-unit probability distributions despite valid JSON
@@ -290,7 +299,21 @@ fields/types. Those packets used explicit original-generative resolution, not
 probability repair. All nine constructions accounted for every original exactly
 once. Whole-construction median latency was 35.6 seconds for P0, 41.1 for P0-R
 and 51.8 for P1 (three runs each); these small, source-correlated, cache-sensitive
-observations do not qualify promotion or a latency improvement.
+observations did not qualify promotion or a latency improvement.
+
+A subsequent matched experiment used 12 newly selected source tasks, four
+candidates each and three repeats across full Luna, restricted Luna and native
+D1: 108 model methods. All arms received identical caller-visible instructions,
+evidence and choices; the two Luna wire requests differed only in output schema.
+Full-Luna A/A disagreed on 23/144 selected choices (16.0%); restricted A/A on
+14/144 (9.7%); full versus restricted on 28/144 (19.4%). Restricted passed
+35/36 complete output contracts. Excluding its one non-unit reply changes the
+cross-format rate to 28/140 (20.0%). This supports a scoped rollout with explicit
+fallback, not a correctness-equivalence or end-to-end speed claim: comparisons
+are source-correlated and use a new common task rather than untouched production
+prompts. The full response still authors fields absent from the decision response.
+Native D1 differed much more (85/144 versus restricted) and only 28/36 native
+replies formed complete consistent partitions; this change does not enable it.
 
 ## Progress, organization and persistence
 

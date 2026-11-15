@@ -10,7 +10,10 @@ export interface TopicCurationSettings {
     priorContextFraction?: number;
     priorDeltas?: boolean;
     compactIds?: boolean;
-    generativeDecisionStage?: TopicGenerativeDecisionStage | undefined;
+    generativeDecisionStage?:
+        | TopicGenerativeDecisionStage
+        | "original"
+        | undefined;
 }
 
 export function validateTopicCurationSettings(
@@ -20,7 +23,7 @@ export function validateTopicCurationSettings(
         "concurrency" in options ||
         "frozenPreparation" in options ||
         (options.generativeDecisionStage !== undefined &&
-            !["decomposed", "output-contract"].includes(
+            !["original", "decomposed", "output-contract"].includes(
                 options.generativeDecisionStage,
             )) ||
         (options.inputTokenTarget !== undefined &&
@@ -46,6 +49,8 @@ export function resolveTopicCurationSettings(
         ...settings,
         priorDeltas: settings.priorDeltas ?? true,
         compactIds: settings.compactIds ?? true,
+        generativeDecisionStage:
+            settings.generativeDecisionStage ?? "output-contract",
     };
 }
 
@@ -62,7 +67,7 @@ export function topicCurationPolicy(
         resolved.compactIds,
         "frozen-two-packet-windows",
     ]).slice(0, 16)}`;
-    return resolved.generativeDecisionStage
+    return resolved.generativeDecisionStage !== "original"
         ? `${recipe}:generative-partition-v1:${resolved.generativeDecisionStage}`
         : recipe;
 }

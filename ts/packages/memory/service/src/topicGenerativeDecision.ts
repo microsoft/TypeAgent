@@ -239,6 +239,26 @@ const nativeOutputRules = `Return ONLY answers in the supplied schema, one typed
 Include exactly every offered probability key. Each distribution must sum to one, not approximately one; check the arithmetic before returning.
 Confidence and option probabilities are your judgments, not copied provider scores. Do not add rationale or metadata fields.`;
 
+function decisionRequest(
+    rules: string,
+    payload: unknown,
+    stage: TopicGenerativeDecisionStage,
+) {
+    const task = topicPartitionTask(payload);
+    return {
+        task,
+        rules: `${rules}\n${groupingRules}\n${stage === "output-contract" ? nativeOutputRules : "Return ONLY assignments in the supplied schema, one offered choice per assignmentSlot."}`,
+        schema:
+            stage === "output-contract"
+                ? topicChoiceSchema(task.questions)
+                : legacySchema(task.questions),
+    };
+}
+
+const authoringRules = `Author the decided partition in the original concepts/deferred schema. Do not change membership or deferral to improve wording.
+Each decided group must have a source-grounded definition explaining its complete union. Keep required deferral reasons and evidence provenance.
+An unchanged singleton role-prior group may be omitted so the original host retains it exactly. If the decided partition is unsupported, do not fabricate supporting prose; the host will use the original resolution path.`;
+
 export async function generativeTopicDecision(
     rules: string,
     payload: unknown,
@@ -249,7 +269,8 @@ export async function generativeTopicDecision(
     observe?: (receipt: TopicGenerativeDecisionReceipt) => void,
 ): Promise<unknown> {
     context.signal.throwIfAborted();
-    const task = topicPartitionTask(payload);
+    const request = decisionRequest(rules, payload, stage);
+    const { task } = request;
     const inputFingerprint = viewHash([rules, payload, "topic-partition-v1"]);
     let operation: TopicGenerativeDecisionReceipt["operation"] = "decision";
     let lastResponse: unknown;
@@ -269,11 +290,9 @@ export async function generativeTopicDecision(
         });
     try {
         const response = await complete(
-            `${rules}\n${groupingRules}\n${stage === "output-contract" ? nativeOutputRules : "Return ONLY assignments in the supplied schema, one offered choice per assignmentSlot."}`,
+            request.rules,
             task.payload,
-            stage === "output-contract"
-                ? topicChoiceSchema(task.questions)
-                : legacySchema(task.questions),
+            request.schema,
             { ...context, kind: "adjudication" },
         );
         lastResponse = response;
@@ -293,7 +312,7 @@ export async function generativeTopicDecision(
         operation = "authoring";
         context.signal.throwIfAborted();
         const authored = await complete(
-            `${rules}\nAuthor the decided partition in the original concepts/deferred schema. Do not change membership or deferral to improve wording.\nEach decided group must have a source-grounded definition explaining its complete union. Keep required deferral reasons and evidence provenance.\nAn unchanged singleton role-prior group may be omitted so the original host retains it exactly. If the decided partition is unsupported, do not fabricate supporting prose; the host will use the original resolution path.`,
+            `${rules}\n${authoringRules}`,
             { ...topicDecisionRecord(payload), decidedPartition: plan },
             schema,
             { ...context, kind: "metadata" },
@@ -329,6 +348,7 @@ export function withGenerativeTopicDecisions(
     complete: TopicCurationCompletion,
     stage: TopicGenerativeDecisionStage,
     observe?: (receipt: TopicGenerativeDecisionReceipt) => void,
+    inspect = complete.inspectRequest,
 ): TopicCurationCompletion {
     const adapted: TopicCurationCompletion = (
         rules,
@@ -347,7 +367,27 @@ export function withGenerativeTopicDecisions(
                   observe,
               )
             : complete(rules, payload, schema, context);
-    if (complete.inspectRequest)
-        adapted.inspectRequest = complete.inspectRequest;
+    if (inspect)
+        adapted.inspectRequest = (rules, payload, schema) => {
+            const request = decisionRequest(rules, payload, stage);
+            // Bound any partition before its memberships have been decided.
+            const authoring = {
+                ...topicDecisionRecord(payload),
+                decidedPartition: {
+                    groups: request.task.nodes.map(({ id }) => [id]),
+                    deferred: request.task.nodes.map(({ id }) => id),
+                },
+            };
+            const requests = [
+                inspect(rules, payload, schema),
+                inspect(request.rules, request.task.payload, request.schema),
+                inspect(`${rules}\n${authoringRules}`, authoring, schema),
+            ];
+            return requests.reduce((largest, current) =>
+                current.estimatedInputTokens > largest.estimatedInputTokens
+                    ? current
+                    : largest,
+            );
+        };
     return adapted;
 }

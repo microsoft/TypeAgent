@@ -81,6 +81,10 @@ test("JavaScript callers reject obsolete positional arguments before model or en
         { kind: "generative", settings: { compactIds: false } },
         {
             kind: "generative",
+            settings: { generativeDecisionStage: "original" },
+        },
+        {
+            kind: "generative",
             settings: { generativeDecisionStage: "decomposed" },
         },
         {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    openai,
     RequestAdmissionError,
     type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
@@ -13,6 +14,7 @@ import {
 import {
     generativeTopicDecision,
     topicPartitionTask,
+    withGenerativeTopicDecisions,
     type TopicGenerativeDecisionReceipt,
 } from "../src/topicGenerativeDecision.js";
 import {
@@ -25,6 +27,7 @@ import {
 } from "../src/topicCurationSettings.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { initialTopicNodes } from "../src/topicSnapshot.js";
+import { createConfiguredTopicGenerator } from "../src/topicGeneration.js";
 import type { TopicSnapshot, TopicCurationPacket } from "../src/topicTypes.js";
 
 const questions: TopicChoiceQuestions = {
@@ -421,7 +424,7 @@ function merged(input: unknown) {
     };
 }
 
-test.each([undefined, "decomposed", "output-contract"] as const)(
+test.each([undefined, "original", "decomposed", "output-contract"] as const)(
     "frozen integration preserves preparation, compact identities and host installation (%s)",
     async (stage) => {
         const value = snapshot();
@@ -484,21 +487,147 @@ test.each([undefined, "decomposed", "output-contract"] as const)(
         ).toBe(true);
         expect(
             calls.filter((call) => call.kind === "adjudication").length,
-        ).toBe(stage ? 1 : 0);
+        ).toBe(stage === "original" ? 0 : 1);
         expect(
             receipts.filter((receipt) => receipt.operation === "decision")
                 .length,
-        ).toBe(stage ? 1 : 0);
+        ).toBe(stage === "original" ? 0 : 1);
         expect(packets).toHaveLength(1);
     },
 );
 
+test("configured generative topics use restricted decisions by default without native inference", async () => {
+    const value = snapshot();
+    const schemas: Array<string | undefined> = [];
+    const generator = createConfiguredTopicGenerator({
+        mode: { kind: "generative" },
+        model: {
+            completionSettings: {
+                response_format: { type: "json_object" },
+            },
+            complete: async (messages, _usage, schema) => {
+                if (typeof messages === "string")
+                    throw new Error("Expected structured messages");
+                if (Array.isArray(schema))
+                    throw new Error("Expected a structured-output schema");
+                const input: unknown = JSON.parse(String(messages[1].content));
+                schemas.push(schema?.name);
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        schema?.name === "topic_decision_answers"
+                            ? nativeAssignments(input)
+                            : merged(input),
+                    ),
+                };
+            },
+        },
+    });
+    const result = await generator(
+        {
+            corpusId: value.corpusId,
+            actor: "offline",
+            definition: {
+                viewId: "topics",
+                kind: "wiki",
+                selector: { kind: "sources", sources: [] },
+            },
+            expectedVersion: 0,
+            bounds: {},
+            inputs: [],
+            influenceSources: value.influenceSources,
+            pipeline: "topics-v1",
+            model: "offline",
+            fingerprint: value.inputFingerprint,
+            topicInput: { occurrences: value.occurrences },
+        },
+        new AbortController().signal,
+    );
+    expect(schemas).toEqual([
+        "memory_topic_curation",
+        "topic_decision_answers",
+        "memory_topic_curation",
+    ]);
+    expect(result.recipe).toContain(":generative-partition-v1:output-contract");
+    expect(result.curation?.concepts[0].memberIds).toHaveLength(4);
+});
+
+test("packing inspects the decision schema, original fallback and bounded authoring payload", () => {
+    const model = openai.createChatModel(
+        {
+            provider: "azure",
+            modelType: openai.ModelType.Chat,
+            apiKey: "synthetic-key",
+            endpoint: "https://synthetic.invalid/inspection",
+            supportsResponseFormat: true,
+            requestConstraints: {
+                inputTokens: 32000,
+                contextTokens: 64000,
+                outputTokens: 4096,
+            },
+        },
+        { response_format: { type: "json_object" } },
+    );
+    const inspect = import.meta.jest.fn(
+        (rules: string, input: unknown, schema?: StructuredOutputJsonSchema) =>
+            model.inspectRequest!(
+                [
+                    { role: "system", content: rules },
+                    { role: "user", content: JSON.stringify(input) },
+                ],
+                schema,
+            ),
+    );
+    const complete: TopicCurationCompletion = async () => {
+        throw new Error("Inspection must not call a model");
+    };
+    const adapted = withGenerativeTopicDecisions(
+        complete,
+        "output-contract",
+        undefined,
+        inspect,
+    );
+    const request = adapted.inspectRequest!(
+        originalRules,
+        payload,
+        originalSchema,
+    );
+    expect(inspect.mock.calls.map((call) => call[2]?.name)).toEqual([
+        "original-curation",
+        "topic_decision_answers",
+        "original-curation",
+    ]);
+    expect(inspect.mock.calls[2][1]).toMatchObject({
+        decidedPartition: {
+            groups: [["new-0"], ["new-1"], ["prior-0"]],
+            deferred: ["new-0", "new-1", "prior-0"],
+        },
+    });
+    expect(request.estimatedInputTokens).toBe(
+        Math.max(
+            ...inspect.mock.results.map(
+                (result) => result.value.estimatedInputTokens,
+            ),
+        ),
+    );
+});
 test("stage recipe identities are distinct and invalid native stages are rejected", () => {
     const baseline = topicCurationPolicy(true, {
         compactIds: true,
         priorDeltas: true,
     });
     expect(topicCurationPolicy(true)).toBe(baseline);
+    expect(topicCurationPolicy(true)).toBe(
+        topicCurationPolicy(true, {
+            generativeDecisionStage: "output-contract",
+        }),
+    );
+    expect(
+        topicCurationPolicy(true, { generativeDecisionStage: "original" }),
+    ).toMatch(/^curated-lazy-v10:[0-9a-f]{16}$/);
+    expect(
+        topicCurationPolicy(true, { generativeDecisionStage: "original" }),
+    ).not.toBe(baseline);
     expect(
         topicCurationPolicy(true, { generativeDecisionStage: "decomposed" }),
     ).not.toBe(baseline);

@@ -448,7 +448,8 @@ function prepareTopicPacket(
         payload,
         schema,
         batch.map((node) => [node.id, node.memberIds ?? [node.id]]),
-        ...(options.generativeDecisionStage
+        ...(options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
             ? ["generative-partition-v1", options.generativeDecisionStage]
             : []),
     ]);
@@ -552,12 +553,19 @@ function createTopicCuration(
             "Topic packet replay requires lazy curation with ordered installation",
         );
     options = { ...options };
-    if (options.generativeDecisionStage)
+    if (
+        options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
+    ) {
         complete = withGenerativeTopicDecisions(
             complete,
             options.generativeDecisionStage,
             options.onGenerativeDecision,
+            options.inspectRequest ?? complete.inspectRequest,
         );
+        if (complete.inspectRequest)
+            options.inspectRequest = complete.inspectRequest;
+    }
     if (options.compactIds) {
         complete = compactTopicCompletion(complete, options.inspectRequest);
         if (complete.inspectRequest)
