@@ -35,7 +35,7 @@ export interface ViewEditorialContext {
 type ProtectedEdit = ViewEditOperation;
 type EditorialInput = ViewBuildSnapshot;
 
-const consequenceKinds = [
+export const consequenceKinds = [
     "quantity",
     "statistic-cohort",
     "command-lease",

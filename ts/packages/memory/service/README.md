@@ -10,6 +10,31 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Bounded Wiki decisions
+
+The configured synthesis adapter uses `GPT_6_LUNA` with strict **choice-only**
+answers for Wiki utility, admission/canonical selection, contribution coverage,
+editorial/consolidation verification, completeness and consolidation relation.
+Answers contain only `{ type: "choice", choice: "<offered value>" }` under their
+question IDs; probabilities, confidence, explanations and extra fields are rejected.
+
+Existing evidence preparation still produces purpose, exact prose witnesses and
+critical distinctions. Those fields pass the original host validators before the
+restricted decisions run. Utility receives original evidence without page context.
+Admission/coverage and consolidation must agree with the validated preparation;
+disagreement or uncertainty fails the operation explicitly, without manufacturing
+evidence, accepting the prepared verdict as fallback or resampling the decision.
+Editorial categories retain their existing safe/failures consistency checks.
+Completeness can change the article's status but never its prose or citations.
+
+This behavior is enabled by default for the configured Wiki adapter. It requires a
+configured Azure/OpenAI Luna endpoint; there is no fallback to another model.
+Prose generation, evidence-contract repair, project summaries, non-Wiki Views and
+topic curation retain their existing models and contracts. Additional decision
+calls use the existing scheduler, cancellation and provider request budgets.
+The adapter identity changes to invalidate cached assessments from the old policy.
+Rollback requires reverting this policy change, not changing the global prose model.
+
 ## Retained ingestion jobs
 
 Corpus status, paginated job lists, individual job reads, restart recovery and
