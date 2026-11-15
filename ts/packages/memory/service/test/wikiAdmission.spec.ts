@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import {
     nominateWikiPages,
     parseWikiAssessment,
@@ -605,7 +606,7 @@ test.each([
             const adapter = createConfiguredViewSynthesisAdapter(
                 "openai:WIKI_REPAIR",
                 4000,
-                model,
+                withWikiChoiceResponses(model),
             );
             const signal = new AbortController().signal;
             let merges = 0;
@@ -693,7 +694,7 @@ test.each(["covered", "contribute"] as const)(
         const adapter = createConfiguredViewSynthesisAdapter(
             undefined,
             4000,
-            model,
+            withWikiChoiceResponses(model),
         );
         const result = await adapter.assessWikiSubject!(
             input(),
@@ -733,7 +734,7 @@ test("configured assessment rejects a second invalid response without further re
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     await expect(
         adapter.assessWikiSubject!(
@@ -812,7 +813,7 @@ test("configured Wiki repair identifies omitted fragments and nonverbatim witnes
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     const assessment = await adapter.assessWikiSubject!(
         frozen,
@@ -1057,7 +1058,7 @@ test.each(["sparse-first-page", "sparse-overlap", "useful-ambiguity"] as const)(
             const adapter = createConfiguredViewSynthesisAdapter(
                 "openai:WIKI_UTILITY",
                 4000,
-                model,
+                withWikiChoiceResponses(model),
             );
             expect(
                 await adapter.assessWikiSubject!(
