@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8826178e5e51bc43cbe08c8077ea30082ed6b0b4a1a5fb439f749a80796df644 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b2de7573d833ba21a443dadc2495747c2616c8ed5ec05e5677117ed26f287760 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-service — AI-generated documentation
@@ -23,11 +23,14 @@ Transport-independent memory corpus service
 - default → [./dist/index.js](./dist/index.js)
 - `./rpc` → [./dist/rpcFacade.js](./dist/rpcFacade.js)
 - `./benchmark` → [./dist/benchmarkBridge.js](./dist/benchmarkBridge.js)
+- `./performance-experiments` → [./dist/memoryPerformanceExperimentConfig.js](./dist/memoryPerformanceExperimentConfig.js)
 - `./agent-edition-validation` → [./dist/agentEditionValidation.js](./dist/agentEditionValidation.js)
 - `./procedure-markdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
 - `./procedureMarkdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
 - `./view-text` → [./dist/viewText.js](./dist/viewText.js)
+- `./view-detail` → [./dist/viewDetail.js](./dist/viewDetail.js)
 - `./view-types` → [./dist/viewTypes.js](./dist/viewTypes.js)
+- `./view-packages` → [./dist/viewPackages.js](./dist/viewPackages.js)
 
 ### Dependencies
 
@@ -52,9 +55,11 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 - [@typeagent/memory-agent](../../../packages/agents/memory/README.md)
 - [@typeagent/memory-client](../../../packages/memory/client/README.md)
 - [@typeagent/memory-mcp-server](../../../packages/memory/mcp-server/README.md)
+- [@typeagent/package-installation](../../../packages/packageInstallation/README.md)
 - [@typeagent/procedure-artifacts](../../../packages/procedureArtifacts/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
+- _…and 2 more workspace consumers._
 
 ### Files of interest
 
@@ -68,21 +73,23 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 - [./src/agentSessionStore.ts](./src/agentSessionStore.ts)
 - [./src/agentSessionTypes.ts](./src/agentSessionTypes.ts)
 - [./src/batchImport.ts](./src/batchImport.ts)
-- _…and 117 more under `./src/`._
+- _…and 124 more under `./src/`._
 
 ### Environment variables
 
-_6 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_8 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS`
 - `TYPEAGENT_BENCHMARK_MAINTENANCE_MODE`
 - `TYPEAGENT_BENCHMARK_MODEL`
+- `TYPEAGENT_EMBEDDING_PROVIDER`
 - `TYPEAGENT_MEMORY_FAST_MODEL`
 - `TYPEAGENT_MEMORY_PERF_EXPERIMENTS`
+- `TYPEAGENT_MEMORY_PREPARED_INDEXING`
 - `TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT`
 
 ---
 
-_Auto-generated against commit `d02797d2124bca889e9c5f72f136a72602875db1` on `2026-11-03T18:34:45.428Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
+_Auto-generated against commit `9d0c0c6135eb00ff717e8a30ef83acbb6dfe076c` on `2026-11-15T08:18:54.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
