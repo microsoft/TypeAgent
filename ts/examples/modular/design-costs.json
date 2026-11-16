@@ -37,5 +37,12 @@
     "round": 5,
     "phase": "plan",
     "what": "Ultra plan: all design and implementation work to date (the week since Mon 2026-11-09 21:00) has used about 6% of the weekly limit"
+  },
+  {
+    "date": "2026-11-16",
+    "round": 5,
+    "phase": "design session",
+    "what": "reviews of 9.2 (2b) and 9.d (3b, rerun), the rule MessageProcessor.items-unchanged; human attention about 15 minutes",
+    "humanHours": 0.25
   }
 ]

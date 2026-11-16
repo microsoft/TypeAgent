@@ -32,7 +32,8 @@ usage limit:
   gives a subscriber, not what this work cost.
 - By 2026-11-13, all the design and implementation work to date had used
   about 6% of the week: roughly $100 at list prices, on that estimate.
-- Human time on 2026-11-13: about 3 hours.
+- Human time on 2026-11-13: about 3 hours; on 2026-11-16, about 15
+  minutes of attention (reviews of 9.2 and 9.d, one rule decided).
 
 Two thresholds frame the numbers:
 - **Independent developers** ($100 to $200 a month): success means rarely
