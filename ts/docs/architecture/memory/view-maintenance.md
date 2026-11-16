@@ -213,6 +213,11 @@ invalidates the operation. Consolidation checks intended separation participants
 both when nominating and when accepting a merge. Automatic splitting remains
 disabled, and the original overview is never redirected arbitrarily to one child.
 
+Separation receipts are included in the committed inventory projection so
+nomination checks reuse the pinned snapshot without hydrating full history.
+Normal projection maintenance upgrades older versions; legacy receipt reads
+remain bound to the operation's committed head.
+
 ## Maintained Topics and source synopses
 
 Topics are maintained navigation snapshots built from eligible original indexed

@@ -1206,9 +1206,17 @@ export class TypedViewStore {
     public async listViewSeparations(
         corpusId: string,
     ): Promise<ViewSeparationReceipt[]> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.listViewSeparations(corpusId),
+            );
         return structuredClone(
             Object.values(
-                (await this.readSnapshot(corpusId)).state.separations ?? {},
+                this.inventory(corpusId)?.separations ??
+                    (await this.readStateField<
+                        Record<string, ViewSeparationReceipt>
+                    >(corpusId, ["separations"])) ??
+                    {},
             ),
         );
     }
