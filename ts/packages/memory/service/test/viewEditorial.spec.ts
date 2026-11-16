@@ -3,6 +3,7 @@
 
 import {
     assertEditorialAssessment,
+    assertEditorialDiagnostics,
     captureEditorialContext,
     editorialProtection,
     isEditorialUnlockSuccessor,
@@ -438,6 +439,114 @@ test("consequential updates require focused actual-output checks; no per-fragmen
     expect(
         assertEditorialAssessment({ safe: true, failures: [] }),
     ).toBeUndefined();
+});
+
+test("first informational builds and unchanged outputs still require factual checking", () => {
+    const current = version();
+    const editorial = captureEditorialContext(current);
+    if (!editorial) throw new Error("Fixture requires an informational base");
+    for (const pipeline of [
+        "informational-wiki-v1",
+        "informational-project-summary-v1",
+    ] as const) {
+        const input: ViewBuildSnapshot = {
+            corpusId: "corpus",
+            actor: "test",
+            expectedVersion: 0,
+            definition: current.definition,
+            inputs: [],
+            bounds: {},
+            pipeline,
+            model: "test",
+            fingerprint: "test",
+        };
+        expect(
+            requiresEditorialCheck(input, output("Unsupported assertion")),
+        ).toBe(true);
+        expect(
+            requiresEditorialCheck(
+                { ...input, editorial },
+                { ...output("unused"), content: current.generation!.content },
+            ),
+        ).toBe(true);
+    }
+});
+
+test("editorial diagnostics bind the exact output location and original evidence", () => {
+    const current = version();
+    const candidate = output("The median is 90 ms.");
+    const input: ViewBuildSnapshot = {
+        corpusId: "corpus",
+        actor: "test",
+        expectedVersion: 0,
+        definition: current.definition,
+        bounds: {},
+        pipeline: "informational-wiki-v1",
+        model: "test",
+        fingerprint: "test",
+        inputs: [
+            {
+                sourceId: "worksheet",
+                revisionId: "r1",
+                title: "Worksheet",
+                content: "38 ms median",
+                contentHash: "source",
+                passages: current.content.citations,
+            },
+        ],
+    };
+    const assessment = parseEditorialAssessment({
+        safe: false,
+        failures: ["quantity"],
+        diagnostics: [
+            {
+                kind: "quantity",
+                location: "/content/sections/0/body",
+                quote: "90 ms",
+                reason: "The claimed median differs from the original.",
+                evidence: [{ fragmentId: "f0", quote: "38 ms median" }],
+                correction: "Use the source's 38 ms median.",
+            },
+        ],
+    });
+    expect(() =>
+        assertEditorialDiagnostics(assessment, input, candidate, true),
+    ).not.toThrow();
+    expect(() => assertEditorialAssessment(assessment)).toThrow(
+        '/content/sections/0/body ("90 ms")',
+    );
+    for (const patch of [
+        { location: "/content/sections/1/body" },
+        { location: "/content/__proto__" },
+        { quote: "fabricated output witness" },
+        { evidence: [{ fragmentId: "f1", quote: "38 ms median" }] },
+        {
+            evidence: [
+                { fragmentId: "f0", quote: "fabricated source witness" },
+            ],
+        },
+        { evidence: [] },
+    ]) {
+        const changed = structuredClone(assessment);
+        Object.assign(changed.diagnostics![0], patch);
+        expect(() =>
+            assertEditorialDiagnostics(changed, input, candidate, true),
+        ).toThrow("invalid-assessment");
+    }
+    expect(() =>
+        assertEditorialDiagnostics(
+            { safe: true, failures: [] },
+            input,
+            candidate,
+            true,
+        ),
+    ).toThrow("invalid-assessment");
+    expect(() =>
+        parseEditorialAssessment({ ...assessment, diagnostics: [] }),
+    ).toThrow("invalid-assessment");
+    expect(() =>
+        parseEditorialAssessment({ ...assessment, failures: ["scope-state"] }),
+    ).toThrow("invalid-assessment");
 });
 
 test("related navigation follows current original source revisions without establishing equivalence", () => {

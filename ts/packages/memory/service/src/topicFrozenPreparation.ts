@@ -11,6 +11,7 @@ import type {
 import type { TopicCuration, TopicNode, TopicSnapshot } from "./topicTypes.js";
 import type { ViewCitation } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
+import { nominateDeferredTopics } from "./topicLookup.js";
 
 export interface OrderedTopicPacket {
     start: number;
@@ -119,6 +120,12 @@ export async function reconcileFrozenTopics(
         signal,
     );
     signal.throwIfAborted();
+    const reconsidered = nominateDeferredTopics(
+        snapshot,
+        current,
+        batches.flat(),
+    );
+    const reconsideredIds = new Set(reconsidered.map((node) => node.id));
     const raw = new Map(snapshot.nodes.map((node) => [node.id, node]));
     const candidates: TopicCurationCandidate[] = prepared.flatMap((result) => [
         ...result.concepts.map((concept) => ({
@@ -132,6 +139,7 @@ export async function reconcileFrozenTopics(
             return node;
         }),
     ]);
+    candidates.push(...reconsidered);
     recordSearchTiming("topic.curation.frozen.frontier", 0, {
         rawNodes: batches.reduce((sum, batch) => sum + batch.length, 0),
         candidates: candidates.length,
@@ -153,7 +161,12 @@ export async function reconcileFrozenTopics(
                 signal,
                 true,
                 undefined,
-                current,
+                {
+                    ...current,
+                    deferred: current.deferred.filter(
+                        (entry) => !reconsideredIds.has(entry.nodeId),
+                    ),
+                },
                 { ...inner, candidates },
             ),
     );
@@ -164,7 +177,8 @@ export async function reconcileFrozenTopics(
     return {
         concepts: reconciled.concepts,
         deferred: reconciled.deferred.filter(
-            ({ nodeId }) => !retainedDeferrals.has(nodeId),
+            ({ nodeId }) =>
+                !retainedDeferrals.has(nodeId) || reconsideredIds.has(nodeId),
         ),
     };
 }

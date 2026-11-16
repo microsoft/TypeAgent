@@ -69,11 +69,12 @@ export interface WikiFamilyMaintenanceRequest {
     corpusId: string;
     expectedHead: string | null;
     family: "wiki" | "projects";
-    operation: "update" | "rebuild" | "pause" | "resume";
+    operation: "update" | "rebuild" | "review" | "pause" | "resume";
 }
 export interface TopicFamilyMaintenanceRequest
-    extends Omit<WikiFamilyMaintenanceRequest, "family"> {
+    extends Omit<WikiFamilyMaintenanceRequest, "family" | "operation"> {
     family: "topics";
+    operation: "update" | "rebuild" | "pause" | "resume";
 }
 export type ViewMaintenanceRequest =
     | ExplicitViewMaintenanceRequest

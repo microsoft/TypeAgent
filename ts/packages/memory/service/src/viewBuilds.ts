@@ -21,6 +21,8 @@ import {
     mergeEditorialView,
     requiresEditorialCheck,
     assertEditorialAssessment,
+    assertEditorialDiagnostics,
+    parseEditorialAssessment,
     EditorialRejection,
 } from "./viewEditorial.js";
 import {
@@ -134,6 +136,11 @@ export interface ViewBuildOwner extends TopicBuildOwner {
         signal: AbortSignal,
     ): Promise<boolean>;
     consolidateWiki?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<void>;
+    reviewInformational?(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         signal: AbortSignal,
@@ -426,6 +433,11 @@ export class ViewBuildRunner {
     ): Promise<
         Pick<ViewBuildTargetResult, "inventory" | "inventoryAudit"> | undefined
     > {
+        if (
+            informationalPipeline(result.snapshot.pipeline) ||
+            result.snapshot.pipeline === "schema-defined-v1"
+        )
+            return undefined;
         if (!this.adapter.inventory && !this.adapter.checkInventory)
             return undefined;
         if (!this.adapter.inventory || !this.adapter.checkInventory)
@@ -514,6 +526,10 @@ export class ViewBuildRunner {
                 result.snapshot.pipeline === "topics-v1",
                 signal,
             );
+            if (result.snapshot.semanticReviewOnly) {
+                await this.reviewInformationalTarget(job, result, signal);
+                return true;
+            }
             if (result.snapshot.pipeline === "topics-v1") {
                 if (!this.owner.materializeTopics)
                     throw new Error(
@@ -619,11 +635,7 @@ export class ViewBuildRunner {
                 ))
             )
                 return true;
-            const evidence =
-                informational ||
-                result.snapshot.pipeline === "schema-defined-v1"
-                    ? undefined
-                    : await this.prepareInventory(job, result, signal);
+            const evidence = await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
@@ -692,7 +704,7 @@ export class ViewBuildRunner {
                 const verified = await timeSearchStage(
                     "view.editorial.verify",
                     () =>
-                        this.verifyOrRepairProjectSummary(
+                        this.verifyOrRepairEditorial(
                             result.snapshot,
                             candidate,
                             output,
@@ -734,9 +746,7 @@ export class ViewBuildRunner {
                     proof,
                 ),
             );
-            await timeSearchStage("wiki.consolidation", () =>
-                this.consolidateWikiTarget(job, result, conflicts, signal),
-            );
+            await this.reviewAcceptedTarget(job, result, conflicts, signal);
         } catch (error) {
             const state = failedTargetState(
                 error,
@@ -752,6 +762,36 @@ export class ViewBuildRunner {
             jobSignal.removeEventListener("abort", cancel);
         }
         return true;
+    }
+
+    private async reviewInformationalTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!this.owner.reviewInformational)
+            throw new Error("Semantic review is unavailable");
+        await this.owner.reviewInformational(job, result, signal);
+    }
+
+    private async reviewAcceptedTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        conflicts: string[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (
+            !conflicts.length &&
+            informationalPipeline(result.snapshot.pipeline) &&
+            this.owner.reviewInformational
+        )
+            await timeSearchStage("view.semantic-review", () =>
+                this.reviewInformationalTarget(job, result, signal),
+            );
+        else
+            await timeSearchStage("wiki.consolidation", () =>
+                this.consolidateWikiTarget(job, result, conflicts, signal),
+            );
     }
 
     private async extensionTarget(
@@ -964,17 +1004,19 @@ export class ViewBuildRunner {
         if (!forceCheck && !requiresEditorialCheck(input, output)) return;
         if (!this.adapter.checkEditorial)
             throw new Error(
-                "Consequential editorial update requires an actual-output checker",
+                "Informational build requires an actual-output factual checker",
             );
-        assertEditorialAssessment(
+        const assessment = parseEditorialAssessment(
             await abortable(
                 this.adapter.checkEditorial(input, output, signal),
                 signal,
             ),
         );
+        assertEditorialDiagnostics(assessment, input, output);
+        assertEditorialAssessment(assessment);
     }
 
-    private async verifyOrRepairProjectSummary(
+    private async verifyOrRepairEditorial(
         input: ViewBuildSnapshot,
         candidate: ViewSynthesisOutput,
         output: ViewSynthesisOutput,
@@ -992,27 +1034,34 @@ export class ViewBuildRunner {
             if (
                 !(error instanceof EditorialRejection) ||
                 error.code !== "critical-distinction" ||
-                input.pipeline !== "informational-project-summary-v1" ||
-                !this.adapter.repairProjectSummary
+                !informationalPipeline(input.pipeline)
             )
                 throw error;
-            assessment = { safe: false, failures: error.failures };
+            assessment = {
+                safe: false,
+                failures: error.failures,
+                ...(error.diagnostics
+                    ? { diagnostics: error.diagnostics }
+                    : {}),
+            };
         }
-        console.warn("Project summary requires evidence-contract repair");
+        const repair =
+            this.adapter.repairInformational ??
+            (input.pipeline === "informational-project-summary-v1"
+                ? this.adapter.repairProjectSummary
+                : undefined);
+        if (!repair) assertEditorialAssessment(assessment);
+        if (!repair) throw new Error("Informational repair is unavailable");
+        console.warn("Informational article requires evidence-contract repair");
         const repaired = await abortable(
-            this.adapter.repairProjectSummary(
-                input,
-                output,
-                assessment,
-                signal,
-            ),
+            repair.call(this.adapter, input, output, assessment, signal),
             signal,
         );
         validateConstructedGuide(input, repaired);
         const merged = mergeEditorialView(current, repaired, input.inputs);
         if (merged.conflicts.length)
             throw new Error(
-                "Project summary repair introduced protected-edit conflicts",
+                "Informational repair introduced protected-edit conflicts",
             );
         validateConstructedGuide(input, merged.output);
         await this.verifyEditorialUpdate(input, merged.output, signal, true);

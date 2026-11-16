@@ -22,6 +22,7 @@ import type {
     ViewBuildSnapshot,
     ViewSynthesisOutput,
     ViewDefinitionInput,
+    ViewCitation,
 } from "./viewTypes.js";
 
 export function informationalProject(content: {
@@ -92,8 +93,24 @@ export function projectSummarySchema(
         ...Object.fromEntries(
             projectBriefRoles.map((role) => [role, { type: "string" }]),
         ),
-        limits: { type: "string" },
-        citationIds: { type: "array", items: { type: "string", enum: ids } },
+        limits: { anyOf: [{ type: "string" }, { type: "null" }] },
+        citationIds: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                article: {
+                    type: "array",
+                    items: { type: "string", enum: ids },
+                },
+                ...Object.fromEntries(
+                    projectBriefRoles.map((role) => [
+                        role,
+                        { type: "array", items: { type: "string", enum: ids } },
+                    ]),
+                ),
+            },
+            required: ["article", ...projectBriefRoles],
+        },
         projectState: {
             type: "string",
             enum: ["unknown", "active", "blocked", "complete"],
@@ -227,13 +244,13 @@ export function hydrateProjectSummary(
         "summary",
         "completeness",
         ...projectBriefRoles,
-        "limits",
         "projectState",
         "incidentState",
         "capacityState",
     ];
     const allowedKeys = [
         ...requiredStringKeys,
+        "limits",
         "citationIds",
         "assignments",
         "milestoneItems",
@@ -256,13 +273,18 @@ export function hydrateProjectSummary(
             raw.completeness !== "sufficient")
     )
         throw new Error("Invalid informational project-summary fields");
+    const citationBindings = Array.isArray(raw.citationIds)
+        ? undefined
+        : evidenceRecord(raw.citationIds);
     const base = hydrateInformational(input, {
         title: raw.title,
         summary: raw.summary,
         status: raw.completeness,
         prose: raw.goalsScope,
         limits: raw.limits,
-        citationIds: raw.citationIds,
+        citationIds: citationBindings
+            ? citationBindings.article
+            : raw.citationIds,
     });
     const owners = parseProjectBriefDetails({
         kind: "owners",
@@ -322,18 +344,75 @@ export function hydrateProjectSummary(
         })),
         citations: base.content.citations,
     };
+    const sectionCitations = bindProjectSectionCitations(
+        input,
+        citationBindings,
+        base.content.citations,
+    );
     return {
         content,
         outcome: "projectSummary",
         missingEvidence: base.missingEvidence,
         relationships: content.sections.flatMap((section, position) =>
-            base.relationships.map((edge) => ({
-                ...edge,
-                id: `section:${position}:${edge.id}`,
-                from: { ...edge.from, sectionId: section.id },
-            })),
+            base.relationships.flatMap((edge) => {
+                const selected = sectionCitations
+                    ? sectionCitations.get(section.role)
+                    : base.content.citations;
+                if (!selected)
+                    throw new Error("Missing project section support binding");
+                const citations = edge.citations.filter((citation) =>
+                    selected.includes(citation),
+                );
+                return citations.length
+                    ? [
+                          {
+                              ...edge,
+                              id: `section:${position}:${edge.id}`,
+                              from: { ...edge.from, sectionId: section.id },
+                              citations,
+                          },
+                      ]
+                    : [];
+            }),
         ),
     };
+}
+
+function bindProjectSectionCitations(
+    input: ViewBuildSnapshot,
+    value: unknown,
+    selected: ViewCitation[],
+): Map<string, ViewCitation[]> | undefined {
+    // Older injected adapters predate per-section support selection.
+    if (value === undefined) return undefined;
+    const bindings = evidenceRecord(value);
+    if (
+        Object.keys(bindings).length !== projectBriefRoles.length + 1 ||
+        Object.keys(bindings).some(
+            (role) =>
+                role !== "article" &&
+                !projectBriefRoles.some((known) => known === role),
+        )
+    )
+        throw new Error(
+            "Project support requires exactly the supplied section roles",
+        );
+    const fragments = input.inputs.flatMap((source) => source.passages ?? []);
+    return new Map(
+        projectBriefRoles.map((role) => [
+            role,
+            evidenceArray(bindings[role], fragments.length).map((id) => {
+                if (typeof id !== "string" || !/^f(0|[1-9]\d*)$/.test(id))
+                    throw new Error("Unknown project section fragment ID");
+                const fragment = fragments[Number(id.slice(1))];
+                if (!fragment || !selected.includes(fragment))
+                    throw new Error(
+                        "Project section fragment is not selected in citationIds",
+                    );
+                return fragment;
+            }),
+        ]),
+    );
 }
 
 export function validateInformationalProjectContent(

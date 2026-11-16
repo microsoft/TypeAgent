@@ -340,6 +340,88 @@ const score = (f) =>
         f.mapping,
     );
 
+test("reviewed task metrics join the existing scorecard and critical gate without inventing targets", () => {
+    const f = fixture();
+    f.gold.cases[0].tasks = [
+        {
+            id: "admit",
+            metric: "topicAdmission",
+            subject: "ownership",
+            expected: "admitted",
+            critical: true,
+            requirement: "Useful scoped topic",
+            witnesses: f.gold.cases[0].expectations[0].witnesses,
+        },
+    ];
+    f.annotations.records[0].tasks = [
+        {
+            id: "admit",
+            correct: false,
+            observed: "deferred",
+            rationale: "Reviewed useful evidence was deferred",
+            evidence: [{ artifact: "rendered", quote }],
+        },
+    ];
+    rebind(f);
+    const summary = score(f).arms.baseline;
+    assert.equal(summary.metrics.topicAdmission.value, 0);
+    assert.equal(summary.metrics.sourceForgetting.denominator, null);
+    assert.equal(summary.metrics.selectedFact.value, 1);
+    assert.equal(summary.metrics.preservedFact.value, 1);
+    assert.equal(summary.criticalErrors, 1);
+    assert.equal(summary.gate.status, "failed");
+    f.annotations.records[0].tasks = [];
+    assert.throws(() => score(f), /Missing\/unknown task annotation/);
+});
+
+test("failed requests with assigned tasks remain in the campaign denominator without output quotes", () => {
+    const f = fixture();
+    f.gold.cases[0].tasks = [
+        {
+            id: "admit",
+            metric: "topicAdmission",
+            subject: "ownership",
+            expected: "admitted",
+            critical: false,
+            requirement: "Useful scoped topic",
+            witnesses: f.gold.cases[0].expectations[0].witnesses,
+        },
+    ];
+    const row = f.outputs.records[0];
+    Object.assign(row, {
+        status: "failed",
+        saved: null,
+        rendered: null,
+        citationResolutions: [],
+    });
+    const annotation = f.annotations.records[0];
+    annotation.claims = [];
+    annotation.savedConsistent = false;
+    annotation.expectations.forEach((label) =>
+        Object.assign(label, {
+            preserved: false,
+            correct: false,
+            savedQuote: null,
+            outputQuote: null,
+        }),
+    );
+    annotation.tasks = [
+        {
+            id: "admit",
+            correct: null,
+            observed: "uncertain",
+            rationale: "Request retained; provider failed before output",
+            evidence: [],
+        },
+    ];
+    rebind(f);
+    const summary = score(f).arms.baseline;
+    assert.equal(summary.attempts, 1);
+    assert.equal(summary.failures.value, 1);
+    assert.equal(summary.metrics.topicAdmission.denominator, 1);
+    assert.equal(summary.metrics.topicAdmission.numerator, 0);
+});
+
 test("versioned variable inventory, exact artifacts and independently reviewed scorecard", () => {
     const f = fixture();
     assert.equal(validateConstructionPacket(f.packet), identity(f.packet));
@@ -808,6 +890,42 @@ test("external thresholds are explicit preregistration, not frozen pilot default
             },
         ],
     };
+    const calibration = {
+        status: "approved-independent-human-review",
+        rubricHash: h,
+        reviewers: ["calibrator-1", "calibrator-2"],
+        minimumAgreement: 1,
+        reviewedAt: "2026-11-07T08:00:00Z",
+        judgments: [
+            {
+                id: "calibration-regression-fixture",
+                artifactHash: identity(f.outputs.records[0].saved),
+                votes: [
+                    { reviewer: "calibrator-1", verdict: "supported" },
+                    { reviewer: "calibrator-2", verdict: "supported" },
+                ],
+                resolution: "Synthetic regression votes agree",
+            },
+        ],
+    };
+    f.campaign.reviewProtocol = {
+        schemaVersion: 1,
+        status: "approved-independent-human-review",
+        author: "rubric-author",
+        reviewer: "independent-owner",
+        reviewedAt: "2026-11-07T09:00:00Z",
+        rubricHash: h,
+        calibration,
+        candidateHashes: f.run.arms.map(identity),
+    };
+    f.campaign.splitCustody = {
+        inventory: f.campaign.inventory,
+        assignments: f.campaign.inventory.map(({ id }) => ({
+            id,
+            phase: "confirmation",
+        })),
+    };
+    f.campaign.thresholds.calibrationRecordHash = identity(calibration);
     rebind(f);
     const result = score(f).arms.baseline;
     assert.equal(result.gate.status, "passed-preregistered-gates");

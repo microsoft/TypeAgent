@@ -3,6 +3,7 @@
 
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
 import { indexedLocator } from "../src/indexedFragments.js";
+import { hydrateInformational } from "../src/informationalWiki.js";
 
 // Jest 29 exposes this ESM API, but @types/jest does not declare it.
 const runtimeJest = import.meta.jest;
@@ -15,6 +16,12 @@ const jest = runtimeJest as typeof runtimeJest & {
 const actual = await import("@typeagent/aiclient");
 let instructions = "";
 let request: unknown;
+let completion:
+    | { success: true; data: string }
+    | { success: false; message: string } = {
+    success: false,
+    message: "Controlled provider failure",
+};
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     ...actual,
     openai: {
@@ -31,10 +38,7 @@ jest.unstable_mockModule("@typeagent/aiclient", () => ({
                     messages.find((message) => message.role === "user")!
                         .content,
                 );
-                return {
-                    success: false,
-                    message: "Controlled provider failure",
-                };
+                return completion;
             },
         }),
     },
@@ -42,6 +46,132 @@ jest.unstable_mockModule("@typeagent/aiclient", () => ({
 const { createConfiguredViewSynthesisAdapter } = await import(
     "../src/viewSynthesis.js"
 );
+
+test("configured factual checks require exact output/source diagnostics and compact judgments", async () => {
+    const text = "The owner is unknown. No production deployment is approved.";
+    const block = {
+        sourceId: "source",
+        revisionId: "r1",
+        blockOrdinal: 0,
+        text,
+        score: 1,
+    };
+    const input: ViewBuildSnapshot = {
+        corpusId: "corpus",
+        actor: "test",
+        expectedVersion: 0,
+        bounds: {},
+        pipeline: "informational-wiki-v1",
+        model: "test",
+        fingerprint: "test",
+        definition: {
+            viewId: "article",
+            kind: "wiki",
+            selector: {
+                kind: "sources",
+                sources: [{ sourceId: "source", revisionId: "r1" }],
+            },
+            wiki: {
+                construction: "informational-wiki-v1",
+                query: "Deployment",
+                aliases: [],
+                excludedSourceIds: [],
+            },
+        },
+        inputs: [
+            {
+                sourceId: "source",
+                revisionId: "r1",
+                title: "Source",
+                content: text,
+                contentHash: "source",
+                passages: [
+                    {
+                        sourceId: "source",
+                        revisionId: "r1",
+                        locator: indexedLocator(block, 0, text.length),
+                        excerpt: text,
+                    },
+                ],
+            },
+        ],
+    };
+    const output = hydrateInformational(input, {
+        title: "Deployment",
+        summary: "Production is approved.",
+        prose: "The owner is unknown.",
+        status: "partial",
+        limits: "Owner unknown",
+        citationIds: ["f0"],
+    });
+    const assessment = {
+        safe: false,
+        failures: ["scope-state"],
+        diagnostics: [
+            {
+                kind: "scope-state",
+                location: "/content/summary",
+                quote: "Production is approved.",
+                reason: "Approval contradicts the supplied source.",
+                evidence: [
+                    {
+                        fragmentId: "f0",
+                        quote: text,
+                    },
+                ],
+                correction: "Report production as unapproved.",
+            },
+        ],
+    };
+    const adapter = createConfiguredViewSynthesisAdapter("test");
+    const check = () =>
+        adapter.checkEditorial!(input, output, new AbortController().signal);
+    const native = {
+        safe: assessment.safe,
+        failures: assessment.failures,
+        diagnostics: assessment.diagnostics.map((entry) => ({
+            kind: entry.kind,
+            location: entry.location,
+            reason: entry.reason,
+            evidenceIds: entry.evidence.map((witness) => witness.fragmentId),
+            correction: entry.correction,
+        })),
+    };
+    try {
+        completion = { success: true, data: JSON.stringify(native) };
+        expect(await check()).toEqual(assessment);
+        expect(request).toMatchObject({
+            fragments: [{ id: "f0", excerpt: text }],
+        });
+        expect(instructions).toContain("first builds as well as updates");
+        expect(instructions).toContain(
+            "historical corrected/withdrawn value is not a current",
+        );
+        expect(instructions).not.toContain("12000 tokens");
+        completion = {
+            success: true,
+            data: JSON.stringify({ safe: true, failures: [] }),
+        };
+        await expect(check()).rejects.toThrow("invalid-assessment");
+        const invented = structuredClone(native);
+        invented.diagnostics[0].evidenceIds = ["f1"];
+        completion = { success: true, data: JSON.stringify(invented) };
+        await expect(check()).rejects.toThrow("invalid-assessment");
+        completion = { success: true, data: JSON.stringify(assessment) };
+        await expect(check()).rejects.toThrow("invalid-assessment");
+        completion = {
+            success: true,
+            data: JSON.stringify({ safe: true, failures: [], diagnostics: [] }),
+        };
+        await expect(check()).resolves.toEqual({
+            safe: true,
+            failures: [],
+            diagnostics: [],
+        });
+    } finally {
+        completion = { success: false, message: "Controlled provider failure" };
+    }
+});
 
 test("project prompt preserves qualified dimensions and initiative roles; provider failure has no fallback", async () => {
     const blocks = [
@@ -137,10 +267,26 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
     );
     expect(instructions).toContain("older bounded successes");
     expect(instructions).toContain(
-        "approximately 4000 tokens in the final JSON only, excluding reasoning",
+        "output budget is 4000 tokens, not a length target",
     );
     expect(instructions).toContain(
         "Preserve required evidence even when that needs a longer answer",
+    );
+    expect(instructions).toContain(
+        "pendingOwnerReview ONLY when evidence establishes a pending owner-review process",
+    );
+    expect(instructions).toContain("explain each fact and qualification once");
+    expect(instructions).toContain(
+        "Set limits to null when no substantive evidence gap",
+    );
+    expect(instructions).toContain(
+        "Mention a current blocker and its supported consequence early in the summary",
+    );
+    expect(instructions).toContain(
+        "Topic salience and maintenance scheduling priority are not issue urgency",
+    );
+    expect(instructions).not.toContain(
+        "State missing coverage in limits; this is not exhaustive",
     );
     const rejected = {
         content: {
@@ -180,6 +326,7 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
     expect(instructions).toContain("unchanged original indexed fragments");
     expect(instructions).toContain("untrusted diagnostics");
     expect(instructions).toContain("another rejection is final");
+    expect(instructions).not.toContain("12000 tokens");
     await expect(
         adapter.repairProjectSummary!(
             { ...input, pipeline: "informational-wiki-v1" },

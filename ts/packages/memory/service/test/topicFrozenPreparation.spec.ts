@@ -89,6 +89,59 @@ const settings: TopicCurationOptions = {
     compactIds: true,
 };
 
+test.each([true, false])(
+    "later %s-matching evidence reconsiders retained deferrals without losing provenance",
+    async (matching) => {
+        const value = snapshot(3);
+        const [earlier, unrelated, later] = value.nodes;
+        earlier.label = "Service policy";
+        unrelated.label = "Garden irrigation";
+        later.label = matching ? "Service policy details" : "Orbital mechanics";
+        const raw = structuredClone(value.occurrences);
+        const reusable: TopicCuration = {
+            concepts: [],
+            deferred: [
+                {
+                    nodeId: earlier.id,
+                    reason: "Insufficient evidence in earlier window",
+                },
+                { nodeId: unrelated.id, reason: "Unrelated sparse topic" },
+            ],
+        };
+        const seen: string[] = [];
+        value.curation = await curateTopics(
+            value,
+            (node) => node.citations,
+            async (_rules, payload, _schema, call) => {
+                const packet = payload as Payload;
+                if (call?.phase === "reconciliation")
+                    seen.push(...packet.nodes.map((node) => node.label));
+                return merged(payload);
+            },
+            new AbortController().signal,
+            true,
+            undefined,
+            JSON.parse(JSON.stringify(reusable)) as TopicCuration,
+        );
+        expect(seen).not.toContain("Garden irrigation");
+        expect(
+            value.curation.deferred.some(
+                (entry) => entry.nodeId === earlier.id,
+            ),
+        ).toBe(!matching);
+        expect(
+            value.curation.deferred.some(
+                (entry) => entry.nodeId === unrelated.id,
+            ),
+        ).toBe(true);
+        expect(
+            value.curation.concepts.flatMap((concept) => concept.memberIds),
+        ).toContain(later.id);
+        expect(value.occurrences).toEqual(raw);
+        validateTopicSnapshot(value);
+    },
+);
+
 test("frozen preparation overlaps, reconciles serially and installs complete windows only", async () => {
     const value = snapshot();
     const packets: TopicCurationPacket[] = [];

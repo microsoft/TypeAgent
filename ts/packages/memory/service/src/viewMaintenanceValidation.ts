@@ -21,7 +21,11 @@ function validateWikiFamilyRequest(
     if (
         !writing ||
         !["wiki", "projects", "topics"].includes(request.family) ||
-        !["update", "rebuild", "pause", "resume"].includes(request.operation) ||
+        !(
+            request.family === "topics"
+                ? ["update", "rebuild", "pause", "resume"]
+                : ["update", "rebuild", "review", "pause", "resume"]
+        ).includes(request.operation) ||
         Object.keys(request).some(
             (key) =>
                 !["corpusId", "expectedHead", "family", "operation"].includes(

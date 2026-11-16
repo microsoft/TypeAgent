@@ -956,6 +956,7 @@ test.each([
             {
                 identity: "offline",
                 generate: async (snapshot) => output(snapshot),
+                checkEditorial: async () => ({ safe: true, failures: [] }),
                 validate: async () => {
                     throw new Error("No universal support checker");
                 },

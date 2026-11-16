@@ -89,6 +89,17 @@ export function buildSummary(
             current: !latest || latest.get(result.viewId) === job.jobId,
             ...(result.revisionId ? { revisionId: result.revisionId } : {}),
             ...(result.conflictId ? { conflictId: result.conflictId } : {}),
+            ...(result.semanticReview
+                ? {
+                      semanticReview: {
+                          state: result.semanticReview.state,
+                          reason: result.semanticReview.reason,
+                          acceptedRevisionId:
+                              result.semanticReview.acceptedRevisionId,
+                          dueAt: result.semanticReview.dueAt,
+                      },
+                  }
+                : {}),
             snapshot: {
                 pipeline: result.snapshot.pipeline,
                 definition: { kind: result.snapshot.definition.kind },
