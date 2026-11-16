@@ -839,8 +839,8 @@ export async function prepareReviewPackage({
 
 export async function main(args) {
     if (args.length === 1 && args[0] === "--help") {
-        console.log(
-            "Offline review preparation: --input <owned-live-development-root> --output <new-directory> --seed <custodian-seed> [--pilot-manifest <manifest.json>]\nExplicit roots may be absolute. No models, acquisition, holdout labels, scores or approvals. Output is exclusive; distribute reviewer/ only.",
+        process.stdout.write(
+            "Offline review preparation: --input <owned-live-development-root> --output <new-directory> --seed <custodian-seed> [--pilot-manifest <manifest.json>]\nExplicit roots may be absolute. No models, acquisition, holdout labels, scores or approvals. Output is exclusive; distribute reviewer/ only.\n",
         );
         return 0;
     }
@@ -867,7 +867,7 @@ export async function main(args) {
             seed: options["--seed"],
             pilotManifest: options["--pilot-manifest"],
         });
-        console.log(JSON.stringify(report, null, 2));
+        process.stdout.write(JSON.stringify(report, null, 2) + "\n");
         return 0;
     } catch (error) {
         console.error(error.message);
