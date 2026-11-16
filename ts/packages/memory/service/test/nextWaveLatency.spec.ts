@@ -161,6 +161,7 @@ test("Wiki and project synthesis overlap frozen inputs while installation stays 
         },
         viewSynthesisAdapter: {
             identity: "offline-frozen-families",
+            checkEditorial: async () => ({ safe: true, failures: [] }),
             assessWikiSubject: async () => ({
                 disposition: "distinct",
                 purpose: "Independent migration reference",

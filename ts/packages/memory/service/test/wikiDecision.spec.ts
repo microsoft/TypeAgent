@@ -195,6 +195,19 @@ function controlled(
         questions: Record<string, unknown>;
     }) => unknown,
     afterChoice?: () => void,
+    editorial: unknown = {
+        safe: false,
+        failures: ["scope-state"],
+        diagnostics: [
+            {
+                kind: "scope-state",
+                location: "/content/title",
+                reason: "Approval is not established by the original evidence.",
+                evidenceIds: ["f0"],
+                correction: "Preserve the unknown approval state.",
+            },
+        ],
+    },
 ) {
     const calls: Array<{
         name: string;
@@ -239,6 +252,7 @@ function controlled(
                         },
                     ],
                 };
+            else if (schema.name === "editorial_consequences") raw = editorial;
             else raw = draft;
             return { success: true, data: JSON.stringify(raw) };
         },
@@ -315,7 +329,44 @@ test("Wiki completeness can change only status, not authored prose or source evi
     });
 });
 
-test("Wiki editorial checks replace only bounded judgments and retain the category contract", async () => {
+test("repaired informational Wiki prose also receives an independent completeness verdict", async () => {
+    const { adapter, calls } = controlled(() =>
+        answer({ completeness: "partial" }),
+    );
+    const output = await adapter.repairInformational!(
+        snapshot(),
+        {
+            outcome: "knowledgePages",
+            content: {
+                kind: "wiki",
+                construction: "informational-wiki-v1",
+                index: [],
+                title: "Clock",
+                sections: [],
+                citations: [],
+            },
+            relationships: [],
+            missingEvidence: [],
+        },
+        { safe: false, failures: ["scope-state"] },
+        new AbortController().signal,
+    );
+    expect(output.content).toMatchObject({
+        status: "partial",
+        summary: draft.summary,
+        sections: [{ body: draft.prose }],
+    });
+    expect(calls.map(({ name }) => name)).toEqual([
+        "informational_wiki",
+        "wiki_choice_answers",
+    ]);
+    expect(calls[1].input.state).toMatchObject({
+        fragments: snapshot().inputs[0].passages,
+        content: { summary: draft.summary },
+    });
+});
+
+test("Wiki editorial choices independently confirm output-bound factual diagnostics", async () => {
     const { adapter, calls } = controlled(() =>
         answer({
             safety: "unsafe",
@@ -347,9 +398,119 @@ test("Wiki editorial checks replace only bounded judgments and retain the catego
             output,
             new AbortController().signal,
         ),
-    ).toEqual({ safe: false, failures: ["scope-state"] });
-    expect(calls.map((c) => c.name)).toEqual(["wiki_choice_answers"]);
-    expect(calls[0].input.state).toMatchObject({ content: output.content });
+    ).toEqual({
+        safe: false,
+        failures: ["scope-state"],
+        diagnostics: [
+            {
+                kind: "scope-state",
+                location: "/content/title",
+                quote: "Clock",
+                reason: "Approval is not established by the original evidence.",
+                evidence: [
+                    {
+                        fragmentId: "f0",
+                        quote: snapshot().inputs[0].passages![0].excerpt,
+                    },
+                ],
+                correction: "Preserve the unknown approval state.",
+            },
+        ],
+    });
+    expect(calls.map((c) => c.name)).toEqual([
+        "editorial_consequences",
+        "wiki_choice_answers",
+    ]);
+    expect(calls[1].input.state).toMatchObject({ content: output.content });
+    expect(calls[1].input.state).not.toHaveProperty("preparedAssessment");
+});
+
+test("choice-only Wiki editorial categories retain unsupported-claim diagnostics without invented witnesses", async () => {
+    const { adapter } = controlled(
+        () =>
+            answer({
+                safety: "unsafe",
+                ...Object.fromEntries(
+                    consequenceKinds.map((kind) => [
+                        kind,
+                        kind === "unsupported-claim" ? "fail" : "pass",
+                    ]),
+                ),
+            }),
+        undefined,
+        {
+            safe: false,
+            failures: ["unsupported-claim"],
+            diagnostics: [
+                {
+                    kind: "unsupported-claim",
+                    location: "/content/summary",
+                    reason: "No supplied fragment establishes automatic deployment.",
+                    evidenceIds: [],
+                    correction: "Remove the unsupported deployment assertion.",
+                },
+            ],
+        },
+    );
+    await expect(
+        adapter.checkEditorial!(
+            snapshot(),
+            {
+                outcome: "knowledgePages",
+                content: {
+                    kind: "wiki",
+                    construction: "informational-wiki-v1",
+                    index: [],
+                    title: "Clock",
+                    summary: "Clock deploys automatically.",
+                    sections: [],
+                    citations: [],
+                },
+                relationships: [],
+                missingEvidence: [],
+            },
+            new AbortController().signal,
+        ),
+    ).resolves.toMatchObject({
+        safe: false,
+        failures: ["unsupported-claim"],
+        diagnostics: [
+            {
+                quote: "Clock deploys automatically.",
+                evidence: [],
+            },
+        ],
+    });
+});
+
+test("Wiki editorial disagreement cannot accept or repair unconfirmed diagnostics", async () => {
+    const { adapter } = controlled(() =>
+        answer({
+            safety: "safe",
+            ...Object.fromEntries(
+                consequenceKinds.map((kind) => [kind, "pass"]),
+            ),
+        }),
+    );
+    await expect(
+        adapter.checkEditorial!(
+            snapshot(),
+            {
+                outcome: "knowledgePages",
+                content: {
+                    kind: "wiki",
+                    construction: "informational-wiki-v1",
+                    index: [],
+                    title: "Clock",
+                    sections: [],
+                    citations: [],
+                },
+                relationships: [],
+                missingEvidence: [],
+            },
+            new AbortController().signal,
+        ),
+    ).rejects.toThrow("editorial rejected");
 });
 
 test("unsafe-without-categories is rejected rather than silently converted to safe", async () => {

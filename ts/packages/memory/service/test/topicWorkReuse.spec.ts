@@ -216,9 +216,9 @@ test.each([false, true])(
                 (await service.queryTopics({ corpusId, pageSize: 100 }))
                     .totalNodes,
             ).toBe(54);
-            // Legacy response fixtures exercise the explicit restricted-output fallback.
-            expect(calls).toBe(reuse ? 15 : 27);
-            expect(processedNodes).toBe(reuse ? 180 : 594);
+            // Restricted-output fallback rechecks up to 24 nominated deferrals per tail window.
+            expect(calls).toBe(reuse ? 21 : 29);
+            expect(processedNodes).toBe(reuse ? 324 : 642);
             const current = await new TypedViewStore(root).getTopicState(
                 corpusId,
             );
@@ -481,9 +481,9 @@ function deferred() {
 }
 
 test.each([
-    [48, "zz-added", 3],
-    [55, "zz-added", 3],
-    [48, "aa-added", 9],
+    [48, "zz-added", 5],
+    [55, "zz-added", 5],
+    [48, "aa-added", 11],
 ] as const)(
     "packet prefix replay preserves current output and respects ordering and tail boundaries: %s %s",
     async (count, sourceId, remainingCalls) => {
@@ -891,7 +891,10 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                       ? 2
                       : 1;
             expect(calls - before).toBe(
-                change === "append" ? 3 : expectedCalls * 3,
+                expectedCalls * 3 +
+                    (change === "append" || change === "staged-correction"
+                        ? 2
+                        : 0),
             );
             const page = await service.queryTopics({ corpusId, pageSize: 100 });
             expect(page.totalNodes).toBe(
@@ -1008,10 +1011,10 @@ async function waitTopicJob(service: FileMemoryService, job: ViewBuildJob) {
 }
 
 test.each([
-    [false, "unrelated", 9],
-    [true, "unrelated", 3],
-    [true, "correction", 9],
-    [true, "new-topic", 9],
+    [false, "unrelated", 11],
+    [true, "unrelated", 5],
+    [true, "correction", 11],
+    [true, "new-topic", 11],
 ] as const)(
     "production checkpoint churn preserves only unaffected work and reaches current durable output: reuse=%s change=%s",
     async (reuse, change, expectedRemainingCalls) => {
@@ -1146,7 +1149,7 @@ test.each([
                     )
                 ).state,
             ).toBe("complete");
-            expect(calls - completedCalls).toBe(reuse ? 0 : 9);
+            expect(calls - completedCalls).toBe(reuse ? 0 : 11);
             expect(
                 (await service.queryTopics({ corpusId, pageSize: 100 })).nodes,
             ).toEqual(page.nodes);

@@ -22,6 +22,7 @@ import { validateTopicMaintenance } from "./topicClusterMaintenance.js";
 import {
     TopicEvidenceIndex,
     TopicNominationIndex,
+    nominateDeferredTopics,
     topicSourceKey,
 } from "./topicLookup.js";
 import { yieldMaintenanceBuild } from "./maintenanceConcurrency.js";
@@ -888,6 +889,13 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
         );
         result.concepts.push(...decisions.concepts);
         nominations.replace(packet.reconsidered, decisions.concepts);
+        const reassessed = new Set([
+            ...decisions.concepts.flatMap((concept) => concept.memberIds),
+            ...decisions.deferred.map((entry) => entry.nodeId),
+        ]);
+        result.deferred = result.deferred.filter(
+            (entry) => !reassessed.has(entry.nodeId),
+        );
         result.deferred.push(...decisions.deferred);
         signal.throwIfAborted();
         if (options.onPacket) {
@@ -951,8 +959,14 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                     0,
                     { fingerprint: viewHash(value) },
                 );
+            const deferred = nominateDeferredTopics(
+                snapshot,
+                result,
+                packets.flatMap((packet) => packet.batch),
+            );
             const batch: Candidate[] = [
                 ...packets.flatMap((packet) => packet.batch),
+                ...deferred,
                 ...result.concepts.map((concept) => ({
                     ...concept,
                     prior: concept,
@@ -962,6 +976,7 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                 ...new Map(
                     [
                         ...packets.flatMap((packet) => packet.supplied),
+                        ...deferred.flatMap(evidenceFor),
                         ...result.concepts.flatMap(
                             (concept) => concept.citations,
                         ),
@@ -985,7 +1000,7 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                 schema,
                 ordinal: Math.ceil(packets[0].ordinal / 2),
                 fingerprint: viewHash([
-                    "frozen-window-v1",
+                    "frozen-window-v2",
                     topicCurationPolicy(true, options),
                     snapshot.recipe,
                     rules,

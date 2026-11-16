@@ -25,6 +25,11 @@ Admission/coverage and consolidation must agree with the validated preparation;
 disagreement or uncertainty fails the operation explicitly, without manufacturing
 evidence, accepting the prepared verdict as fallback or resampling the decision.
 Editorial categories retain their existing safe/failures consistency checks.
+Informational Wiki checks also prepare detailed diagnostics bound by the host to
+the actual output values and original fragment quotes, including unsupported
+claims. Independent choice-only editorial verdicts must agree with those
+categories before diagnostics can drive the existing bounded factual repair.
+Repairs still use unchanged original evidence and recheck the actual repaired output.
 Completeness can change the article's status but never its prose or citations.
 
 This behavior is enabled by default for the configured Wiki adapter. It requires a
@@ -32,7 +37,9 @@ configured Azure/OpenAI Luna endpoint; there is no fallback to another model.
 Prose generation, evidence-contract repair, project summaries, non-Wiki Views and
 topic curation retain their existing models and contracts. Additional decision
 calls use the existing scheduler, cancellation and provider request budgets.
-The adapter identity changes to invalidate cached assessments from the old policy.
+The combined `evidence-first-v26-wiki-luna-choice` adapter identity includes both
+the prose and Wiki decision model identities. Earlier `evidence-first-v25`
+results remain historical evidence, not validation of this combined policy.
 Rollback requires reverting this policy change, not changing the global prose model.
 
 ## Retained ingestion jobs

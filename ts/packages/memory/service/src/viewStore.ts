@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import { informationalView } from "./informationalView.js";
+import {
+    assertSeparationParent,
+    separationChildInput,
+    separationParticipants,
+    type ViewSeparationReceipt,
+} from "./viewSeparation.js";
 import { queryTopicSnapshot, validateTopicSnapshot } from "./topicSnapshot.js";
 import { validateTopicBuildOutput } from "./topicBuilds.js";
 import type {
@@ -49,6 +55,10 @@ import {
     unlockEditorialProtection,
 } from "./viewEditorial.js";
 import { reusableWikiAssessment } from "./wikiAdmission.js";
+import {
+    pendingSemanticReview,
+    type ViewSemanticReview,
+} from "./viewSemanticReview.js";
 import { wikiContributionTargets } from "./wikiContribution.js";
 import {
     assertWikiRedirectCapacity,
@@ -97,6 +107,7 @@ import type {
 import { knowledgeBuildDiagnostics } from "./knowledgeDiagnostics.js";
 
 interface ViewStoreState {
+    separations?: Record<string, ViewSeparationReceipt>;
     knowledge?: KnowledgeStatus;
     views: Record<string, ViewVersion[]>;
     builds?: Record<string, ViewBuildJob>;
@@ -119,6 +130,7 @@ export interface WikiFamilyState {
     enabled: boolean;
     dirty: boolean;
     cursor: number;
+    reviewCursor?: string;
     indexVersion?: string;
     error?: string;
     automaticPasses?: {
@@ -185,6 +197,23 @@ function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
 
 function timestamp(): string {
     return new Date().toISOString();
+}
+
+function unchangedWikiAmbiguity(
+    result: ViewBuildTargetResult,
+    state: ViewStoreState,
+): boolean {
+    const dependencies = result.wikiAmbiguityDependencies;
+    return (
+        !!dependencies?.length &&
+        dependencies.every((dependency) => {
+            const page = viewVersions(state, dependency.viewId).at(-1);
+            return (
+                page?.state !== "archived" &&
+                page?.revisionId === dependency.revisionId
+            );
+        })
+    );
 }
 
 export function freezeSnapshot(value: unknown): void {
@@ -1174,6 +1203,197 @@ export class TypedViewStore {
         );
     }
 
+    public async listViewSeparations(
+        corpusId: string,
+    ): Promise<ViewSeparationReceipt[]> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.listViewSeparations(corpusId),
+            );
+        return structuredClone(
+            Object.values(
+                this.inventory(corpusId)?.separations ??
+                    (await this.readStateField<
+                        Record<string, ViewSeparationReceipt>
+                    >(corpusId, ["separations"])) ??
+                    {},
+            ),
+        );
+    }
+
+    public async prepareViewSeparation(
+        receipt: ViewSeparationReceipt,
+        expectedHead: string | null,
+    ): Promise<ViewSeparationReceipt> {
+        const { head, state } = await this.history(receipt.corpusId).read();
+        if (head !== expectedHead)
+            throw new Error("View history head conflict");
+        assertSeparationParent(
+            receipt,
+            viewVersions(state, receipt.viewId).at(-1),
+        );
+        const reviews = Object.values(state.builds ?? {}).flatMap(
+            (job) => job.results,
+        );
+        if (
+            !reviews.some(
+                (result) =>
+                    result.semanticReview?.state === "complete" &&
+                    result.semanticReview.acceptedRevisionId ===
+                        receipt.acceptedRevisionId &&
+                    viewHash(result.semanticReview.assessment) ===
+                        receipt.assessmentHash,
+            )
+        )
+            throw new Error("Separation assessment changed before preview");
+        state.separations ??= {};
+        const existing = state.separations[receipt.receiptId];
+        if (existing) return structuredClone(existing);
+        if (
+            Object.values(state.separations).some(
+                (entry) =>
+                    entry.viewId === receipt.viewId &&
+                    ["confirmed", "incomplete", "active"].includes(entry.state),
+            )
+        )
+            throw new Error(
+                "An existing confirmed separation must be resolved first",
+            );
+        state.separations[receipt.receiptId] = structuredClone(receipt);
+        await this.commitBuildState(
+            receipt.corpusId,
+            head,
+            state,
+            "Prepare separation for explicit confirmation",
+        );
+        return structuredClone(receipt);
+    }
+
+    public async updateViewSeparation(
+        corpusId: string,
+        receiptId: string,
+        update: (receipt: ViewSeparationReceipt) => void,
+        expectedHead?: string | null,
+    ): Promise<ViewSeparationReceipt> {
+        const { head, state } = await this.history(corpusId).read();
+        if (expectedHead !== undefined && head !== expectedHead)
+            throw new Error("View history head conflict");
+        const receipt = state.separations?.[receiptId];
+        if (!receipt)
+            throw new Error("Separation receipt was removed or forgotten");
+        update(receipt);
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Separation ${receiptId}: ${receipt.state}`,
+        );
+        return structuredClone(receipt);
+    }
+
+    public async acceptSeparationChild(
+        corpusId: string,
+        receiptId: string,
+        index: number,
+        output: ViewSynthesisOutput,
+    ): Promise<ViewVersion> {
+        const { head, state } = await this.history(corpusId).read();
+        const receipt = state.separations?.[receiptId];
+        if (!receipt || receipt.state !== "confirmed")
+            throw new Error("Separation is not confirmed or was cancelled");
+        assertSeparationParent(
+            receipt,
+            viewVersions(state, receipt.viewId).at(-1),
+        );
+        const input = separationChildInput(receipt, index);
+        const destination = receipt.destinations[index];
+        const current = viewVersions(state, destination.viewId).at(-1);
+        if (destination.acceptedRevisionId) {
+            if (current?.revisionId !== destination.acceptedRevisionId)
+                throw new Error("Accepted separation destination changed");
+            return structuredClone(current);
+        }
+        if (current)
+            throw new Error(
+                "Separation destination identity is already occupied",
+            );
+        const version = this.generatedVersion(input, undefined, output, output);
+        state.views[version.viewId] = [version];
+        destination.acceptedRevisionId = version.revisionId;
+        receipt.reasonForState =
+            "Children staged; overview navigation awaits all exact indexes";
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Accept staged separation destination ${version.viewId}`,
+        );
+        return structuredClone(version);
+    }
+
+    public async activateViewSeparation(
+        corpusId: string,
+        receiptId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        const receipt = state.separations?.[receiptId];
+        if (!receipt || receipt.state !== "confirmed")
+            throw new Error("Separation is not confirmed or was cancelled");
+        assertSeparationParent(
+            receipt,
+            viewVersions(state, receipt.viewId).at(-1),
+        );
+        for (const destination of receipt.destinations) {
+            const child = viewVersions(state, destination.viewId).at(-1);
+            const publication = state.publications?.[destination.viewId];
+            if (
+                !destination.acceptedRevisionId ||
+                child?.state !== "draft" ||
+                child.revisionId !== destination.acceptedRevisionId ||
+                publication?.publishedRevisionId !== child.revisionId ||
+                publication.indexedRevisionId !== child.revisionId ||
+                publication.indexState !== "ready"
+            )
+                throw new Error(
+                    "Separation destinations are not all accepted and index-ready",
+                );
+        }
+        receipt.state = "active";
+        receipt.reasonForState =
+            "All narrower articles are index-ready; original overview, facts, human units and anchors retained unchanged";
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Activate additive separation navigation",
+        );
+    }
+
+    private separationParticipant(
+        state: ViewStoreState,
+        viewId: string,
+    ): boolean {
+        return separationParticipants(
+            Object.values(state.separations ?? {}),
+        ).has(viewId);
+    }
+
+    private assertSeparationContribution(
+        state: ViewStoreState,
+        candidateId: string,
+        targetId: string,
+        contribution: unknown,
+    ): void {
+        if (!contribution) return;
+        if (
+            this.separationParticipant(state, targetId) ||
+            this.separationParticipant(state, candidateId)
+        )
+            throw new Error(
+                "Separation participants cannot be collapsed by canonical contribution",
+            );
+    }
+
     public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
         const { state } = await this.readSnapshot(corpusId);
         return structuredClone(
@@ -1181,6 +1401,38 @@ export class TypedViewStore {
                 .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                 .slice(0, 100),
         );
+    }
+
+    public async listSemanticReviews(
+        corpusId: string,
+    ): Promise<
+        Array<{ jobId: string; viewId: string; review: ViewSemanticReview }>
+    > {
+        const { state } = await this.readSnapshot(corpusId);
+        const latest = new Map<
+            string,
+            { jobId: string; viewId: string; review: ViewSemanticReview }
+        >();
+        for (const job of Object.values(state.builds ?? {}).reverse())
+            for (const result of job.results) {
+                if (
+                    !result.semanticReview ||
+                    latest.has(result.semanticReview.viewId)
+                )
+                    continue;
+                if (
+                    viewVersions(state, result.semanticReview.viewId).at(-1)
+                        ?.revisionId !==
+                    result.semanticReview.acceptedRevisionId
+                )
+                    continue;
+                latest.set(result.semanticReview.viewId, {
+                    jobId: job.jobId,
+                    viewId: result.semanticReview.viewId,
+                    review: structuredClone(result.semanticReview),
+                });
+            }
+        return [...latest.values()];
     }
 
     public async getViewBuild(
@@ -1265,6 +1517,35 @@ export class TypedViewStore {
             })),
             ...(maintenancePlan ? { maintenancePlan } : {}),
         };
+        for (const result of job.results) {
+            if (!result.snapshot.semanticReviewOnly) continue;
+            const view = viewVersions(state, result.viewId).at(-1);
+            if (
+                !view ||
+                view.state === "archived" ||
+                view.revisionId !== result.snapshot.targetRevisionId
+            )
+                throw new Error(
+                    "Semantic review requires the exact accepted revision",
+                );
+            const prior = Object.values(state.builds ?? {})
+                .reverse()
+                .flatMap((job) => job.results)
+                .find(
+                    (target) =>
+                        target.semanticReview?.viewId === result.viewId &&
+                        target.semanticReview.acceptedRevisionId ===
+                            view.revisionId,
+                );
+            result.semanticReview = pendingSemanticReview(
+                view,
+                result.snapshot.semanticReviewOnly === "explicit"
+                    ? undefined
+                    : prior?.semanticReview,
+            );
+            result.reason =
+                "Queued for semantic assessment without article synthesis";
+        }
         state.builds ??= {};
         state.builds[job.jobId] = job;
         if (topicFamily) state.topicFamily = structuredClone(topicFamily);
@@ -1457,7 +1738,15 @@ export class TypedViewStore {
         const running = Object.values(state.builds ?? {}).filter(
             (job) => job.state === "running",
         );
-        if (!running.length) return;
+        const interruptedSeparations = Object.values(
+            state.separations ?? {},
+        ).filter((receipt) => receipt.state === "confirmed");
+        if (!running.length && !interruptedSeparations.length) return;
+        for (const receipt of interruptedSeparations) {
+            receipt.state = "incomplete";
+            receipt.reasonForState =
+                "Service restarted during separation; explicitly retry this proposal to resume accepted destinations without new revisions";
+        }
         for (const kind of ["wiki", "projects"] as const) {
             const family =
                 state[kind === "wiki" ? "wikiFamily" : "projectFamily"];
@@ -1483,6 +1772,11 @@ export class TypedViewStore {
             job.state = "interrupted";
             job.updatedAt = timestamp();
             for (const result of job.results) {
+                if (result.semanticReview?.state === "running") {
+                    result.semanticReview.state = "pending";
+                    result.semanticReview.reason =
+                        "Service restarted during semantic review; accepted article remains intact";
+                }
                 if (
                     [
                         "pending",
@@ -1580,9 +1874,16 @@ export class TypedViewStore {
         );
         if (
             includeParkedFailures &&
-            attempts.some((result) =>
-                ["blocked", "conflicted", "cancelled"].includes(result.state),
-            )
+            attempts.some((result) => {
+                if (
+                    result.state === "blocked" &&
+                    result.wikiAssessment?.disposition === "ambiguous"
+                )
+                    return unchangedWikiAmbiguity(result, state);
+                return ["blocked", "conflicted", "cancelled"].includes(
+                    result.state,
+                );
+            })
         )
             return true;
         if (
@@ -1608,6 +1909,23 @@ export class TypedViewStore {
                     )
                 );
             }),
+        );
+    }
+
+    public async hasInvalidatedWikiAmbiguity(
+        corpusId: string,
+    ): Promise<boolean> {
+        const { state } = await this.readSnapshot(corpusId);
+        const latest = new Map<string, ViewBuildTargetResult>();
+        for (const job of Object.values(state.builds ?? {}).reverse())
+            for (const result of job.results)
+                if (!latest.has(result.viewId))
+                    latest.set(result.viewId, result);
+        return [...latest.values()].some(
+            (result) =>
+                result.state === "blocked" &&
+                result.wikiAssessment?.disposition === "ambiguous" &&
+                !unchangedWikiAmbiguity(result, state),
         );
     }
 
@@ -1639,6 +1957,12 @@ export class TypedViewStore {
               )
             : [];
         const targetId = input.definition.viewId;
+        this.assertSeparationContribution(
+            state,
+            result.viewId,
+            targetId,
+            contribution,
+        );
         const current = viewVersions(state, targetId).at(-1);
         if (
             (current?.version ?? 0) !== input.expectedVersion ||
@@ -1674,6 +1998,7 @@ export class TypedViewStore {
             result.reason =
                 "Validated draft saved; no publication, review or execution authority";
             result.revisionId = version.revisionId;
+            this.recordAcceptedReview(result, version);
             if (contribution) {
                 result.wikiContribution = {
                     input,
@@ -1705,6 +2030,14 @@ export class TypedViewStore {
             `Materialize draft build ${jobId}: ${viewId} ${result.state}`,
         );
         return result;
+    }
+
+    private recordAcceptedReview(
+        result: ViewBuildTargetResult,
+        version: ViewVersion,
+    ): void {
+        if (informationalView(version.content))
+            result.semanticReview = pendingSemanticReview(version);
     }
 
     private copyWikiContributionResults(
@@ -1740,6 +2073,13 @@ export class TypedViewStore {
         if (!receipt)
             throw new Error("Consolidation receipt was removed or forgotten");
         const survivor = viewVersions(state, receipt.survivorViewId).at(-1);
+        if (
+            this.separationParticipant(state, receipt.survivorViewId) ||
+            this.separationParticipant(state, receipt.retiringViewId)
+        )
+            throw new ConsolidationTargetChanged(
+                "Separation participants cannot be consolidated automatically",
+            );
         if (receipt.acceptedRevisionId) {
             if (survivor?.revisionId !== receipt.acceptedRevisionId)
                 throw new ConsolidationTargetChanged(
@@ -1788,6 +2128,11 @@ export class TypedViewStore {
         state.views[version.viewId].push(version);
         receipt.acceptedRevisionId = version.revisionId;
         receipt.stage = "accepted";
+        const owner = state.builds![jobId].results.find(
+            (result) => result.viewId === targetId,
+        )!;
+        owner.semanticReview = pendingSemanticReview(version);
+        owner.semanticReview.organizationReviewed = true;
         state.publications ??= {};
         state.publications[version.viewId] = {
             ...state.publications[version.viewId],
@@ -1819,6 +2164,13 @@ export class TypedViewStore {
         if (receipt.stage === "redirected" || receipt.stage === "ready") return;
         const survivor = viewVersions(state, receipt.survivorViewId).at(-1);
         const retiring = viewVersions(state, receipt.retiringViewId).at(-1);
+        if (
+            this.separationParticipant(state, receipt.survivorViewId) ||
+            this.separationParticipant(state, receipt.retiringViewId)
+        )
+            throw new ConsolidationTargetChanged(
+                "Separation participants cannot become an automatic redirect",
+            );
         if (
             receipt.stage !== "accepted" ||
             !survivor ||
@@ -2266,6 +2618,28 @@ export class TypedViewStore {
                     ? [id]
                     : [],
             ),
+        );
+        state.separations = Object.fromEntries(
+            Object.entries(state.separations ?? {}).filter(([, receipt]) => {
+                const removed =
+                    clearingDerived ||
+                    affected.has(receipt.viewId) ||
+                    receipt.destinations.some((destination) =>
+                        affected.has(destination.viewId),
+                    ) ||
+                    (!forgottenEvents &&
+                        receipt.privacySourceIds.includes(sourceId)) ||
+                    this.forgottenTopicInfluence(
+                        receipt.input,
+                        sourceId,
+                        forgottenEvents,
+                    ) ||
+                    receipt.input.inputs.some(matches);
+                if (removed)
+                    for (const destination of receipt.destinations)
+                        affected.add(destination.viewId);
+                return !removed;
+            }),
         );
         state.views = Object.fromEntries(
             Object.entries(state.views).filter(([id]) => !affected.has(id)),

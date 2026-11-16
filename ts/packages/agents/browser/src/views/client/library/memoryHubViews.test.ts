@@ -607,7 +607,18 @@ describe("Memory Center preview-first views", () => {
         ).toBe("fa-solid fa-screwdriver-wrench");
         click(host, "Maintain collection");
         const maintenanceItems = host.querySelectorAll('[role="menuitem"]');
-        expect(maintenanceItems).toHaveLength(8);
+        expect([...maintenanceItems].map((item) => item.textContent)).toEqual([
+            "Update Wiki",
+            "Rebuild Wiki",
+            "Review Wiki",
+            "Pause Wiki",
+            "Resume Wiki",
+            "Update Projects",
+            "Rebuild Projects",
+            "Review Projects",
+            "Pause Projects",
+            "Resume Projects",
+        ]);
         for (const item of maintenanceItems)
             expect(item.querySelector("i")!.className).toBe(
                 "fa-solid fa-screwdriver-wrench",
@@ -1147,6 +1158,7 @@ describe("Memory Center preview-first views", () => {
             summary: "A **grounded** synopsis",
             coverageNote: "Partial evidence",
         },
+        { summary: "A grounded synopsis", coverageNote: "" },
         { summary: undefined, coverageNote: "Partial evidence" },
         { summary: undefined, coverageNote: undefined },
     ])(

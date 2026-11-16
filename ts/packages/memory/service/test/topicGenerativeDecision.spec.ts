@@ -496,6 +496,69 @@ test.each([undefined, "original", "decomposed", "output-contract"] as const)(
     },
 );
 
+test.each(["original", "output-contract"] as const)(
+    "frozen reconciliation reconsiders related deferrals without routing raw preparation through decisions (%s)",
+    async (stage) => {
+        const value = snapshot();
+        const reconsidered = value.nodes[0];
+        const calls: Array<{
+            phase: string | undefined;
+            schema: string | undefined;
+            members: string[];
+        }> = [];
+        const receipts: TopicGenerativeDecisionReceipt[] = [];
+        const result = await curateTopics(
+            value,
+            (node) => node.citations,
+            async (_rules, input, schema, context) => {
+                calls.push({
+                    phase: context?.phase,
+                    schema: schema?.name,
+                    members: (input as CurationPayload).nodes.map(
+                        ({ id }) => id,
+                    ),
+                });
+                return schema?.name === "topic_decision_answers"
+                    ? nativeAssignments(input)
+                    : merged(input);
+            },
+            new AbortController().signal,
+            true,
+            undefined,
+            {
+                concepts: [],
+                deferred: [
+                    { nodeId: reconsidered.id, reason: "Initially incidental" },
+                ],
+            },
+            {
+                compactIds: false,
+                priorDeltas: true,
+                generativeDecisionStage: stage,
+                onGenerativeDecision: (receipt) => receipts.push(receipt),
+            },
+        );
+        expect(result.deferred).toEqual([]);
+        expect(
+            result.concepts.flatMap(({ memberIds }) => memberIds).sort(),
+        ).toEqual(value.nodes.map(({ id }) => id).sort());
+        const preparation = calls.filter(
+            ({ phase }) => phase === "preparation",
+        );
+        expect(preparation).toHaveLength(1);
+        expect(preparation[0].members).not.toContain(reconsidered.id);
+        expect(preparation[0].schema).toBe("memory_topic_curation");
+        expect(
+            calls
+                .filter(({ phase }) => phase === "reconciliation")
+                .every(({ members }) => members.includes(reconsidered.id)),
+        ).toBe(true);
+        expect(receipts.some(({ operation }) => operation === "decision")).toBe(
+            stage === "output-contract",
+        );
+    },
+);
+
 test("configured generative topics use restricted decisions by default without native inference", async () => {
     const value = snapshot();
     const schemas: Array<string | undefined> = [];

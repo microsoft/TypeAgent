@@ -344,6 +344,9 @@ export type MemoryCenterInvokeFunctions = {
     memoryPlanViewMaintenance(
         params: ViewMaintenancePlanRequest,
     ): Promise<ViewMaintenancePlan>;
+    memorySeparateView(
+        params: import("@typeagent/memory-service").ViewSeparationRequest,
+    ): Promise<import("@typeagent/memory-service").ViewSeparationResult>;
     memoryMaintainViews(
         params: ViewMaintenanceRequest,
     ): Promise<ViewMaintenanceResult>;

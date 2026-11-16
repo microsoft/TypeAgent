@@ -140,6 +140,15 @@ export const viewBuildSummarySchema = viewBuildJobSchema
                 conflictId: true,
             })
             .extend({
+                semanticReview: result.shape.semanticReview
+                    .unwrap()
+                    .pick({
+                        state: true,
+                        reason: true,
+                        acceptedRevisionId: true,
+                        dueAt: true,
+                    })
+                    .optional(),
                 current: z.boolean(),
                 conflictState: z
                     .enum(["pending", "resolved", "missing"])

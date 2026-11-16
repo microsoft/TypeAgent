@@ -284,6 +284,12 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
     test.each([
         {
             summary: content.summary,
+            coverageNote: "",
+            goalHeading: "Goals",
+            expectedGoalHeading: "Goals",
+        },
+        {
+            summary: content.summary,
             coverageNote: "Selected evidence only",
             goalHeading: "Goals",
             expectedGoalHeading: "Goals",

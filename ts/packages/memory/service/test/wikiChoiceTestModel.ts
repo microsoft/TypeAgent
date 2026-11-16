@@ -8,6 +8,7 @@ import { editorialAssessmentSchema } from "../src/viewEditorial.js";
 // synthetic verdicts agree with those scripts; independent verdicts are tested separately.
 export function withWikiChoiceResponses(model: ChatModel): ChatModel {
     let prepared: Record<string, unknown> = {};
+    let detailedEditorial = false;
     const original = model.complete.bind(model);
     return {
         ...model,
@@ -24,7 +25,13 @@ export function withWikiChoiceResponses(model: ChatModel): ChatModel {
                     log,
                     signal,
                 );
-                if (result.success) prepared = JSON.parse(result.data);
+                if (result.success) {
+                    prepared = JSON.parse(result.data);
+                    detailedEditorial =
+                        !Array.isArray(schema) &&
+                        schema?.name === "editorial_consequences" &&
+                        Array.isArray(prepared.diagnostics);
+                }
                 return result;
             }
             if (typeof messages === "string")
@@ -33,7 +40,7 @@ export function withWikiChoiceResponses(model: ChatModel): ChatModel {
                 state: { pages?: Array<{ viewId: string }> };
                 questions: Record<string, { instructions: string }>;
             };
-            if ("safety" in request.questions) {
+            if ("safety" in request.questions && !detailedEditorial) {
                 const result = await original(
                     [
                         {
@@ -53,6 +60,7 @@ export function withWikiChoiceResponses(model: ChatModel): ChatModel {
                 if (!result.success) return result;
                 prepared = JSON.parse(result.data);
             }
+            if ("safety" in request.questions) detailedEditorial = false;
             const choices = Object.fromEntries(
                 Object.keys(request.questions).map((id) => {
                     let choice: unknown;

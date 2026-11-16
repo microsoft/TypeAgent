@@ -15,6 +15,10 @@ import {
 } from "../src/informationalProject.js";
 import { mergeView, viewHash } from "../src/viewMerge.js";
 import { viewContentToText } from "../src/viewText.js";
+import {
+    hydrateInformational,
+    validateInformationalOutput,
+} from "../src/informationalWiki.js";
 import { versionRelationships } from "../src/viewRelationships.js";
 import type {
     ViewBuildSnapshot,
@@ -105,6 +109,108 @@ function candidate() {
         capacityState: "pendingOwnerReview",
     };
 }
+
+test("an explicit no-substantive-gap response is retained without an invented coverage notice", () => {
+    const input = snapshot(
+        "Atlas is a reference example of scoped project ownership.",
+    );
+    const project = hydrateProjectSummary(input, {
+        ...candidate(),
+        limits: null,
+    });
+    validateInformationalProjectOutput(input, project);
+    const wikiInput: ViewBuildSnapshot = {
+        ...input,
+        pipeline: "informational-wiki-v1",
+        definition: {
+            viewId: "project",
+            kind: "wiki",
+            selector: input.definition.selector,
+            wiki: {
+                construction: "informational-wiki-v1",
+                query: "Scoped project ownership",
+                aliases: [],
+                excludedSourceIds: [],
+            },
+        },
+    };
+    const raw = {
+        title: "Scoped ownership",
+        summary: "Atlas illustrates scoped project ownership.",
+        prose: "Atlas is a reference example of scoped project ownership.",
+        status: "sufficient",
+        limits: null,
+        citationIds: ["f0"],
+    };
+    const wiki = hydrateInformational(wikiInput, raw);
+    validateInformationalOutput(wikiInput, wiki);
+    for (const output of [project, wiki]) {
+        expect(output.content.coverageNote).toBe("");
+        expect(output.missingEvidence).toEqual([]);
+        expect(viewContentToText(output.content)).not.toContain(
+            "Coverage limits:",
+        );
+    }
+    for (const limits of [undefined, "", " "]) {
+        expect(() =>
+            hydrateInformational(wikiInput, { ...raw, limits }),
+        ).toThrow("Invalid informational");
+    }
+});
+
+test("per-section project support does not spread unrelated global citations across every section", () => {
+    const input = snapshot("Nia owns the service migration.");
+    const second = snapshot("A buffer-retention regression remains open.")
+        .inputs[0];
+    second.sourceId = "regression";
+    second.passages = second.passages!.map((passage) => ({
+        ...passage,
+        sourceId: "regression",
+    }));
+    input.inputs.push(second);
+    const raw = {
+        ...candidate(),
+        owners: "Nia owns the service migration.",
+        risks: "A buffer-retention regression remains open.",
+        citationIds: {
+            article: ["f0", "f1"],
+            goalsScope: [],
+            owners: ["f0"],
+            status: [],
+            milestones: [],
+            decisions: [],
+            risks: ["f1"],
+            context: [],
+        },
+    };
+    const output = hydrateProjectSummary(input, raw);
+    validateInformationalProjectOutput(input, output);
+    expect(
+        output.relationships.map((edge) => [edge.from.sectionId, edge.to]),
+    ).toEqual([
+        [
+            "project:owners",
+            { kind: "source", sourceId: "selected", revisionId: "current" },
+        ],
+        [
+            "project:risks",
+            { kind: "source", sourceId: "regression", revisionId: "current" },
+        ],
+    ]);
+    expect(() =>
+        hydrateProjectSummary(input, {
+            ...raw,
+            citationIds: { ...raw.citationIds, article: ["f0"] },
+        }),
+    ).toThrow("not selected in citationIds");
+    const { risks: _risks, ...missingRole } = raw.citationIds;
+    expect(() =>
+        hydrateProjectSummary(input, {
+            ...raw,
+            citationIds: missingRole,
+        }),
+    ).toThrow("exactly the supplied section roles");
+});
 
 test("grounded project structured details and item identities survive refresh without root duplicates", () => {
     const input = snapshot(

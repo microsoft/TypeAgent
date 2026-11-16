@@ -485,7 +485,7 @@ const informationalProjectContent = guideContent.extend({
     kind: z.literal("projectBrief"),
     construction: z.literal("informational-project-summary-v1"),
     status: z.enum(["partial", "sufficient"]).optional(),
-    coverageNote: text.optional(),
+    coverageNote: z.string().max(4000).optional(),
     sections: section
         .extend({ details: informationalProjectDetails })
         .array()
@@ -528,7 +528,7 @@ const wikiContentShape = guideContent.extend({
     kind: z.literal("wiki"),
     construction: z.literal("informational-wiki-v1"),
     status: z.enum(["partial", "sufficient"]).optional(),
-    coverageNote: text.optional(),
+    coverageNote: z.string().max(4000).optional(),
     index: z
         .strictObject({
             pageId: id,
@@ -843,6 +843,7 @@ export const viewSearchRequestSchema = z.strictObject({
 });
 const snapshot = z
     .object({
+        semanticReviewOnly: z.enum(["explicit", "automatic"]).optional(),
         corpusId: id,
         actor: text,
         definition: viewDefinitionSchema,
@@ -950,6 +951,85 @@ const snapshot = z
                     "Larger extension input requires an exact source manifest",
             });
     });
+export const viewSemanticReviewSchema = z.object({
+    schemaVersion: z.literal(1),
+    viewId: id,
+    recipe: text,
+    acceptedRevisionId: id,
+    contentHash: hash,
+    state: z.enum([
+        "pending",
+        "running",
+        "complete",
+        "failed",
+        "stale",
+        "cancelled",
+    ]),
+    attempts: z.number().int().nonnegative(),
+    requestedAt: z.string(),
+    dueAt: z.string(),
+    completedAt: z.string().optional(),
+    organizationReviewed: z.boolean().optional(),
+    assessmentCompletedAt: z.string().optional(),
+    reason: z.string(),
+    inspection: z
+        .object({
+            inputFingerprint: hash,
+            evidenceFingerprint: hash,
+            fragmentCount: z.number().int().nonnegative(),
+            comparedPages: z.object({ viewId: id, revisionId: id }).array(),
+            candidateLimit: z.number().int().positive(),
+            proseCharacterLimit: z.number().int().positive(),
+            truncatedPageIds: id.array(),
+        })
+        .optional(),
+    assessment: z
+        .object({
+            purpose: text,
+            facets: z
+                .object({
+                    id: text,
+                    state: z.enum([
+                        "covered",
+                        "partial",
+                        "unresolved",
+                        "notApplicable",
+                    ]),
+                    reason: text,
+                    citations: citation.array(),
+                })
+                .array()
+                .max(6),
+            gaps: z
+                .object({
+                    id: hash,
+                    facetId: text,
+                    kind: z.enum(["missing", "contradiction"]),
+                    basis: z.enum(["scope-absence", "explicit-evidence"]),
+                    description: text,
+                    resolutionCondition: text,
+                    citations: citation.array(),
+                })
+                .array()
+                .max(24),
+            separation: z
+                .object({
+                    reason: text,
+                    destinations: z
+                        .object({
+                            purpose: text,
+                            sectionIds: id.array(),
+                            citations: citation.array(),
+                        })
+                        .array()
+                        .min(2)
+                        .max(4),
+                    unresolved: text.array().max(16),
+                })
+                .nullable(),
+        })
+        .optional(),
+});
 const consolidationReceipt = z.object({
     identity: hash,
     stage: z.enum(["prepared", "accepted", "redirected", "ready", "stale"]),
@@ -1141,6 +1221,7 @@ export const viewBuildJobSchema = z.object({
             ]),
             reason: z.string(),
             wikiConsolidation: consolidationReceipt.optional(),
+            semanticReview: viewSemanticReviewSchema.optional(),
             revisionId: id.optional(),
             topicGeneration: id.optional(),
             conflictId: z.string().uuid().optional(),

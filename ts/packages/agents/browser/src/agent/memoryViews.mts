@@ -10,6 +10,7 @@ import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
 import {
     readViewDetail,
+    viewSeparationRequestSchema,
     inventoryPageRequestSchema,
     viewSummaryRequestSchema,
     viewPublicationBatchRequestSchema,
@@ -61,6 +62,7 @@ type ViewMethods = Pick<
     | "memoryBuildViews"
     | "memoryPlanViewMaintenance"
     | "memoryMaintainViews"
+    | "memorySeparateView"
     | "memoryUpdateViewMaintenance"
     | "memoryGetViewMaintenance"
     | "memoryGetViewBuild"
@@ -209,6 +211,10 @@ export function createMemoryViewFunctions(
         memoryPlanViewMaintenance: (request) =>
             views().planViewMaintenance(request),
         memoryMaintainViews: (request) => views().maintainViews(request),
+        memorySeparateView: (request) =>
+            required("separateView")(
+                viewSeparationRequestSchema.parse(request),
+            ),
         memoryUpdateViewMaintenance: (request) =>
             views().updateViewMaintenance(request),
         memoryGetViewMaintenance: (request) =>

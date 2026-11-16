@@ -1,5 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import {
+    semanticReviewDue,
+    semanticReviewIntervalMs,
+    validateSemanticAssessment,
+    type ViewSemanticReview,
+} from "./viewSemanticReview.js";
+import {
+    assertSeparationParent,
+    separationProposal,
+    separationChildInput,
+    publicSeparation,
+    validateSeparationRequest,
+    separationParticipants,
+    type ViewSeparationRequest,
+    type ViewSeparationResult,
+    type ViewSeparationReceipt,
+} from "./viewSeparation.js";
+import {
+    parseEditorialAssessment as parseSeparationEditorialAssessment,
+    assertEditorialAssessment as assertSeparationEditorialAssessment,
+    assertEditorialDiagnostics as assertSeparationEditorialDiagnostics,
+} from "./viewEditorial.js";
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
@@ -1881,6 +1903,8 @@ export class FileMemoryService
     >();
     private readonly jobWrites = new Map<string, Promise<void>>();
     private readonly controllers = new Map<string, AbortController>();
+    private readonly separationControllers = new Map<string, AbortController>();
+    private readonly separationWork = new Set<Promise<void>>();
     private initializePromise: Promise<void> | undefined;
     private releaseLock: (() => Promise<void>) | undefined;
     private rootWriteTail: Promise<void> = Promise.resolve();
@@ -2073,6 +2097,8 @@ export class FileMemoryService
                 wikiPages: (input) => this.wikiAdmissionPages(input),
                 consolidateWiki: (job, result, signal) =>
                     this.consolidateWiki(job, result, signal),
+                reviewInformational: (job, result, signal) =>
+                    this.reviewInformationalTarget(job, result, signal),
                 contributeWikiSubject: (
                     job,
                     result,
@@ -2850,11 +2876,7 @@ export class FileMemoryService
                                                             manifest.indexGeneration,
                                                             views,
                                                         );
-                                                    if (
-                                                        family.enabled &&
-                                                        family.dirty &&
-                                                        !family.error
-                                                    )
+                                                    if (family.enabled)
                                                         this.scheduleWikiMaintenance(
                                                             directory.name,
                                                             kind,
@@ -9232,9 +9254,16 @@ export class FileMemoryService
         input: ViewBuildSnapshot,
     ): Promise<WikiPagePurposeContext[]> {
         const family = await this.viewStore.getWikiFamily(input.corpusId);
+        const separations = await this.viewStore.listViewSeparations(
+            input.corpusId,
+        );
+        const participants = separationParticipants(separations);
+        if (participants.has(input.definition.viewId)) return [];
         return nominateWikiPages(
             input,
-            await this.wikiAdmissionViews(input.corpusId),
+            (await this.wikiAdmissionViews(input.corpusId)).filter(
+                (view) => !participants.has(view.viewId),
+            ),
             new Map(
                 family.descriptors.map((descriptor) => [
                     descriptor.viewId,
@@ -9392,11 +9421,371 @@ export class FileMemoryService
         }
     }
 
+    public async separateView(
+        request: ViewSeparationRequest,
+    ): Promise<ViewSeparationResult> {
+        validateSeparationRequest(request);
+        validateIdentifier("corpus ID", request.corpusId);
+        await this.requireViews(request.corpusId);
+        if (request.operation === "preview") {
+            return this.enqueueWrite(request.corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(
+                    request.corpusId,
+                );
+                const view = snapshot.views.find(
+                    (entry) => entry.viewId === request.viewId,
+                );
+                if (
+                    snapshot.head !== request.expectedHead ||
+                    !view ||
+                    view.version !== request.expectedVersion ||
+                    view.revisionId !== request.revisionId
+                )
+                    throw new Error(
+                        "Separation preview head or accepted revision conflict",
+                    );
+                const entry = (
+                    await this.viewStore.listSemanticReviews(request.corpusId)
+                ).find((entry) => entry.viewId === view.viewId);
+                if (!entry)
+                    throw new Error(
+                        "Run semantic review before requesting separation",
+                    );
+                const input = await this.snapshotInformationalTarget(
+                    request.corpusId,
+                    {
+                        expectedVersion: view.version,
+                        definition: derivedDefinitionInput(view),
+                    },
+                    view,
+                    undefined,
+                    true,
+                );
+                if (
+                    entry.review.inspection?.inputFingerprint !==
+                        input.fingerprint ||
+                    entry.review.inspection.evidenceFingerprint !==
+                        viewBuildEvidenceFingerprint(input)
+                )
+                    throw new Error(
+                        "Separation evidence changed; run semantic review again",
+                    );
+                input.influenceSources = [
+                    ...new Map(
+                        [
+                            ...input.inputs,
+                            ...(input.influenceSources ?? []),
+                            ...(input.informationalRetrieval?.sources ?? []),
+                            ...(input.informationalRetrieval?.followSources ??
+                                []),
+                            ...(view.generation?.input?.inputs ?? []),
+                            ...(view.generation?.input?.influenceSources ?? []),
+                        ].map(({ sourceId, revisionId }) => [
+                            JSON.stringify([sourceId, revisionId]),
+                            { sourceId, revisionId },
+                        ]),
+                    ).values(),
+                ];
+                await this.recheckViewInput(input);
+                const receipt = separationProposal(view, entry.review, input);
+                await this.viewStore.prepareViewSeparation(
+                    receipt,
+                    request.expectedHead,
+                );
+                return this.readSeparationResult(
+                    request.corpusId,
+                    receipt.receiptId,
+                );
+            });
+        }
+        if (request.operation === "read")
+            return this.enqueueWrite(request.corpusId, async () => {
+                const receipts = await this.viewStore.listViewSeparations(
+                    request.corpusId,
+                );
+                const receipt = receipts
+                    .filter((entry) => entry.viewId === request.viewId)
+                    .at(-1);
+                return this.readSeparationResult(
+                    request.corpusId,
+                    receipt?.receiptId,
+                );
+            });
+        if (request.operation === "cancel") {
+            return this.enqueueWrite(request.corpusId, async () => {
+                await this.viewStore.updateViewSeparation(
+                    request.corpusId,
+                    request.receiptId,
+                    (receipt) => {
+                        receipt.state = "cancelled";
+                        receipt.reasonForState =
+                            "Cancelled explicitly; overview unchanged and any accepted children retained as incomplete work";
+                    },
+                    request.expectedHead,
+                );
+                this.separationControllers
+                    .get(request.receiptId)
+                    ?.abort(new Error("Separation cancelled explicitly"));
+                return this.readSeparationResult(
+                    request.corpusId,
+                    request.receiptId,
+                );
+            });
+        }
+        if (this.separationControllers.has(request.receiptId))
+            throw new Error(
+                "Separation is already running; read its durable status",
+            );
+        const controller = new AbortController();
+        this.separationControllers.set(request.receiptId, controller);
+        let started = false;
+        try {
+            const receipt = await this.enqueueWrite(
+                request.corpusId,
+                async () => {
+                    const receipt = (
+                        await this.viewStore.listViewSeparations(
+                            request.corpusId,
+                        )
+                    ).find((entry) => entry.receiptId === request.receiptId);
+                    if (
+                        !receipt ||
+                        receipt.confirmationToken !== request.confirmationToken
+                    )
+                        throw new Error(
+                            "Explicit confirmation must match this exact separation preview",
+                        );
+                    await this.recheckSeparation(receipt);
+                    return this.viewStore.updateViewSeparation(
+                        request.corpusId,
+                        request.receiptId,
+                        (current) => {
+                            if (current.state === "stale")
+                                throw new Error(
+                                    "Separation is stale; request a new preview",
+                                );
+                            current.state = "confirmed";
+                            current.confirmedAt ??= new Date().toISOString();
+                            current.reasonForState =
+                                "Explicitly confirmed; narrower articles are being staged, navigation is not active";
+                        },
+                        request.expectedHead,
+                    );
+                },
+            );
+            started = true;
+            const work = this.executeSeparation(receipt, controller.signal);
+            this.separationWork.add(work);
+            try {
+                await work;
+            } finally {
+                this.separationWork.delete(work);
+            }
+        } catch (error) {
+            if (!started) throw error;
+            await this.enqueueWrite(request.corpusId, async () => {
+                const receipt = (
+                    await this.viewStore.listViewSeparations(request.corpusId)
+                ).find((entry) => entry.receiptId === request.receiptId);
+                if (receipt?.state !== "confirmed") return;
+                await this.viewStore.updateViewSeparation(
+                    request.corpusId,
+                    request.receiptId,
+                    (current) => {
+                        current.state = "incomplete";
+                        current.reasonForState = `Incomplete separation; retry this confirmed proposal without duplicating accepted children: ${String(error)}`;
+                    },
+                );
+            });
+            throw error;
+        } finally {
+            this.separationControllers.delete(request.receiptId);
+        }
+        return this.enqueueWrite(request.corpusId, () =>
+            this.readSeparationResult(request.corpusId, request.receiptId),
+        );
+    }
+
+    private async recheckSeparation(
+        receipt: ViewSeparationReceipt,
+    ): Promise<void> {
+        assertSeparationParent(
+            receipt,
+            await this.viewStore.getView({
+                corpusId: receipt.corpusId,
+                viewId: receipt.viewId,
+            }),
+        );
+        await this.recheckViewInput(receipt.input);
+        for (const destination of receipt.destinations) {
+            if (!destination.acceptedRevisionId) continue;
+            const child = await this.viewStore.getView({
+                corpusId: receipt.corpusId,
+                viewId: destination.viewId,
+            });
+            if (
+                child?.revisionId !== destination.acceptedRevisionId ||
+                child.state !== "draft"
+            )
+                throw new Error(
+                    "Separation destination changed; overview navigation withheld",
+                );
+        }
+    }
+
+    private async readSeparationResult(
+        corpusId: string,
+        receiptId?: string,
+    ): Promise<ViewSeparationResult> {
+        let receipt = (await this.viewStore.listViewSeparations(corpusId)).find(
+            (entry) => entry.receiptId === receiptId,
+        );
+        if (receipt) {
+            let missingIndex = false;
+            try {
+                await this.recheckSeparation(receipt);
+                if (receipt.state === "active") {
+                    for (const destination of receipt.destinations) {
+                        const child = await this.viewStore.getView({
+                            corpusId,
+                            viewId: destination.viewId,
+                        });
+                        const publication = child
+                            ? await this.viewStore.getViewPublication(child)
+                            : undefined;
+                        if (
+                            !child ||
+                            publication?.indexState !== "ready" ||
+                            publication.publishedRevisionId !==
+                                child.revisionId ||
+                            publication.indexedRevisionId !==
+                                child.revisionId ||
+                            publication.blockedReason ||
+                            !(await this.informationalIndexReady(child))
+                        ) {
+                            missingIndex = true;
+                            throw new Error(
+                                "A separation destination index is unavailable",
+                            );
+                        }
+                    }
+                }
+            } catch (error) {
+                receipt = await this.viewStore.updateViewSeparation(
+                    corpusId,
+                    receipt.receiptId,
+                    (current) => {
+                        current.state = missingIndex ? "incomplete" : "stale";
+                        current.reasonForState = missingIndex
+                            ? "An exact destination index is unavailable; navigation withheld until explicit retry restores every index"
+                            : "Overview, evidence or permissions changed; navigation withheld";
+                    },
+                );
+                // Never return retained purposes or citations after source access is revoked.
+                await this.assertInfluenceEligible(receipt.input);
+                if (!(error instanceof Error)) throw error;
+            }
+        }
+        return {
+            head: (await this.viewStore.listViews(corpusId)).head,
+            proposal: receipt ? publicSeparation(receipt) : null,
+        };
+    }
+
+    private async executeSeparation(
+        receipt: ViewSeparationReceipt,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!this.viewAdapter.checkEditorial)
+            throw new Error(
+                "Separation requires the actual-output factual checker",
+            );
+        for (let index = 0; index < receipt.destinations.length; index++) {
+            signal.throwIfAborted();
+            const destination = receipt.destinations[index];
+            let child = destination.acceptedRevisionId
+                ? await this.viewStore.getView({
+                      corpusId: receipt.corpusId,
+                      viewId: destination.viewId,
+                  })
+                : undefined;
+            if (!child) {
+                const input = separationChildInput(receipt, index);
+                const output = await abortable(
+                    this.viewAdapter.generate(input, signal),
+                    signal,
+                );
+                validateConstructedGuide(input, output);
+                const assessment = parseSeparationEditorialAssessment(
+                    await abortable(
+                        this.viewAdapter.checkEditorial(input, output, signal),
+                        signal,
+                    ),
+                );
+                assertSeparationEditorialDiagnostics(assessment, input, output);
+                assertSeparationEditorialAssessment(assessment);
+                child = await this.enqueueWrite(receipt.corpusId, async () => {
+                    signal.throwIfAborted();
+                    await this.recheckSeparation(receipt);
+                    return this.viewStore.acceptSeparationChild(
+                        receipt.corpusId,
+                        receipt.receiptId,
+                        index,
+                        output,
+                    );
+                });
+                destination.acceptedRevisionId = child.revisionId;
+            }
+            const accepted = child;
+            await this.enqueueWrite(receipt.corpusId, async () => {
+                signal.throwIfAborted();
+                await this.recheckSeparation(receipt);
+                if (accepted.revisionId !== destination.acceptedRevisionId)
+                    throw new Error(
+                        "Separation destination changed before indexing",
+                    );
+                await this.recoverInformationalEffect(accepted, signal);
+                const publication =
+                    await this.viewStore.getViewPublication(accepted);
+                if (
+                    publication.publishedRevisionId !== accepted.revisionId ||
+                    publication.indexedRevisionId !== accepted.revisionId ||
+                    publication.indexState !== "ready" ||
+                    !(await this.informationalIndexReady(accepted))
+                )
+                    throw new Error(
+                        "Destination saved but not index-ready; publication policy or indexing requires attention",
+                    );
+            });
+        }
+        await this.enqueueWrite(receipt.corpusId, async () => {
+            signal.throwIfAborted();
+            await this.recheckSeparation(receipt);
+            for (const destination of receipt.destinations) {
+                const child = await this.viewStore.getView({
+                    corpusId: receipt.corpusId,
+                    viewId: destination.viewId,
+                });
+                if (!child || !(await this.informationalIndexReady(child)))
+                    throw new Error(
+                        "All exact destination indexes must be ready before activating navigation",
+                    );
+            }
+            await this.viewStore.activateViewSeparation(
+                receipt.corpusId,
+                receipt.receiptId,
+            );
+        });
+    }
+
     private async consolidationPairs(
         corpusId: string,
         targetId: string,
     ): Promise<Array<[ViewVersion, ViewVersion]>> {
         const snapshot = await this.listViewSnapshot(corpusId);
+        const separations = await this.viewStore.listViewSeparations(corpusId);
+        const participants = separationParticipants(separations);
+        if (participants.has(targetId)) return [];
         const targetView = snapshot.views.find(
             (view) => view.viewId === targetId,
         );
@@ -9417,6 +9806,7 @@ export class FileMemoryService
         );
         const candidates: Array<{ view: ViewVersion; first: string }> = [];
         for (const view of snapshot.views) {
+            if (participants.has(view.viewId)) continue;
             if (view.viewId !== targetId && !nominated.has(view.viewId))
                 continue;
             const versions = await this.viewStore.getViewVersions({
@@ -9454,6 +9844,324 @@ export class FileMemoryService
                     ? [target.view, partner.view]
                     : [partner.view, target.view],
             );
+    }
+
+    private semanticReviewAvailable(kind: "wiki" | "projects"): boolean {
+        return (
+            !!this.viewAdapter.reviewInformational ||
+            (kind === "wiki" &&
+                !!this.viewAdapter.assessWikiConsolidation &&
+                !!this.viewAdapter.checkWikiConsolidation)
+        );
+    }
+
+    private async updateSemanticReview(
+        job: ViewBuildJob,
+        viewId: string,
+        acceptedRevisionId: string,
+        operation: (
+            review: ViewSemanticReview,
+            target: ViewBuildTargetResult,
+        ) => void,
+        input?: ViewBuildSnapshot,
+    ): Promise<void> {
+        await this.enqueueWrite(job.corpusId, async () => {
+            const latest = (
+                await this.viewStore.getViewBuild(job.corpusId, job.jobId)
+            )?.results.find((entry) => entry.viewId === viewId);
+            if (!latest?.semanticReview)
+                throw new ViewBuildStaleError(
+                    "Semantic review demand was forgotten",
+                );
+            if (latest.semanticReview.acceptedRevisionId !== acceptedRevisionId)
+                return;
+            if (input) await this.recheckViewInput(input);
+            await this.viewStore.updateViewBuild(
+                job.corpusId,
+                job.jobId,
+                (current) => {
+                    const target = current.results.find(
+                        (entry) => entry.viewId === viewId,
+                    )!;
+                    operation(target.semanticReview!, target);
+                },
+            );
+        });
+    }
+
+    private async reviewInformationalTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<void> {
+        const saved = await this.viewStore.getViewBuild(
+            job.corpusId,
+            job.jobId,
+        );
+        const target = saved?.results.find(
+            (entry) => entry.viewId === result.viewId,
+        );
+        const review = target?.semanticReview;
+        if (!review)
+            throw new ViewBuildStaleError("Semantic review demand was removed");
+        const kind = result.snapshot.definition.projectSummary
+            ? "projects"
+            : "wiki";
+        if (!this.semanticReviewAvailable(kind)) return;
+        const update = (
+            operation: (
+                review: ViewSemanticReview,
+                target: ViewBuildTargetResult,
+            ) => void,
+            input?: ViewBuildSnapshot,
+        ) =>
+            this.updateSemanticReview(
+                job,
+                result.viewId,
+                review.acceptedRevisionId,
+                operation,
+                input,
+            );
+        try {
+            signal.throwIfAborted();
+            await update((current) => {
+                current.state = "running";
+                current.attempts++;
+                current.reason =
+                    "Reviewing accepted prose; article synthesis and publication are independent";
+            });
+            const view = await this.viewStore.getView({
+                corpusId: job.corpusId,
+                viewId: review.viewId,
+            });
+            if (
+                !view ||
+                view.state === "archived" ||
+                view.revisionId !== review.acceptedRevisionId ||
+                viewHash(view.content) !== review.contentHash
+            )
+                throw new ViewBuildStaleError(
+                    "Accepted article changed before semantic review",
+                );
+            const input = result.snapshot.semanticReviewOnly
+                ? result.snapshot
+                : await this.enqueueWrite(job.corpusId, () =>
+                      this.snapshotInformationalTarget(
+                          job.corpusId,
+                          {
+                              expectedVersion: view.version,
+                              definition: derivedDefinitionInput(view),
+                          },
+                          view,
+                          undefined,
+                          true,
+                      ),
+                  );
+            this.viewBuilds.trackContribution(job.jobId, input);
+            await this.enqueueWrite(job.corpusId, () =>
+                this.recheckViewInput(input),
+            );
+            const runtime = await this.getCorpusRuntime(job.corpusId);
+            const pages =
+                kind === "wiki"
+                    ? await runtime.access.read(() =>
+                          this.wikiAdmissionPages(input),
+                      )
+                    : [];
+            await update((current, target) => {
+                current.state = "running";
+                current.reason =
+                    "Reviewing accepted prose; article synthesis and publication are independent";
+                current.inspection = {
+                    inputFingerprint: input.fingerprint,
+                    evidenceFingerprint: viewBuildEvidenceFingerprint(input),
+                    fragmentCount: input.inputs.reduce(
+                        (count, source) =>
+                            count + (source.passages?.length ?? 0),
+                        0,
+                    ),
+                    comparedPages: pages.map(({ viewId, revisionId }) => ({
+                        viewId,
+                        revisionId,
+                    })),
+                    candidateLimit: 8,
+                    proseCharacterLimit: 6000,
+                    truncatedPageIds: pages
+                        .filter((page) => page.proseTruncated)
+                        .map((page) => page.viewId),
+                };
+                target.snapshot.influenceSources = [
+                    ...new Map(
+                        [
+                            ...(target.snapshot.influenceSources ?? []),
+                            ...input.inputs,
+                            ...(input.influenceSources ?? []),
+                        ].map(({ sourceId, revisionId }) => [
+                            JSON.stringify([sourceId, revisionId]),
+                            { sourceId, revisionId },
+                        ]),
+                    ).values(),
+                ];
+            });
+            const reusable =
+                review.inspection?.evidenceFingerprint ===
+                viewBuildEvidenceFingerprint(input)
+                    ? review.assessment
+                    : undefined;
+            const proposed =
+                reusable ??
+                (this.viewAdapter.reviewInformational
+                    ? await abortable(
+                          this.viewAdapter.reviewInformational(
+                              input,
+                              view,
+                              signal,
+                          ),
+                          signal,
+                      )
+                    : undefined);
+            const assessment = proposed
+                ? validateSemanticAssessment(proposed, input, view)
+                : undefined;
+            signal.throwIfAborted();
+            if (assessment)
+                await update((current) => {
+                    current.assessment = assessment;
+                    current.assessmentCompletedAt = new Date().toISOString();
+                }, input);
+            await this.enqueueWrite(job.corpusId, () =>
+                this.recheckViewInput(input),
+            );
+            if (kind === "wiki" && !review.organizationReviewed)
+                await this.consolidateWiki(job, result, signal);
+            await update((current, target) => {
+                current.state = "complete";
+                current.organizationReviewed = true;
+                current.completedAt = new Date().toISOString();
+                current.dueAt = new Date(
+                    Date.now() + semanticReviewIntervalMs,
+                ).toISOString();
+                current.reason = assessment
+                    ? "Bounded semantic assessment recorded for exact accepted content; no article rewrite"
+                    : "Bounded consolidation review complete; adapter does not provide completeness assessment";
+                if (assessment) current.assessment = assessment;
+                if (
+                    result.snapshot.semanticReviewOnly &&
+                    target.state === "pending"
+                ) {
+                    target.state = "skipped";
+                    target.reason = current.reason;
+                    target.revisionId = view.revisionId;
+                }
+            }, input);
+        } catch (error) {
+            const cancelled =
+                (await this.viewStore.getViewBuild(job.corpusId, job.jobId))
+                    ?.state === "cancelled";
+            await update((current, target) => {
+                current.state =
+                    error instanceof ViewBuildStaleError
+                        ? "stale"
+                        : cancelled
+                          ? "cancelled"
+                          : "failed";
+                current.reason = safeError(error);
+                current.dueAt = new Date(Date.now() + 30_000).toISOString();
+                if (
+                    result.snapshot.semanticReviewOnly &&
+                    target.state === "pending"
+                ) {
+                    target.state = "skipped";
+                    target.reason = `Article retained; semantic review ${current.state}: ${current.reason}`;
+                }
+            });
+            console.warn(
+                `Semantic review ${job.corpusId}/${review.viewId}: ${safeError(error)}`,
+            );
+        }
+    }
+
+    private async admitSemanticReview(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        family: WikiFamilyState,
+        views: ViewVersion[],
+        plan: ViewMaintenancePlan,
+        force = false,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        if (await this.hasActiveInformationalBuild(corpusId, kind))
+            return undefined;
+        if (!this.semanticReviewAvailable(kind)) {
+            if (force)
+                throw new Error(
+                    "Configured adapter does not support semantic review",
+                );
+            return undefined;
+        }
+        const reviews = new Map(
+            (await this.viewStore.listSemanticReviews(corpusId)).map(
+                (entry) => [entry.viewId, entry.review],
+            ),
+        );
+        const eligible = views
+            .filter(
+                (view) =>
+                    view.state === "draft" &&
+                    !!view.generation?.input &&
+                    (kind === "wiki"
+                        ? !!view.definition.wiki
+                        : !!view.definition.projectSummary) &&
+                    (force ||
+                        semanticReviewDue(reviews.get(view.viewId), view)),
+            )
+            .sort((left, right) => left.viewId.localeCompare(right.viewId));
+        const view =
+            eligible.find(
+                (view) =>
+                    view.viewId.localeCompare(family.reviewCursor ?? "") > 0,
+            ) ?? eligible[0];
+        if (!view) return undefined;
+        const target = {
+            expectedVersion: view.version,
+            definition: derivedDefinitionInput(view),
+        };
+        const input = await this.snapshotInformationalTarget(
+            corpusId,
+            target,
+            view,
+            undefined,
+            true,
+        );
+        input.semanticReviewOnly = force ? "explicit" : "automatic";
+        plan.targets.push({
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            state: "rebuild",
+            reason: "Semantic review only; accepted article is not resynthesized",
+        });
+        const nextFamily = { ...family, reviewCursor: view.viewId };
+        const request = {
+            corpusId,
+            expectedHead: (await this.viewStore.listViews(corpusId)).head,
+            targets: [target],
+        };
+        const reservation = this.viewBuilds.reserve();
+        try {
+            const admitted = await this.viewStore.admitViewBuild(
+                request,
+                [input],
+                plan,
+                nextFamily,
+                kind,
+            );
+            if (admitted.admitted) reservation.start(admitted.job);
+            return await this.viewStore.recordViewMaintenance(
+                plan,
+                admitted.job,
+            );
+        } finally {
+            reservation.release();
+        }
     }
 
     private async consolidateWiki(
@@ -10135,6 +10843,17 @@ export class FileMemoryService
                                 : {}),
                         };
                         target.wikiAssessmentKey = assessmentKey;
+                        if (assessment.disposition === "ambiguous")
+                            target.wikiAmbiguityDependencies = pages
+                                .filter((page) =>
+                                    assessment.ambiguousViewIds.includes(
+                                        page.viewId,
+                                    ),
+                                )
+                                .map(({ viewId, revisionId }) => ({
+                                    viewId,
+                                    revisionId,
+                                }));
                         if (result.snapshot.influenceSources)
                             target.snapshot.influenceSources = structuredClone(
                                 result.snapshot.influenceSources,
@@ -10251,11 +10970,22 @@ export class FileMemoryService
                             corpusId,
                             kind,
                         );
-                        if (!family.enabled || !family.dirty || family.error)
-                            return;
+                        if (!family.enabled) return;
                         const snapshot =
                             await this.viewStore.listViews(corpusId);
                         if (this.maintenance.isDeferred(corpusId)) return;
+                        if (!family.dirty || family.error)
+                            return this.admitSemanticReview(
+                                corpusId,
+                                kind,
+                                family,
+                                snapshot.views,
+                                {
+                                    corpusId,
+                                    expectedHead: snapshot.head,
+                                    targets: [],
+                                },
+                            );
                         return this.maintainWikiFamily(
                             runtime,
                             {
@@ -10367,7 +11097,7 @@ export class FileMemoryService
                                     runtime.manifest.indexGeneration,
                                     views,
                                 );
-                            if (family.enabled && family.dirty && !family.error)
+                            if (family.enabled)
                                 this.scheduleWikiMaintenance(corpusId, kind);
                         }
                     },
@@ -10423,6 +11153,15 @@ export class FileMemoryService
                 family.dirty = true;
         }
         if (family.indexVersion !== indexGeneration) {
+            family.dirty = true;
+            family.cursor = 0;
+            delete family.candidateReadCursor;
+            delete family.error;
+        }
+        if (
+            kind === "wiki" &&
+            (await this.viewStore.hasInvalidatedWikiAmbiguity(corpusId))
+        ) {
             family.dirty = true;
             family.cursor = 0;
             delete family.candidateReadCursor;
@@ -10595,6 +11334,26 @@ export class FileMemoryService
         );
     }
 
+    private async hasActiveInformationalBuild(
+        corpusId: string,
+        kind: "wiki" | "projects",
+    ): Promise<boolean> {
+        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
+        return active.some(
+            (job) =>
+                job.state === "running" &&
+                !(
+                    this.knowledgeMaintenance.has(corpusId) &&
+                    job.results.every((result) =>
+                        this.independentKnowledgePipeline(
+                            result.snapshot.pipeline,
+                            kind,
+                        ),
+                    )
+                ),
+        );
+    }
+
     private async maintainWikiFamily(
         runtime: CorpusRuntime,
         request: Extract<
@@ -10620,23 +11379,19 @@ export class FileMemoryService
         };
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
-        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
-        if (
-            active.some(
-                (job) =>
-                    job.state === "running" &&
-                    !(
-                        this.knowledgeMaintenance.has(corpusId) &&
-                        job.results.every((result) =>
-                            this.independentKnowledgePipeline(
-                                result.snapshot.pipeline,
-                                kind,
-                            ),
-                        )
-                    ),
-            )
-        )
+        if (await this.hasActiveInformationalBuild(corpusId, kind))
             return this.viewStore.recordViewMaintenance(plan);
+        if (request.operation === "review")
+            return (
+                (await this.admitSemanticReview(
+                    corpusId,
+                    kind,
+                    family,
+                    snapshot.views,
+                    plan,
+                    true,
+                )) ?? this.viewStore.recordViewMaintenance(plan)
+            );
         if (
             !family.dirty &&
             family.indexVersion === runtime.manifest.indexGeneration
@@ -10755,6 +11510,26 @@ export class FileMemoryService
             if (decisions.length)
                 nextFamily.error = `${decisions[0].reason}; ${decisions.length} targets require decisions; independent maintenance continues`;
         }
+        return this.admitWikiFamilyTargets(
+            corpusId,
+            kind,
+            nextFamily,
+            plan,
+            targets,
+            snapshots,
+            automatic,
+        );
+    }
+
+    private async admitWikiFamilyTargets(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        nextFamily: WikiFamilyState,
+        plan: ViewMaintenancePlan,
+        targets: ViewBuildRequest["targets"],
+        snapshots: ViewBuildSnapshot[],
+        automatic: boolean,
+    ): Promise<ViewMaintenanceResult> {
         if (!targets.length) {
             if (!nextFamily.dirty) delete nextFamily.candidateReadCursor;
             await this.viewStore.saveWikiFamily(corpusId, nextFamily, kind);
@@ -11783,7 +12558,7 @@ export class FileMemoryService
 
     private async maintainTopics(
         runtime: CorpusRuntime,
-        request: Extract<ViewMaintenanceRequest, { family: string }>,
+        request: Extract<ViewMaintenanceRequest, { family: "topics" }>,
         automatic = false,
         retryAdmission = true,
     ): Promise<ViewMaintenanceResult> {
@@ -11889,7 +12664,7 @@ export class FileMemoryService
 
     private async recaptureChangedTopicAdmission(
         runtime: CorpusRuntime,
-        request: Extract<ViewMaintenanceRequest, { family: string }>,
+        request: Extract<ViewMaintenanceRequest, { family: "topics" }>,
         expectedHead: string | null,
         automatic: boolean,
         retryAllowed: boolean,
@@ -18758,6 +19533,9 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        for (const controller of this.separationControllers.values())
+            controller.abort(new Error("Memory service is closing"));
+        await Promise.allSettled(this.separationWork);
         for (const release of this.synopsisCheckpointHolds.values()) release();
         this.synopsisCheckpointHolds.clear();
         this.synopsisPriorityCooldowns.clear();
