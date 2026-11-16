@@ -4,6 +4,7 @@
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
 import { indexedLocator } from "../src/indexedFragments.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 
 // Jest 29 exposes this ESM API, but @types/jest does not declare it.
 const runtimeJest = import.meta.jest;
@@ -22,25 +23,28 @@ let completion:
     success: false,
     message: "Controlled provider failure",
 };
+const model = withWikiChoiceResponses({
+    completionSettings: {},
+    complete: async (messages) => {
+        if (typeof messages === "string")
+            throw new Error("Expected structured prompt messages");
+        instructions = String(
+            messages.find((message) => message.role === "system")!.content,
+        );
+        request = JSON.parse(
+            String(
+                messages.find((message) => message.role === "user")!.content,
+            ),
+        );
+        return completion;
+    },
+});
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     ...actual,
     openai: {
         ...actual.openai,
         getChatModelSettings: () => ({ provider: "azure" }),
-        createChatModel: () => ({
-            complete: async (
-                messages: Array<{ role: string; content: string }>,
-            ) => {
-                instructions = messages.find(
-                    (message) => message.role === "system",
-                )!.content;
-                request = JSON.parse(
-                    messages.find((message) => message.role === "user")!
-                        .content,
-                );
-                return completion;
-            },
-        }),
+        createChatModel: () => model,
     },
 }));
 const { createConfiguredViewSynthesisAdapter } = await import(

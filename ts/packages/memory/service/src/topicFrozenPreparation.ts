@@ -97,6 +97,8 @@ export async function reconcileFrozenTopics(
     };
     delete inner.replayPackets;
     delete inner.onPacket;
+    delete inner.generativeDecisionStage;
+    delete inner.onGenerativeDecision;
     const prepared = await parallel(
         batches.map(
             (candidates) => (preparationSignal: AbortSignal) =>
@@ -167,7 +169,12 @@ export async function reconcileFrozenTopics(
                         (entry) => !reconsideredIds.has(entry.nodeId),
                     ),
                 },
-                { ...inner, candidates },
+                {
+                    ...inner,
+                    candidates,
+                    generativeDecisionStage: options.generativeDecisionStage,
+                    onGenerativeDecision: options.onGenerativeDecision,
+                },
             ),
     );
     validate(reconciled);

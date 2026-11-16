@@ -261,7 +261,7 @@ test("binding is rechecked immediately before normal, repair and organization pr
             );
             assert.equal(
                 providerCalls,
-                boundary === "normal" ? 0 : boundary === "organization" ? 2 : 1,
+                boundary === "normal" ? 0 : boundary === "organization" ? 3 : 1,
             );
             const calls = JSON.parse(
                 await readFile(path.join(output, "calls.json"), "utf8"),
@@ -295,7 +295,7 @@ test("matching model binding is saved in result metrics and each provider receip
             { initializeModel: () => model },
         );
         assert.equal(result.observations.completed, true);
-        assert.equal(result.observations.providerCalls, 2);
+        assert.equal(result.observations.providerCalls, 3);
         assert.equal(result.observations.modelBindingHash, expected.hash);
         assert.deepEqual(result.observations.modelBinding, expected.binding);
         assert.equal(
@@ -424,7 +424,24 @@ test("effective topic replay settings preserve defaults and every explicit treat
     assert.deepEqual(topicReplaySettings({}), {
         priorDeltas: true,
         compactIds: true,
+        generativeDecisionStage: "output-contract",
     });
+    for (const stage of ["original", "decomposed", "output-contract"])
+        assert.deepEqual(
+            topicReplaySettings({ "generative-decision-stage": stage }),
+            {
+                priorDeltas: true,
+                compactIds: true,
+                generativeDecisionStage: stage,
+            },
+        );
+    assert.throws(
+        () =>
+            topicReplaySettings({
+                "generative-decision-stage": "native",
+            }),
+        /Invalid topic curation settings/,
+    );
     assert.deepEqual(
         topicReplaySettings({
             "input-tokens": "12000",
@@ -437,6 +454,7 @@ test("effective topic replay settings preserve defaults and every explicit treat
             priorContextFraction: 0.25,
             priorDeltas: true,
             compactIds: false,
+            generativeDecisionStage: "output-contract",
         },
     );
     assert.throws(
@@ -740,7 +758,7 @@ test("organization shares the original deadline and cannot invoke a provider aft
             },
             { now: () => now, initializeModel: () => model },
         );
-        assert.equal(providerCalls, 2);
+        assert.equal(providerCalls, 3);
         assert.equal(result.observations.disposition, "deadline-incomplete");
         assert.equal(result.observations.coverage.admittedNodes, 8);
         assert.equal(result.observations.coverage.unaccountedNodes, 0);
@@ -1319,7 +1337,12 @@ test("completed curation resumes through the real organization generator without
                     result.observations.calls.map(
                         ({ phase, kind }) => phase ?? kind,
                     ),
-                    ["preparation", "reconciliation", "organization"],
+                    [
+                        "preparation",
+                        "reconciliation",
+                        "reconciliation",
+                        "organization",
+                    ],
                 );
                 const snapshot = JSON.parse(
                     await readFile(path.join(output, "snapshot.json"), "utf8"),

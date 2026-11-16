@@ -113,6 +113,7 @@ function configuredGenerativeSettings(
                     "priorContextFraction",
                     "priorDeltas",
                     "compactIds",
+                    "generativeDecisionStage",
                 ].includes(key),
         )
     )

@@ -490,6 +490,9 @@ calls all completed; source extraction, embedding/backfill, topic calls outside
 that adapter and internal transport retries remain outside this measurement.
 Independent annotations, calibrated agreement, numeric thresholds and sealed
 confirmation remain pending. No human approval is implied by these executions.
+The reported v25 live observations predate integration of choice-only Wiki
+verdicts and restricted topic-reconciliation routing; they do not qualify that
+combined decision policy.
 
 ### Frozen review and split guard
 

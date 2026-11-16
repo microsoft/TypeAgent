@@ -47,6 +47,10 @@ import {
     runFrozenTopicWindows,
 } from "./topicFrozenPreparation.js";
 import {
+    withGenerativeTopicDecisions,
+    type TopicGenerativeDecisionReceipt,
+} from "./topicGenerativeDecision.js";
+import {
     indexTopicDecisionEvidence,
     topicClusterSignature,
     type TopicDecisionEvidenceContexts,
@@ -90,6 +94,9 @@ export interface TopicCurationCall {
     signal: AbortSignal;
 }
 export interface TopicCurationOptions extends TopicCurationSettings {
+    onGenerativeDecision?:
+        | ((receipt: TopicGenerativeDecisionReceipt) => void)
+        | undefined;
     candidates?: Candidate[];
     replayPackets?: TopicCurationPacket[];
     onPacket?: (packet: TopicCurationPacket) => void;
@@ -442,6 +449,10 @@ function prepareTopicPacket(
         payload,
         schema,
         batch.map((node) => [node.id, node.memberIds ?? [node.id]]),
+        ...(options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
+            ? ["generative-partition-v1", options.generativeDecisionStage]
+            : []),
     ]);
     recordSearchTiming("topic.curation.packet", performance.now() - started, {
         ordinal,
@@ -543,6 +554,19 @@ function createTopicCuration(
             "Topic packet replay requires lazy curation with ordered installation",
         );
     options = { ...options };
+    if (
+        options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
+    ) {
+        complete = withGenerativeTopicDecisions(
+            complete,
+            options.generativeDecisionStage,
+            options.onGenerativeDecision,
+            options.inspectRequest ?? complete.inspectRequest,
+        );
+        if (complete.inspectRequest)
+            options.inspectRequest = complete.inspectRequest;
+    }
     if (options.compactIds) {
         complete = compactTopicCompletion(complete, options.inspectRequest);
         if (complete.inspectRequest)

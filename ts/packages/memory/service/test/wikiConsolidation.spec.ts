@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { mkdtemp, rm } from "node:fs/promises";
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -413,7 +414,7 @@ test("configured scope comparison binds each article's query and aliases indepen
         const adapter = createConfiguredViewSynthesisAdapter(
             undefined,
             4000,
-            model,
+            withWikiChoiceResponses(model),
         );
         expect(
             await adapter.assessWikiConsolidation!(
@@ -468,7 +469,7 @@ test("configured consolidation repair uses unchanged originals and checks preser
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     const signal = new AbortController().signal;
     const repaired = await adapter.repairWikiConsolidation!(

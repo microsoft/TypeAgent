@@ -355,3 +355,6 @@ snapshots are retained for independent scope/admission review; API success is
 not a topic-quality score. Independent gold/output approval, calibrated
 reviewers, numeric thresholds and untouched confirmation are still required
 before a benchmark-quality claim. Sealed holdouts remain unexecuted.
+These v25 development observations predate integration of the later choice-only
+Wiki verdicts and restricted topic-reconciliation routing. They are not a live
+qualification of the combined decision policy.

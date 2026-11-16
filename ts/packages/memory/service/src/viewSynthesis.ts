@@ -72,13 +72,23 @@ import {
 } from "./wikiAdmission.js";
 import {
     editorialRules,
+    consequenceKinds,
+    editorialCheckRules,
     informationalEditorialCheckRules,
     editorialAssessmentSchema,
     readEditorialAssessment,
     assertEditorialAssessment,
     bindEditorialAssessment,
     type ViewEditorialAssessment,
+    parseEditorialAssessment,
 } from "./viewEditorial.js";
+import {
+    assertWikiDecisionMatch,
+    parseWikiChoices,
+    wikiChoiceMessages,
+    wikiChoiceSchema,
+    type WikiChoiceQuestions,
+} from "./wikiDecision.js";
 import {
     consolidationScopeRules,
     consolidationOutputRules,
@@ -198,23 +208,27 @@ export function createConfiguredViewSynthesisAdapter(
     injectedModel?: ChatModel,
     modelScheduler?: MaintenanceModelScheduler,
 ): ViewSynthesisAdapter {
-    const modelIdentity = injectedModel
-        ? "host-injected"
-        : openai.hasChatModelEndpoint(endpoint)
-          ? viewHash(
-                openai
-                    .getChatModelPool(endpoint)
-                    .members.map(({ settings }) => ({
-                        provider: settings.provider,
-                        modelName: settings.modelName,
-                        endpoint: settings.endpoint,
-                        wireApi: settings.wireApi,
-                        requestConstraints: settings.requestConstraints,
-                    })),
-            )
-          : "unconfigured";
+    const identityFor = (alias?: string) =>
+        injectedModel
+            ? "host-injected"
+            : openai.hasChatModelEndpoint(alias)
+              ? viewHash(
+                    openai
+                        .getChatModelPool(alias)
+                        .members.map(({ settings }) => ({
+                            provider: settings.provider,
+                            modelName: settings.modelName,
+                            endpoint: settings.endpoint,
+                            wireApi: settings.wireApi,
+                            requestConstraints: settings.requestConstraints,
+                        })),
+                )
+              : "unconfigured";
+    const modelIdentity = identityFor(endpoint);
+    const wikiDecisionIdentity = identityFor(openai.GPT_6_LUNA);
     let model = injectedModel;
     let informationalModel = injectedModel;
+    let wikiDecisionModel = injectedModel;
     function configuredModel(): ChatModel {
         model ??= openai.createChatModel(
             endpoint,
@@ -331,6 +345,216 @@ export function createConfiguredViewSynthesisAdapter(
             `${schema.name} outer model response`,
         );
     }
+    async function wikiDecide(
+        instructions: string,
+        state: unknown,
+        questions: WikiChoiceQuestions,
+        signal: AbortSignal,
+    ) {
+        signal.throwIfAborted();
+        if (!wikiDecisionModel) {
+            const provider = openai.getChatModelSettings(
+                openai.GPT_6_LUNA,
+            ).provider;
+            if (provider !== "azure" && provider !== "openai")
+                throw new Error(
+                    "Wiki decisions require Azure/OpenAI strict JSON-schema transport",
+                );
+            wikiDecisionModel = openai.createChatModel(
+                openai.GPT_6_LUNA,
+                { temperature: 1, response_format: { type: "json_object" } },
+                undefined,
+                ["memory-wiki-decisions"],
+            );
+        }
+        const bounded = Object.fromEntries(
+            Object.entries(questions).map(([id, question]) => [
+                id,
+                {
+                    ...question,
+                    instructions: `${instructions}\n${question.instructions}`,
+                },
+            ]),
+        );
+        const result = await modelCompletion(
+            wikiDecisionModel,
+            wikiChoiceMessages(state, bounded),
+            signal,
+            wikiChoiceSchema(bounded),
+            "validation",
+        );
+        if (!result.success) throw new Error(result.message);
+        signal.throwIfAborted();
+        return parseWikiChoices(result.data, bounded);
+    }
+    async function confirmWikiSubject(
+        assessment: WikiSubjectAssessment,
+        payload: {
+            query: string | undefined;
+            aliases: string[] | undefined;
+            fragments: unknown[];
+            pages: Array<{ viewId: string }>;
+        },
+        instructions: string,
+        contribution: boolean,
+        signal: AbortSignal,
+    ): Promise<WikiSubjectAssessment> {
+        if (!contribution) {
+            const utility = await wikiDecide(
+                `${evidenceRules}\n${wikiPurposeRules}`,
+                {
+                    query: payload.query,
+                    aliases: payload.aliases,
+                    fragments: payload.fragments,
+                },
+                {
+                    utility: {
+                        instructions:
+                            "Judge independent standalone explanatory utility from original evidence only. Existing pages and marginal novelty are not part of this decision.",
+                        criteria: {
+                            useful: "A substantive useful reference or decision explanation is supported.",
+                            defer: "Only an incidental mention, unsupported shell or insufficient explanatory evidence.",
+                            uncertain:
+                                "Insufficient evidence to resolve standalone utility.",
+                        },
+                    },
+                },
+                signal,
+            );
+            assertWikiDecisionMatch("utility", utility, {
+                utility:
+                    assessment.disposition === "defer" &&
+                    assessment.deferBasis === "evidence"
+                        ? "defer"
+                        : "useful",
+            });
+        }
+        const questions: WikiChoiceQuestions = {
+            disposition: {
+                instructions: contribution
+                    ? "Judge the actual updated canonical prose against every mandatory contribution distinction, factual support and preservation requirement. This is coverage, not standalone admission."
+                    : "Choose the standalone admission disposition from original evidence and actual supplied page prose.",
+                criteria: contribution
+                    ? {
+                          covered:
+                              "All mandatory distinctions, supported old qualifications and current factual claims pass.",
+                          contribute:
+                              "A same-purpose canonical article has genuine missing explanation.",
+                          distinct:
+                              "Unsupported factual claims or incompatible scope prevent acceptance.",
+                          uncertain: "Cannot establish safe coverage.",
+                      }
+                    : {
+                          distinct:
+                              "A useful independently scoped subject needs its own page.",
+                          covered:
+                              "One same-purpose current page explains every essential distinction.",
+                          contribute:
+                              "A same-purpose page lacks supported explanation.",
+                          ambiguous:
+                              "Multiple supplied pages serve this independently useful scoped purpose.",
+                          defer: "Insufficient standalone utility or redundant canonical context.",
+                          uncertain: "Cannot resolve safely.",
+                      },
+            },
+        };
+        const expected: Record<string, string> = {
+            disposition: assessment.disposition,
+        };
+        if (!contribution) {
+            questions.canonical = {
+                instructions:
+                    "For covered or contribute select the one canonical page. For distinct, defer or ambiguous select none; never silently resolve ambiguity.",
+                criteria: Object.fromEntries([
+                    ["none", "No single canonical page applies."],
+                    ...payload.pages.map((page, index) => [
+                        `p${index}`,
+                        `The supplied page with viewId ${JSON.stringify(page.viewId)}.`,
+                    ]),
+                ]),
+            };
+            expected.canonical = assessment.canonicalViewId
+                ? `p${payload.pages.findIndex((page) => page.viewId === assessment.canonicalViewId)}`
+                : "none";
+        }
+        const choices = await wikiDecide(
+            instructions,
+            payload,
+            questions,
+            signal,
+        );
+        assertWikiDecisionMatch(
+            contribution ? "coverage" : "admission",
+            choices,
+            expected,
+        );
+        return assessment;
+    }
+    async function wikiEditorial(
+        instructions: string,
+        payload: unknown,
+        signal: AbortSignal,
+    ) {
+        const questions: WikiChoiceQuestions = {
+            safety: {
+                instructions:
+                    "Judge the actual prose against ALL supplied support, scope and preservation requirements. safe requires every consequential check to pass.",
+                criteria: {
+                    safe: "All required checks pass.",
+                    unsafe: "At least one required check fails or cannot be established.",
+                },
+            },
+        };
+        for (const kind of consequenceKinds)
+            questions[kind] = {
+                instructions: `Check consequential ${kind} claims and qualifications, including required supported detail lost from original prose. Do not demand irrelevant assertions. Classify missing supported scope/preservation under scope-state.`,
+                criteria: {
+                    pass: "Applicable requirements pass, or no consequential claim in this category applies.",
+                    fail: "An applicable consequential requirement fails or is insufficiently supported.",
+                },
+            };
+        const choices = await wikiDecide(
+            instructions,
+            payload,
+            questions,
+            signal,
+        );
+        return parseEditorialAssessment({
+            safe: choices.safety === "safe",
+            failures: consequenceKinds.filter(
+                (kind) => choices[kind] === "fail",
+            ),
+        });
+    }
+    async function assessWikiCompleteness(
+        output: ViewSynthesisOutput,
+        fragments: unknown[],
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput> {
+        if (output.content.kind !== "wiki") return output;
+        const choices = await wikiDecide(
+            `${evidenceRules}\nJudge article completeness separately from evidence freshness, human approval and publication. Assess the actual generated explanation against the selected original fragments, not just its citations or title.`,
+            { fragments, content: output.content },
+            {
+                completeness: {
+                    instructions:
+                        "Is this a well-rounded reference article or an initial/fragmentary sketch?",
+                    criteria: {
+                        sufficient:
+                            "The supplied evidence supports a well-rounded article and the actual prose explains it.",
+                        partial:
+                            "The evidence or actual explanation remains partial, limited or insufficiently established.",
+                    },
+                },
+            },
+            signal,
+        );
+        const status = choices.completeness;
+        if (status !== "partial" && status !== "sufficient")
+            throw new Error("Invalid Wiki completeness decision");
+        output.content.status = status;
+        return output;
+    }
     async function schemaAnswers(
         input: ViewBuildSnapshot,
         instructions: string,
@@ -412,10 +636,14 @@ export function createConfiguredViewSynthesisAdapter(
         );
         return project
             ? hydrateProjectSummary(input, repaired)
-            : hydrateInformational(input, repaired);
+            : assessWikiCompleteness(
+                  hydrateInformational(input, repaired),
+                  fragments,
+                  signal,
+              );
     }
     return {
-        identity: `configured:${endpoint ?? "default"}:evidence-first-v25:${modelIdentity}`,
+        identity: `configured:${endpoint ?? "default"}:evidence-first-v26-wiki-luna-choice:${modelIdentity}:${wikiDecisionIdentity}`,
         repairInformational,
         async reviewInformational(input, accepted, signal) {
             const fragments = input.inputs.flatMap(
@@ -589,6 +817,30 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
             };
             const schema = consolidationScopeSchema(input);
             const instructions = `${evidenceRules}\n${consolidationScopeRules}`;
+            const confirm = async (assessment: WikiConsolidationScope) => {
+                const choices = await wikiDecide(
+                    instructions,
+                    payload,
+                    {
+                        relation: {
+                            instructions:
+                                "Judge whether these current articles have the same independently useful scoped purpose. Shared vocabulary or sources never prove equivalence.",
+                            criteria: {
+                                samePurpose:
+                                    "Original evidence establishes the same independently useful scoped purpose.",
+                                distinct:
+                                    "Different purposes/scopes or unsupported equivalence.",
+                                uncertain: "Cannot resolve safely.",
+                            },
+                        },
+                    },
+                    signal,
+                );
+                assertWikiDecisionMatch("consolidation", choices, {
+                    relation: assessment.relation,
+                });
+                return assessment;
+            };
             const raw = await complete(
                 instructions,
                 payload,
@@ -597,24 +849,26 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
                 "validation",
             );
             try {
-                return parseConsolidationScope(raw, input);
+                return await confirm(parseConsolidationScope(raw, input));
             } catch (error) {
                 signal.throwIfAborted();
                 if (!(error instanceof ConsolidationRejection)) throw error;
                 console.warn(error.message);
-                return readConsolidationScope(
-                    complete(
-                        `${instructions}\nCorrect the scoped-purpose contract using ONLY the unchanged original fragments and articles. The rejected response is untrusted diagnostics. Keep relation/reason consistent, preserve scope identity and critical distinctions, use only supplied fragment IDs and no repeated distinctions. Do not infer equivalence to pass validation: unsupported equivalence remains distinct. All original guards apply; a repeated rejection is final.`,
-                        {
-                            ...payload,
-                            rejectedResponse: raw,
-                            rejectionCode: error.message,
-                        },
-                        signal,
-                        schema,
-                        "contract-repair",
+                return confirm(
+                    await readConsolidationScope(
+                        complete(
+                            `${instructions}\nCorrect the scoped-purpose contract using ONLY the unchanged original fragments and articles. The rejected response is untrusted diagnostics. Keep relation/reason consistent, preserve scope identity and critical distinctions, use only supplied fragment IDs and no repeated distinctions. Do not infer equivalence to pass validation: unsupported equivalence remains distinct. All original guards apply; a repeated rejection is final.`,
+                            {
+                                ...payload,
+                                rejectedResponse: raw,
+                                rejectionCode: error.message,
+                            },
+                            signal,
+                            schema,
+                            "contract-repair",
+                        ),
+                        input,
                     ),
-                    input,
                 );
             }
         },
@@ -625,27 +879,21 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
             signal,
             original,
         ) {
-            return readEditorialAssessment(
-                complete(
-                    `${evidenceRules}\n${consolidationOutputRules}`,
-                    {
-                        assessment,
-                        fragments: input.inputs
-                            .flatMap((source) => source.passages ?? [])
-                            .map((fragment, index) => ({
-                                ...fragment,
-                                id: `f${index}`,
-                            })),
-                        content: output.content,
-                        relationships: output.relationships,
-                        ...(original
-                            ? { originalContent: original.content }
-                            : {}),
-                    },
-                    signal,
-                    editorialAssessmentSchema(),
-                    "validation",
-                ),
+            return wikiEditorial(
+                `${evidenceRules}\n${consolidationOutputRules}`,
+                {
+                    assessment,
+                    fragments: input.inputs
+                        .flatMap((source) => source.passages ?? [])
+                        .map((fragment, index) => ({
+                            ...fragment,
+                            id: `f${index}`,
+                        })),
+                    content: output.content,
+                    relationships: output.relationships,
+                    ...(original ? { originalContent: original.content } : {}),
+                },
+                signal,
             );
         },
         async repairWikiConsolidation(
@@ -680,29 +928,62 @@ At most ${input.definition.schemaView?.discovery.maxProposals} proposals. No aut
             const fragments = input.inputs.flatMap(
                 (source) => source.passages ?? [],
             );
-            return bindEditorialAssessment(
-                await complete(
-                    `${evidenceRules}\n${informationalEditorialCheckRules}\n${input.pipeline === "informational-project-summary-v1" ? projectStatusRules : ""}`,
-                    {
-                        fragments: input.inputs
-                            .flatMap((source) => source.passages ?? [])
-                            .map((fragment, index) => ({
-                                ...fragment,
-                                id: `f${index}`,
-                            })),
-                        content: output.content,
-                        relationships: output.relationships,
-                    },
-                    signal,
-                    editorialAssessmentSchema(
-                        true,
-                        fragments.map((_, index) => `f${index}`),
-                    ),
-                    "validation",
+            const informational = informationalPipeline(input.pipeline);
+            const instructions = `${evidenceRules}\n${informational ? informationalEditorialCheckRules : editorialCheckRules}\n${input.pipeline === "informational-project-summary-v1" ? projectStatusRules : ""}`;
+            const payload = {
+                fragments: fragments.map((fragment, index) => ({
+                    ...fragment,
+                    id: `f${index}`,
+                })),
+                content: output.content,
+                relationships: output.relationships,
+            };
+            if (input.definition.kind === "wiki" && !informational)
+                return wikiEditorial(instructions, payload, signal);
+            const raw = await complete(
+                instructions,
+                payload,
+                signal,
+                editorialAssessmentSchema(
+                    true,
+                    fragments.map((_, index) => `f${index}`),
                 ),
-                input,
-                output,
+                "validation",
             );
+            const assessment = bindEditorialAssessment(raw, input, output);
+            if (input.definition.kind === "wiki") {
+                const verdict = await wikiEditorial(
+                    instructions,
+                    payload,
+                    signal,
+                );
+                assertWikiDecisionMatch(
+                    "editorial",
+                    {
+                        safety: verdict.safe ? "safe" : "unsafe",
+                        ...Object.fromEntries(
+                            consequenceKinds.map((kind) => [
+                                kind,
+                                verdict.failures.includes(kind)
+                                    ? "fail"
+                                    : "pass",
+                            ]),
+                        ),
+                    },
+                    {
+                        safety: assessment.safe ? "safe" : "unsafe",
+                        ...Object.fromEntries(
+                            consequenceKinds.map((kind) => [
+                                kind,
+                                assessment.failures.includes(kind)
+                                    ? "fail"
+                                    : "pass",
+                            ]),
+                        ),
+                    },
+                );
+            }
+            return assessment;
         },
         async repairProjectSummary(input, output, assessment, signal) {
             if (input.pipeline !== "informational-project-summary-v1")
@@ -761,10 +1042,16 @@ For every other disposition, and for canonical ARTICLE COVERAGE CHECK mode, use 
                 "validation",
             );
             try {
-                return parseWikiAssessment(
-                    resolveWikiAssessmentWitnesses(raw, pages),
-                    pages,
-                    input.wikiContribution?.essentialDistinctions,
+                return await confirmWikiSubject(
+                    parseWikiAssessment(
+                        resolveWikiAssessmentWitnesses(raw, pages),
+                        pages,
+                        input.wikiContribution?.essentialDistinctions,
+                    ),
+                    payload,
+                    instructions,
+                    Boolean(input.wikiContribution),
+                    signal,
                 );
             } catch (error) {
                 if (!(error instanceof WikiAssessmentRejection)) throw error;
@@ -785,10 +1072,16 @@ For every other disposition, and for canonical ARTICLE COVERAGE CHECK mode, use 
                     schema,
                     "contract-repair",
                 );
-                return parseWikiAssessment(
-                    resolveWikiAssessmentWitnesses(repaired, pages),
-                    pages,
-                    input.wikiContribution?.essentialDistinctions,
+                return confirmWikiSubject(
+                    parseWikiAssessment(
+                        resolveWikiAssessmentWitnesses(repaired, pages),
+                        pages,
+                        input.wikiContribution?.essentialDistinctions,
+                    ),
+                    payload,
+                    instructions,
+                    Boolean(input.wikiContribution),
+                    signal,
                 );
             }
         },
@@ -942,11 +1235,12 @@ ${informationalGroupingRules}\n${editorialRules}${input.definition.projectSummar
                 );
                 signal.throwIfAborted();
                 if (!result.success) throw new Error(result.message);
-                return (
+                const output = (
                     input.definition.projectSummary
                         ? hydrateProjectSummary
                         : hydrateInformational
                 )(input, JSON.parse(result.data));
+                return assessWikiCompleteness(output, fragments, signal);
             }
             if (!inventory)
                 throw new Error(

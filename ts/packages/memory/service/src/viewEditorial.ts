@@ -42,7 +42,7 @@ export interface ViewEditorialContext {
 type ProtectedEdit = ViewEditOperation;
 type EditorialInput = ViewBuildSnapshot;
 
-const consequenceKinds = [
+export const consequenceKinds = [
     "unsupported-claim",
     "quantity",
     "statistic-cohort",

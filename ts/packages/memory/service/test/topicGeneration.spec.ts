@@ -348,7 +348,10 @@ test("named generative settings and Decision factories retain distinct recipes",
                 };
             },
         },
-        mode: { kind: "generative" },
+        mode: {
+            kind: "generative",
+            settings: { generativeDecisionStage: "original" },
+        },
     });
     const result = await generate(input(1), new AbortController().signal);
     expect(curationCalls).toBe(2);
@@ -538,7 +541,10 @@ test.each([false, true])(
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const snapshot = await generator(
             input(7),
@@ -664,7 +670,10 @@ test.each([
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const outcome = generator(input(2), controller.signal);
         if (mode === "repeated" || mode === "transport" || mode === "abort") {
@@ -810,12 +819,11 @@ test.each([8, 9])(
 test("curation checkpoints seed only unchanged policy and exact captured evidence", async () => {
     const frozen = await capture(input(55).topicInput!.occurrences);
     const checkpoints: TopicSnapshot[] = [];
-    let calls = 0;
     const generator = createConfiguredTopicGenerator({
         model: {
             completionSettings: {},
             complete: async (messages) => {
-                if (++calls === 5)
+                if (checkpoints.length)
                     throw new Error("Curation provider interrupted");
                 const payload = JSON.parse(promptText(messages, 1));
                 return {

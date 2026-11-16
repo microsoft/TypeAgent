@@ -38,6 +38,8 @@ function curationSettings(
     const priorContextFraction = numeric(
         "TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION",
     );
+    const generativeDecisionStage =
+        environment.TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE;
     const flags: Pick<TopicCurationSettings, "priorDeltas" | "compactIds"> = {};
     for (const [field, variable] of [
         ["priorDeltas", "TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS"],
@@ -51,6 +53,7 @@ function curationSettings(
     if (
         inputTokenTarget === undefined &&
         priorContextFraction === undefined &&
+        generativeDecisionStage === undefined &&
         Object.keys(flags).length === 0
     )
         return undefined;
@@ -58,9 +61,30 @@ function curationSettings(
         ...flags,
         ...(inputTokenTarget !== undefined ? { inputTokenTarget } : {}),
         ...(priorContextFraction !== undefined ? { priorContextFraction } : {}),
+        ...(generativeDecisionStage !== undefined
+            ? {
+                  generativeDecisionStage: parseGenerativeDecisionStage(
+                      generativeDecisionStage,
+                  ),
+              }
+            : {}),
     };
     validateTopicCurationSettings(settings);
     return settings;
+}
+
+function parseGenerativeDecisionStage(
+    value: string,
+): NonNullable<TopicCurationSettings["generativeDecisionStage"]> {
+    if (
+        value !== "original" &&
+        value !== "decomposed" &&
+        value !== "output-contract"
+    )
+        throw new Error(
+            "Invalid TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE",
+        );
+    return value;
 }
 
 function configuredDecisionExecution(
