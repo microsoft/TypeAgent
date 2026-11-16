@@ -1,21 +1,20 @@
 Status: reviewed
 
-Phase 3b review of task 9's distinguishing tests, drafted by the design agent; the human decided each item. A was run 2 (Sonnet), B run 1 (Opus).
+Phase 3b review of task 9's distinguishing tests after both runs were redone for the operation log, drafted by the design agent for the human to decide each item. A was run 1 (Opus), B run 2 (Sonnet).
 
 ## Tests
 
-- **freedom** A local add calls the writer with `below` absent (Sonnet) or `undefined` (Opus): the same effect.
-- **freedom** The queued local remove shares the caller's `ids` array (Sonnet) or a copy (Opus). `own-copy` covers the operation `enqueue` returns, and operations are never changed, so nothing can tell except identity.
-- **freedom** The same for the remote queue.
-- **freedom** A property outside the operation's type survives into the stamped operation (Sonnet) or is dropped (Opus). The type keeps callers from adding one except by widening; the rules don't say what happens to it.
-- **freedom** A clear lists the IDs it removes in a different order: the writer treats the list as a set.
-- **contract gap** **requeue: 9** Opus's read facet is a class instance that keeps the writer in an own property, so whoever holds `model` can reach `add` and `remove` through `model.writer`. Task 9's text forbids it ("an object with only `ShapeCollection`'s members ... never the writer itself"), but `ShapeMessageProcessor.read-facet`'s expression checks only that `model` has no `add` or `remove`. Made: the rule and its contract test check that every own property of `model`, and every property along its prototype chain short of `Object.prototype`, is a `ShapeCollection` member (`onlyMembers` in `shapeModel.vocab.ts`), with the adversary `ShapeMessageProcessor.read-facet--facet-keeps-writer`. Task 9 (Opus, run 1) goes back for another attempt.
-- **contract gap** **requeue: 9.2, 10** Sonnet's clear copies and filters every present shape, so a clear that removes nothing costs time in proportion to the shapes present. `ShapeMessageProcessor.log-amortized` allows only "time in proportion to the shapes a clear removes", but `bench.ts` measures no clear. Made: task 10 adds a pattern, remote clears that remove nothing while all the shapes stay, and goes back for another attempt; 9.2 (Sonnet) goes back for another attempt. The reference walks every shape too, but it isn't held to the budgets.
+- **freedom** A local remove whose `ids` array the caller changes after enqueuing: A copied it, B (and the reference) queued the caller's array. The test changes an enqueued item, so no conforming caller sees the difference. `Operation`'s "operations are never changed" said so only in prose; decided (the human, 2026-11-16): it is the caller's obligation, now the rule `MessageProcessor.items-unchanged`, checked by comparing each enqueue call's arguments with the copy the history keeps (`Call.given` against `Call.args` in `rules.ts`).
+- **freedom** The same on the remote queue, under the same rule.
+- **freedom** `applied` reports the object given to `remote.enqueue` (B) or an equal copy (A). "As it was enqueued" fixes the values, not the object.
+- **freedom** The stamped operation's property order. `MessageProcessor.stamps` fixes which fields and their values.
+- **freedom** The read facet's members are own (B) or inherited (A). `read-facet` allows either, on purpose.
+- **freedom** The log's listeners are in a `#private` field (A) or an own property (B). No rule speaks of `logOperations`' properties; the previous review decided a forged log entry changes no shape and nothing reads the log.
+- **freedom** Calling the facet's `on` detached from the facet. The interfaces describe method calls on the object; a detached call isn't one.
 
 ## Notes
 
-- **nothing** The missing copies also show when an enqueued array is changed, which "operations are never changed" rules out: the identity tests already show it.
-- **nothing** Own properties against a prototype in the facet: the same difference as the facet test.
-- **nothing** The two drain the queues differently, which only reentrancy could show, and `not-reentrant` forbids it.
-
-The report's paragraphs, outside its bullets: a spy writer is a valid way to observe the processor; every test keeps the processor's requirements, including `client-order`; the two agree on the model for every valid sequence tried; and the scratch copies' `node_modules`, which kept `testkit.ts`'s fast-check import from loading there, is fixed in `task.ts`.
+- **nothing** The two agree on everything the rules settle, including writer calls, `below` after acknowledgments and removals, clears, the log's order and the stamps.
+- **nothing** Their per-client lists differ only for adds applied out of `clientSeq` order, which `client-order` rules out.
+- **nothing** The drain order differs only under reentrancy, which `not-reentrant` forbids.
+- **nothing** The reference counts `clientSeq` from 1 and the runs from 0; `stamps` asks only that it grow.

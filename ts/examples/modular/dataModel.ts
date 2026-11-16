@@ -50,8 +50,9 @@ export interface DataModel {
  * order the collaboration protocol assigns. A local operation has seq -1
  * (pending) until it is acknowledged, when it appears in the remote queue
  * with the same clientId and clientSeq and its assigned seq. Operations
- * are never changed: a processor records an acknowledged seq in its own
- * state.
+ * are never changed (MessageProcessor.items-unchanged for what callers
+ * give enqueue, OperationSink.enqueue.own-copy for what it returns): a
+ * processor records an acknowledged seq in its own state.
  *
  * refSeq is what the client knew when it made the operation: the seq of
  * the last remote operation it had applied, or -1 if none. The client also
@@ -160,6 +161,8 @@ export interface OperationLogging<TOp extends Operation> {
  *   when: a collaboration protocol that reorders a client's operations is specified.
  *   how: each DDS says what an acknowledgment that arrives out of order does (for shapes, whether it may move a shape, or z-order is defined by something other than seq); client-order is dropped; the processor contract delivers acknowledgments out of clientSeq order, with an adversary that matches an acknowledgment to the oldest pending operation without checking clientSeq.
  * @requires not-reentrant  While a call to process is pending, nothing enqueues on either queue or calls process again.
+ * @requires items-unchanged  Nothing changes what was given to enqueue on either queue after giving it.
+ *   history(this).every((c) => !c.member.endsWith(".enqueue") || deepEqual(c.given, c.args))
  * @ensures stamps  enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none.
  * @deferred session  A collaboration session: within one, clientIds are unique, and so (by ShapeMessageProcessor.new-ids) are shape IDs; between sessions, only the last snapshot defines the data. A processor can start from a snapshot, a model with the seq of the last operation it includes: its first refSeq is that seq, and the IDs in the snapshot count as already made.
  *   when: the collaboration protocol, or saving and loading a model, is specified.

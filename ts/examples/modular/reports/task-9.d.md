@@ -2,137 +2,132 @@ Status: done
 
 ## Tests
 
-- **local add calls the writer with no below argument** A applies a local add
-  with `writer.add(op.id, op.shape)`, leaving `below` out; B always passes it,
-  as `undefined`, so the writer sees three arguments. Nothing decides this:
-  `ShapeCollectionWriter.add` puts the shape "on top when below is undefined",
-  which is also what an absent argument gives, so the two calls have the same
-  effect. Open; passes on A. (The reference passes it too, so it fails there.)
-
-- **local remove hands the writer the content's own ids array** A stamps a
-  local operation by spreading the content (`{ ...content, clientId, ... }`),
-  so the queued operation shares the caller's `ids` array, and `process` hands
-  that very array to `writer.remove`; B builds the operation field by field
-  with `ids: [...content.ids]`, so the writer gets a copy. The test compares
-  identity only, and never changes an operation. `OperationSink.enqueue.own-copy`
-  is about the operation enqueue *returns* (both return a copy with its own
-  array), not about the one that is queued, so no rule decides who owns the
-  array the writer sees: open. Passes on A.
-
-- **remote remove hands the writer the enqueued operation's ids array** The
-  same lack of copying at the other sink, and a step further: A queues the
-  caller's operation object itself (`remoteQueue.push(op)`) and returns a copy
-  of it, so the writer is later given the caller's own `ids` array; B queues a
-  copy and returns a copy of that. Decided by nothing, for the reason above,
-  though it is what `own-copy` is written to prevent one step later: open.
-  Passes on A.
-
-- **local enqueue keeps a property the operation type does not declare**
-  Because A spreads the content, a field the operation's type doesn't declare
-  (here `origin`) survives into the stamped operation A returns — the one the
-  infrastructure sends to collaborators; B rebuilds the operation from `type`,
-  the fields its own kind declares and the stamps, and drops it.
-  `MessageProcessor.stamps` says which fields are added and `OperationContent`
-  which are removed; neither says what becomes of fields outside the type.
-  Open; passes on A.
-
-- **a clear lists what it removes in the order the adds were applied** Both
-  remove exactly the shapes whose adds the clear knew, in one `remove` call
-  with the same set of IDs, but in different orders: A lists them in the order
-  it applied their adds (its map's insertion order), B lists the acknowledged
-  adds its `refSeq` covers first, in `seq` order, and then the clearing
-  client's own adds that are still pending, in `clientSeq` order. In the test
-  a local add is applied, then a remote add is placed under it, then a clear
-  knows both: A lists mine then theirs, B theirs then mine. The order is open:
-  `ShapeCollectionWriter.remove` ignores it ("repeats and absent IDs are
-  ignored", the result is a set), and `clear-known` names a set too. Passes on
-  A; the reference lists them bottom to top in z-order, which is theirs then
-  mine, so it fails as B does.
-
-- **the read facet has no own property beyond the collection's members** A's
-  `model` is an object whose own properties are exactly `ShapeCollection`'s
-  members; B's is an instance of a facet class that keeps the writer in an own
-  property, so `Object.keys(model)` lists `writer` and whoever holds the facet
-  can reach the write side through it and call `add` and `remove`. The spec
-  text decides it: "`model` is a read-only facet of the writer: an object with
-  only `ShapeCollection`'s members, delegating to the writer ... Never the
-  writer itself", and that is what `ShapeMessageProcessor.read-facet` is for
-  ("so whoever holds it can't change the shapes through it") — though the
-  rule's own expression tests only `!("add" in this.model)` and
-  `!("remove" in this.model)`, which B's facet satisfies. Passes on A.
-
-- **a clear that removes nothing does not cost more as shapes pile up** A's
-  clear copies every present add into an array and filters it
-  (`[...this.addInfo].filter(...)`), so it costs time in proportion to the
-  shapes present even when it removes none; B reads a prefix of its chain of
-  acknowledged adds and the clearing client's own chain, so a clear that knows
-  nothing costs a constant. With 4000 clears that know nothing, going from 20
-  present shapes to 2000 leaves B's time about where it was and multiplies A's
-  by orders of magnitude; the test fails A at a twentyfold margin.
-  `ShapeMessageProcessor.log-amortized` decides it: "process takes amortized
-  logarithmic time per operation, plus time in proportion to the shapes a
-  clear removes". Passes on B; the reference fails it too, since its clear
-  walks the writer's shapes with `forEach`.
+- **a local remove applies the IDs it was given when it was enqueued** Two
+  local adds are applied, then a local remove is enqueued with an `ids` array
+  holding the first shape's ID, and the caller pushes the second shape's ID
+  onto that array before `process`. A removes one shape: its
+  `local.enqueue` stamps the content into a new operation whose `ids` is a
+  fresh copy (`[...content.ids]`), so the queued operation is the
+  processor's own down to its arrays. B removes both: it stamps with
+  `{ ...content, ... }`, so the queued operation keeps the caller's array
+  and the remove applies whatever that array holds at `process` time. The
+  spec text that bears on it is the approach's "Both follow
+  `OperationSink.enqueue.own-copy`" and "`local.enqueue` stamps the
+  operation, queues it, and returns a copy". `OperationSink.enqueue.own-copy`
+  itself is written about the *returned* operation ("The returned operation is
+  the caller's own ... nothing the receiver does later ... changes it"), and
+  both implementations satisfy that direction; no rule states the converse,
+  that the queued operation is unaffected by what the *caller* does later.
+  So the rules arguably leave this open, even though the approach text says
+  both enqueues follow own-copy and `Operation`'s fields (and
+  `RemoveShapes.ids`) are declared `readonly`.
+- **a remote remove applies the IDs it was given when it was enqueued** The
+  same difference on the other sink, and in B it comes from a different
+  line. Two remote adds from `peer` are applied, then a remote remove is
+  enqueued and the caller pushes a second ID onto its `ids` array before
+  `process`. A removes one shape: `remote.enqueue` queues `copyOp(op)` and
+  returns a copy of that. B removes both: `remote.enqueue` pushes the
+  caller's operation object itself onto the remote queue (only the return
+  value is a copy). Same spec text as above, with the same caveat: the
+  approach says `remote.enqueue` follows `own-copy`, but the rule as
+  written only constrains the returned operation.
+- **applied reports the very object the remote queue was given** A remote
+  clear from a client that knew nothing is enqueued and a listener records
+  what `applied` carries. In B the logged operation is `===` the object
+  passed to `remote.enqueue` (it is the queued object); in A it is a
+  distinct, equal copy. `OperationLogging.logOperations` and
+  `MessageProcessor.process.logs-each` say a remote operation is reported
+  "as it was enqueued", and the task-9 approach repeats "a remote one as it
+  was enqueued"; neither says whether that means the same object or an equal
+  one, so this is open. Nothing a conforming caller can observe about
+  *values* differs; only object identity does.
+- **the stamped operation keeps the property order of the content it was made from**
+  The content is written `{ shape, id, type: "add" }` and the stamped
+  operation `local.enqueue` returns is inspected with
+  `Object.keys`. B keeps the content's order and appends the stamps
+  (`{ ...content, clientId, clientSeq, refSeq, seq }`), so the keys are
+  `shape, id, type, clientId, clientSeq, refSeq, seq`. A rebuilds the
+  operation per type (`{ type: "add", id, shape, ...marks }`), so `type`
+  comes first whatever order the content had. No rule fixes property order:
+  `MessageProcessor.stamps` says only which fields are stamped and with
+  what. This is a difference in something the spec leaves open.
+- **the read facet carries ShapeCollection's members as its own properties**
+  B builds `model` as an object literal, so all eight of
+  `collectionMembers` are its own properties; A builds it from a class, so
+  the members are inherited from the prototype and the facet has no own
+  property at all (its writer is a JavaScript `#private` field, which is not
+  a property). `ShapeMessageProcessor.read-facet` requires only that `model`
+  have "only `ShapeCollection`'s members, own or inherited" (`onlyMembers`
+  in shapeModel.vocab.ts), which both satisfy; whether they are own or
+  inherited is explicitly left open, so this is an open difference.
+- **the operation log keeps its registrations out of its own properties**
+  A's `logOperations` holds its listeners in a JavaScript `#private` field,
+  so the object has no own properties; B's holds them in a TypeScript
+  `private` field, which is an ordinary own property (`lists`) at run time.
+  No rule constrains `logOperations`' property surface — `read-facet`'s
+  `onlyMembers` is about `model` only — so this one is entirely open. It is
+  the same kind of difference as the facet test above, but on a different
+  object and from an independent choice in each implementation.
+- **the read facet's on still works when it is called apart from the facet**
+  `p.model.on` is read into a variable and then called. B's facet is an
+  object literal whose `on` returns the captured `facet`, so the detached
+  call registers the listener and returns `model`. A's facet is a class
+  instance whose `on` reaches `this.#writer`, so a detached call throws a
+  `TypeError`. `read-facet` fixes only what `this.model.on(...)` returns, so
+  the behavior of a detached call is open. This shares its root cause with
+  "the read facet carries ShapeCollection's members as its own properties"
+  (class instance versus object literal with closures); it is a separate
+  observation, not a separate decision.
 
 ## Notes
 
-**How the tests look at the writer.** Four tests pass the processor a
-`SpyWriter`, a subclass of `RefShapeWriter` that records the arguments of each
-`add` and `remove` and then calls the reference writer. The writer is an
-interface the processor is handed, so its calls are part of what the
-interfaces show. The spy deviates from `RefShapeWriter` in one way: a `remove`
-of an empty list returns 0 without scanning, which is the same result with no
-event, so it still meets `@ensures removed`. That keeps the writer's own
-linear scan from hiding the processor's cost in the last test.
-
-**Valid uses.** Every add's ID comes from the `newShapeId` of the client that
-made the add — a second `ShapeProcessor` with the other client's ID mints the
-remote ones, and `new-ids` keeps those from colliding with ours
-(`fresh-add-id`). Remote operations carry assigned, increasing `seq`s with
-`refSeq < seq` (`remote-seq`, `ref-seq-range`), each client's arrive in
-`clientSeq` order (`client-order`), and no two share an identity
-(`unique-identity`). Nothing enqueues or calls `process` while a `process`
-call is pending (`not-reentrant`), and no operation is changed after it is
-enqueued, which is why the two copy tests compare array identity instead of
-mutating an array the caller still holds.
-
-**Differences found and not given a test of their own.**
-
-- The missing copies also show through mutation: with A, pushing an ID onto an
-  array that was passed to `local.enqueue` or `remote.enqueue` changes what a
-  later `process` removes; with B it changes nothing. That is the same
-  difference as the two identity tests, and it needs an operation to be changed
-  after it is enqueued, which the spec's "Operations are never changed" rules
-  out, so it shows nothing the identity tests don't.
-- A's facet carries its members as own properties and B's on a prototype
-  (`Object.getPrototypeOf`, `constructor.name`): the same object-literal
-  against class difference the facet test already shows.
-- `process` drains the queues differently — A shifts each queue until it is
-  empty, B swaps the array out and iterates the snapshot — so a local
-  operation enqueued while `process` ran would be applied before the remote
-  queue by A and after it by B. Only reentrancy could show it, and
-  `not-reentrant` forbids that.
-
-**Where they agree.** I found no valid sequence of operations on which the two
-differ in the model: the z-order and contents, which shapes a clear removes
-(the set, not the order), which `seq`s are recorded, the number of writer calls
-per operation and the `change` events that follow, `newShapeId`, and the
-`refSeq` stamped on local operations all coincide. In particular their very
-different bookkeeping of pending adds (A keeps a FIFO of its own
-unacknowledged add IDs, B two linked chains per client) always yields the same
-`below` for a remote add; and A matches an acknowledgment to an add by its ID
-where B matches by `clientSeq`, which `fresh-add-id` (no ID is reused) and
-`client-order` (acknowledgments arrive in order) keep from differing.
-
-**`npm run check` in this workspace.** Each test passes on exactly one of A
-and B, as the printed results show. The three scratch copies the check makes
-can't be compiled there, for a reason outside this task: `check-here` links
-each scratch's `node_modules` to `<workspace>/.task/node_modules`, which does
-not exist (`task.ts` takes its repo directory from its own location), so in a
-scratch copy `npx tsc` finds neither `@types/node` nor a TypeScript new enough
-for `erasableSyntaxOnly`. `npm run typecheck`, which compiles the tests
-against the reference in the workspace itself, passes. The tests do run in the
-scratch copies because they import no package: that is also why the shape they
-add is a local `UnitBox` built on `geometry.vocab.ts` rather than `testkit.ts`'s
-`TestBox` — `testkit.ts` imports `fast-check`, which a scratch copy can't
-resolve, and the whole test file then reports nothing at all.
+- **What I could not tell apart.** On every *semantic* question the spec
+  settles, A and B agreed in everything I could construct: the z-order a
+  remote add lands in (including the `below` argument the writer receives
+  after an acknowledgment or after the lowest pending add is removed), what
+  a clear removes and in what order it lists the IDs in its single
+  `remove` call, that a clear removing nothing still calls `remove` with an
+  empty list, that an acknowledgment applies nothing and emits `applied`,
+  the order `applied` reports a batch in, the stamps (both count `clientSeq`
+  from 0 and both take `refSeq` from the last applied remote seq), the
+  `newShapeId` strings, and the number and order of writer calls. I checked
+  this with two probe tests over a recording writer (a subclass of
+  `RefShapeWriter` that logged every `add` and `remove` with its arguments)
+  driving a mixed run: a pending local add, a remote add below it, a second
+  pending local add, the acknowledgment of the first, another remote add, a
+  local remove, and a remote clear that knew shapes by both halves of
+  `knew`. Both implementations produced exactly the same call sequence, so
+  the probes told them apart on nothing and are not in the final file. The
+  six real differences are all at the edges the rules leave open: when a
+  copy is taken, and what the objects handed out look like.
+- **Where the structural difference comes from.** A keeps its pending and
+  acknowledged adds in two chains of records with an insertion-sorted
+  per-client chain; B keeps the same information in two doubly linked lists
+  pushed at the tail. Those orders can only diverge if one client's adds are
+  applied out of `clientSeq` order, which `MessageProcessor.client-order`
+  (and applying the local queue in enqueue order) rules out, so I could not
+  turn the difference into a test without breaking a `@requires`.
+- **What I did not test, on purpose.** A's `process` takes the whole local
+  queue as a snapshot and then the whole remote queue, repeating; B's drains
+  each queue with `shift` in a loop. The two differ only if something is
+  enqueued *during* `process` (B would apply a newly enqueued local
+  operation before the remote queue, A after it), and
+  `MessageProcessor.not-reentrant` forbids enqueuing while a `process` call
+  is pending, so such a test would show nothing about the spec. The same
+  goes for A's doing its bookkeeping before the writer call and B's after:
+  the only way to look in between is from a `change` listener, which cannot
+  enqueue either.
+- **The reference.** The reference (`shapeprocessorkit.ts`) keeps the
+  caller's operation on both queues, so it fails both "IDs as they were when
+  it was enqueued" tests, and it builds the stamped operation by spreading
+  the content into a literal, so it passes the identity, property-order and
+  own-property tests; it fails the detached-`on` test, because its
+  `readFacet` returns `this` from a method shorthand, which is `undefined`
+  in a detached call. It also failed the mixed-run probe, for a reason that
+  tells A and B apart from it rather than from each other: the reference
+  stamps its first local operation with `clientSeq` 1 (`++this.clientSeq`)
+  while A and B both count from 0, so the acknowledgment the probe built for
+  `clientSeq` 0 matched no pending operation there. `MessageProcessor.stamps`
+  asks only for "a clientSeq greater than any earlier local operation's", so
+  where the count starts is open too — but A and B make the same choice, so
+  no test here can be about it.

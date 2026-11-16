@@ -402,6 +402,7 @@ No rules of its own.
 | `MessageProcessor.client-order` | requires | Each client's operations arrive on remote in clientSeq order, as a protocol that sequences each client's operations in the order sent delivers them; so acknowledgments arrive in the order the local operations were enqueued. | caller's obligation |  |
 | `MessageProcessor.client-reorder` | deferred | A protocol may sequence a client's operations out of clientSeq order, and processors still converge. | deferred: when a collaboration protocol that reorders a client's operations is specified. |  |
 | `MessageProcessor.not-reentrant` | requires | While a call to process is pending, nothing enqueues on either queue or calls process again. | caller's obligation |  |
+| `MessageProcessor.items-unchanged` | requires | Nothing changes what was given to enqueue on either queue after giving it. | caller's obligation |  |
 | `MessageProcessor.stamps` | ensures | enqueue on local returns the operation stamped with this processor's clientId, a clientSeq greater than any earlier local operation's, seq -1, and as refSeq the seq of the last remote operation process had applied when enqueue was called, or -1 if none. | tested | 1 |
 | `MessageProcessor.session` | deferred | A collaboration session: within one, clientIds are unique, and so (by ShapeMessageProcessor.new-ids) are shape IDs; between sessions, only the last snapshot defines the data. A processor can start from a snapshot, a model with the seq of the last operation it includes: its first refSeq is that seq, and the IDs in the snapshot count as already made. | deferred: when the collaboration protocol, or saving and loading a model, is specified. |  |
 | `MessageProcessor.sole-writer` | ensures | The model changes only during process: reading it changes nothing and emits none of its events. | tested | 1 |
@@ -476,7 +477,7 @@ No rules of its own.
 | `ShapeMessageProcessor.remove-listed` | ensures | No shape that an applied remove lists is present. | tested | 1 |
 | `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 2 |
 | `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 2 |
-| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes already show its whole effect; one that changes nothing emits nothing; and no change is emitted apart from an operation. | tested | 2 |
+| `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes already show its whole effect, and before logOperations reports the operation; one that changes nothing emits nothing; and no change is emitted apart from an operation. | tested | 2 |
 | `ShapeMessageProcessor.log-amortized` | budget | process takes time per operation logarithmic in the number of shapes, on each of the processor's workloads (in none of which a clear removes shapes), growing at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
 
 ## FrameHandler

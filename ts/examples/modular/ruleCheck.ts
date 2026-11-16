@@ -40,7 +40,7 @@ export interface ObserveOptions {
 }
 
 interface Frame {
-  readonly call: { member: string; args: readonly unknown[]; result: unknown; emitted: Emitted[]; nested: Call[] };
+  readonly call: { member: string; args: readonly unknown[]; given: readonly unknown[]; result: unknown; emitted: Emitted[]; nested: Call[] };
   readonly rules: readonly CompiledRule[];
   readonly args: readonly unknown[];
   readonly at: unknown[][];
@@ -145,7 +145,7 @@ export function observe<T extends object>(target: T, options: ObserveOptions): T
       }
     }
     const pres = rules.map((r) => r.pre.call(target, ...args));
-    const frame: Frame = { call: { member, args: args.map(copy), result: undefined, emitted: [], nested: [] }, rules, args, at: [] };
+    const frame: Frame = { call: { member, args: args.map(copy), given: args, result: undefined, emitted: [], nested: [] }, rules, args, at: [] };
     stack.push(frame);
     let result: unknown;
     try {

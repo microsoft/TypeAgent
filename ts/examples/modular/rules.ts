@@ -116,6 +116,8 @@ export interface Call {
   readonly member: string;
   /** The arguments, as they were when the call was made. */
   readonly args: readonly unknown[];
+  /** The arguments the caller passed, the same values, as they are now; where they differ from args, someone changed them after the call. */
+  readonly given: readonly unknown[];
   /** The return value, as it was on return; for an asynchronous call, the value its promise settled with. */
   readonly result: unknown;
   /** The events the object emitted during the call, in order. */

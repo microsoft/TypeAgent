@@ -288,8 +288,8 @@ budget for model updates, a circle, and a canvas view that draws circles.
 - **Outputs:** `bench.ts`, `mapShapeCollection.ts` (header only), `shapeProcessor.ts` (header only), `listLocator.ts` (header only), `quadTreeLocator.ts` (header only)
 - **Imports:** `geometry.ts`, `shape.ts`, `dataModel.ts`, `shapeModel.ts`,
   `listLocator.ts`, `quadTreeLocator.ts`, `inkStroke.ts`, `circle.ts`,
-  `mapShapeCollection.ts`, `shapeProcessor.ts`, `frames.ts`, and Node
-  built-ins
+  `mapShapeCollection.ts`, `shapeProcessor.ts`, `frames.ts`,
+  `shapeModel.vocab.ts`, and Node built-ins
 - **Binds:** node
 
 Each input event's operations are sent, and processed, within a small

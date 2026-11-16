@@ -126,15 +126,19 @@ deferred.
   present shapes" after review found a Sonnet run (9.2) whose removes
   were linear: a ratio of 28.4 against the limit of 16, not measured by
   any workload.
-- **Task 9.2 is collected and awaits review** (2b). Its earlier attempt
-  was sent back (`reports/task-9.2.review-3.md`); one run was wasted on a
-  stale workspace ($2.77, in `design-costs.json`). The new attempt
-  ($1.51) passes every check. A quick test of removes (1,000 against
-  100,000 shapes) gives a ratio of 11.8: inside the limit of 16, but far
-  above task 9's 1.5 and the 4 to 9 a logarithmic structure measures, so
-  the review should read its remove path before accepting it. Then
-  requeue and rerun 9.d, and review it (3b).
-- **Catalog:** 31 interfaces, 137 rules. **Adversaries:** 173, none
+- **Task 9.2 is done** (2b, 2026-11-16, `reports/task-9.2.review.md`).
+  Its earlier attempt was sent back (`reports/task-9.2.review-3.md`); one
+  run was wasted on a stale workspace ($2.77, in `design-costs.json`).
+  The new attempt ($1.51) does O(1) bookkeeping per removed ID; `bench.ts`
+  run against it gives removes a ratio of 3.89 (task 9's: 3.68). An
+  earlier quick test's 11.8 was noise at 1,000 shapes. 9.d was requeued
+  (both runs changed), rerun and reviewed: done, seven freedoms
+  (`reports/task-9.d.review.md`). Two of them changed an enqueued item,
+  which "operations are never changed" forbade only in prose; it is now
+  the caller's rule `MessageProcessor.items-unchanged`, checked through a
+  new `Call.given` (the arguments as passed) against `Call.args` (the copy
+  taken at the call).
+- **Catalog:** 31 interfaces, 138 rules. **Adversaries:** 173, none
   escaped on seeds 1 to 3. **Tests:** 422, with the 9 expected failures
   below.
 - **Costs:** `costs.md` has the measured figures, the Ultra calibration
@@ -150,14 +154,13 @@ deferred.
 
 ## Next session
 
-1. Review 9.2 (read its remove path), then 9.d as above, and commit.
-2. Step 0 for the docgent: a `project.json` per project, so the tooling
+1. Step 0 for the docgent: a `project.json` per project, so the tooling
    serves circles and `docgent/` (interface lists are hardcoded in
    `task.ts`, `catalog.ts` and `ruleGen.ts`; `ruleCheck.ts` must take each
    project's compiled rules instead of importing circles').
-3. The docgent's phase 1 (`docgent/phase1-proposal.md`, three questions)
+2. The docgent's phase 1 (`docgent/phase1-proposal.md`, three questions)
    and the human's edits to the gold Q&A.
-4. Later: assess extracting an existing repository into a blueprint (the
+3. Later: assess extracting an existing repository into a blueprint (the
    colleague's question); compile `shape.ts`'s rules next.
 
 ## Expected failures until phase 2 finishes

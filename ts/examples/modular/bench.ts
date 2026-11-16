@@ -29,7 +29,7 @@
  * when a timed erasing tap finds no circle to erase, each of which would make
  * its measurement another measurement entirely; exceeding the frame budget is
  * printed, not a failure, because timing is flaky.
- * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts, listLocator.ts, quadTreeLocator.ts, inkStroke.ts, circle.ts, mapShapeCollection.ts, shapeProcessor.ts, node:os
+ * Imports: geometry.ts, shape.ts, dataModel.ts, shapeModel.ts, listLocator.ts, quadTreeLocator.ts, inkStroke.ts, circle.ts, mapShapeCollection.ts, shapeProcessor.ts, shapeModel.vocab.ts, node:os
  */
 
 import { cpus, release, type as osType } from "node:os";

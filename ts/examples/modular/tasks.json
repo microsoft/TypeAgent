@@ -1515,7 +1515,8 @@
       },
       "num_turns": 26,
       "duration_ms": 807072
-    }
+    },
+    "reviewed": "2026-11-16T18:14:03.267Z"
   },
   "12.d": {
     "collected": "2026-11-12T21:31:34.185Z",
@@ -1756,20 +1757,143 @@
     "review": "reports/task-11.d.review.md"
   },
   "9.d": {
-    "collected": "2026-11-12T21:40:18.872Z",
     "outputs": {
-      "distinguish/task-9.distinguish.ts": "d027217ba22f3f8df61378a4335469a2fa790e849d652c5279bf3a7a68989917"
+      "distinguish/task-9.distinguish.ts": "0e542071c12e381890417d2f6a77393fe4ccf896a9bd3f3e35d0292d9a19a70a"
     },
     "report": "reports/task-9.d.md",
+    "labels": {
+      "a": "run 1",
+      "b": "run 2"
+    },
+    "results": [
+      {
+        "name": "a local remove applies the IDs it was given when it was enqueued",
+        "a": true,
+        "b": false,
+        "ref": false
+      },
+      {
+        "name": "a remote remove applies the IDs it was given when it was enqueued",
+        "a": true,
+        "b": false,
+        "ref": false
+      },
+      {
+        "name": "applied reports the very object the remote queue was given",
+        "a": false,
+        "b": true,
+        "ref": true
+      },
+      {
+        "name": "the stamped operation keeps the property order of the content it was made from",
+        "a": false,
+        "b": true,
+        "ref": true
+      },
+      {
+        "name": "the read facet carries ShapeCollection's members as its own properties",
+        "a": false,
+        "b": true,
+        "ref": true
+      },
+      {
+        "name": "the operation log keeps its registrations out of its own properties",
+        "a": true,
+        "b": false,
+        "ref": false
+      },
+      {
+        "name": "the read facet's on still works when it is called apart from the facet",
+        "a": false,
+        "b": true,
+        "ref": false
+      }
+    ],
+    "review": "reports/task-9.d.review.md",
+    "requeues": [
+      {
+        "requeued": "2026-11-16T18:14:26.790Z",
+        "review": "reports/task-9.respec-1.md",
+        "usage": {
+          "total_cost_usd": 4.387332499999999,
+          "usage": {
+            "input_tokens": 60,
+            "cache_creation_input_tokens": 135573,
+            "cache_read_input_tokens": 2897001,
+            "output_tokens": 63273,
+            "output_tokens_details": {
+              "thinking_tokens": 50329
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 135573,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "global",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 1000,
+                "cache_read_input_tokens": 141353,
+                "cache_creation_input_tokens": 723,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 723
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+              "inputTokens": 912,
+              "outputTokens": 13,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0,
+              "webSearchRequests": 0,
+              "costUSD": 0.000977,
+              "contextWindow": 200000,
+              "maxOutputTokens": 32000,
+              "thinkingTokens": 0,
+              "canonicalModel": "claude-haiku-4-5",
+              "provider": "firstParty",
+              "costBasis": "list"
+            },
+            "claude-opus-5[1m]": {
+              "inputTokens": 60,
+              "outputTokens": 63273,
+              "cacheReadInputTokens": 2897001,
+              "cacheCreationInputTokens": 135573,
+              "webSearchRequests": 0,
+              "costUSD": 4.386355499999999,
+              "contextWindow": 1000000,
+              "maxOutputTokens": 64000,
+              "thinkingTokens": 50329,
+              "canonicalModel": "claude-opus-5",
+              "provider": "firstParty",
+              "costBasis": "list"
+            }
+          },
+          "num_turns": 39,
+          "duration_ms": 847417
+        }
+      }
+    ],
+    "collected": "2026-11-16T18:27:42.160Z",
     "usage": {
-      "total_cost_usd": 4.387332499999999,
+      "total_cost_usd": 4.1387355,
       "usage": {
-        "input_tokens": 60,
-        "cache_creation_input_tokens": 135573,
-        "cache_read_input_tokens": 2897001,
-        "output_tokens": 63273,
+        "input_tokens": 58,
+        "cache_creation_input_tokens": 136843,
+        "cache_read_input_tokens": 2631487,
+        "output_tokens": 58131,
         "output_tokens_details": {
-          "thinking_tokens": 50329
+          "thinking_tokens": 44054
         },
         "server_tool_use": {
           "web_search_requests": 0,
@@ -1777,19 +1901,19 @@
         },
         "service_tier": "standard",
         "cache_creation": {
-          "ephemeral_1h_input_tokens": 135573,
+          "ephemeral_1h_input_tokens": 136843,
           "ephemeral_5m_input_tokens": 0
         },
         "inference_geo": "global",
         "iterations": [
           {
             "input_tokens": 2,
-            "output_tokens": 1000,
-            "cache_read_input_tokens": 141353,
-            "cache_creation_input_tokens": 723,
+            "output_tokens": 931,
+            "cache_read_input_tokens": 134564,
+            "cache_creation_input_tokens": 2279,
             "cache_creation": {
               "ephemeral_5m_input_tokens": 0,
-              "ephemeral_1h_input_tokens": 723
+              "ephemeral_1h_input_tokens": 2279
             },
             "type": "message"
           }
@@ -1799,11 +1923,11 @@
       "modelUsage": {
         "claude-haiku-4-5-20251001": {
           "inputTokens": 912,
-          "outputTokens": 13,
+          "outputTokens": 17,
           "cacheReadInputTokens": 0,
           "cacheCreationInputTokens": 0,
           "webSearchRequests": 0,
-          "costUSD": 0.000977,
+          "costUSD": 0.000997,
           "contextWindow": 200000,
           "maxOutputTokens": 32000,
           "thinkingTokens": 0,
@@ -1812,73 +1936,24 @@
           "costBasis": "list"
         },
         "claude-opus-5[1m]": {
-          "inputTokens": 60,
-          "outputTokens": 63273,
-          "cacheReadInputTokens": 2897001,
-          "cacheCreationInputTokens": 135573,
+          "inputTokens": 58,
+          "outputTokens": 58131,
+          "cacheReadInputTokens": 2631487,
+          "cacheCreationInputTokens": 136843,
           "webSearchRequests": 0,
-          "costUSD": 4.386355499999999,
+          "costUSD": 4.1377385,
           "contextWindow": 1000000,
           "maxOutputTokens": 64000,
-          "thinkingTokens": 50329,
+          "thinkingTokens": 44054,
           "canonicalModel": "claude-opus-5",
           "provider": "firstParty",
           "costBasis": "list"
         }
       },
-      "num_turns": 39,
-      "duration_ms": 847417
+      "num_turns": 38,
+      "duration_ms": 767054
     },
-    "labels": {
-      "a": "run 2",
-      "b": "run 1"
-    },
-    "results": [
-      {
-        "name": "local add calls the writer with no below argument",
-        "a": true,
-        "b": false,
-        "ref": false
-      },
-      {
-        "name": "local remove hands the writer the content's own ids array",
-        "a": true,
-        "b": false,
-        "ref": true
-      },
-      {
-        "name": "remote remove hands the writer the enqueued operation's ids array",
-        "a": true,
-        "b": false,
-        "ref": true
-      },
-      {
-        "name": "local enqueue keeps a property the operation type does not declare",
-        "a": true,
-        "b": false,
-        "ref": true
-      },
-      {
-        "name": "a clear lists what it removes in the order the adds were applied",
-        "a": true,
-        "b": false,
-        "ref": false
-      },
-      {
-        "name": "the read facet has no own property beyond the collection's members",
-        "a": true,
-        "b": false,
-        "ref": true
-      },
-      {
-        "name": "a clear that removes nothing does not cost more as shapes pile up",
-        "a": false,
-        "b": true,
-        "ref": false
-      }
-    ],
-    "reviewed": "2026-11-12T21:51:32.205Z",
-    "review": "reports/task-9.d.review.md"
+    "reviewed": "2026-11-16T19:19:15.853Z"
   },
   "8.d": {
     "collected": "2026-11-12T21:43:27.587Z",
