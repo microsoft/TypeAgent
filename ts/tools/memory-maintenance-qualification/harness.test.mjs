@@ -60,6 +60,22 @@ async function runHarnessCli(args) {
     return { code, stdout, stderr };
 }
 
+test("compiled checkpoints include the shared topic curation settings module", async () => {
+    const hashes = await snapshotCompiledCheckpoint(productRoot);
+    assert.match(
+        hashes[
+            path.join(
+                "packages",
+                "memory",
+                "service",
+                "dist",
+                "topicCurationSettings.js",
+            )
+        ],
+        /^[a-f0-9]{64}$/,
+    );
+});
+
 test("offline worker CLI preserves newline output and captures final diagnostics before owned failure cleanup", async () => {
     const help = await runHarnessCli(["--help"]);
     assert.equal(help.code, 0, help.stderr);

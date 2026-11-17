@@ -131,6 +131,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryPlanViewMaintenance: (params) =>
             forward("memoryPlanViewMaintenance", params),
         memoryMaintainViews: (params) => forward("memoryMaintainViews", params),
+        memorySeparateView: (params) => forward("memorySeparateView", params),
         memoryUpdateViewMaintenance: (params) =>
             forward("memoryUpdateViewMaintenance", params),
         memoryGetViewMaintenance: (params) =>

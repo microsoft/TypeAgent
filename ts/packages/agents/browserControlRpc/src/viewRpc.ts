@@ -494,6 +494,7 @@ export const viewMethods = [
     "memoryBuildViews",
     "memoryPlanViewMaintenance",
     "memoryMaintainViews",
+    "memorySeparateView",
     "memoryUpdateViewMaintenance",
     "memoryGetViewMaintenance",
     "memoryGetViewBuild",

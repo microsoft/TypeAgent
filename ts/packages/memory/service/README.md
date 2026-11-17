@@ -10,6 +10,38 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Bounded Wiki decisions
+
+The configured synthesis adapter uses `GPT_6_LUNA` with strict **choice-only**
+answers for Wiki utility, admission/canonical selection, contribution coverage,
+editorial/consolidation verification, completeness and consolidation relation.
+Answers contain only `{ type: "choice", choice: "<offered value>" }` under their
+question IDs; probabilities, confidence, explanations and extra fields are rejected.
+
+Existing evidence preparation still produces purpose, exact prose witnesses and
+critical distinctions. Those fields pass the original host validators before the
+restricted decisions run. Utility receives original evidence without page context.
+Admission/coverage and consolidation must agree with the validated preparation;
+disagreement or uncertainty fails the operation explicitly, without manufacturing
+evidence, accepting the prepared verdict as fallback or resampling the decision.
+Editorial categories retain their existing safe/failures consistency checks.
+Informational Wiki checks also prepare detailed diagnostics bound by the host to
+the actual output values and original fragment quotes, including unsupported
+claims. Independent choice-only editorial verdicts must agree with those
+categories before diagnostics can drive the existing bounded factual repair.
+Repairs still use unchanged original evidence and recheck the actual repaired output.
+Completeness can change the article's status but never its prose or citations.
+
+This behavior is enabled by default for the configured Wiki adapter. It requires a
+configured Azure/OpenAI Luna endpoint; there is no fallback to another model.
+Prose generation, evidence-contract repair, project summaries, non-Wiki Views and
+topic curation retain their existing models and contracts. Additional decision
+calls use the existing scheduler, cancellation and provider request budgets.
+The combined `evidence-first-v26-wiki-luna-choice` adapter identity includes both
+the prose and Wiki decision model identities. Earlier `evidence-first-v25`
+results remain historical evidence, not validation of this combined policy.
+Rollback requires reverting this policy change, not changing the global prose model.
+
 ## Retained ingestion jobs
 
 Corpus status, paginated job lists, individual job reads, restart recovery and
@@ -590,21 +622,26 @@ These switches do not alter models or relax required readiness, publication,
 editorial, correction or forgetting checks. They are not included in the existing
 experiment aliases. A combined treatment is not an isolated-factor measurement.
 
-| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments.                                                                                                                                                                     |
-| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                                                                                                                                                                                         |
-| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                                                                                                                                                                                        |
-| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                                                                                                                                                                                          |
-| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                                                                                                                                                                                          |
-| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                                                                                                                                                                                               |
-| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                                                                                                                                                                                               |
-| `indexing-parallel`   | Default generative topic speculation at concurrency two (explicit topic settings retain precedence); two independent source synopses per batch; isolated prepared message embeddings overlap knowledge extraction. Source publication and topic commits remain serialized, stale inputs are revalidated, and started siblings settle before failure leaves scope. Embedding overlap requires `TYPEAGENT_MEMORY_PREPARED_INDEXING=1` and the built-in corpus index; legacy indexing and custom index factories are unchanged. |
-| `topic-parallel`      | Only the topic-speculation component of `indexing-parallel`; explicit topic settings still take precedence.                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `synopsis-parallel`   | Only the bounded two-source synopsis component of `indexing-parallel`.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `embedding-parallel`  | Only the prepared-message embedding overlap component of `indexing-parallel`; prepared indexing and the built-in index remain prerequisites.                                                                                                                                                                                                                                                                                                                                                                                 |
+Consumers that only parse these switches can import
+`memoryPerformanceExperiments` from `@typeagent/memory-service/performance-experiments`.
+This shares the same validation without loading the memory/indexing runtime during
+browser view-server startup. The `@typeagent/memory-service/view-detail` entry point
+similarly exposes the paging contract and bounds without loading the service.
+
+| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments.                                                                                                                                                         |
+| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                                                                                                                                                                             |
+| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                                                                                                                                                                            |
+| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                                                                                                                                                                              |
+| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                                                                                                                                                                              |
+| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                                                                                                                                                                              |
+| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                                                                                                                                                                                   |
+| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                                                                                                                                                                                   |
+| `indexing-parallel`   | Two independent source synopses per batch; isolated prepared message embeddings overlap knowledge extraction. Generative topics always use frozen two-packet preparation independently of this switch. Source publication and topic commits remain serialized, stale inputs are revalidated, and started siblings settle before failure leaves scope. Embedding overlap requires `TYPEAGENT_MEMORY_PREPARED_INDEXING=1` and the built-in corpus index; legacy indexing and custom index factories are unchanged. |
+| `synopsis-parallel`   | Only the bounded two-source synopsis component of `indexing-parallel`.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `embedding-parallel`  | Only the prepared-message embedding overlap component of `indexing-parallel`; prepared indexing and the built-in index remain prerequisites.                                                                                                                                                                                                                                                                                                                                                                     |
 
 Fast model deployments also need verified `modelRequestConstraints` context,
 input and full output capacities for uncapped request admission. A soft reader
@@ -827,6 +864,41 @@ retains the legacy raw-summary path for explicit diagnostic/custom-host use.
 The recipe/fingerprint distinguishes these policies, so old raw snapshots
 cannot silently qualify as current curated knowledge.
 
+Generative curation always prepares up to two frozen raw-only packets concurrently,
+then reconciles and commits each complete window serially. Prior deltas and compact
+wire IDs default to true. Packet input-token targets and reserved prior fractions
+remain optional; without them, existing node/character packing applies.
+The former serial/speculative scheduler selection and `topic-parallel` experiment
+have been removed. The `concurrency` and `frozenPreparation` programmatic settings,
+`TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
+`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` now fail explicitly.
+Remove these controls instead of selecting another scheduling mode.
+The default recipe is
+`curated-lazy-v10:<hash>:generative-partition-v1:output-contract`.
+It invalidates original-policy progress and receipts;
+do not relabel saved artifacts. See the [topic curation guide](../../../tools/memory-maintenance-qualification/topic-curation-README.md)
+for remaining settings, checkpoint reuse and replay migration.
+
+Prepared-topic reconciliation now uses restricted-output generative decisions
+by default. The configured chat model (Luna by default) chooses admission,
+deferral and canonical group membership through typed `answers` with complete
+probability distributions and confidence. This is not a native Decision 1 call.
+Raw-only preparation, descriptive authoring, summaries, editorial validation
+and organization remain generative. Authoring must preserve the decided partition.
+Non-unit probabilities, inconsistent leaders, synthesis requests or changed
+authored membership produce a logged failure and explicit original-generative
+resolution; provider, admission and cancellation failures still propagate.
+Context-aware packing includes the decision schema, original fallback and a
+conservative bound on the authoring payload.
+
+To roll back, set
+`TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE=original`, or pass
+`topicCuration: { generativeDecisionStage: "original" }` to the service.
+`output-contract` is the default; `decomposed` retains a choice-only diagnostic
+control. All three are generative settings and conflict with native Decision
+activation. Switching stages changes the policy and packet identity, so start
+fresh work rather than relabeling receipts.
+
 The LLM decides semantic equivalence, compatible scope and whether a concept
 has a substantive, specific consumer purpose. Host rules validate supplied
 identities, exact membership accounting, cited sources and bounded payloads;
@@ -876,7 +948,7 @@ catalog synchronization is still full-catalog work, not an incremental operation
 Set `FileMemoryServiceOptions.decisionTopics: true`, or
 `TYPEAGENT_MEMORY_DECISION_TOPICS=true` in the native/MCP/CLI/benchmark host,
 to select the experimental `curated-decision-v2` pipeline. The default remains
-the generative `curated-lazy-v6` policy. Decision curation requires curated
+the restricted-output generative policy described above. Decision curation requires curated
 topics and explicitly rejects a conflicting custom `generateTopics` adapter;
 ordinary custom-adapter receiver/cancellation behavior is unchanged.
 

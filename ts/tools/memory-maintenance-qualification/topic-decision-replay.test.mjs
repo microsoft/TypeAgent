@@ -728,6 +728,12 @@ test("default Decision capture hashes shipped implementations and performs no ne
         });
         assert.equal(result.disposition, "capture-only");
         assert.equal(result.providerCalls, 0);
+        assert.match(
+            result.identity.implementation[
+                "packages/memory/service/dist/topicCurationSettings.js"
+            ],
+            /^[a-f0-9]{64}$/,
+        );
         assert.ok(
             Object.hasOwn(
                 result.identity.implementation,

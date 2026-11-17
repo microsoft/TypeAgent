@@ -263,7 +263,13 @@ test("bounded indexed search flag survives protocol round-trip and rejects nonbo
 });
 
 test("informational family requests round-trip without weakening legacy target guards", () => {
-    for (const operation of ["update", "rebuild", "pause", "resume"]) {
+    for (const operation of [
+        "update",
+        "rebuild",
+        "review",
+        "pause",
+        "resume",
+    ]) {
         const request = {
             corpusId: "corpus",
             expectedHead: null,
@@ -289,6 +295,16 @@ test("informational family requests round-trip without weakening legacy target g
             false,
         );
     }
+    for (const family of ["projects", "topics"])
+        assert.equal(
+            viewMaintenanceRequestSchema.safeParse({
+                corpusId: "corpus",
+                expectedHead: null,
+                family,
+                operation: "review",
+            }).success,
+            family === "projects",
+        );
     assert.equal(
         viewMaintenanceRequestSchema.safeParse({
             corpusId: "corpus",
@@ -428,6 +444,16 @@ test("distinct indexed project summaries round-trip through save and MCP without
         revisionId: "definition-revision",
     };
     assert.deepEqual(viewVersionSchema.parse(version), version);
+    const noGap = structuredClone(version);
+    noGap.content.coverageNote = "";
+    assert.deepEqual(viewVersionSchema.parse(noGap), noGap);
+    assert.equal(
+        viewVersionSchema.safeParse({
+            ...noGap,
+            content: { ...noGap.content, coverageNote: null },
+        }).success,
+        false,
+    );
     const client = new McpMemoryServiceClient({
         callTool: async ({ name }) => {
             assert.equal(name, viewToolNames.getView);

@@ -69,6 +69,49 @@ function resultTitle(
     return labels[result.snapshot.definition.kind];
 }
 
+function renderSemanticReview(
+    row: HTMLElement,
+    review: NonNullable<ViewBuildTargetResult["semanticReview"]>,
+): void {
+    row.append(
+        rbChip(
+            `Semantic review: ${review.state}`,
+            review.state === "failed" ? "bad" : undefined,
+        ),
+        rbNode("p", review.reason),
+        rbNode(
+            "p",
+            `Assessment revision: ${review.acceptedRevisionId}. Next due: ${new Date(review.dueAt).toLocaleString()}.`,
+        ),
+    );
+    if (!review.assessment) return;
+    const assessment = review.assessment;
+    row.append(rbNode("p", assessment.purpose));
+    if (review.assessmentCompletedAt)
+        row.append(
+            rbNode(
+                "p",
+                `Completeness assessment saved: ${new Date(review.assessmentCompletedAt).toLocaleString()}.`,
+            ),
+        );
+    for (const facet of assessment.facets)
+        row.append(rbNode("p", `${facet.id}: ${facet.state}. ${facet.reason}`));
+    for (const gap of assessment.gaps)
+        row.append(
+            rbNode(
+                "p",
+                `${gap.description} Resolution: ${gap.resolutionCondition}`,
+            ),
+        );
+    if (assessment.separation)
+        row.append(
+            rbNode(
+                "p",
+                `Separation recommendation only: ${assessment.separation.reason}. Destinations: ${assessment.separation.destinations.map((destination) => destination.purpose).join("; ")}`,
+            ),
+        );
+}
+
 export function mountMemoryHubViewActivity(
     host: HTMLElement,
     attentionHost: HTMLElement,
@@ -225,6 +268,8 @@ export function mountMemoryHubViewActivity(
                     ),
                 );
             }
+            if (result.semanticReview)
+                renderSemanticReview(row, result.semanticReview);
             if (result.snapshot.pipeline === "topics-v1") {
                 row.append(
                     rbNode(

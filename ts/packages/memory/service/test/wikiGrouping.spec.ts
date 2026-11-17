@@ -189,6 +189,7 @@ describe("conservative indexed grouping", () => {
         let generated = 0;
         const adapter: ViewSynthesisAdapter = {
             identity: "offline-indexed-grouping",
+            checkEditorial: async () => ({ safe: true, failures: [] }),
             generate: async (input) => {
                 generated++;
                 return hydrateInformational(input, {

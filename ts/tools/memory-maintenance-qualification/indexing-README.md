@@ -214,13 +214,22 @@ Time and question limits are **not financial limits**.
 
 ## Run the two live production arms
 
-For a same-build comparison of the three parallelization changes, prepare a
+For a same-build comparison of synopsis and embedding parallelization, prepare a
 **new** pilot with `--comparison indexing-parallel`. Both arms then enable
-prepared indexing. A0 removes the bundled and all three individual indexing
+prepared indexing. A0 removes the bundled and both individual indexing
 parallel experiments; A1 enables the bundle. Other inherited performance
 experiments remain identical.
-An explicit `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` is rejected rather than
-silently overriding the treatment. Each recorded arm includes `indexingParallel`.
+Removed `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
+`TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` variables are rejected in every arm.
+Generative topics always use frozen two-packet preparation and serial
+reconciliation/commit, with input target and prior fraction unset by default
+(preserving node/character packing and no reserved prior fraction), prior deltas
+true and compact IDs true. The historical 24000-token / 0.25-fraction settings
+remain explicit treatments, not defaults. These four settings remain configurable;
+each arm records their effective values. Native Decision scheduling is unchanged.
+Old approvals, recordings and receipts keep their original identities and must
+not be relabeled; prepare fresh artifacts for the current implementation.
+Each recorded arm also includes `indexingParallel`.
 
 Add `--first-case-only` to freeze one complete history for this comparison.
 This schedules the first deterministically selected case in both arms, without
@@ -241,8 +250,11 @@ and completed ingestion timings remain distinct from successful readiness.
 ### Prepare independent treatments without running inference
 
 Use a new directory and `--comparison indexing-ablation --first-case-only` to
-freeze four sequential conditions: `A0` (all parallel treatments off), `T1`
-(topic-only), `S1` (synopsis-only), `E1` (embedding-only). Every condition enables
+freeze three sequential conditions: `A0` (synopsis/embedding treatments off),
+`S1` (synopsis-only), `E1` (embedding-only). Frozen topic preparation stays enabled
+in every condition. The removed `topic-parallel` experiment fails explicitly;
+older four-condition pilot schedules containing `T1` are rejected, not relabeled.
+Every condition enables
 prepared indexing and uses the same complete first history with fresh stores.
 The runner refuses another arm order or an inherited topic-concurrency override.
 It removes inherited individual/bundled indexing treatments before selecting

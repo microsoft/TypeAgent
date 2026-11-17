@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,6 +39,52 @@ function createContext(folder) {
         registrations,
     };
 }
+
+test("view routes load experiment configuration without the memory runtime", () => {
+    const routes = new URL(
+        "../dist/views/server/features/views/viewRoutes.mjs",
+        import.meta.url,
+    );
+    execFileSync(
+        process.execPath,
+        [
+            "--input-type=module",
+            "--eval",
+            `
+                import assert from "node:assert/strict";
+                import { registerHooks } from "node:module";
+                registerHooks({
+                    resolve(specifier, context, nextResolve) {
+                        assert.ok(
+                            ![
+                                "@typeagent/memory-service",
+                                "@typeagent/knowpro",
+                                "@typeagent/aiclient",
+                            ].includes(specifier),
+                            "View startup must not load " + specifier +
+                                " from " + context.parentURL,
+                        );
+                        return nextResolve(specifier, context);
+                    },
+                });
+                const routes = await import(${JSON.stringify(routes.href)});
+                assert.equal(typeof routes.registerViewRoutes, "function");
+                const { memoryPerformanceExperiments } = await import(
+                    "@typeagent/memory-service/performance-experiments"
+                );
+                assert.deepEqual(
+                    [...memoryPerformanceExperiments("source-preview")],
+                    ["source-preview"],
+                );
+                assert.throws(
+                    () => memoryPerformanceExperiments("topic-parallel"),
+                    /Unknown memory performance experiment/,
+                );
+            `,
+        ],
+        { cwd: new URL("..", import.meta.url), timeout: 30_000 },
+    );
+});
 
 test(
     "view host readiness shares startup and cleans up after restart",

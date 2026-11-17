@@ -6,10 +6,12 @@ import { z } from "zod";
 import {
     viewDetailMaxChars,
     viewDetailPageChars,
-    type ViewDetailPage,
-    type ViewDetailPageRequest,
-    type ViewDetailReadRequest,
-    type ViewVersion,
+} from "@typeagent/memory-service/view-detail";
+import type {
+    ViewDetailPage,
+    ViewDetailPageRequest,
+    ViewDetailReadRequest,
+    ViewVersion,
 } from "@typeagent/memory-service";
 import { viewReadRequestSchema, viewVersionSchema } from "./viewProtocol.js";
 

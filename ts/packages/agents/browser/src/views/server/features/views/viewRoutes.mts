@@ -12,7 +12,7 @@ import type {
     UnderstandingRequest,
     UnderstandingResult,
 } from "@typeagent/memory-service";
-import { memoryPerformanceExperiments } from "@typeagent/memory-service";
+import { memoryPerformanceExperiments } from "@typeagent/memory-service/performance-experiments";
 import {
     understandingRequestSchema,
     understandingResultSchema,

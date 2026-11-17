@@ -19,7 +19,6 @@ export const categories = [
     "multi-session",
 ];
 export const parallelTreatmentNames = [
-    "topic-parallel",
     "synopsis-parallel",
     "embedding-parallel",
 ];
@@ -27,6 +26,10 @@ export function indexingTreatments(environment = process.env) {
     const names = (environment.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
         .split(",")
         .map((name) => name.trim());
+    assert.ok(
+        !names.includes("topic-parallel"),
+        "topic-parallel has been removed; generative topics always use frozen preparation and serial reconciliation",
+    );
     return parallelTreatmentNames.filter(
         (name) => names.includes("indexing-parallel") || names.includes(name),
     );
@@ -41,7 +44,7 @@ export function productionSchedule(comparison = "prepared-indexing") {
         "Unknown production comparison",
     );
     return comparison === "indexing-ablation"
-        ? ["A0", "T1", "S1", "E1"]
+        ? ["A0", "S1", "E1"]
         : ["A0", "A1"];
 }
 export const digest = (value) =>

@@ -120,6 +120,7 @@ for (const kind of [
                     : new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-gateway-test",
+                checkEditorial: async () => ({ safe: true, failures: [] }),
                 ...(kind === "timeline"
                     ? {
                           inventory: async (input) =>

@@ -100,17 +100,43 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                         "Expected configured strict evidence-first request",
                     );
                 stages.push(schema.name);
-                const answer =
-                    kind === "projectBrief"
-                        ? projectSummaryTestResponse(
-                              JSON.parse(user.content).fragments,
-                          )
-                        : (kind === "timeline"
-                              ? timelineTestAnswer
-                              : inventoryTestAnswer)(
-                              schema.name,
-                              JSON.parse(user.content),
-                          );
+                let answer: unknown;
+                if (kind === "projectBrief") {
+                    if (schema.name === "informational_project_summary")
+                        answer = projectSummaryTestResponse(
+                            JSON.parse(user.content).fragments,
+                        );
+                    else if (schema.name === "editorial_consequences")
+                        answer = {
+                            safe: true,
+                            failures: [],
+                            diagnostics: [],
+                        };
+                    else if (schema.name === "informational_semantic_review") {
+                        const { requiredFacets } = JSON.parse(user.content) as {
+                            requiredFacets: string[];
+                        };
+                        answer = {
+                            purpose: "Summarize Payments reliability",
+                            facets: requiredFacets.map((id) => ({
+                                id,
+                                state: "unresolved",
+                                reason: "Bounded evidence leaves open questions",
+                                evidenceIds: [],
+                            })),
+                            gaps: [],
+                            separation: null,
+                        };
+                    } else
+                        throw new Error(
+                            `Unexpected project brief schema: ${schema.name}`,
+                        );
+                } else
+                    answer = (
+                        kind === "timeline"
+                            ? timelineTestAnswer
+                            : inventoryTestAnswer
+                    )(schema.name, JSON.parse(user.content));
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
                     JSON.stringify({
@@ -270,7 +296,11 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
             expect(job.state).toBe("complete");
             expect(stages).toEqual(
                 kind === "projectBrief"
-                    ? ["informational_project_summary"]
+                    ? [
+                          "informational_project_summary",
+                          "editorial_consequences",
+                          "informational_semantic_review",
+                      ]
                     : [
                           "memory_source_fact_inventory",
                           "memory_source_inventory_check",
@@ -282,6 +312,8 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                       ],
             );
             const result = job.results[0];
+            if (kind === "projectBrief")
+                expect(result.semanticReview?.state).toBe("complete");
             expect(result.state).toBe(
                 kind === "projectBrief" ? "draft" : "searchable",
             );
@@ -387,7 +419,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                 expectedHead: latest.head!,
             });
             expect(retry.intent).toEqual(publication.intent);
-            expect(stages).toHaveLength(kind === "projectBrief" ? 1 : 5);
+            expect(stages).toHaveLength(kind === "projectBrief" ? 3 : 5);
             if (kind === "timeline") {
                 const canonical = (
                     await client.appendEvent({

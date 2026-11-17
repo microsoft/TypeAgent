@@ -17,6 +17,7 @@ import { viewHash } from "./viewMerge.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
 import { topicClusterSignature } from "./topicDecision.js";
 import { topicMaintenanceSignature } from "./topicClusterMaintenance.js";
+import { topicCurationPolicy } from "./topicCurationSettings.js";
 
 export function supportsTopicIndex(
     index: CorpusIndex,
@@ -113,7 +114,7 @@ function reusableTopicPackets(
         !previous.curationInputFingerprint ||
         previous.corpusId !== options.corpusId ||
         previous.recipe !==
-            `${options.model}:editorial-v1:${options.curationRecipe ?? "curated-lazy-v6"}` ||
+            `${options.model}:editorial-v1:${options.curationRecipe ?? topicCurationPolicy(true)}` ||
         previous.curationSuppressionFingerprint !==
             viewHash(options.suppressions) ||
         !topicSourceClosurePreserved(
@@ -171,7 +172,7 @@ function curationDependencyFingerprint(
         occurrences,
         suppressions: options.suppressions,
         model: options.model,
-        curationRecipe: options.curationRecipe ?? "curated-lazy-v6",
+        curationRecipe: options.curationRecipe ?? topicCurationPolicy(true),
         events: options.influenceEvents ?? [],
     });
 }
@@ -188,7 +189,7 @@ function reusableTopicCuration(
         !current ||
         current.corpusId !== corpusId ||
         current.recipe !==
-            `${model}:editorial-v1:${options.curationRecipe ?? "curated-lazy-v6"}` ||
+            `${model}:editorial-v1:${options.curationRecipe ?? topicCurationPolicy(true)}` ||
         viewHash(current.occurrences) !== viewHash(occurrences) ||
         !current.nodes.every((node) => node.authorship === "generated")
     )

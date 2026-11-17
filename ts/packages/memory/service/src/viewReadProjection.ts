@@ -7,6 +7,7 @@ import type { KnowledgeDiagnostic } from "./knowledgeTypes.js";
 import type { ViewBuildSummary } from "./inventoryTypes.js";
 import { viewBuildEvidenceFingerprint } from "./viewMerge.js";
 import type { WikiFamilyState } from "./viewStore.js";
+import type { ViewSeparationReceipt } from "./viewSeparation.js";
 import type {
     ViewBuildJob,
     ViewMergeConflict,
@@ -16,7 +17,7 @@ import type {
 } from "./viewTypes.js";
 
 export const viewReadProjectionEntry = "view-read-projection.json";
-export const viewReadProjectionVersion = 1;
+export const viewReadProjectionVersion = 2;
 
 export interface ViewInventoryBuild extends Omit<ViewBuildSummary, "results"> {
     diagnostics?: KnowledgeDiagnostic[];
@@ -38,6 +39,7 @@ export interface ViewReadProjection {
     projectFamily?: WikiFamilyState;
     conflicts?: Record<string, ViewMergeConflict>;
     versions?: Record<string, ViewVersion[]>;
+    separations?: Record<string, ViewSeparationReceipt>;
 }
 
 export function viewReadProjection(state: {
@@ -47,9 +49,11 @@ export function viewReadProjection(state: {
     wikiFamily?: WikiFamilyState;
     projectFamily?: WikiFamilyState;
     conflicts?: Record<string, ViewMergeConflict>;
+    separations?: Record<string, ViewSeparationReceipt>;
 }): ViewReadProjection {
     return {
         version: viewReadProjectionVersion,
+        separations: state.separations ?? {},
         views: Object.values(state.views).flatMap((versions) =>
             versions.length ? [versions[versions.length - 1]] : [],
         ),

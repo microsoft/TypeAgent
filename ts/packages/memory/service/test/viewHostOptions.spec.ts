@@ -59,19 +59,17 @@ test("short-job priority is explicitly configurable and conflicts with reservati
     ).toThrow("cannot both be enabled");
 });
 
-test("topic experiments are opt-in and reject invalid host settings", () => {
+test("topic packet controls reject invalid and removed scheduler settings", () => {
     expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
         "topicCuration",
     );
     expect(
         getConfiguredMemoryViewOptions({
             TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "32000",
-            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
             TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.25",
         }).topicCuration,
     ).toEqual({
         inputTokenTarget: 32000,
-        concurrency: 2,
         priorContextFraction: 0.25,
     });
 
@@ -79,6 +77,10 @@ test("topic experiments are opt-in and reject invalid host settings", () => {
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "" },
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "NaN" },
         { TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "3" },
+        { TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "1" },
+        { TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2" },
+        { TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION: "false" },
+        { TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION: "true" },
         { TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.2" },
         { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "-1" },
     ])
@@ -108,21 +110,72 @@ test("unchanged topic curation reuse is opt-in for both generation engines", () 
     ).toThrow("TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE");
 });
 
+test("restricted topic decisions have an explicit validated host rollback", () => {
+    for (const stage of ["original", "decomposed", "output-contract"] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: stage,
+            }).topicCuration,
+        ).toEqual({ generativeDecisionStage: stage });
+    for (const stage of ["", "native", "false"])
+        expect(() =>
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: stage,
+            }),
+        ).toThrow("Invalid TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+            TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: "output-contract",
+        }),
+    ).toThrow("cannot configure Decision topics");
+});
+
+test("default frozen topic preparation is compatible with ordered watermarks", () => {
+    const options = getConfiguredMemoryViewOptions({
+        TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS: "true",
+        TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "true",
+    });
+    expect(options.topicCuration).toEqual({
+        priorDeltas: true,
+        compactIds: true,
+    });
+    expect(
+        () =>
+            new FileMemoryService("unused", {
+                ...options,
+                curatedTopics: true,
+                topicCurationReuse: true,
+                topicWatermark: true,
+            }),
+    ).not.toThrow();
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION: "true",
+        }),
+    ).toThrow("has been removed");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS: "maybe",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_TOPIC_COMPACT_IDS");
+});
+
 test("generative and native execution families retain distinct capacities and reject conflicting activation", () => {
     expect(
         getConfiguredMemoryViewOptions({
             TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "24",
-            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+            TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "32000",
         }),
     ).toMatchObject({
         decisionTopicExecution: { concurrency: 24 },
-        topicCuration: { concurrency: 2 },
+        topicCuration: { inputTokenTarget: 32000 },
     });
 
     expect(() =>
         getConfiguredMemoryViewOptions({
             TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
-            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+            TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "32000",
         }),
     ).toThrow("cannot configure Decision");
     for (const options of [{ decisionTopics: true }, { curatedTopics: false }])
@@ -130,12 +183,12 @@ test("generative and native execution families retain distinct capacities and re
             () =>
                 new FileMemoryService("unused", {
                     ...options,
-                    topicCuration: { concurrency: 2 },
+                    topicCuration: { inputTokenTarget: 32000 },
                 }),
         ).toThrow("Generative topic settings require");
 });
 
-test("private topic watermark requires explicit single-worker generative reuse", () => {
+test("private topic watermark requires explicit generative reuse", () => {
     expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
         "topicWatermark",
     );
@@ -159,7 +212,6 @@ test("private topic watermark requires explicit single-worker generative reuse",
         { topicCurationReuse: false },
         { decisionTopics: true },
         { curatedTopics: false },
-        { topicCuration: { concurrency: 2 as const } },
     ])
         expect(
             () =>

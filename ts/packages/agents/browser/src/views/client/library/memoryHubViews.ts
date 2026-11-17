@@ -42,6 +42,7 @@ import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { createTimelineEditor } from "./memoryHubTimeline";
 import { createWikiEditor } from "./memoryHubWiki";
 import { createMaintenancePanel } from "./memoryHubMaintenance";
+import { createSeparationPanel } from "./memoryHubSeparation";
 import { createGuideEditor } from "./memoryHubGuide";
 import {
     projectBriefSectionHeading,
@@ -78,6 +79,19 @@ function appendArticleCoverage(
         article.append(
             rbNode("p", `Coverage: ${content.coverageNote}`, "hub-view-note"),
         );
+}
+
+function appendSeparationPanel(
+    article: HTMLElement,
+    view: ViewVersion,
+    revisionId?: string,
+): void {
+    if (
+        !revisionId &&
+        view.state === "draft" &&
+        (view.definition.wiki || view.definition.projectSummary)
+    )
+        article.append(createSeparationPanel(view));
 }
 
 function appendArticleIntroduction(
@@ -599,14 +613,16 @@ export function mountMemoryHubViews(
             ];
         }
 
-        // Family-wide maintenance lives in one menu rather than eight page
+        // Family-wide maintenance lives in one menu rather than separate page
         // buttons that multiply with every family.
         function collectionWikiControls(capabilities: {
             derivedViews?: { informationalWiki?: true };
         }): MenuItem[] {
             if (!capabilities.derivedViews?.informationalWiki) return [];
             return (["wiki", "projects"] as const).flatMap((family) =>
-                (["update", "rebuild", "pause", "resume"] as const).map(
+                (
+                    ["update", "rebuild", "review", "pause", "resume"] as const
+                ).map(
                     (operation): MenuItem => ({
                         label: `${operation[0].toUpperCase()}${operation.slice(1)} ${family === "wiki" ? "Wiki" : "Projects"}`,
                         icon: "fa-screwdriver-wrench",
@@ -2202,6 +2218,7 @@ export function mountMemoryHubViews(
             );
             article.append(citations);
         }
+        appendSeparationPanel(article, view, route?.revisionId);
         const actions = rbNode("div", undefined, "hub-view-actions");
         const back = rbIconButton(
             "fa-arrow-left",

@@ -25,6 +25,7 @@ import {
     embeddingConfigurationHash,
     encode,
     freezePilot,
+    indexingTreatments,
     openPilot,
     readJson,
     replayTape,
@@ -71,6 +72,23 @@ import {
 import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
+
+test("indexing treatment identity excludes removed topic scheduling", () => {
+    assert.deepEqual(
+        indexingTreatments({
+            TYPEAGENT_MEMORY_PERF_EXPERIMENTS: "indexing-parallel",
+        }),
+        ["synopsis-parallel", "embedding-parallel"],
+    );
+    assert.throws(
+        () =>
+            indexingTreatments({
+                TYPEAGENT_MEMORY_PERF_EXPERIMENTS:
+                    "indexing-parallel,topic-parallel",
+            }),
+        /topic-parallel has been removed/,
+    );
+});
 
 test("pilot approval and worker share a sanitized identity for every pool member", () => {
     const primary = {
@@ -140,20 +158,19 @@ test("singleton ablations remove inherited treatments and preserve frozen order"
     const pilot = {
         manifest: {
             questionIds: ["one", "two", "three"],
-            schedule: ["A0", "T1", "S1", "E1"],
+            schedule: ["A0", "S1", "E1"],
         },
         inputs: { comparison: "indexing-ablation", firstCaseOnly: true },
     };
     assert.deepEqual(productionPlan(pilot).schedule, pilot.manifest.schedule);
     for (const [arm, expected] of [
         ["A0", ""],
-        ["T1", "topic-parallel"],
         ["S1", "synopsis-parallel"],
         ["E1", "embedding-parallel"],
     ]) {
         const env = productionArmEnvironment(pilot, arm, {
             TYPEAGENT_MEMORY_PERF_EXPERIMENTS:
-                "indexing-parallel,topic-parallel,synopsis-parallel,embedding-parallel,translation-cache",
+                "indexing-parallel,synopsis-parallel,embedding-parallel,translation-cache",
         });
         assert.equal(env.TYPEAGENT_MEMORY_PREPARED_INDEXING, "1");
         assert.equal(
@@ -168,12 +185,12 @@ test("singleton ablations remove inherited treatments and preserve frozen order"
                 ...pilot,
                 manifest: {
                     ...pilot.manifest,
-                    schedule: ["A0", "S1", "T1", "E1"],
+                    schedule: ["A0", "T1", "S1", "E1"],
                 },
             }),
         /schedule/,
     );
-    const arms = ["A0", "T1", "S1", "E1"].map((arm) => ({
+    const arms = ["A0", "S1", "E1"].map((arm) => ({
         arm,
         status: arm === "E1" ? "failed" : "completed",
         cases: [
@@ -185,7 +202,7 @@ test("singleton ablations remove inherited treatments and preserve frozen order"
         ],
     }));
     assert.equal(
-        treatmentPerformance(arms, ["one"], "T1").medians.ingestionMs
+        treatmentPerformance(arms, ["one"], "S1").medians.ingestionMs
             .medianRatioControlOverTreatment,
         2,
     );
@@ -226,7 +243,14 @@ test("parallel comparison freezes one full history and holds preparation constan
             productionArmEnvironment(pilot, "A1", {
                 TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "1",
             }),
-        /default topic concurrency/,
+        /TYPEAGENT_MEMORY_TOPIC_CONCURRENCY/,
+    );
+    assert.throws(
+        () =>
+            productionArmEnvironment(pilot, "A1", {
+                TYPEAGENT_MEMORY_PERF_EXPERIMENTS: "topic-parallel",
+            }),
+        /topic-parallel has been removed/,
     );
     assert.throws(
         () => productionPlan({ ...pilot, inputs: { comparison: "typo" } }),
@@ -376,7 +400,7 @@ test("selection freezes three categories without using question/reference labels
         await assert.rejects(openPilot(directory), /Assertion/);
     }));
 
-test("freezing an ablation persists four independent conditions and one complete production history", async () =>
+test("freezing an ablation persists three independent conditions and one complete production history", async () =>
     temporary(async (root) => {
         const inputs = { comparison: "indexing-ablation", firstCaseOnly: true };
         const directory = path.join(root, "ablation");
@@ -388,7 +412,7 @@ test("freezing an ablation persists four independent conditions and one complete
             inputs,
         );
         const pilot = await openPilot(directory);
-        assert.deepEqual(pilot.manifest.schedule, ["A0", "T1", "S1", "E1"]);
+        assert.deepEqual(pilot.manifest.schedule, ["A0", "S1", "E1"]);
         assert.equal(productionPlan(pilot).questionIds.length, 1);
         assert.equal(pilot.construction.length, 3);
         assert.equal(pilot.construction[0].sessions.length, 2);

@@ -77,7 +77,7 @@ function validateConsolidationIndex(content: WikiContent): void {
         );
 }
 
-function isInformationalSummary(value: unknown): value is string {
+function isInformationalText(value: unknown): value is string {
     return (
         typeof value === "string" &&
         value.trim().length > 0 &&
@@ -118,7 +118,7 @@ export function validateInformationalContent(content: WikiContent): void {
             typeof page.details.note !== "string" ||
             page.details.note.length > 4000 ||
             (position > 0 && page.details.mergedPageIds.length !== 0) ||
-            !isInformationalSummary(content.summary) ||
+            !isInformationalText(content.summary) ||
             (content.status !== undefined &&
                 !isArticleCompleteness(content.status))
         )
@@ -201,7 +201,7 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
                     enum: ["partial", "sufficient"],
                 },
                 prose: { type: "string" },
-                limits: { type: "string" },
+                limits: { anyOf: [{ type: "string" }, { type: "null" }] },
                 citationIds: {
                     type: "array",
                     items: { type: "string", enum: ids },
@@ -234,15 +234,11 @@ export function hydrateInformational(
         !value.title.trim() ||
         !("summary" in value) ||
         !("status" in value) ||
-        (value.summary !== undefined &&
-            !isInformationalSummary(value.summary)) ||
-        (value.status !== undefined && !isArticleCompleteness(value.status)) ||
         !("prose" in value) ||
         typeof value.prose !== "string" ||
         !value.prose.trim() ||
         !("limits" in value) ||
-        typeof value.limits !== "string" ||
-        !value.limits.trim() ||
+        (value.limits !== null && !isInformationalText(value.limits)) ||
         !("citationIds" in value) ||
         !Array.isArray(value.citationIds) ||
         !value.citationIds.length ||
@@ -270,7 +266,7 @@ export function hydrateInformational(
     });
     const viewId = input.definition.viewId;
     if (
-        typeof value.summary !== "string" ||
+        !isInformationalText(value.summary) ||
         !isArticleCompleteness(value.status)
     )
         throw new Error(
@@ -281,7 +277,7 @@ export function hydrateInformational(
         kind: "wiki",
         construction: "informational-wiki-v1",
         status: value.status,
-        coverageNote: value.limits.trim(),
+        coverageNote: value.limits === null ? "" : value.limits.trim(),
         title: value.title,
         summary: value.summary.trim(),
         sections: [
@@ -306,7 +302,7 @@ export function hydrateInformational(
     return {
         content,
         outcome: "knowledgePages",
-        missingEvidence: [value.limits],
+        missingEvidence: value.limits === null ? [] : [value.limits],
         relationships: [...new Set(citations.map(viewSourceKey))].map(
             (key, position) => {
                 const supporting = citations.filter(

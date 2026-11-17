@@ -21,6 +21,7 @@ import {
     benchmarkProviderConfiguration,
     benchmarkFailure,
     loadPrepared,
+    benchmarkTopicCuration,
 } from "./longmemeval-live.mjs";
 import {
     digest,
@@ -220,12 +221,9 @@ export function productionArmEnvironment(
     const { comparison, schedule } = productionPlan(pilot);
     assert.ok(schedule.includes(arm), "Choose a frozen production arm");
     const env = { ...environment, TYPEAGENT_MEMORY_SEARCH_TRACE: "1" };
+    benchmarkTopicCuration(env);
+    indexingTreatments(env);
     if (comparison !== "prepared-indexing") {
-        assert.equal(
-            env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY,
-            undefined,
-            "Parallel indexing comparison requires default topic concurrency",
-        );
         env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
         const experiments = (env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
             .split(",")
@@ -238,7 +236,6 @@ export function productionArmEnvironment(
             );
         const treatment = {
             A1: "indexing-parallel",
-            T1: "topic-parallel",
             S1: "synopsis-parallel",
             E1: "embedding-parallel",
         }[arm];
@@ -750,10 +747,7 @@ export function pairedPerformance(arms, ids) {
     };
 }
 export function treatmentPerformance(arms, ids, treatment) {
-    assert.ok(
-        ["T1", "S1", "E1"].includes(treatment),
-        "Unknown singleton treatment",
-    );
+    assert.ok(["S1", "E1"].includes(treatment), "Unknown singleton treatment");
     const paired = pairedPerformance(
         arms
             .filter((arm) => ["A0", treatment].includes(arm.arm))

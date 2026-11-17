@@ -23,7 +23,7 @@ import {
     createTopicTransaction,
 } from "./topicDecisionTransactions.js";
 import {
-    curateTopics,
+    curateTopicEvidence,
     validateTopicCurationProgress,
     type TopicCurationCompletion,
 } from "./topicCuration.js";
@@ -768,7 +768,7 @@ async function resolveUncertainty(
         return output;
     };
     resolutionComplete.inspectRequest = complete.inspectRequest;
-    const resolution = await curateTopics(
+    const resolution = await curateTopicEvidence(
         {
             ...withoutCuration(snapshot),
             nodes: snapshot.nodes.filter((node) => ids.has(node.id)),

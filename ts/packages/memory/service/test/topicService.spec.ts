@@ -104,7 +104,7 @@ describe("production topic service vertical slice", () => {
                 ];
             }
             if (curated) {
-                expect(input.model).toContain("topics-curated-lazy-v6");
+                expect(input.model).toContain("topics-curated-lazy-v10:");
                 snapshot.curation = {
                     concepts: [
                         {

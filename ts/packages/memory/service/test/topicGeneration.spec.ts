@@ -348,11 +348,14 @@ test("named generative settings and Decision factories retain distinct recipes",
                 };
             },
         },
-        mode: { kind: "generative", settings: { concurrency: 2 } },
+        mode: {
+            kind: "generative",
+            settings: { generativeDecisionStage: "original" },
+        },
     });
     const result = await generate(input(1), new AbortController().signal);
-    expect(curationCalls).toBe(1);
-    expect(result.recipe).toMatch(/:curated-lazy-v8:[0-9a-f]{16}$/);
+    expect(curationCalls).toBe(2);
+    expect(result.recipe).toMatch(/:curated-lazy-v10:[0-9a-f]{16}$/);
     expect(result.curation?.deferred).toHaveLength(1);
 });
 
@@ -538,13 +541,16 @@ test.each([false, true])(
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const snapshot = await generator(
             input(7),
             new AbortController().signal,
         );
-        expect(calls).toBe(1);
+        expect(calls).toBe(2);
         expect(snapshot.curation?.deferred).toHaveLength(7);
         expect(
             snapshot.nodes.every(
@@ -664,7 +670,10 @@ test.each([
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const outcome = generator(input(2), controller.signal);
         if (mode === "repeated" || mode === "transport" || mode === "abort") {
@@ -681,8 +690,8 @@ test.each([
         const snapshot = await outcome;
         expect(stages).toEqual(
             mode === "valid"
-                ? ["curation", "organization"]
-                : ["curation", "organization", "organization"],
+                ? ["curation", "curation", "organization"]
+                : ["curation", "curation", "organization", "organization"],
         );
         expect(snapshot.parents).toHaveLength(1);
         expect(snapshot.parents[0].parentId).toMatch(/^concept:/);
@@ -744,15 +753,77 @@ test.each([false, true])(
     },
 );
 
+test.each([8, 9])(
+    "lazy summaries bind the complete supplied packet and reject unsupplied ID %s",
+    async (evidenceId) => {
+        const citations = Array.from(
+            { length: 9 },
+            (_, index) => occurrence(`source-${index}`).citations[0],
+        );
+        let calls = 0;
+        const summarize = createConfiguredTopicConceptSummarizer(undefined, {
+            completionSettings: {},
+            complete: async (messages) => {
+                calls++;
+                if (calls === 1) {
+                    const packet = JSON.parse(promptText(messages, 1));
+                    expect(packet.evidence).toHaveLength(9);
+                    expect(packet.evidence[8]).toEqual({
+                        id: 8,
+                        ...citations[8],
+                    });
+                }
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        calls === 1
+                            ? {
+                                  summary:
+                                      "The ninth source retains the rollout blocker.",
+                                  evidenceIds: [evidenceId],
+                              }
+                            : { safe: true, failures: [] },
+                    ),
+                };
+            },
+        });
+        const concept = {
+            id: `concept:${"b".repeat(32)}`,
+            label: "Rollout",
+            scope: "Deployment",
+            purpose: "Understand the rollout blocker",
+            summary: "",
+            summaryState: "pending" as const,
+            memberIds: ["topic:one"],
+            citations,
+            salience: 7,
+        };
+        if (evidenceId === 8) {
+            const result = await summarize(
+                concept,
+                new AbortController().signal,
+            );
+            expect(result.citations).toEqual([citations[8]]);
+            expect(calls).toBe(2);
+        } else {
+            await expect(
+                summarize(concept, new AbortController().signal),
+            ).rejects.toThrow("unsupplied evidence");
+            expect(calls).toBe(1);
+        }
+        expect(concept.citations).toEqual(citations);
+        expect(concept.summaryState).toBe("pending");
+    },
+);
+
 test("curation checkpoints seed only unchanged policy and exact captured evidence", async () => {
     const frozen = await capture(input(55).topicInput!.occurrences);
     const checkpoints: TopicSnapshot[] = [];
-    let calls = 0;
     const generator = createConfiguredTopicGenerator({
         model: {
             completionSettings: {},
             complete: async (messages) => {
-                if (++calls === 2)
+                if (checkpoints.length)
                     throw new Error("Curation provider interrupted");
                 const payload = JSON.parse(promptText(messages, 1));
                 return {
@@ -777,7 +848,7 @@ test("curation checkpoints seed only unchanged policy and exact captured evidenc
     expect(checkpoints).toHaveLength(1);
     const partial = checkpoints[0];
     expect(partial.curation).toBeUndefined();
-    expect(partial.curationProgress!.deferred).toHaveLength(24);
+    expect(partial.curationProgress!.deferred).toHaveLength(48);
     const resumed = await capture(frozen.topicInput!.occurrences, partial);
     expect(resumed.topicInput!.reusableCuration).toEqual(
         partial.curationProgress,
@@ -817,7 +888,7 @@ test("partial summary checkpoints retain only audited prose and can seed exact-e
                         data: JSON.stringify({ parents: [], related: [] }),
                     };
                 const payload = JSON.parse(promptText(messages, 1));
-                if (instructions.includes("Check the ACTUAL")) {
+                if (instructions.includes("Audit the proposed output")) {
                     const sourceId = payload.evidence[0].sourceId;
                     if (sourceId === "source-0") await held.promise;
                     audited.add(sourceId);
@@ -891,7 +962,7 @@ test("checkpoint persistence failure drains workers and prevents organization", 
                 return {
                     success: true,
                     data: JSON.stringify(
-                        instructions.includes("Check the ACTUAL")
+                        instructions.includes("Audit the proposed output")
                             ? { safe: true, failures: [] }
                             : {
                                   summary: "Rollout remains blocked.",
@@ -933,7 +1004,7 @@ test("large raw organization visits every topic without inventing same-label par
             return {
                 success: true,
                 data: JSON.stringify(
-                    instructions.includes("Check the ACTUAL")
+                    instructions.includes("Audit the proposed output")
                         ? { safe: true, failures: [] }
                         : {
                               summary: "Rollout remains blocked.",
@@ -964,7 +1035,7 @@ test("summary schema permits only the exact numeric IDs in each request", async 
                     success: true,
                     data: JSON.stringify({ parents: [], related: [] }),
                 };
-            if (instructions.includes("Check the ACTUAL"))
+            if (instructions.includes("Audit the proposed output"))
                 return {
                     success: true,
                     data: JSON.stringify({ safe: true, failures: [] }),
@@ -1031,7 +1102,7 @@ function blockedModel() {
             const gate = deferred<Response>();
             const instructions = promptText(messages, 0);
             const payload: unknown = JSON.parse(promptText(messages, 1));
-            const kind = instructions.includes("Check the ACTUAL")
+            const kind = instructions.includes("Audit the proposed output")
                 ? "editorial"
                 : instructions.includes("Organize supplied topics")
                   ? "organization"
@@ -1140,6 +1211,8 @@ test("three worker slots bound overlapping summary/editorial calls and retain or
     )!;
     expect(summaryPrompt.instructions).toContain("1600 characters");
     expect(editorialPrompt.instructions).toContain("no rationale");
+    expect(editorialPrompt.instructions).not.toContain("JSON pointer");
+    expect(editorialPrompt.instructions).not.toContain("evidenceIds");
     expect(fake.calls.some((call) => call.instructions.includes("4000"))).toBe(
         false,
     );
@@ -1305,7 +1378,7 @@ test("reuse requires exact owned evidence AND complete same-source revision cont
         completionSettings: {},
         complete: async (messages) => {
             const prompt = promptText(messages, 0);
-            const response = prompt.includes("Check the ACTUAL")
+            const response = prompt.includes("Audit the proposed output")
                 ? { safe: true, failures: [] }
                 : prompt.includes("Organize supplied topics")
                   ? { parents: [], related: [] }
@@ -1383,7 +1456,7 @@ test("concurrent timing retains input ordinals and enabled/disabled equivalence"
         complete: async (messages) => ({
             success: true,
             data: JSON.stringify(
-                promptText(messages, 0).includes("Check the ACTUAL")
+                promptText(messages, 0).includes("Audit the proposed output")
                     ? { safe: true, failures: [] }
                     : promptText(messages, 0).includes(
                             "Organize supplied topics",
@@ -1458,7 +1531,7 @@ test("production model retries quota 429s in worker slots with one inherited agg
             const content = JSON.stringify(
                 summary
                     ? { summary: "Rollout remains blocked.", evidenceIds: [0] }
-                    : instructions.includes("Check the ACTUAL")
+                    : instructions.includes("Audit the proposed output")
                       ? { safe: true, failures: [] }
                       : { parents: [], related: [] },
             );
