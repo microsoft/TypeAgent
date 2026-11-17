@@ -41,6 +41,7 @@ function connection(
         getMacroRequirements: missing,
         validateMacro: missing,
         approveMacro: missing,
+        reviseMacro: missing,
         disableMacro: missing,
         deleteMacro: missing,
         runMacro: missing,
@@ -88,6 +89,8 @@ test("recognized malformed commands return usage with no mutation", async () => 
         "@typeagent recipe disable id revision extra",
         "@typeagent recipe cancel missing",
         "@typeagent recipe list\nextra",
+        "@typeagent recipe revise id 1",
+        "@typeagent recipe revise id 0 feedback",
     ])
         expect(
             (await handleRecipeCommand({ ...input, prompt }))?.responseContent,
@@ -125,6 +128,8 @@ test("unknown IDs/cancel return explicit local failure, not legacy fallback", as
         "@typeagent recipe delete missing 1",
         "@typeagent recipe cancel job missing",
         "@typeagent recipe cancel run missing",
+        "@typeagent recipe revise missing 1 Clarify the output",
+        "@typeagent recipe status missing",
     ]) {
         const result = await handleRecipeCommand({ ...input, prompt }, connect);
         expect(result?.handled).toBe(true);
@@ -188,6 +193,71 @@ test("explicit execution preserves JSON string whitespace and preallocates a run
         runId: expect.any(String),
         inputs: { text: "two  spaces", number: 7 },
     });
+});
+
+test("review corrections preserve plain-language spacing and return the revision job without approving or running", async () => {
+    const job = {
+        jobId: "job",
+        traceId: "trace",
+        cwd: input.cwd,
+        sessionId: input.sessionId,
+        mode: "prepare" as const,
+        status: "queued" as const,
+        createdAt: "2026-10-27T00:00:00Z",
+        updatedAt: "2026-10-27T00:00:00Z",
+        authoring: {
+            captureId: "trace",
+            taskId: "task",
+            tokenId: "token",
+            contextDigest: "a".repeat(64),
+        },
+    };
+    const reviseMacro = jest.fn<MacroOwnerConnection["reviseMacro"]>(
+        async () => job,
+    );
+    const getMacroLearningJob = jest.fn<
+        MacroOwnerConnection["getMacroLearningJob"]
+    >(async () => job);
+    const approveMacro = jest.fn(missing);
+    const runMacro = jest.fn(missing);
+    const client = connection({
+        reviseMacro,
+        getMacroLearningJob,
+        approveMacro,
+        runMacro,
+    });
+    const result = await handleRecipeCommand(
+        {
+            ...input,
+            prompt: "@typeagent recipe revise saved 3 Keep  two spaces\nand return only the title",
+        },
+        async () => client,
+    );
+    expect(reviseMacro).toHaveBeenCalledWith({
+        macroId: "saved",
+        version: 3,
+        feedback: "Keep  two spaces\nand return only the title",
+    });
+    expect(result?.responseContent).toContain('"jobId": "job"');
+    expect(result?.responseContent).toContain("Revision queued");
+    expect(result?.responseContent).toContain("needsReview");
+    const status = await handleRecipeCommand(
+        { ...input, prompt: "@typeagent recipe status job" },
+        async () => client,
+    );
+    expect(JSON.parse(status!.responseContent!)).toEqual(job);
+    expect(getMacroLearningJob).toHaveBeenCalledWith("job");
+    expect(approveMacro).not.toHaveBeenCalled();
+    expect(runMacro).not.toHaveBeenCalled();
+    const unsafe = await handleRecipeCommand(
+        {
+            ...input,
+            prompt: "@typeagent recipe revise saved 9007199254740992 change it",
+        },
+        async () => client,
+    );
+    expect(unsafe?.responseContent).toContain("positive integer");
+    expect(reviseMacro).toHaveBeenCalledTimes(1);
 });
 
 test("off does not connect to either catalog or backend", async () => {

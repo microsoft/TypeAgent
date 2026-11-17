@@ -48,6 +48,15 @@ bounded semantic functions. Backend authorization remains authoritative.
   Never change that preference for the user.
 - Validate staged programs before explicit approval. Approval never runs a
   program and does not grant backend permission.
+- If the user identifies a problem during review, call `revise_macro` with the
+  exact current draft version and their plain-language feedback. Do not edit
+  stored artifacts or approve the old draft. Check `get_macro_learning_job`;
+  `queued`, `building` and `awaitingAuthor` are not ready. Once `needsReview`,
+  inspect and validate the returned new version, explain the correction, and
+  obtain explicit approval before calling `approve_macro`. Revisions always
+  require review, even under Read-only or All. Failed corrections do not
+  publish; report the error and request another correction only if the user
+  wants one. Changes must stay within the captured tool contracts.
 
 ## Owner-specific capabilities
 
