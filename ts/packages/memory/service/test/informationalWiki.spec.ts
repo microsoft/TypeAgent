@@ -2589,8 +2589,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 release();
                 const outcome = await maintaining;
                 if (suppress) {
-                    expect(outcome.error).toBeInstanceOf(ViewBuildStaleError);
-                    expect(outcome.result).toBeUndefined();
+                    expect(outcome.error).toBeUndefined();
+                    expect(outcome.result?.job).toBeUndefined();
+                    const family = await new TypedViewStore(root).getWikiFamily(
+                        corpusId,
+                    );
+                    expect(family.dirty).toBe(true);
+                    expect(family.planningConflict?.attempts).toBe(1);
                 } else {
                     expect(outcome.error).toBeUndefined();
                     expect(outcome.result?.job).toBeDefined();

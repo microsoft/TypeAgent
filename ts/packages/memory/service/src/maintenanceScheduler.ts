@@ -221,14 +221,19 @@ export class MaintenanceScheduler {
         this.timer.unref();
     }
 
-    public cancel(corpusId: string, family: string): void {
+    public cancel(
+        corpusId: string,
+        family: string,
+        preserveTargetFailures = false,
+    ): void {
         const key = `${corpusId}:${family}`;
         this.pending.delete(key);
         this.failures.delete(key);
         this.parked.delete(key);
-        for (const target of this.reportedFailures.keys())
-            if (target.startsWith(`${key}:`))
-                this.reportedFailures.delete(target);
+        if (!preserveTargetFailures)
+            for (const target of this.reportedFailures.keys())
+                if (target.startsWith(`${key}:`))
+                    this.reportedFailures.delete(target);
     }
 
     public reportFailure(
@@ -244,6 +249,15 @@ export class MaintenanceScheduler {
 
     public park(corpusId: string, family: string, reason: string): void {
         this.parked.set(`${corpusId}:${family}`, reason);
+    }
+
+    public resumeDeferred(
+        corpusId: string,
+        family: string,
+        reason: string,
+    ): void {
+        const key = `${corpusId}:${family}`;
+        if (this.parked.get(key) === reason) this.parked.delete(key);
     }
 
     public async waitForBuild<T>(work: () => Promise<T>): Promise<T> {

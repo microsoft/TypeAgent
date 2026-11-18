@@ -105,13 +105,17 @@ describe("derived-only View persistence", () => {
                 }),
             );
         });
+        const consulted: string[] = [];
         expect(
             await store.hasPendingInformationalInput(
                 corpusId,
                 "guide",
                 snapshot,
+                true,
+                (viewId) => consulted.push(viewId),
             ),
         ).toBe(true);
+        expect(consulted).toEqual(["first", "second"]);
         expect(await store.hasInvalidatedWikiAmbiguity(corpusId)).toBe(false);
         const unchanged = await store.listViews(corpusId);
         await store.saveViewDraft({
