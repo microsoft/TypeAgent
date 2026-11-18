@@ -133,6 +133,11 @@ export interface WikiFamilyState {
     reviewCursor?: string;
     indexVersion?: string;
     error?: string;
+    planningConflict?: {
+        reason: string;
+        generation?: string;
+        attempts: number;
+    };
     automaticPasses?: {
         generation: string | undefined;
         policy: string;
@@ -202,11 +207,13 @@ function timestamp(): string {
 function unchangedWikiAmbiguity(
     result: ViewBuildTargetResult,
     state: ViewStoreState,
+    consulted?: (viewId: string) => void,
 ): boolean {
     const dependencies = result.wikiAmbiguityDependencies;
     return (
         !!dependencies?.length &&
         dependencies.every((dependency) => {
+            consulted?.(dependency.viewId);
             const page = viewVersions(state, dependency.viewId).at(-1);
             return (
                 page?.state !== "archived" &&
@@ -1856,6 +1863,7 @@ export class TypedViewStore {
         viewId: string,
         input: ViewBuildSnapshot,
         includeParkedFailures = true,
+        consulted?: (viewId: string) => void,
     ): Promise<boolean> {
         const { state } = await this.readSnapshot(corpusId);
         const pendingConflict = Object.values(state.conflicts ?? {}).some(
@@ -1879,7 +1887,7 @@ export class TypedViewStore {
                     result.state === "blocked" &&
                     result.wikiAssessment?.disposition === "ambiguous"
                 )
-                    return unchangedWikiAmbiguity(result, state);
+                    return unchangedWikiAmbiguity(result, state, consulted);
                 return ["blocked", "conflicted", "cancelled"].includes(
                     result.state,
                 );

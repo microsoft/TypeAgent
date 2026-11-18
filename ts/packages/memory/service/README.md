@@ -51,6 +51,33 @@ job files at once. Filtering, ordering and pagination remain unchanged;
 unreadable or corrupt job files still fail explicitly rather than producing
 an apparently empty or complete result.
 
+## Recoverable Wiki construction planning
+
+Wiki and project construction planning validates the descriptors it uses or
+changes, target revisions, original source revisions and construction access.
+Retained admission and candidate-visit decisions also track every nominated
+coverage/canonical page and its separation relationships, including decisions
+that select no build. Inputs are checked again immediately before admission;
+the existing build and publication guards remain in force.
+
+Unrelated View additions or revisions do not discard prepared work. Concurrent
+unrelated descriptor changes are merged rather than overwritten and leave the
+family dirty for another bounded pass. Changed consulted dependencies defer the
+plan instead of recording a permanent technical rejection. Existing pages,
+proposals, unprocessed cursors and newly discovered candidate identities are
+retained; no stale proposal authorizes an overwrite or publication.
+A concurrent family pause remains authoritative and does not create recovery
+writes after the pause.
+
+Deferred planning is durable across restart and visible as pending/deferred
+maintenance. The existing 30-second reconciliation wave resumes it, without an
+immediate retry loop. Three consecutive dependency conflicts in one source-index
+generation stop automatic retries with an explicit-maintenance-required error.
+Explicit maintenance or a changed source-index generation resets the streak;
+successful planning clears it without clearing unrelated target failures.
+Configured automatic pass and candidate-read budgets still apply. This recovery
+does not change model selection, admission choices or editorial policies.
+
 ## Installed memory-view packs
 
 A memory-view pack is an npm package exporting a static JSON manifest at
