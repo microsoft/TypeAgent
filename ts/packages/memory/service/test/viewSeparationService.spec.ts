@@ -238,12 +238,30 @@ test("confirmed separation survives partial generation and restart, checks real 
             "stale",
         );
         authorized = true;
-        await store.forgetSource(corpusId, source.sourceId);
+        const forget = await service.previewForgetSource(
+            corpusId,
+            source.sourceId,
+        );
+        // Serialize the privacy purge with the live service's background maintenance.
+        const forgotten = await service.forgetSource({
+            corpusId,
+            sourceId: source.sourceId,
+            confirmationToken: forget.confirmationToken,
+        });
+        expect(forgotten.deletedRevisionCount).toBe(1);
+        await service.close();
+        service = open();
+        await service.initialize();
+        expect(await service.listSources(corpusId)).toEqual([]);
         expect(await store.listViewSeparations(corpusId)).toEqual([]);
-        for (const child of proposal.destinations)
+        for (const child of proposal.destinations) {
             expect(
                 await store.getView({ corpusId, viewId: child.viewId }),
             ).toBeUndefined();
+            expect(
+                await service.getView({ corpusId, viewId: child.viewId }),
+            ).toBeUndefined();
+        }
     } finally {
         await service.close();
         await rm(root, { recursive: true, force: true });
