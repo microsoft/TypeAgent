@@ -112,6 +112,16 @@ stored versions still load, but absence of quality is unscored, not full support
 Human edits do not carry prior current-article quality forward; historical
 generated quality stays with its original generated content.
 
+Native output-support validation retains its weakest decision as structured
+quality, without converting partial support into full support. Ambiguity
+`keep_separate` can retain a new, partially supported Wiki draft at lower
+confidence; exact section/relationship coverage, missing-context and inventory
+exclusion checks still apply. Unsupported or uncertain validation remains
+reviewable rather than becoming an accepted draft. Combination and publication
+continue to require strict support. Both automatic and human arbitration
+recheck every participant's current construction authorization inside the final
+write, after asynchronous verification.
+
 ## Canonical citation provenance
 
 Inline `[fN]` references are local to the article's generation snapshot. Before

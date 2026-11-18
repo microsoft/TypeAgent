@@ -1483,6 +1483,7 @@ export function assertSupportReport(
             !assessments(value.exclusions, "itemId"))
     )
         throw new Error("Invalid evidence/context validation report");
+    if (value.quality !== undefined) parseSupportQuality(value.quality);
 }
 export function draftRequest(
     input: ViewBuildSnapshot,
@@ -1829,8 +1830,13 @@ export class ViewSupportRejection extends Error {}
 export function validateSupport(
     output: ViewSynthesisOutput,
     report: ViewSupportReport,
+    { allowPartialDraft = false }: { allowPartialDraft?: boolean } = {},
 ): void {
     assertSupportReport(report);
+    const retainPartial =
+        allowPartialDraft &&
+        output.content.kind === "wiki" &&
+        report.quality?.status === "partiallySupported";
     exactEvidenceCoverage(
         report.sections,
         output.content.sections.map((section) => section.id),
@@ -1858,10 +1864,14 @@ export function validateSupport(
             throw new Error("Unsupported inventory exclusion");
     }
     if (
-        !report.supported ||
+        (report.quality &&
+            report.quality.status !== "supported" &&
+            !retainPartial) ||
         report.missingContext.length ||
-        report.sections.some((section) => !section.supported) ||
-        report.relationships.some((edge) => !edge.supported)
+        (!retainPartial &&
+            (!report.supported ||
+                report.sections.some((section) => !section.supported) ||
+                report.relationships.some((edge) => !edge.supported)))
     )
         throw new ViewSupportRejection(
             `Unsupported evidence or missing context: ${[...report.reasons, ...report.missingContext, ...report.sections.filter((section) => !section.supported).map((section) => `${section.sectionId}: ${section.reason}`), ...report.relationships.filter((edge) => !edge.supported).map((edge) => `${edge.edgeId}: ${edge.reason}`)].join("; ")}`,

@@ -9971,7 +9971,11 @@ export class FileMemoryService
             } else {
                 await this.verifyWikiAmbiguityReview(review, signal);
                 review = await this.enqueueWrite(job.corpusId, async () => {
-                    for (const participant of review.participants)
+                    for (const participant of review.participants) {
+                        await this.assertWikiAmbiguitySources(
+                            participant.input,
+                            "build",
+                        );
                         if (participant.page)
                             await this.checkWikiContributionInput(
                                 participant.input,
@@ -9981,6 +9985,7 @@ export class FileMemoryService
                             await this.assertInfluenceEligible(
                                 participant.input,
                             );
+                    }
                     if (!review.participants[0].page)
                         await this.recheckViewInput(result.snapshot);
                     return this.viewStore.updateWikiAmbiguityReview(
@@ -10209,7 +10214,16 @@ export class FileMemoryService
                     signal,
                 );
                 review.verification.push({ ids: group.ids, support: report });
-                validateSupport(candidate.draft, report);
+                validateSupport(candidate.draft, report, {
+                    allowPartialDraft: true,
+                });
+                if (
+                    report.quality &&
+                    (!candidate.draft.quality ||
+                        report.quality.confidence <
+                            candidate.draft.quality.confidence)
+                )
+                    candidate.draft.quality = report.quality;
             } else {
                 const output = verifyAmbiguityCombination(
                     group,
@@ -10489,6 +10503,10 @@ export class FileMemoryService
             );
             return await this.enqueueWrite(request.corpusId, async () => {
                 for (const participant of review.participants) {
+                    await this.assertWikiAmbiguitySources(
+                        participant.input,
+                        "build",
+                    );
                     await this.assertInfluenceEligible(participant.input);
                     if (participant.page)
                         await this.checkWikiContributionInput(

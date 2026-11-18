@@ -771,10 +771,24 @@ export function createWikiDecisionFirstAdapter(
                 answers,
                 await auditCoverageNote(input, output, signal),
             );
+            const status = [
+                "unsupported",
+                "uncertain",
+                "partiallySupported",
+                "supported",
+            ] as const;
+            const weakest = status.find((value) =>
+                Object.values(answers).includes(value),
+            );
+            if (!weakest)
+                throw new Error("D1-v2 output support status missing");
             return {
                 supported: Object.values(answers).every(
                     (value) => value === "supported",
                 ),
+                quality: supportQuality([
+                    { category: "newContentSupport", status: weakest },
+                ]),
                 sections: output.content.sections.map((s, i) => ({
                     sectionId: s.id,
                     supported: answers[`s${i}`] === "supported",

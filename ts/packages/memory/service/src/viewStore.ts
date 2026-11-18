@@ -1284,8 +1284,14 @@ export class TypedViewStore {
             target.state = next.state === "resolved" ? "draft" : "conflicted";
             target.reason = `Wiki ambiguity ${next.state}: ${next.reason}`;
             const revision = next.appliedRevisions?.[next.candidateId];
-            if (revision) target.revisionId = revision;
-            else if (next.state === "resolved") {
+            if (revision) {
+                target.revisionId = revision;
+                const quality = viewVersions(state, next.candidateId).find(
+                    (version) => version.revisionId === revision,
+                )?.quality;
+                if (quality) target.quality = quality;
+                else delete target.quality;
+            } else if (next.state === "resolved") {
                 target.state = "skipped";
                 const group = next.resolution?.groups.find(
                     (entry) =>

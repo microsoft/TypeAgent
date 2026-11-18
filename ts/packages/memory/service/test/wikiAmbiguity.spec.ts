@@ -11,7 +11,11 @@ import {
     type StructuredOutputJsonSchema,
     type DecisionModel,
 } from "@typeagent/aiclient";
-import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
+import {
+    createConfiguredViewSynthesisAdapter,
+    assertSupportReport,
+    validateSupport,
+} from "../src/viewSynthesis.js";
 import { createWikiDecisionFirstAdapter } from "../src/wikiDecisionFirst.js";
 import { wikiPageContext, parseWikiAssessment } from "../src/wikiAdmission.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
@@ -795,7 +799,11 @@ interface ServiceHarness {
             }>;
         };
     }>;
-    sourceAllowed(): Promise<boolean>;
+    sourceAllowed(
+        source: { sourceId: string },
+        revision: { revisionId: string },
+        operation: "read" | "build",
+    ): Promise<boolean>;
     listWikiAmbiguityReviews(corpusId: string): Promise<WikiAmbiguityReview[]>;
     resolveWikiAmbiguityReview(
         request: WikiAmbiguityReviewAction,
@@ -808,6 +816,258 @@ interface ServiceHarness {
         signal: AbortSignal,
     ): Promise<void>;
 }
+
+function arbitrationHarness(
+    store: TypedViewStore,
+    review: WikiAmbiguityReview,
+): ServiceHarness {
+    const harness = Object.create(
+        FileMemoryService.prototype,
+    ) as ServiceHarness;
+    harness.viewStore = store;
+    harness.enqueueWrite = async (_corpusId, task) => task();
+    harness.assertInfluenceEligible = async () => {};
+    harness.recheckViewInput = async () => {};
+    harness.checkWikiContributionInput = async () => {};
+    harness.requireViews = async () => ({
+        access: { read: async (work) => work() },
+    });
+    harness.getCorpusRuntime = async () => ({
+        manifest: {
+            sources: review.participants.flatMap((participant) =>
+                participant.input.inputs.map((source) => ({
+                    sourceId: source.sourceId,
+                    revisions: [{ revisionId: source.revisionId }],
+                })),
+            ),
+        },
+    });
+    harness.sourceAllowed = async () => true;
+    harness.viewAdapter = {
+        identity: "offline",
+        generate: async (snapshot) => output(snapshot),
+        validate: async (_snapshot, candidate) => ({
+            supported: true,
+            missingContext: [],
+            reasons: [],
+            sections: candidate.content.sections.map((section) => ({
+                sectionId: section.id,
+                supported: true,
+                reason: "original evidence",
+            })),
+            relationships: candidate.relationships.map((edge) => ({
+                edgeId: edge.id,
+                supported: true,
+                reason: "original evidence",
+            })),
+        }),
+        resolveWikiAmbiguity: async (record) => separate(record.participants),
+    };
+    return harness;
+}
+
+async function applySeparateResolution(
+    harness: ServiceHarness,
+    mode: "automatic" | "human",
+    { store, job, review }: Awaited<ReturnType<typeof fixture>>,
+): Promise<WikiAmbiguityReview> {
+    if (mode === "human") {
+        const reserved = await store.reserveWikiAmbiguityReview(review);
+        return harness.resolveWikiAmbiguityReview({
+            corpusId: "corpus",
+            reviewId: reserved.review.id,
+            expectedVersion: reserved.review.version,
+            action: "keep_separate",
+        });
+    }
+    await harness.resolveWikiAmbiguity(
+        job,
+        job.results[0],
+        assessment,
+        review.participants.flatMap((participant) =>
+            participant.page
+                ? [wikiPageContext(job.results[0].snapshot, participant.page)]
+                : [],
+        ),
+        new AbortController().signal,
+    );
+    return (await store.listWikiAmbiguityReviews("corpus"))[0];
+}
+
+describe.each(["automatic", "human"] as const)("%s arbitration", (mode) => {
+    test.each(["candidate", "second"])(
+        "rechecks %s construction authorization revoked during verification",
+        async (revokedId) => {
+            const data = await fixture();
+            const { root, store, review } = data;
+            try {
+                const harness = arbitrationHarness(store, review);
+                let revoked = false;
+                harness.sourceAllowed = async (source, _revision, operation) =>
+                    operation !== "build" ||
+                    !revoked ||
+                    source.sourceId !== `source-${revokedId}`;
+                const validate = harness.viewAdapter.validate;
+                harness.viewAdapter.validate = async (...args) => {
+                    const report = await validate(...args);
+                    revoked = true;
+                    return report;
+                };
+                const result = await applySeparateResolution(
+                    harness,
+                    mode,
+                    data,
+                );
+                expect(revoked).toBe(true);
+                expect(result.state).toBe("conflict");
+                expect(result.reason).toContain("authorization changed");
+                const saved = (
+                    await new TypedViewStore(root).listWikiAmbiguityReviews(
+                        "corpus",
+                    )
+                )[0];
+                expect(saved.state).toBe("conflict");
+                expect(saved.participants[0].draft?.content).toEqual(
+                    review.participants[0].draft?.content,
+                );
+                expect((await store.listViews("corpus")).views).toHaveLength(2);
+                for (const participant of review.participants.filter(
+                    (entry) => entry.page,
+                ))
+                    expect(
+                        (
+                            await store.getView({
+                                corpusId: "corpus",
+                                viewId: participant.id,
+                            })
+                        )?.revisionId,
+                    ).toBe(participant.revisionId);
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+    );
+
+    test.each(["partiallySupported", "unsupported", "uncertain"] as const)(
+        "retains native %s output with the correct draft policy",
+        async (status) => {
+            const data = await fixture();
+            const { root, store, review } = data;
+            try {
+                const harness = arbitrationHarness(store, review);
+                const model: DecisionModel = {
+                    provider: "azure",
+                    model: "decision-1",
+                    configGeneration: 1,
+                    providerSource: "factory",
+                    decide: async (request) => ({
+                        success: true,
+                        data: {
+                            provider: "azure",
+                            requestedModel: "decision-1",
+                            answers: Object.fromEntries(
+                                Object.keys(request.questions).map((id) => [
+                                    id,
+                                    {
+                                        type: "choice",
+                                        choice: status,
+                                        probabilities: { [status]: 1 },
+                                    },
+                                ]),
+                            ),
+                        },
+                    }),
+                };
+                const native = createWikiDecisionFirstAdapter(
+                    harness.viewAdapter,
+                    model,
+                    async () => {
+                        throw new Error("No prose repair allowed");
+                    },
+                    { arm: "D1" },
+                );
+                harness.viewAdapter.validate = native.validate;
+                const result = await applySeparateResolution(
+                    harness,
+                    mode,
+                    data,
+                );
+                expect(result.state).toBe(
+                    status === "partiallySupported"
+                        ? "resolved"
+                        : "needsReview",
+                );
+                const saved = (
+                    await new TypedViewStore(root).listWikiAmbiguityReviews(
+                        "corpus",
+                    )
+                )[0];
+                const report = saved.verification?.find(
+                    (entry): entry is { support: unknown } =>
+                        typeof entry === "object" &&
+                        entry !== null &&
+                        "support" in entry,
+                )?.support;
+                assertSupportReport(report);
+                expect(report.quality?.status).toBe(status);
+                const draft = saved.participants[0].draft!;
+                expect(() => validateSupport(draft, report)).toThrow(
+                    "Unsupported evidence",
+                );
+                expect(() =>
+                    validateSupport(draft, {
+                        ...report,
+                        supported: true,
+                        sections: report.sections.map((section) => ({
+                            ...section,
+                            supported: true,
+                        })),
+                        relationships: report.relationships.map((edge) => ({
+                            ...edge,
+                            supported: true,
+                        })),
+                    }),
+                ).toThrow("Unsupported evidence");
+                const retained = await store.getView({
+                    corpusId: "corpus",
+                    viewId: "candidate",
+                });
+                if (status === "partiallySupported") {
+                    expect(retained?.state).toBe("draft");
+                    expect(retained?.quality?.status).toBe(
+                        "partiallySupported",
+                    );
+                    expect(retained?.quality?.confidence).toBe(0.5);
+                    expect(
+                        (await store.getViewBuild("corpus", data.job.jobId))
+                            ?.results[0].quality,
+                    ).toEqual(retained?.quality);
+                    expect(
+                        (
+                            await new TypedViewStore(root).getView({
+                                corpusId: "corpus",
+                                viewId: "candidate",
+                            })
+                        )?.quality,
+                    ).toEqual(retained?.quality);
+                } else expect(retained).toBeUndefined();
+                for (const participant of review.participants.filter(
+                    (entry) => entry.page,
+                ))
+                    expect(
+                        (
+                            await store.getView({
+                                corpusId: "corpus",
+                                viewId: participant.id,
+                            })
+                        )?.revisionId,
+                    ).toBe(participant.revisionId);
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+    );
+});
 
 test("revoked source authorization withholds complete review evidence without erasing retained work or leaking it through approval failure", async () => {
     const { root, store, review } = await fixture();

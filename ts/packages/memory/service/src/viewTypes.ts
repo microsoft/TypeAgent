@@ -677,6 +677,7 @@ export interface ViewInventoryCoverage {
 }
 export interface ViewSupportReport {
     supported: boolean;
+    quality?: import("./viewSupport.js").ViewSupportQuality;
     sections: Array<{ sectionId: string; supported: boolean; reason: string }>;
     relationships: Array<{
         edgeId: string;
