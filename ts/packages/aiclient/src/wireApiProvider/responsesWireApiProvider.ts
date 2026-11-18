@@ -34,10 +34,18 @@ type ResponsesUsage = {
 
 type ResponsesResult = {
     status?: string;
+    incomplete_details?: { reason?: string };
     output_text?: string;
     output?: ResponsesOutputItem[];
     usage?: ResponsesUsage;
 };
+
+function incompleteResponseMessage(result: ResponsesResult): string {
+    const reason = result.incomplete_details?.reason;
+    return typeof reason === "string" && reason.trim().length > 0
+        ? `${incompleteOutputMessage} (reason: ${reason})`
+        : incompleteOutputMessage;
+}
 
 export class ResponsesWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "responses";
@@ -100,7 +108,7 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
     parseResponse(data: unknown, _request: ModelRequest): Result<string> {
         const res = data as ResponsesResult;
         if (res.status === "incomplete") {
-            return error(incompleteOutputMessage);
+            return error(incompleteResponseMessage(res));
         }
         if (typeof res.output_text === "string") {
             return success(res.output_text);
@@ -131,13 +139,13 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                 const evt = JSON.parse(raw) as {
                     type?: string;
                     delta?: string;
-                    response?: {
-                        usage?: ResponsesUsage;
-                    };
+                    response?: ResponsesResult;
                 };
                 const piece: StreamPiece = {};
                 if (evt.type === "response.incomplete") {
-                    throw new Error(incompleteOutputMessage);
+                    throw new Error(
+                        incompleteResponseMessage(evt.response ?? {}),
+                    );
                 }
                 if (
                     evt.type === "response.output_text.delta" &&
