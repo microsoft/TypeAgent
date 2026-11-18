@@ -65,12 +65,12 @@ describe("bounded serving experiments", () => {
                         AZURE_OPENAI_RESPONSE_FORMAT: "1",
                         AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS:
                             "https://example.test/openai/deployments/extraction/chat/completions",
-                        AZURE_OPENAI_ENDPOINT_GPT_5_4_MINI_EASTUS:
-                            "https://example.test/openai/deployments/query/chat/completions",
+                        AZURE_OPENAI_ENDPOINT_MEMORY_QUERY_LUNA_EASTUS:
+                            "https://example.test/openai/deployments/gpt-6-luna/chat/completions",
                     }),
                 );
                 globalThis.fetch = async (url, init) => {
-                    expect(String(url)).toContain("/deployments/query/");
+                    expect(String(url)).toContain("/deployments/gpt-6-luna/");
                     body = JSON.parse(String(init?.body)) as Record<
                         string,
                         unknown
@@ -87,7 +87,7 @@ describe("bounded serving experiments", () => {
                     informationalViews: false,
                     sourceSynopses: false,
                     performanceExperiments: experiment,
-                    fastQueryModelEndpoint: "gpt_5_4_mini",
+                    fastQueryModelEndpoint: "memory_query_luna",
                     indexSettingsFactory: () => {
                         settings = createDocMemorySettings();
                         return settings;

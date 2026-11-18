@@ -12,6 +12,136 @@ import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { createTopicSnapshot } from "../src/topicGeneration.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { knowledgeBuildDiagnostics } from "../src/knowledgeDiagnostics.js";
+import { ViewBuildStaleError } from "../src/viewBuilds.js";
+
+test.each(["once", "always", "failed"] as const)(
+    "Wiki checkpoint replans stale targets without accepting invalid work (%s)",
+    async (mode) => {
+        class SinglePurposeIndex extends FakeSemanticCorpusIndex {
+            async listSubjects() {
+                return {
+                    total: 1,
+                    items: [
+                        {
+                            term: "Reference",
+                            postingCount: 1,
+                            sourceIds: ["source"],
+                        },
+                    ],
+                };
+            }
+            override async getKnowledgeGraph() {
+                return {
+                    entities: [],
+                    relationships: [],
+                    topics: [
+                        {
+                            name: "Reference",
+                            sourceIds: ["source"],
+                            mentionCount: 1,
+                        },
+                    ],
+                };
+            }
+            async readFragments() {
+                const document = this.documents[0];
+                return {
+                    fragments: [
+                        {
+                            sourceId: document.source.sourceId,
+                            revisionId: document.revision.revisionId,
+                            snippet: document.content,
+                            locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
+                            score: 1,
+                        },
+                    ],
+                    readChars: document.content.length,
+                    limited: false,
+                };
+            }
+        }
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "memory-stale-replan-"),
+        );
+        let attempts = 0;
+        const service = new FileMemoryService(root, {
+            maintenanceMode: "manual",
+            sourceSynopses: false,
+            indexFactory: (_id, directory) => new SinglePurposeIndex(directory),
+            viewSynthesisAdapter: {
+                identity: "offline-stale-replan",
+                generate: async () => {
+                    throw new Error("No prose needed");
+                },
+                validate: async () => {
+                    throw new Error("No prose needed");
+                },
+                assessWikiSubject: async () => {
+                    attempts++;
+                    if (mode === "failed") throw new Error("Invalid evidence");
+                    if (mode === "always" || attempts === 1)
+                        throw new ViewBuildStaleError(
+                            "View target version is stale or archived",
+                        );
+                    return {
+                        disposition: "defer",
+                        purpose: "Passing reference",
+                        reason: "No substantive reference evidence.",
+                        canonicalViewId: "",
+                        sharedFragmentIds: [],
+                        essentialDistinctions: [],
+                        ambiguousViewIds: [],
+                    };
+                },
+            },
+        });
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Stale target replanning",
+            );
+            const ingested = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Reference",
+                    text: "A passing Reference mention.",
+                },
+            });
+            await waitForMemoryJob(service, ingested.jobId);
+            const checkpoint = await service.createKnowledgeCheckpoint({
+                corpusId,
+                families: ["wiki"],
+                producerComplete: true,
+                timeoutMs: 30000,
+            });
+            const finished = await service.waitForKnowledgeCheckpoint({
+                corpusId,
+                checkpointId: checkpoint.checkpointId,
+                timeoutMs: 30000,
+            });
+            expect(finished.state).toBe(
+                mode === "once"
+                    ? "ready"
+                    : mode === "always"
+                      ? "partial"
+                      : "failed",
+            );
+            expect(attempts).toBe(
+                mode === "once" ? 2 : mode === "always" ? 4 : 1,
+            );
+            const jobs = await service.listViewBuilds(corpusId);
+            expect(
+                jobs.some((job) =>
+                    job.results.some((target) => target.state === "stale"),
+                ),
+            ).toBe(mode !== "failed");
+        } finally {
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+);
 
 test.each([
     { producerComplete: false, candidateCount: 45 },

@@ -230,7 +230,7 @@ function canonical(): ViewVersion {
     };
 }
 
-test("same/subset contributing revisions nominate different locators; empty and cross-revision sets do not", () => {
+test("nomination distinguishes contributing-revision overlap from full-prose lexical matches", () => {
     const input = snapshot(),
         page = canonical();
     input.definition.selector.sources.push({
@@ -282,17 +282,20 @@ test("same/subset contributing revisions nominate different locators; empty and 
     });
     const replaced = structuredClone(page);
     replaced.content.citations[0].revisionId = "replacement";
-    expect(nominateWikiPages(input, [replaced], new Map())).toEqual([]);
     expect(
-        nominateWikiPages({ ...input, inputs: [] }, [page], new Map()),
-    ).toEqual([]);
+        nominateWikiPages(input, [replaced], new Map())[0].sourceOverlap.shared,
+    ).toBe(0);
+    expect(
+        nominateWikiPages({ ...input, inputs: [] }, [page], new Map())[0]
+            .sourceOverlap.shared,
+    ).toBe(0);
     expect(
         nominateWikiPages(
             input,
             [{ ...page, content: { ...page.content, citations: [] } }],
             new Map(),
-        ),
-    ).toEqual([]);
+        )[0].sourceOverlap.shared,
+    ).toBe(0);
 });
 
 test.each([
@@ -412,18 +415,25 @@ test("canonical contribution still rejects an untracked title change", () => {
     expect(page.content.title).toBe("Untracked title");
 });
 
-test("synthetic host coverage rejects truncated prose even when every claimed witness is visible", () => {
+test("full-page coverage retains long prose and rejects explicitly truncated context", () => {
     const input = snapshot();
     const page = canonical();
     page.content.sections[0].body = `${contrast}\n${"Bounded context. ".repeat(400)}`;
     const context = wikiPageContext(input, page);
-    expect(context.prose).toHaveLength(6000);
-    expect(context.proseTruncated).toBe(true);
+    expect(context.prose.length).toBeGreaterThan(6000);
+    expect(context.proseTruncated).toBe(false);
     expect(context.prose).toContain(contrast);
+    const truncated = {
+        ...context,
+        prose: context.prose.slice(0, 6000),
+        proseTruncated: true,
+    };
     expect(() =>
-        parseWikiAssessment(assessment(input, context, "covered"), [context]),
+        parseWikiAssessment(assessment(input, truncated, "covered"), [
+            truncated,
+        ]),
     ).toThrow("incomplete-prose-coverage");
-    const complete = wikiPageContext(input, page, undefined, false);
+    const complete = wikiPageContext(input, page);
     expect(complete.proseTruncated).toBe(false);
     const accepted = parseWikiAssessment(
         assessment(input, complete, "covered"),
@@ -458,7 +468,6 @@ test.each(["old", "incoming"])(
             combined,
             { ...page, content: merged.output.content },
             undefined,
-            false,
         );
         const verified = assessment(combined, complete, "covered");
         expect(
@@ -471,7 +480,6 @@ test.each(["old", "incoming"])(
             combined,
             { ...page, content: omitted },
             undefined,
-            false,
         );
         expect(incomplete.sharedFragmentIds).toEqual(["f0", "f1"]);
         expect(() =>
@@ -523,6 +531,9 @@ test("contribution union retains original exact evidence, metadata, stable ID an
     const input = snapshot(),
         page = canonical();
     page.definition.wiki!.aliases = ["existing alias"];
+    page.content.summary = "Summary-only prior qualification.";
+    if (page.content.kind !== "wiki") throw new Error("Expected Wiki");
+    page.content.coverageNote = "Note-only prior limitation.";
     const context = wikiPageContext(input, page);
     const combined = wikiContributionInput(
         input,
@@ -531,6 +542,13 @@ test("contribution union retains original exact evidence, metadata, stable ID an
     );
     expect(combined.definition.viewId).toBe("canonical");
     expect(combined.expectedVersion).toBe(1);
+    expect(combined.wikiContribution!.priorProse).toContain(
+        "Summary-only prior qualification.",
+    );
+    expect(combined.wikiContribution!.priorProse).toContain(
+        "Note-only prior limitation.",
+    );
+    expect(context.prose).toBe(combined.wikiContribution!.priorProse);
     expect(combined.targetRevisionId).toBe(page.revisionId);
     expect(combined.definition.wiki!.aliases).toEqual([
         "existing alias",
@@ -557,7 +575,7 @@ test("contribution union retains original exact evidence, metadata, stable ID an
         definition: { ...page.definition, ...combined.definition },
         generation: { ...page.generation!, input: combined },
     };
-    const contextAfter = wikiPageContext(combined, next, undefined, false);
+    const contextAfter = wikiPageContext(combined, next);
     const verified = assessment(combined, contextAfter, "covered");
     expect(
         parseWikiAssessment(

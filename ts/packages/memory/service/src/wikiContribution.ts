@@ -7,7 +7,7 @@ import type {
     ViewVersion,
     WikiSubjectAssessment,
 } from "./viewTypes.js";
-import { contributingSources } from "./wikiAdmission.js";
+import { contributingSources, wikiArticleProse } from "./wikiAdmission.js";
 import { viewSourceKey } from "./viewContent.js";
 import { viewHash } from "./viewMerge.js";
 import { derivedDefinitionInput } from "./viewRelationships.js";
@@ -163,9 +163,7 @@ export function wikiContributionInput(
             query,
             purpose: assessment.purpose,
             essentialDistinctions,
-            priorProse: canonical.content.sections
-                .map((section) => section.body)
-                .join("\n\n"),
+            priorProse: wikiArticleProse(canonical.content),
         },
     };
     return { ...snapshot, fingerprint: viewHash(snapshot) };

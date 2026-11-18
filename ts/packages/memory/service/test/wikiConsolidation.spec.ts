@@ -26,7 +26,11 @@ import {
     authoredRelationships,
 } from "../src/viewRelationships.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
-import { EditorialRejection } from "../src/viewEditorial.js";
+import {
+    EditorialRejection,
+    parseEditorialAssessment,
+} from "../src/viewEditorial.js";
+import { supportQuality, type ViewSupportQuality } from "../src/viewSupport.js";
 import { viewHash } from "../src/viewMerge.js";
 import type {
     ViewBuildJob,
@@ -43,9 +47,10 @@ function input(
     viewId: string,
     body = "Payments capacity review is open, not approved. Command median 38 ms differs from a held lease median 1750 ms. p95 acquisition 420 ms has a different cohort. Withdrawal is not a replacement value.",
     query = viewId,
+    sourceId = "original",
 ): ViewBuildSnapshot {
     const block = {
-        sourceId: "original",
+        sourceId,
         revisionId: "r1",
         blockOrdinal: 0,
         text: body,
@@ -103,9 +108,15 @@ function output(snapshot: ViewBuildSnapshot) {
         citationIds: ["f0"],
     });
 }
-async function preparedStore(root: string) {
+async function preparedStore(
+    root: string,
+    quality?: ViewSupportQuality,
+    sourceIds = ["original", "original"],
+) {
     const store = new TypedViewStore(root, "authenticated-test-owner");
-    const snapshots = [input("survivor"), input("retiring")];
+    const snapshots = ["survivor", "retiring"].map((viewId, index) =>
+        input(viewId, undefined, viewId, sourceIds[index]),
+    );
     const request = {
         corpusId: "corpus",
         expectedHead: null,
@@ -115,15 +126,19 @@ async function preparedStore(root: string) {
         })),
     };
     const admitted = await store.admitViewBuild(request, snapshots);
-    for (const snapshot of snapshots)
+    for (const snapshot of snapshots) {
+        const candidate = output(snapshot);
+        const merged = structuredClone(candidate);
+        if (quality) merged.quality = quality;
         await store.materializeViewBuild(
             "corpus",
             admitted.job.jobId,
             snapshot.definition.viewId,
-            output(snapshot),
-            output(snapshot),
+            candidate,
+            merged,
             [],
         );
+    }
     const survivor = (await store.getView({
         corpusId: "corpus",
         viewId: "survivor",
@@ -173,6 +188,7 @@ function repairFixture() {
     const repair = {
         summary:
             "Keyword calls include 17 in August 2021 and 34 in January 2022.",
+        coverageNote: "Selected original indexed evidence",
         sections: original.content.sections.map((section) => ({
             id: section.id,
             body: snapshot.inputs[0].content,
@@ -195,6 +211,179 @@ function repairFixture() {
     };
     return { snapshot, original, repair, assessment };
 }
+
+describe("Canonical inline fragment provenance", () => {
+    it("preserves literal code, links and escaped labels while rebinding actual references", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-literal-alias-"),
+        );
+        try {
+            const { survivor, retiring } = await preparedStore(
+                root,
+                undefined,
+                ["original", "other"],
+            );
+            if (retiring.content.kind !== "wiki")
+                throw new Error("Wiki fixture required");
+            const literal =
+                "Use `[f99]` or array[f99], link [f99](https://example.invalid/), and escaped \\[f99].\n```text\n[f99]\n````\n";
+            retiring.content.sections[0].body = `${literal}Evidence [f0].`;
+            const captured = consolidationInput(survivor, retiring);
+            const ordinal = captured.inputs
+                .flatMap((source) => source.passages ?? [])
+                .findIndex((fragment) => fragment.sourceId === "other");
+            expect(ordinal).toBeGreaterThanOrEqual(0);
+            const { output: combined } = preservedCanonicalOutput(
+                survivor,
+                retiring,
+                captured,
+            );
+            if (combined.content.kind !== "wiki")
+                throw new Error("Wiki output required");
+            expect(combined.content.sections[1].body).toBe(
+                `${literal}Evidence [f${ordinal}].`,
+            );
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+    it("rebinds colliding page-local labels to their exact merged passages without mutating pages", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-alias-binding-"),
+        );
+        try {
+            const { survivor, retiring } = await preparedStore(
+                root,
+                undefined,
+                ["original", "other"],
+            );
+            if (
+                survivor.content.kind !== "wiki" ||
+                retiring.content.kind !== "wiki"
+            )
+                throw new Error("Wiki fixtures required");
+            for (const view of [survivor, retiring]) {
+                if (view.content.kind !== "wiki")
+                    throw new Error("Wiki fixture required");
+                view.content.summary += " [f0]";
+                view.content.coverageNote += " [f0]";
+                view.content.sections[0].heading += " [f0]";
+                view.content.sections[0].body += " [f0]";
+            }
+            const captured = consolidationInput(survivor, retiring);
+            const fragments = captured.inputs.flatMap(
+                (source) => source.passages ?? [],
+            );
+            const first = fragments.findIndex(
+                (fragment) => fragment.sourceId === "original",
+            );
+            const second = fragments.findIndex(
+                (fragment) => fragment.sourceId === "other",
+            );
+            expect(first).toBeGreaterThanOrEqual(0);
+            expect(second).toBeGreaterThanOrEqual(0);
+            expect(first).not.toBe(second);
+            const { output: combined } = preservedCanonicalOutput(
+                survivor,
+                retiring,
+                captured,
+            );
+            if (combined.content.kind !== "wiki")
+                throw new Error("Wiki output required");
+            expect(combined.content.summary).toContain(`[f${first}]`);
+            expect(combined.content.summary).toContain(`[f${second}]`);
+            expect(combined.content.coverageNote).toContain(`[f${second}]`);
+            expect(combined.content.sections[0].body).toContain(`[f${first}]`);
+            expect(combined.content.sections[1].body).toContain(`[f${second}]`);
+            expect(combined.content.sections[1].heading).toContain(
+                `[f${second}]`,
+            );
+            expect(retiring.content.summary).toBe(
+                "Grounded reference summary. [f0]",
+            );
+            expect(combined.content.citations).toHaveLength(2);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    it("binds identical indexed provenance consistently across pages", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-shared-alias-"),
+        );
+        try {
+            const { survivor, retiring } = await preparedStore(root);
+            for (const view of [survivor, retiring]) {
+                if (view.content.kind !== "wiki")
+                    throw new Error("Wiki fixture required");
+                view.content.sections[0].body += " [f0]";
+            }
+            if (
+                survivor.content.kind !== "wiki" ||
+                retiring.content.kind !== "wiki"
+            )
+                throw new Error("Wiki fixtures required");
+            retiring.content.sections[0] = {
+                ...structuredClone(survivor.content.sections[0]),
+                id: retiring.content.sections[0].id,
+            };
+            const { output: combined, anchors } = preservedCanonicalOutput(
+                survivor,
+                retiring,
+            );
+            if (combined.content.kind !== "wiki")
+                throw new Error("Wiki output required");
+            expect(combined.content.sections).toHaveLength(1);
+            expect(combined.content.sections[0].body).toContain("[f0]");
+            expect(anchors).toHaveLength(1);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    it("rejects unknown local labels explicitly while preserving original pages", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-unknown-alias-"),
+        );
+        try {
+            const { survivor, retiring } = await preparedStore(root);
+            if (retiring.content.kind !== "wiki")
+                throw new Error("Wiki fixture required");
+            retiring.content.summary += " [f99]";
+            expect(() => preservedCanonicalOutput(survivor, retiring)).toThrow(
+                "unbound-fragment-reference",
+            );
+            expect(retiring.content.summary).toContain("[f99]");
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    it("does not bind a missing passage to another source with the same ordinal", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "wiki-missing-alias-"),
+        );
+        try {
+            const { survivor, retiring } = await preparedStore(
+                root,
+                undefined,
+                ["original", "other"],
+            );
+            if (retiring.content.kind !== "wiki")
+                throw new Error("Wiki fixture required");
+            retiring.content.summary += " [f0]";
+            const captured = consolidationInput(survivor, retiring);
+            captured.inputs = captured.inputs.filter(
+                (source) => source.sourceId !== "other",
+            );
+            expect(() =>
+                preservedCanonicalOutput(survivor, retiring, captured),
+            ).toThrow("unbound-fragment-reference");
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+});
 
 test("consolidation corrects a quantity once and independently rechecks actual prose without changing anchors", async () => {
     const { snapshot, original, repair, assessment } = repairFixture();
@@ -250,6 +439,271 @@ test("consolidation corrects a quantity once and independently rechecks actual p
     expect(result.output.relationships).toEqual(original.relationships);
     expect(original).toEqual(retained);
 });
+
+test("partial consolidation support retains a scored draft without repair or rejection", async () => {
+    const { snapshot, original, assessment } = repairFixture();
+    if (original.content.kind === "wiki")
+        original.content.status = "sufficient";
+    let repairs = 0;
+    const adapter: ViewSynthesisAdapter = {
+        identity: "offline",
+        generate: async () => original,
+        validate: async () => {
+            throw new Error("Unused");
+        },
+        checkWikiConsolidation: async () =>
+            parseEditorialAssessment({
+                safe: true,
+                failures: [],
+                decisions: [
+                    {
+                        category: "newContentSupport",
+                        status: "partiallySupported",
+                        choiceConfidence: 0.99,
+                    },
+                    { category: "preservation", status: "supported" },
+                ],
+            }),
+        repairWikiConsolidation: async () => {
+            repairs++;
+            throw new Error("Partial alone must not require repair");
+        },
+    };
+    const result = await verifyOrRepairWikiConsolidation(
+        adapter,
+        snapshot,
+        original,
+        assessment,
+        new AbortController().signal,
+    );
+    expect(repairs).toBe(0);
+    expect(result.output.quality).toMatchObject({
+        status: "partiallySupported",
+        confidence: 0.5,
+    });
+    expect(
+        result.output.content.kind === "wiki" && result.output.content.status,
+    ).toBe("sufficient");
+    expect(original.quality).toBeUndefined();
+});
+
+test("a partial draft persists support quality and native confidence across store restart", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), "r7-partial-draft-"));
+    try {
+        const quality = supportQuality([
+            {
+                category: "newContentSupport",
+                status: "partiallySupported",
+                choiceConfidence: 0.99,
+            },
+        ]);
+        const { survivor } = await preparedStore(root, quality);
+        const reopened = new TypedViewStore(root, "authenticated-test-owner");
+        const draft = await reopened.getView({
+            corpusId: "corpus",
+            viewId: "survivor",
+        });
+        expect(draft?.state).toBe("draft");
+        expect(draft?.revisionId).toBe(survivor.revisionId);
+        expect(draft?.quality).toEqual(quality);
+        expect(draft?.generation?.quality).toEqual(quality);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("partial quality survives store restart and cannot silently replace a stronger prior article", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), "r7-support-store-"));
+    try {
+        const full = supportQuality([
+            { category: "newContentSupport", status: "supported" },
+            { category: "preservation", status: "supported" },
+        ]);
+        const { store, survivor } = await preparedStore(root, full);
+        const captured = {
+            ...input("survivor"),
+            expectedVersion: survivor.version,
+            targetRevisionId: survivor.revisionId,
+            definitionRevisionId: survivor.definition.revisionId,
+        };
+        const request = {
+            corpusId: "corpus",
+            expectedHead: (await store.listViews("corpus")).head,
+            targets: [
+                {
+                    definition: captured.definition,
+                    expectedVersion: survivor.version,
+                },
+            ],
+        };
+        const admitted = await store.admitViewBuild(request, [captured]);
+        const partial = output(captured);
+        partial.quality = supportQuality([
+            { category: "newContentSupport", status: "supported" },
+            {
+                category: "preservation",
+                status: "partiallySupported",
+                choiceConfidence: 0.99,
+            },
+        ]);
+        const result = await store.materializeViewBuild(
+            "corpus",
+            admitted.job.jobId,
+            "survivor",
+            partial,
+            partial,
+            [],
+        );
+        expect(result.state).toBe("conflicted");
+        expect(result.reason).toContain("prior supported article unchanged");
+        const reopened = new TypedViewStore(root, "authenticated-test-owner");
+        const retained = await reopened.getView({
+            corpusId: "corpus",
+            viewId: "survivor",
+        });
+        expect(retained?.revisionId).toBe(survivor.revisionId);
+        expect(retained?.quality).toEqual(full);
+        expect(retained?.generation?.quality).toEqual(full);
+        const conflict = await reopened.getViewConflict(
+            "corpus",
+            result.conflictId!,
+        );
+        expect(conflict?.candidate.quality).toEqual(partial.quality);
+        expect(conflict?.candidate.content).toEqual(partial.content);
+        const head = (await reopened.listViews("corpus")).head!;
+        await expect(
+            reopened.resolveViewConflict(
+                {
+                    corpusId: "corpus",
+                    conflictId: result.conflictId!,
+                    expectedHead: head,
+                    expectedVersion: survivor.version,
+                    expectedRevisionId: survivor.revisionId,
+                    inputFingerprint: conflict!.input.fingerprint,
+                    choice: "generated",
+                },
+                partial,
+            ),
+        ).rejects.toThrow("requires revalidation before replacing");
+        expect((await reopened.listViews("corpus")).head).toBe(head);
+        const unsafe = {
+            ...partial,
+            quality: supportQuality([
+                { category: "newContentSupport", status: "unsupported" },
+                { category: "preservation", status: "supported" },
+            ]),
+        };
+        await expect(
+            reopened.materializeViewBuild(
+                "corpus",
+                admitted.job.jobId,
+                "survivor",
+                unsafe,
+                unsafe,
+                [],
+            ),
+        ).rejects.toThrow("Unsupported editorial output cannot be accepted");
+        expect((await reopened.listViews("corpus")).head).toBe(head);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test.each(["draft", "conflicted"] as const)(
+    "partial support retained as %s never becomes a failed required target",
+    async (retainedState) => {
+        const snapshot = input("partial");
+        const quality = supportQuality([
+            {
+                category: "newContentSupport",
+                status:
+                    retainedState === "draft"
+                        ? "partiallySupported"
+                        : "supported",
+            },
+            {
+                category: "preservation",
+                status:
+                    retainedState === "conflicted"
+                        ? "partiallySupported"
+                        : "supported",
+            },
+        ]);
+        const job: ViewBuildJob = {
+            jobId: "partial-job",
+            corpusId: "corpus",
+            fingerprint: snapshot.fingerprint,
+            request: {
+                corpusId: "corpus",
+                expectedHead: null,
+                targets: [
+                    { definition: snapshot.definition, expectedVersion: 0 },
+                ],
+            },
+            actor: "authenticated-owner",
+            createdAt: "offline",
+            updatedAt: "offline",
+            state: "running",
+            publication: false,
+            results: [
+                {
+                    viewId: "partial",
+                    snapshot,
+                    state: "pending",
+                    reason: "Pending",
+                },
+            ],
+        };
+        let finish: () => void = () => {
+            throw new Error("Completion callback is not initialized");
+        };
+        const finished = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        let repairs = 0;
+        const runner = new ViewBuildRunner(
+            {
+                identity: "offline",
+                generate: async () => output(snapshot),
+                validate: async () => {
+                    throw new Error("No publication proof for partial support");
+                },
+                checkEditorial: async () =>
+                    parseEditorialAssessment({
+                        safe: true,
+                        failures: [],
+                        decisions: quality.decisions,
+                    }),
+                repairWikiEditorial: async () => {
+                    repairs++;
+                    throw new Error("Partial alone must not repair");
+                },
+            },
+            {
+                update: async (_corpus, _job, update) => {
+                    update(job);
+                    if (job.state !== "running") finish();
+                    return job;
+                },
+                current: async () => undefined,
+                materialize: async (_job, target, _candidate, merged) => {
+                    expect(merged.quality).toEqual(quality);
+                    target.state = retainedState;
+                    target.quality = quality;
+                },
+            },
+        );
+        runner.start(job);
+        await finished;
+        await runner.close();
+        expect(repairs).toBe(0);
+        expect(job.results[0].state).toBe(retainedState);
+        expect(job.state).toBe(
+            retainedState === "draft" ? "complete" : "partial",
+        );
+        expect(job.publication).toBe(false);
+    },
+);
 
 test.each([
     ["repeat", "critical-distinction", 2, 1],
@@ -333,11 +787,20 @@ test("configured consolidation repair uses unchanged originals and checks preser
                 expect(String(messages[0].content)).toContain(
                     "Preserve EVERY supported unique claim",
                 );
+                expect(String(messages[0].content)).toContain(
+                    "Precise source-backed limitations are material qualifications",
+                );
+                expect(String(messages[0].content)).toContain(
+                    "Work through each original limitation clause and EACH named subject separately",
+                );
                 return { success: true, data: JSON.stringify(repair) };
             }
             expect(payload.originalContent).toEqual(original.content);
             expect(String(messages[0].content)).toContain(
                 "compare every supported unique claim",
+            );
+            expect(String(messages[0].content)).toContain(
+                'A generic "not complete" disclaimer is not a substitute',
             );
             return {
                 success: true,
@@ -451,6 +914,10 @@ test("consolidation repair rejects unknown, missing, duplicate or malformed sect
             sections: [{ ...repair.sections[0], heading: "Injected" }],
         },
         { ...repair, title: "Injected" },
+        { ...repair, coverageNote: "" },
+        { ...repair, coverageNote: null },
+        { ...repair, coverageNote: 42 },
+        { ...repair, coverageNote: "x".repeat(120001) },
     ])
         expect(() => applyConsolidationRepair(original, invalid)).toThrow(
             "Wiki consolidation rejected",
@@ -465,6 +932,112 @@ test("consolidation repair rejects unknown, missing, duplicate or malformed sect
             sections: [repair.sections[0], repair.sections[0]],
         }),
     ).toThrow("invalid-section-repair");
+});
+
+test("consolidation repairs unsupported coverage notes and rechecks classified completeness without changing supported prose", async () => {
+    const { snapshot, original, assessment } = repairFixture();
+    original.content.sections[0].body = snapshot.inputs[0].content;
+    if (original.content.kind !== "wiki") throw new Error("Expected Wiki");
+    original.content.coverageNote = "No dates are supplied.";
+    const retained = structuredClone(original);
+    const seen: string[] = [];
+    const adapter: ViewSynthesisAdapter = {
+        identity: "offline",
+        generate: async () => original,
+        validate: async () => {
+            throw new Error("Unused support checker");
+        },
+        checkWikiConsolidation: async (_input, candidate) => {
+            if (candidate.content.kind !== "wiki")
+                throw new Error("Expected Wiki");
+            seen.push(candidate.content.coverageNote ?? "");
+            return candidate.content.coverageNote === "No dates are supplied."
+                ? { safe: false, failures: ["coverage"] }
+                : { safe: true, failures: [] };
+        },
+        repairWikiConsolidation: async () => {
+            const repaired = applyConsolidationRepair(original, {
+                summary: original.content.summary,
+                coverageNote:
+                    "The originals give two dated keyword-call counts.",
+                sections: original.content.sections.map(({ id, body }) => ({
+                    id,
+                    body,
+                })),
+            });
+            if (repaired.content.kind !== "wiki")
+                throw new Error("Expected Wiki");
+            repaired.content.status = "sufficient";
+            return repaired;
+        },
+    };
+    const result = await verifyOrRepairWikiConsolidation(
+        adapter,
+        snapshot,
+        original,
+        assessment,
+        new AbortController().signal,
+    );
+    expect(seen).toEqual([
+        "No dates are supplied.",
+        "The originals give two dated keyword-call counts.",
+    ]);
+    expect(result.output.content).toEqual({
+        ...retained.content,
+        coverageNote: seen[1],
+        status: "sufficient",
+    });
+    expect(result.output.relationships).toEqual(retained.relationships);
+    expect(original).toEqual(retained);
+});
+
+test("shared G0 consolidation repair separately classifies the repaired article", async () => {
+    const { snapshot, original, repair, assessment } = repairFixture();
+    const schemas: string[] = [];
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async (messages, _options, schema) => {
+            if (
+                typeof messages === "string" ||
+                !schema ||
+                Array.isArray(schema)
+            )
+                throw new Error("Expected structured messages");
+            schemas.push(schema.name);
+            const payload = JSON.parse(String(messages[1].content));
+            if (schema.name === "wiki_consolidation_repair") {
+                expect(schema.schema.required).toContain("coverageNote");
+                return { success: true, data: JSON.stringify(repair) };
+            }
+            expect(schema.name).toBe("wiki_completeness");
+            expect(payload.content.coverageNote).toBe(repair.coverageNote);
+            expect(payload.content.sections[0].body).toBe(
+                snapshot.inputs[0].content,
+            );
+            return {
+                success: true,
+                data: JSON.stringify({ status: "sufficient" }),
+            };
+        },
+    };
+    const adapter = createConfiguredViewSynthesisAdapter(
+        undefined,
+        4000,
+        model,
+        undefined,
+        { arm: "G0", writerContract: "shared-prose-v1" },
+    );
+    const repaired = await adapter.repairWikiConsolidation!(
+        snapshot,
+        original,
+        assessment,
+        { safe: false, failures: ["quantity"] },
+        new AbortController().signal,
+    );
+    expect(schemas).toEqual(["wiki_consolidation_repair", "wiki_completeness"]);
+    expect(repaired.content.kind === "wiki" && repaired.content.status).toBe(
+        "sufficient",
+    );
 });
 
 test("bounded typed scope assessment rejects unsupported IDs, extra fields, contradictory scope and raw JSON diagnostics", async () => {

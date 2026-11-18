@@ -2,6 +2,14 @@
 // Licensed under the MIT License.
 import { randomUUID } from "node:crypto";
 import {
+    wikiAmbiguityReviewSchema,
+    wikiAmbiguityToolNames,
+} from "./wikiAmbiguityProtocol.js";
+import type {
+    WikiAmbiguityReview,
+    WikiAmbiguityReviewAction,
+} from "@typeagent/memory-service";
+import {
     frameQueryRequestSchema,
     frameCorpusRequestSchema,
     frameQueryResultSchema,
@@ -652,6 +660,18 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.listViewBuilds?.(corpusId) ??
             unsupportedCapability("view builds")
+        );
+    }
+    public listWikiAmbiguityReviews(corpusId: string) {
+        return (
+            this.service.listWikiAmbiguityReviews?.(corpusId) ??
+            unsupportedCapability("Wiki ambiguity review")
+        );
+    }
+    public resolveWikiAmbiguityReview(request: WikiAmbiguityReviewAction) {
+        return (
+            this.service.resolveWikiAmbiguityReview?.(request) ??
+            unsupportedCapability("Wiki ambiguity review")
         );
     }
     public cancelViewBuild(request: ViewBuildJobRequest) {
@@ -1383,6 +1403,24 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewToolNames.listViewBuilds,
             { corpusId },
             viewBuildJobSchema.array(),
+        );
+    }
+    public listWikiAmbiguityReviews(
+        corpusId: string,
+    ): Promise<WikiAmbiguityReview[]> {
+        return this.invoke(
+            wikiAmbiguityToolNames.list,
+            { corpusId },
+            wikiAmbiguityReviewSchema.array(),
+        );
+    }
+    public resolveWikiAmbiguityReview(
+        request: WikiAmbiguityReviewAction,
+    ): Promise<WikiAmbiguityReview> {
+        return this.invoke(
+            wikiAmbiguityToolNames.resolve,
+            request,
+            wikiAmbiguityReviewSchema,
         );
     }
     public cancelViewBuild(

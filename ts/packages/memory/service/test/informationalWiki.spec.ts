@@ -2786,6 +2786,48 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         );
     });
 
+    test("explicit rebuild does not retain prior evidence from a newly excluded source", async () => {
+        const corpusId = (await service.createCorpus("Retained exclusions"))
+            .corpusId;
+        await update(corpusId, "pause");
+        await add(corpusId, "keep", "Acquisition retained qualification.");
+        await add(corpusId, "omit", "Acquisition excluded detail.");
+        await update(corpusId, "resume");
+        await update(corpusId, "pause");
+        const snapshot = await service.listViews(corpusId);
+        const page = snapshot.views[0];
+        const definition = derivedDefinitionInput(page);
+        if (!definition.wiki) throw new Error("Missing Wiki selector");
+        definition.wiki.excludedSourceIds = ["omit"];
+        expect(
+            page.generation?.input?.inputs.map((input) => input.sourceId),
+        ).toContain("omit");
+        beforeGeneration = async (input) => {
+            expect(input.inputs.map((source) => source.sourceId)).toEqual([
+                "keep",
+            ]);
+            expect(input.editorial?.retiredSourceRevisions).toEqual([
+                expect.objectContaining({ sourceId: "omit" }),
+            ]);
+        };
+        const rebuilt = await waitForViewBuild(
+            service,
+            await service.buildViews({
+                corpusId,
+                expectedHead: snapshot.head,
+                targets: [{ expectedVersion: page.version, definition }],
+            }),
+        );
+        expect(rebuilt.state).toBe("complete");
+        const current = await service.getView({
+            corpusId,
+            viewId: page.viewId,
+        });
+        expect(current!.content.sections[0].body).not.toContain(
+            "excluded detail",
+        );
+    });
+
     test("overlapping prose keeps the human version and exposes a resolvable proposal", async () => {
         const corpusId = (await service.createCorpus("Conflict mocks"))
             .corpusId;

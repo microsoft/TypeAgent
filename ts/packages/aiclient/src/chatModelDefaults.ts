@@ -42,6 +42,11 @@ export function isLunaChatModel(settings: ApiSettings): boolean {
     );
 }
 
+export function isGpt6ChatModel(settings: ApiSettings): boolean {
+    const model = getOpenAIChatModelIdentifier(settings);
+    return model !== undefined && /^gpt-6(?:\.1)?(?:-|$)/i.test(model);
+}
+
 export function isGpt4ChatModel(settings: ApiSettings): boolean {
     const model = getOpenAIChatModelIdentifier(settings);
     return model !== undefined && /^gpt[-_.]?4(?:o|$|[-_.])/i.test(model);

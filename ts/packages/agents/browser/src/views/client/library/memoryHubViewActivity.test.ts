@@ -3,7 +3,11 @@
 
 import { inventoryFixture } from "./memoryHubInventoryTestData";
 
-import type { ViewBuildJob, ViewVersion } from "@typeagent/memory-service";
+import type {
+    ViewBuildJob,
+    ViewVersion,
+    WikiAmbiguityReview,
+} from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
 import {
     mountMemoryHubViewActivity,
@@ -88,6 +92,110 @@ beforeEach(() => {
             }
         }),
     );
+});
+
+test("durable Wiki review Inbox feed survives absent build-summary pages and supports human keep-separate", async () => {
+    let review: WikiAmbiguityReview = {
+        id: "review",
+        corpusId: "alpha",
+        jobId: "historical-job",
+        candidateId: "candidate",
+        version: 2,
+        createdAt: "2026-11-15",
+        updatedAt: "2026-11-15",
+        state: "needsReview",
+        reason: "Retained unresolved Wiki proposal",
+        assessment: {
+            disposition: "ambiguous",
+            reason: "uncertain",
+            purpose: "candidate",
+            canonicalViewId: "",
+            sharedFragmentIds: [],
+            ambiguousViewIds: [],
+            essentialDistinctions: [],
+        },
+        participants: [
+            {
+                id: "candidate",
+                revisionId: null,
+                input: {
+                    corpusId: "alpha",
+                    actor: "fixture",
+                    definition: {
+                        viewId: "candidate",
+                        kind: "wiki",
+                        selector: { kind: "sources", sources: [] },
+                    },
+                    expectedVersion: 0,
+                    bounds: {},
+                    inputs: [],
+                    pipeline: "informational-wiki-v1",
+                    model: "offline",
+                    fingerprint: "f",
+                },
+            },
+        ],
+        request: {
+            model: "GPT_6_1_SOL",
+            logicalRequests: 1,
+            state: "unavailable",
+        },
+    };
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return {
+                    derivedViews: { builds: true, wikiAmbiguityReviews: true },
+                };
+            if (method === "memoryListCorpora")
+                return [{ corpusId: "alpha", name: "Alpha" }];
+            if (method === "memoryListViewBuilds") return [];
+            if (method === "memoryListViews") return { head: null, views: [] };
+            if (method === "memoryListWikiAmbiguityReviews") return [review];
+            if (method === "memoryResolveWikiAmbiguityReview") {
+                review = {
+                    ...review,
+                    state: "resolved",
+                    reason: "Verified keep separate",
+                };
+                return review;
+            }
+            throw new Error(`Unexpected method ${method}`);
+        }),
+    );
+    const host = document.createElement("div");
+    const attention = document.createElement("div");
+    const counts = jest.fn();
+    const mounted = mountMemoryHubViewActivity(host, attention, {
+        scope: () => "alpha",
+        onError: jest.fn(),
+        onOpenView: jest.fn(),
+        onOpenBuild: jest.fn(),
+        onAttentionCount: counts,
+    });
+    try {
+        await mounted.refresh();
+        expect(attention.textContent).toContain(
+            "Retained unresolved Wiki proposal",
+        );
+        expect(counts).toHaveBeenLastCalledWith(1, false);
+        textButton(attention, "Keep separate").click();
+        await new Promise((done) => setTimeout(done, 0));
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryResolveWikiAmbiguityReview",
+            {
+                corpusId: "alpha",
+                reviewId: "review",
+                expectedVersion: 2,
+                action: "keep_separate",
+            },
+        );
+        expect(attention.textContent).not.toContain(
+            "Retained unresolved Wiki proposal",
+        );
+    } finally {
+        mounted.dispose();
+    }
 });
 
 test("partial builds and failed targets remain explicit in Activity and Inbox", async () => {

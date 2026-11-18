@@ -20,6 +20,8 @@ export * from "./viewHostOptions.js";
 export { parseViewDraftCapability } from "./viewBuildValidation.js";
 export * from "./viewStore.js";
 export * from "./viewSynthesis.js";
+export * from "./wikiAdmissionExperiment.js";
+export * from "./wikiAmbiguity.js";
 export * from "./viewTypes.js";
 export * from "./viewDetail.js";
 export * from "./viewExtensions.js";

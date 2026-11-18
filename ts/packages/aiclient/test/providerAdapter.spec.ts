@@ -480,6 +480,32 @@ describe("MessagesWireApiProvider", () => {
 describe("ResponsesWireApiProvider", () => {
     const adapter = adapterFor("responses");
 
+    test.each(["max_output_tokens", "content_filter"])(
+        "preserves incomplete response reason %s without accepting partial output",
+        (reason) => {
+            const response = {
+                status: "incomplete",
+                incomplete_details: { reason },
+                output_text: "partial",
+            };
+            const result = adapter.parseResponse(response, makeRequest());
+            expect(result.success).toBe(false);
+            if (!result.success)
+                expect(result.message).toBe(
+                    `Model response is incomplete (reason: ${reason})`,
+                );
+            const decoder = adapter.createStreamDecoder!(makeRequest());
+            expect(() =>
+                decoder.push(
+                    JSON.stringify({
+                        type: "response.incomplete",
+                        response,
+                    }),
+                ),
+            ).toThrow(`Model response is incomplete (reason: ${reason})`);
+        },
+    );
+
     test("preserves reader JSON schemas through Responses text.format", () => {
         const jsonSchema = {
             name: "memory_answer",

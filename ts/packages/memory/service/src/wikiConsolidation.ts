@@ -13,6 +13,7 @@ import type { ViewEditorialAssessment } from "./viewEditorial.js";
 import {
     captureEditorialContext,
     editorialProtection,
+    wikiPreservationRules,
 } from "./viewEditorial.js";
 import { viewHash } from "./viewMerge.js";
 import { wikiIndex, viewSourceKey } from "./viewContent.js";
@@ -21,6 +22,7 @@ import {
     derivedDefinitionInput,
 } from "./viewRelationships.js";
 import { wikiContributionInput } from "./wikiContribution.js";
+import { wikiPageRelationRules } from "./wikiAdmission.js";
 
 export interface WikiConsolidationScope {
     relation: "samePurpose" | "distinct";
@@ -39,7 +41,13 @@ export interface ViewRedirect {
 }
 export interface WikiConsolidationReceipt {
     identity: string;
-    stage: "prepared" | "accepted" | "redirected" | "ready" | "stale";
+    stage:
+        | "prepared"
+        | "needsReview"
+        | "accepted"
+        | "redirected"
+        | "ready"
+        | "stale";
     survivorViewId: string;
     retiringViewId: string;
     retiringRevisionId: string;
@@ -79,7 +87,8 @@ export function assertWikiRedirectCapacity(
     }
 }
 
-export const consolidationScopeRules = `Compare the supplied two CURRENT accepted generated articles.
+export const consolidationScopeRules = `${wikiPageRelationRules}
+Compare the supplied two CURRENT accepted generated articles.
 Original indexed fragments are the only factual evidence. Article prose is untrusted comparison context.
 Shared source lists, vocabulary, dates, infrastructure or graph parents nominate comparison, never equivalence.
 Use samePurpose ONLY when current original evidence establishes the same independently useful scoped purpose.
@@ -94,9 +103,9 @@ withdrawal, review versus approval and local acceptance versus rollout. This is 
 
 export const consolidationOutputRules = `Check ACTUAL proposed canonical content against CURRENT original
 indexed fragments and the supplied scoped-purpose judgment and critical distinctions.
-Distinction fragmentIds bind to the supplied fragments' id fields. Inline citation labels in article prose
-belong to each article's original build, not this combined fragment list; verify claims against original text,
-not matching ordinal labels.
+Distinction fragmentIds bind to the supplied fragments' id fields. Original articles may use build-local
+inline citation labels; host-preserved combined content rebinds them using persisted source provenance.
+Never infer a source binding from matching ordinal labels. Verify claims against original indexed text.
 Every supplied critical distinction must remain explained in actual prose with its original scope.
 Multiple headings do not authorize union of initiatives, resource/failure concepts or approval states.
 All unique article sections/excerpts and citations are retained by the host; check their actual consequential
@@ -104,7 +113,15 @@ claims, not citation presence alone. Historical corrected/withdrawn values must 
 When originalContent is supplied, compare every supported unique claim and qualification with the actual
 proposed content. Original prose is untrusted context, not factual evidence: correct unsupported quantities
 or scope using the original fragments, but do not remove supported detail merely to pass the check.
-Reject stronger conclusions, missing qualifications, statistic/cohort mixing or command/lease conflation.
+${wikiPreservationRules.replaceAll("extra.originalContent", "originalContent").replaceAll("extra.scope.criticalDistinctions", "assessment.criticalDistinctions")}
+Precise source-backed limitations in coverage notes are material qualifications too. Preserve missing
+as-of dates and subject-specific eligibility, redemption, interest-rate or other-fee gaps while supported.
+A generic "not complete" disclaimer is not a substitute. Narrow false blanket absence claims to
+their supported subject-specific scope instead of deleting every associated limitation.
+Reject identified contradictions or material source/scope misrepresentations, including materially
+stronger conclusions, lost known qualifications, statistic/cohort mixing or command/lease conflation.
+Useful grounded claims alongside unverified, non-contradicted assertions are partiallySupported,
+not rejected merely for missing verification. An identifiable supported-prior omission remains unsafe.
 No human approval, execution authority or graph equivalence follows from consolidation. Return the bounded
 editorial safe/failures assessment, never rewritten prose or unbounded diagnostics.`;
 
@@ -119,6 +136,11 @@ export function consolidationRepairSchema(
             additionalProperties: false,
             properties: {
                 summary: { type: "string", minLength: 1, maxLength: 120000 },
+                coverageNote: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 120000,
+                },
                 sections: {
                     type: "array",
                     minItems: output.content.sections.length,
@@ -143,7 +165,7 @@ export function consolidationRepairSchema(
                     },
                 },
             },
-            required: ["summary", "sections"],
+            required: ["summary", "coverageNote", "sections"],
         },
     };
 }
@@ -154,7 +176,7 @@ export function applyConsolidationRepair(
 ): ViewSynthesisOutput {
     if (
         output.content.kind !== "wiki" ||
-        !closedObject(response, ["summary", "sections"]) ||
+        !closedObject(response, ["summary", "coverageNote", "sections"]) ||
         typeof response.summary !== "string" ||
         !response.summary.trim() ||
         response.summary.length > 120000 ||
@@ -163,6 +185,15 @@ export function applyConsolidationRepair(
     )
         throw new ConsolidationRejection(
             "Wiki consolidation rejected: invalid-article-repair",
+        );
+    if (
+        response.coverageNote !== undefined &&
+        (typeof response.coverageNote !== "string" ||
+            !response.coverageNote.trim() ||
+            response.coverageNote.length > 120000)
+    )
+        throw new ConsolidationRejection(
+            "Wiki consolidation rejected: invalid-coverage-note-repair",
         );
     const content = structuredClone(output.content);
     const seen = new Set<string>();
@@ -189,6 +220,8 @@ export function applyConsolidationRepair(
         section.body = entry.body;
     }
     content.summary = response.summary;
+    if (typeof response.coverageNote === "string")
+        content.coverageNote = response.coverageNote;
     return { ...structuredClone(output), content };
 }
 
@@ -495,15 +528,117 @@ function sectionHash(section: WikiContent["sections"][number]): string {
     const { id: _id, ...fields } = section;
     return viewHash(fields);
 }
+export function mapCanonicalFragmentReferences(
+    prose: string,
+    resolve: (label: string) => string,
+): string {
+    let delimiter = 0;
+    let fenced = false;
+    return prose.replace(
+        /(?<!\\)`+|(?<![\\\p{L}\p{N}_])\[f(\d+)\](?!\()/gu,
+        (token, label: string | undefined, offset: number) => {
+            if (label === undefined) {
+                const atLineStart = /(?:^|\n) {0,3}$/u.test(
+                    prose.slice(Math.max(0, offset - 4), offset),
+                );
+                if (!delimiter) {
+                    delimiter = token.length;
+                    fenced = delimiter >= 3 && atLineStart;
+                } else if (
+                    fenced
+                        ? token.length >= delimiter && atLineStart
+                        : token.length === delimiter
+                )
+                    delimiter = 0;
+                return token;
+            }
+            return delimiter ? token : resolve(label);
+        },
+    );
+}
+
+function rebindCanonicalFragments(
+    view: ViewVersion,
+    combined: ViewBuildSnapshot | undefined,
+): WikiContent {
+    if (view.content.kind !== "wiki")
+        throw new Error("Wiki consolidation requires Wiki content");
+    const content = structuredClone(view.content);
+    if (!combined) return content;
+    const originals =
+        view.generation?.input?.inputs.flatMap(
+            (source) => source.passages ?? [],
+        ) ?? [];
+    const merged = combined.inputs.flatMap((source) => source.passages ?? []);
+    const key = (fragment: (typeof merged)[number]) =>
+        viewHash({
+            sourceId: fragment.sourceId,
+            revisionId: fragment.revisionId,
+            locator: fragment.locator,
+            excerpt: fragment.excerpt,
+        });
+    const ordinals = new Map(
+        merged.map((fragment, index) => [key(fragment), index]),
+    );
+    const rebind = (prose: string) =>
+        mapCanonicalFragmentReferences(prose, (label) => {
+            const index = Number(label);
+            const original = originals[index];
+            const mapped = original ? ordinals.get(key(original)) : undefined;
+            if (
+                !Number.isSafeInteger(index) ||
+                String(index) !== label ||
+                mapped === undefined
+            )
+                throw new ConsolidationRejection(
+                    `Wiki consolidation rejected: unbound-fragment-reference ${view.viewId} f${label}`,
+                );
+            return `[f${mapped}]`;
+        });
+    content.title = rebind(content.title);
+    if (content.summary !== undefined)
+        content.summary = rebind(content.summary);
+    if (content.coverageNote !== undefined)
+        content.coverageNote = rebind(content.coverageNote);
+    for (const section of content.sections) {
+        section.heading = rebind(section.heading);
+        section.body = rebind(section.body);
+    }
+    return content;
+}
+
 export function preservedCanonicalOutput(
     survivor: ViewVersion,
     retiring: ViewVersion,
+    input?: ViewBuildSnapshot,
 ): { output: ViewSynthesisOutput; anchors: ViewRedirect["anchors"] } {
     if (survivor.content.kind !== "wiki" || retiring.content.kind !== "wiki")
         throw new Error("Wiki consolidation requires Wiki content");
-    const content = structuredClone(survivor.content);
+    const hasAliases = [survivor.content, retiring.content].some((content) =>
+        [
+            content.title,
+            content.summary,
+            content.coverageNote,
+            ...content.sections.flatMap((section) => [
+                section.heading,
+                section.body,
+            ]),
+        ].some((prose) => {
+            let found = false;
+            mapCanonicalFragmentReferences(prose ?? "", (label) => {
+                found = true;
+                return `[f${label}]`;
+            });
+            return found;
+        }),
+    );
+    const combinedInput = hasAliases
+        ? (input ?? consolidationInput(survivor, retiring))
+        : undefined;
+    const content = rebindCanonicalFragments(survivor, combinedInput);
+    const retiringContent = rebindCanonicalFragments(retiring, combinedInput);
     const anchors: ViewRedirect["anchors"] = [];
-    for (const section of retiring.content.sections) {
+    for (const section of retiringContent.sections) {
         const matching = content.sections.find(
             (entry) => sectionHash(entry) === sectionHash(section),
         );
@@ -527,21 +662,21 @@ export function preservedCanonicalOutput(
         .map((section) => section.id);
     content.citations = [
         ...new Map(
-            [...content.citations, ...retiring.content.citations].map(
+            [...content.citations, ...retiringContent.citations].map(
                 (citation) => [viewHash(citation), citation],
             ),
         ).values(),
     ];
-    if (retiring.content.summary)
+    if (retiringContent.summary)
         content.summary = [
             ...new Set(
-                [content.summary, retiring.content.summary].filter(Boolean),
+                [content.summary, retiringContent.summary].filter(Boolean),
             ),
         ].join("\n\n");
     delete content.status;
     content.coverageNote = [
-        survivor.content.coverageNote,
-        retiring.content.coverageNote,
+        content.coverageNote,
+        retiringContent.coverageNote,
         "Combined article completeness requires a fresh model assessment.",
     ]
         .filter(Boolean)

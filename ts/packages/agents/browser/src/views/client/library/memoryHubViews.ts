@@ -53,7 +53,10 @@ import {
     findPopulatedViewKinds,
 } from "./memoryHubViewTypeFilter";
 
-function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
+function articleCompleteness(
+    content: DerivedViewContent,
+    quality?: ViewVersion["quality"],
+): HTMLElement[] {
     if (
         (content.kind !== "wiki" && content.kind !== "projectBrief") ||
         !content.status
@@ -64,6 +67,14 @@ function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
             `Completeness: ${content.status}`,
             content.status === "sufficient" ? "good" : "warn",
         ),
+        ...(quality
+            ? [
+                  rbChip(
+                      `Support: ${quality.status} (policy score ${quality.confidence})`,
+                      quality.status === "supported" ? "good" : "warn",
+                  ),
+              ]
+            : []),
     ];
 }
 
@@ -85,6 +96,14 @@ function appendArticleIntroduction(
     view: ViewVersion,
     meta: HTMLElement,
 ): HTMLElement {
+    if (view.quality && view.quality.unresolvedCategories.length)
+        meta.append(
+            rbNode(
+                "p",
+                `Needs further evidence or review: ${view.quality.unresolvedCategories.join(", ")}. Support score is an ordinal policy, not a calibrated probability or publication approval.`,
+                "hub-view-note",
+            ),
+        );
     const hasInfobox =
         view.content.kind === "wiki" || view.content.kind === "projectBrief";
     const overviewLabel =
@@ -2057,7 +2076,7 @@ export function mountMemoryHubViews(
         metaChips.append(
             rbChip(viewKindLabels[view.content.kind]),
             rbChip(`Version ${view.version}`),
-            ...articleCompleteness(view.content),
+            ...articleCompleteness(view.content, view.quality),
         );
         meta.append(metaChips, ...viewRevisionTime(view.createdAt));
         article.append(title);

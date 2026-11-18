@@ -12,7 +12,11 @@ import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { parseIndexedLocator } from "../src/indexedFragments.js";
 import { viewContentToText } from "../src/viewText.js";
-import type { ViewBuildJob, ViewSynthesisAdapter } from "../src/viewTypes.js";
+import type {
+    ViewBuildJob,
+    ViewSynthesisAdapter,
+    ViewVersion,
+} from "../src/viewTypes.js";
 import {
     compatibleSubjectIdentity,
     discoverInformationalDescriptors,
@@ -42,6 +46,99 @@ async function finishBuild(service: FileMemoryService, admitted: ViewBuildJob) {
 }
 
 describe("conservative indexed grouping", () => {
+    test.each(["archived", "draft"] as const)(
+        "%s alias records preserve archival intent and active-page ambiguity",
+        (state) => {
+            const page = (viewId: string, query: string): ViewVersion => ({
+                viewId,
+                corpusId: "corpus",
+                revisionId: `${viewId}-revision`,
+                version: 1,
+                actor: "test",
+                createdAt: "2026-11-11T00:00:00Z",
+                state: viewId === "canonical" ? "draft" : state,
+                provenance: "generated",
+                definition: {
+                    viewId,
+                    revisionId: `${viewId}-definition`,
+                    kind: "wiki",
+                    selector: { kind: "sources", sources: [] },
+                    wiki: {
+                        construction: "informational-wiki-v1",
+                        query,
+                        aliases:
+                            viewId === "canonical" ? ["card comparison"] : [],
+                        excludedSourceIds: [],
+                    },
+                },
+                content: {
+                    kind: "wiki",
+                    construction: "informational-wiki-v1",
+                    title: query,
+                    sections: [],
+                    index: [],
+                    citations: [
+                        {
+                            sourceId: "shared",
+                            revisionId: "revision",
+                            locator: "source:0",
+                            excerpt: "Shared comparison evidence.",
+                        },
+                    ],
+                },
+                relationships: [],
+            });
+            const canonical = page("canonical", "travel rewards");
+            const retired = page("retired", "card comparison");
+            const family: WikiFamilyState = {
+                enabled: true,
+                dirty: true,
+                cursor: 0,
+                descriptors: [],
+            };
+            const subject = {
+                term: "card comparison",
+                postingCount: 2,
+                sourceIds: ["shared", "new-source"],
+            };
+            const views = [canonical, retired];
+            const originalViews = structuredClone(views);
+            discoverInformationalDescriptors(family, [subject], views, "wiki");
+            expect(views).toEqual(originalViews);
+            expect(family.descriptors).toHaveLength(2);
+            if (state === "draft") {
+                expect(family.error).toContain(
+                    "existing page records remain separate",
+                );
+            } else {
+                expect(family.error).toBeUndefined();
+                expect(
+                    family.descriptors.find(
+                        (descriptor) => descriptor.viewId === "canonical",
+                    )?.sourceIds,
+                ).toContain("new-source");
+                const archivedOnly: WikiFamilyState = {
+                    enabled: true,
+                    dirty: true,
+                    cursor: 0,
+                    descriptors: [],
+                };
+                discoverInformationalDescriptors(
+                    archivedOnly,
+                    [subject],
+                    [retired],
+                    "wiki",
+                );
+                expect(archivedOnly.error).toBeUndefined();
+                expect(
+                    archivedOnly.descriptors.map(
+                        (descriptor) => descriptor.viewId,
+                    ),
+                ).toEqual(["retired"]);
+            }
+        },
+    );
+
     test("visited identities do not skip unread candidates after ranking or discovery changes", () => {
         const descriptors = [
             {

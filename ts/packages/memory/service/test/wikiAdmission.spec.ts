@@ -13,6 +13,8 @@ import {
     wikiAssessmentSchema,
     wikiProseWitnesses,
     resolveWikiAssessmentWitnesses,
+    wikiArticleProse,
+    wikiProseWitnessRange,
 } from "../src/wikiAdmission.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
@@ -206,6 +208,12 @@ test("assessment dependencies ignore unrelated publication but retain all nomina
     const unrelated = page("unrelated");
     unrelated.definition.wiki!.query = "unrelated astronomy";
     unrelated.content.title = "Astronomy";
+    unrelated.content.summary = "A guide to distant galaxies.";
+    unrelated.content.sections = unrelated.content.sections.map((section) => ({
+        ...section,
+        heading: "Astronomy",
+        body: "Distant galaxies contain many stars.",
+    }));
     unrelated.content.citations = unrelated.content.citations.map(
         (citation) => ({
             ...citation,
@@ -364,6 +372,75 @@ test("only explicit typed evidence deferrals are independent of canonical contex
     ).toThrow("deferral-basis-without-defer");
     const schema = wikiAssessmentSchema([]).schema;
     expect(schema.required).toContain("deferBasis");
+});
+
+test("article evidence includes full summaries, bodies and coverage notes, never headings or navigation", () => {
+    const body = "Original body. ".repeat(600);
+    const prose = wikiArticleProse({
+        summary: "Summary-only qualification.",
+        sections: [
+            {
+                ...page().content.sections[0],
+                heading: "Not retained evidence",
+                body,
+            },
+        ],
+        coverageNote: "Note-only subject-specific limitation.",
+    });
+    expect(prose).toBe(
+        `Summary-only qualification.\n\n${body}\n\nNote-only subject-specific limitation.`,
+    );
+    expect(prose.length).toBeGreaterThan(6000);
+    expect(prose).not.toContain("Not retained evidence");
+    expect(wikiArticleProse({ sections: [] })).toBe("");
+});
+
+test("ordered witness ranges retain separated qualifications and reject invalid or oversized bindings", () => {
+    const prose =
+        "a".repeat(995) +
+        "Main claim. " +
+        "b".repeat(1000) +
+        "Separated qualification.";
+    expect(wikiProseWitnessRange(prose, "w0", "w2")).toBe(prose);
+    expect(() => wikiProseWitnessRange(prose, "w2", "w0")).toThrow(
+        "invalid-canonical-witness-range",
+    );
+    expect(() => wikiProseWitnessRange(prose, "w0", "invented")).toThrow(
+        "canonical-witness-not-supplied",
+    );
+    expect(() => wikiProseWitnessRange("a".repeat(7000), "w0", "w6")).toThrow(
+        "canonical-witness-range-too-long",
+    );
+    const contexts = nominateWikiPages(input(), [page()], new Map());
+    contexts[0].prose = prose;
+    const raw = {
+        ...covered(),
+        essentialDistinctions: [
+            {
+                ...covered().essentialDistinctions[0],
+                canonicalExcerpt: "",
+                canonicalWitnessId: "w0",
+                canonicalEndWitnessId: "w2",
+            },
+        ],
+    };
+    expect(
+        parseWikiAssessment(
+            resolveWikiAssessmentWitnesses(raw, contexts),
+            contexts,
+        ).essentialDistinctions[0].canonicalExcerpt,
+    ).toBe(prose);
+    expect(() =>
+        resolveWikiAssessmentWitnesses(
+            {
+                ...raw,
+                essentialDistinctions: [
+                    { ...raw.essentialDistinctions[0], canonicalWitnessId: "" },
+                ],
+            },
+            contexts,
+        ),
+    ).toThrow("invalid-canonical-witness-binding");
 });
 
 test("native prose witnesses preserve all text and exact selected-page bindings", () => {
@@ -633,14 +710,16 @@ test.each([
     },
 );
 
-test.each(["covered", "contribute"] as const)(
+test.each(["covered", "contribute", "empty-purpose"] as const)(
     "configured assessment repairs an invalid %s contract once against unchanged evidence",
     async (disposition) => {
         const contexts = nominateWikiPages(input(), [page()], new Map());
         const invalid = {
             ...covered(),
-            disposition,
+            disposition:
+                disposition === "empty-purpose" ? "covered" : disposition,
             ...(disposition === "covered" ? { essentialDistinctions: [] } : {}),
+            ...(disposition === "empty-purpose" ? { purpose: "" } : {}),
         };
         const requests: unknown[] = [];
         const model: ChatModel = {
@@ -674,9 +753,11 @@ test.each(["covered", "contribute"] as const)(
             previousAssessment: invalid,
             validationFailure: {
                 code:
-                    disposition === "covered"
-                        ? "invalid-distinction-evidence"
-                        : "incomplete-prose-coverage",
+                    disposition === "empty-purpose"
+                        ? "invalid-assessment-text"
+                        : disposition === "covered"
+                          ? "invalid-distinction-evidence"
+                          : "incomplete-prose-coverage",
             },
         });
     },

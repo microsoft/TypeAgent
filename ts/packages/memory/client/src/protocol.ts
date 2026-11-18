@@ -874,6 +874,7 @@ export const knowledgeGraphSchema = z.object({
 export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
+            wikiAmbiguityReviews: z.literal(true).optional(),
             extension: z
                 .strictObject({
                     apiVersion: z.literal(1),

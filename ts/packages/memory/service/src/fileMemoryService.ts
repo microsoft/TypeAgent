@@ -1,5 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import {
+    ambiguityInput,
+    ambiguityParticipantVersion,
+    parseWikiAmbiguity,
+    verifyAmbiguityCombination,
+    wikiAmbiguityKey,
+    WikiAmbiguityDecisionError,
+    type WikiAmbiguityReview,
+    type WikiAmbiguityReviewAction,
+    type WikiAmbiguityParticipant,
+} from "./wikiAmbiguity.js";
+import { incompletePreservation } from "./viewSupport.js";
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
@@ -299,6 +311,8 @@ import {
 import type { ViewInventoryBuild } from "./viewReadProjection.js";
 import {
     captureEditorialContext,
+    retainEditorialPassages,
+    priorEditorialInputs,
     editorialArticle,
     editorialProtection,
     isEditorialUnlockSuccessor,
@@ -445,6 +459,7 @@ import {
     readConsolidationScope,
     type WikiConsolidationReceipt,
     ConsolidationTargetChanged,
+    ConsolidationRejection,
 } from "./wikiConsolidation.js";
 import { viewSourceKey } from "./viewContent.js";
 import type {
@@ -747,6 +762,7 @@ export interface FileMemoryServiceOptions {
     maintenanceShortBuildReservation?: boolean;
     maintenanceShortBuildPriority?: boolean;
     wikiAssessmentConcurrency?: number;
+    wikiAdmissionExperiment?: import("./wikiAdmissionExperiment.js").WikiAdmissionExperimentOptions;
     ingestionCommitPolicy?: Partial<IngestionCommitPolicy>;
     maintenanceLimits?: {
         maxTargetsPerPass?: number;
@@ -2024,6 +2040,7 @@ export class FileMemoryService
                 Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
                 undefined,
                 this.maintenanceModels,
+                options.wikiAdmissionExperiment,
             );
         this.viewAdapter = adapter;
         this.summarizeTopicConcept = createConfiguredTopicConceptSummarizer(
@@ -2049,6 +2066,20 @@ export class FileMemoryService
                 canPrepareWikiAssessment: async (input) =>
                     !(await this.unchangedInformationalInput(input)),
                 wikiPages: (input) => this.wikiAdmissionPages(input),
+                resolveWikiAmbiguity: (
+                    job,
+                    result,
+                    assessment,
+                    pages,
+                    signal,
+                ) =>
+                    this.resolveWikiAmbiguity(
+                        job,
+                        result,
+                        assessment,
+                        pages,
+                        signal,
+                    ),
                 consolidateWiki: (job, result, signal) =>
                     this.consolidateWiki(job, result, signal),
                 contributeWikiSubject: (
@@ -5637,6 +5668,7 @@ export class FileMemoryService
                           ...(this.informationalWikiEnabled
                               ? {
                                     informationalWiki: true as const,
+                                    wikiAmbiguityReviews: true as const,
                                     informationalProjects: true as const,
                                 }
                               : {}),
@@ -7173,6 +7205,7 @@ export class FileMemoryService
             jobIds: [],
             reasons: [],
         };
+        let staleReplans = 0;
         for (let page = 0; checkpoint.producerComplete || page < 3; page++) {
             signal.throwIfAborted();
             const familyState = await this.viewStore.getWikiFamily(
@@ -7218,6 +7251,27 @@ export class FileMemoryService
                         .filter((entry) => entry.revisionId)
                         .map((entry) => entry.viewId),
                 );
+                if (
+                    finished.state !== "complete" &&
+                    finished.results.some((entry) => entry.state === "stale") &&
+                    finished.results.every((entry) =>
+                        [
+                            "draft",
+                            "merged",
+                            "published",
+                            "searchable",
+                            "skipped",
+                            "stale",
+                        ].includes(entry.state),
+                    ) &&
+                    staleReplans < 3
+                ) {
+                    staleReplans++;
+                    result.reasons.push(
+                        `${family} stale targets require fresh maintenance planning; retry ${staleReplans}/3, prior job ${finished.jobId}`,
+                    );
+                    continue;
+                }
                 if (finished.state !== "complete")
                     return {
                         ...result,
@@ -8760,46 +8814,65 @@ export class FileMemoryService
             throw new Error(
                 "No substantive indexed fragments matched this wiki selector",
             );
-        const inputs = selected.flatMap((item) => {
-            const source = runtime.manifest.sources.find(
-                (entry) => entry.sourceId === item.sourceId,
-            );
-            const revision = source?.revisions.find(
-                (entry) => entry.revisionId === item.revisionId,
-            );
-            if (
-                !source ||
-                !revision ||
-                source.activeRevisionId !== item.revisionId ||
-                revision.state !== "ready"
-            )
-                throw new ViewBuildStaleError(
-                    "Informational source revision is unavailable or changed",
+        const previousInputs = priorEditorialInputs(current);
+        const inputs = selected
+            .filter((item) => request.sourceIds.includes(item.sourceId))
+            .flatMap((item) => {
+                const source = runtime.manifest.sources.find(
+                    (entry) => entry.sourceId === item.sourceId,
                 );
-            const fragments = selection.fragments.filter(
-                (fragment) =>
-                    fragment.sourceId === item.sourceId &&
-                    fragment.revisionId === item.revisionId,
-            );
-            if (!fragments.length) return [];
-            return [
-                {
-                    ...item,
-                    title: source.title,
-                    content: fragments
-                        .map((fragment) => fragment.snippet)
-                        .join("\n\n"),
-                    contentHash: viewHash(revision.content),
-                    passages: fragments.map((fragment) => ({
+                const revision = source?.revisions.find(
+                    (entry) => entry.revisionId === item.revisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    source.activeRevisionId !== item.revisionId ||
+                    revision.state !== "ready"
+                )
+                    throw new ViewBuildStaleError(
+                        "Informational source revision is unavailable or changed",
+                    );
+                const fragments = selection.fragments.filter(
+                    (fragment) =>
+                        fragment.sourceId === item.sourceId &&
+                        fragment.revisionId === item.revisionId,
+                );
+                const previous = previousInputs.find(
+                    (input) =>
+                        input.sourceId === item.sourceId &&
+                        input.revisionId === item.revisionId,
+                );
+                if (
+                    previous &&
+                    previous.contentHash !== viewHash(revision.content)
+                )
+                    throw new ViewBuildStaleError(
+                        "Prior editorial evidence content changed",
+                    );
+                const passages = retainEditorialPassages(
+                    previous?.passages ?? [],
+                    fragments.map((fragment) => ({
                         sourceId: fragment.sourceId,
                         revisionId: fragment.revisionId,
                         locator: fragment.locator,
                         excerpt: fragment.snippet,
                     })),
-                },
-            ];
-        });
-        const editorial = captureEditorialContext(current);
+                );
+                if (!passages.length) return [];
+                return [
+                    {
+                        ...item,
+                        title: source.title,
+                        content: passages
+                            .map((passage) => passage.excerpt)
+                            .join("\n\n"),
+                        contentHash: viewHash(revision.content),
+                        passages,
+                    },
+                ];
+            });
+        const editorial = captureEditorialContext(current, inputs);
         const snapshot = {
             corpusId,
             actor: userInfo().username,
@@ -8829,11 +8902,7 @@ export class FileMemoryService
             ...(editorial ? { editorial } : {}),
             inputs,
             ...(context ? { informationalRetrieval: context } : {}),
-            selectionFingerprint: viewHash({
-                readChars: selection.readChars,
-                limited: selection.limited,
-                fragments: selection.fragments,
-            }),
+            selectionFingerprint: viewHash(inputs),
             pipeline: target.definition.projectSummary
                 ? ("informational-project-summary-v1" as const)
                 : ("informational-wiki-v1" as const),
@@ -9255,18 +9324,50 @@ export class FileMemoryService
         await this.checkWikiContributionInput(input);
         await this.assertInfluenceEligible(input);
         signal.throwIfAborted();
-        const assessment = await readConsolidationScope(
-            abortable(
-                this.viewAdapter.assessWikiConsolidation(
-                    input,
-                    survivor,
-                    retiring,
+        let assessment: import("./wikiConsolidation.js").WikiConsolidationScope;
+        try {
+            assessment = await readConsolidationScope(
+                abortable(
+                    this.viewAdapter.assessWikiConsolidation(
+                        input,
+                        survivor,
+                        retiring,
+                        signal,
+                    ),
                     signal,
                 ),
+                input,
+            );
+        } catch (error) {
+            if (
+                !(error instanceof Error) ||
+                !error.message.includes("requires review: uncertain")
+            )
+                throw error;
+            await this.resolveWikiAmbiguity(
+                job,
+                result,
+                {
+                    ...(error instanceof WikiAmbiguityDecisionError
+                        ? { nativeChoices: error.nativeChoices }
+                        : {}),
+                    disposition: "ambiguous",
+                    ambiguityBasis: "uncertain",
+                    purpose: input.definition.wiki?.query ?? "",
+                    reason: error.message,
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [survivor.viewId, retiring.viewId],
+                },
+                [
+                    wikiPageContext(input, survivor),
+                    wikiPageContext(input, retiring),
+                ],
                 signal,
-            ),
-            input,
-        );
+            );
+            return true;
+        }
         if (assessment.relation !== "samePurpose") return false;
         input.wikiContribution!.purpose = assessment.scope.purpose;
         input.wikiContribution!.essentialDistinctions =
@@ -9276,10 +9377,33 @@ export class FileMemoryService
             }));
         const { fingerprint: _priorFingerprint, ...checkedInput } = input;
         input.fingerprint = viewHash(checkedInput);
-        const { output: original, anchors } = preservedCanonicalOutput(
-            survivor,
-            retiring,
-        );
+        let preserved: ReturnType<typeof preservedCanonicalOutput>;
+        try {
+            preserved = preservedCanonicalOutput(survivor, retiring);
+        } catch (error) {
+            if (!(error instanceof ConsolidationRejection)) throw error;
+            await this.resolveWikiAmbiguity(
+                job,
+                result,
+                {
+                    disposition: "ambiguous",
+                    ambiguityBasis: "uncertain",
+                    purpose: input.definition.wiki?.query ?? "",
+                    reason: error.message,
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [survivor.viewId, retiring.viewId],
+                },
+                [
+                    wikiPageContext(input, survivor),
+                    wikiPageContext(input, retiring),
+                ],
+                signal,
+            );
+            return true;
+        }
+        const { output: original, anchors } = preserved;
         const { output, verification } = await abortable(
             verifyOrRepairWikiConsolidation(
                 this.viewAdapter,
@@ -9299,7 +9423,9 @@ export class FileMemoryService
                 output,
                 assessment,
             }),
-            stage: "prepared",
+            stage: incompletePreservation(verification.quality)
+                ? "needsReview"
+                : "prepared",
             survivorViewId: survivor.viewId,
             retiringViewId: retiring.viewId,
             retiringRevisionId: retiring.revisionId,
@@ -9326,6 +9452,11 @@ export class FileMemoryService
                             "Consolidation owner changed or was forgotten",
                         );
                     target.wikiConsolidation = receipt;
+                    if (receipt.stage === "needsReview") {
+                        target.state = "conflicted";
+                        target.reason =
+                            "Partial preservation requires human review; prior articles and complete source-bound consolidation proposal retained";
+                    }
                 },
             );
             await this.resumeWikiConsolidationLocked(
@@ -9351,7 +9482,8 @@ export class FileMemoryService
             throw new ViewBuildStaleError(
                 "Consolidation receipt was removed or forgotten",
             );
-        if (receipt.stage === "stale") return;
+        if (receipt.stage === "stale" || receipt.stage === "needsReview")
+            return;
         if (receipt.stage === "prepared" && job!.state === "cancelled")
             throw new ViewBuildStaleError(
                 "Consolidation cancelled before canonical acceptance",
@@ -9469,6 +9601,7 @@ export class FileMemoryService
                 if (
                     !result.wikiConsolidation ||
                     result.wikiConsolidation.stage === "stale" ||
+                    result.wikiConsolidation.stage === "needsReview" ||
                     (result.wikiConsolidation.stage === "ready" &&
                         result.state === "merged")
                 )
@@ -9605,7 +9738,6 @@ export class FileMemoryService
             contribution.input,
             canonical,
             undefined,
-            false,
         );
         if (
             parseWikiAssessment(
@@ -9761,6 +9893,635 @@ export class FileMemoryService
         );
     }
 
+    private async resolveWikiAmbiguity(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        const { participants, missingSupport } =
+            await this.captureWikiAmbiguityParticipants(
+                result,
+                assessment,
+                pages,
+            );
+        const now = new Date().toISOString();
+        const initial: WikiAmbiguityReview = {
+            id: wikiAmbiguityKey(result.snapshot, assessment, participants),
+            corpusId: job.corpusId,
+            jobId: job.jobId,
+            candidateId: result.viewId,
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+            state: "resolving",
+            reason: assessment.reason,
+            assessment,
+            participants,
+            request: {
+                model: "GPT_6_1_SOL",
+                logicalRequests: 1,
+                state: "reserved",
+            },
+        };
+        const reservation = await this.enqueueWrite(job.corpusId, () =>
+            this.viewStore.reserveWikiAmbiguityReview(initial),
+        );
+        result.wikiAmbiguityReviewId = reservation.review.id;
+        if (!reservation.reserved) {
+            const originalJob = await this.viewStore.getViewBuild(
+                job.corpusId,
+                reservation.review.jobId,
+            );
+            if (
+                reservation.review.state === "resolving" &&
+                originalJob?.state !== "running"
+            ) {
+                const interrupted = reservation.review;
+                interrupted.state = "needsReview";
+                interrupted.request.state = "interrupted";
+                interrupted.reason =
+                    "A prior logical Sol request was reserved; outcome is indeterminate after interruption. No replay or repair request is permitted.";
+                await this.enqueueWrite(job.corpusId, () =>
+                    this.viewStore.updateWikiAmbiguityReview(
+                        interrupted,
+                        interrupted.version,
+                    ),
+                );
+            }
+            return;
+        }
+        let review = reservation.review;
+        try {
+            await this.retainWikiAmbiguityDraft(
+                review,
+                result.snapshot,
+                signal,
+            );
+            await this.completeWikiAmbiguityResolution(
+                review,
+                missingSupport,
+                signal,
+            );
+            await this.recordWikiAmbiguityAccounting(job, result, review);
+            if (review.resolution!.status === "needs_review") {
+                review.state = "needsReview";
+                review.reason = review.resolution!.reason;
+            } else {
+                await this.verifyWikiAmbiguityReview(review, signal);
+                review = await this.enqueueWrite(job.corpusId, async () => {
+                    for (const participant of review.participants)
+                        if (participant.page)
+                            await this.checkWikiContributionInput(
+                                participant.input,
+                                false,
+                            );
+                        else
+                            await this.assertInfluenceEligible(
+                                participant.input,
+                            );
+                    if (!review.participants[0].page)
+                        await this.recheckViewInput(result.snapshot);
+                    return this.viewStore.updateWikiAmbiguityReview(
+                        review,
+                        review.version,
+                        true,
+                    );
+                });
+                return;
+            }
+        } catch (error) {
+            review.state =
+                error instanceof ViewBuildStaleError
+                    ? "conflict"
+                    : "needsReview";
+            review.reason =
+                error instanceof Error ? error.message : String(error);
+            if (review.reason.includes("GPT_6_1_SOL is unavailable"))
+                review.request.state = "unavailable";
+            if (review.request.state === "reserved")
+                review.request.state = "failed";
+        }
+        await this.recordWikiAmbiguityAccounting(job, result, review);
+        await this.enqueueWrite(job.corpusId, () =>
+            this.viewStore.updateWikiAmbiguityReview(review, review.version),
+        );
+    }
+
+    private async captureWikiAmbiguityParticipants(
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+    ): Promise<{
+        participants: WikiAmbiguityParticipant[];
+        missingSupport: boolean;
+    }> {
+        const corpusId = result.snapshot.corpusId;
+        const existingCandidate = await this.viewStore.getView({
+            corpusId,
+            viewId: result.viewId,
+        });
+        const participants: WikiAmbiguityParticipant[] = [
+            {
+                id: result.viewId,
+                revisionId: existingCandidate?.revisionId ?? null,
+                ...(existingCandidate ? { page: existingCandidate } : {}),
+                input: structuredClone(
+                    existingCandidate?.generation?.input ?? result.snapshot,
+                ),
+            },
+        ];
+        let missingSupport =
+            !!existingCandidate && !existingCandidate.generation?.input;
+        for (const context of pages.filter((page) =>
+            assessment.ambiguousViewIds.includes(page.viewId),
+        )) {
+            if (context.viewId === result.viewId) continue;
+            const page = await this.viewStore.getView({
+                corpusId,
+                viewId: context.viewId,
+            });
+            if (!page || page.revisionId !== context.revisionId)
+                throw new ViewBuildStaleError(
+                    "Wiki ambiguity participant changed before capture",
+                );
+            missingSupport ||= !page.generation?.input;
+            participants.push({
+                id: page.viewId,
+                revisionId: page.revisionId,
+                page,
+                input: structuredClone(
+                    page.generation?.input ?? {
+                        ...result.snapshot,
+                        inputs: [],
+                        definition: {
+                            ...result.snapshot.definition,
+                            viewId: page.viewId,
+                        },
+                    },
+                ),
+            });
+        }
+        return { participants, missingSupport };
+    }
+
+    private async retainWikiAmbiguityDraft(
+        review: WikiAmbiguityReview,
+        input: ViewBuildSnapshot,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (review.participants[0].page) return;
+        await this.assertWikiAmbiguitySources(input, "build");
+        const draft = await this.viewAdapter.generate(input, signal);
+        review.participants[0].proposal = draft;
+        Object.assign(
+            review,
+            await this.enqueueWrite(review.corpusId, () =>
+                this.viewStore.updateWikiAmbiguityReview(
+                    review,
+                    review.version,
+                ),
+            ),
+        );
+        validateConstructedGuide(input, draft);
+        review.participants[0].draft = draft;
+        Object.assign(
+            review,
+            await this.enqueueWrite(review.corpusId, () =>
+                this.viewStore.updateWikiAmbiguityReview(
+                    review,
+                    review.version,
+                ),
+            ),
+        );
+    }
+
+    private async completeWikiAmbiguityResolution(
+        review: WikiAmbiguityReview,
+        missingSupport: boolean,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (missingSupport)
+            throw new Error(
+                "Original generation input passages are unavailable for an existing page; page prose is not evidence",
+            );
+        for (const participant of review.participants)
+            await this.assertWikiAmbiguitySources(participant.input, "build");
+        for (const participant of review.participants.filter(
+            (entry) => entry.page,
+        ))
+            await this.checkWikiContributionInput(participant.input, false);
+        if (!this.viewAdapter.resolveWikiAmbiguity) {
+            review.request.state = "unavailable";
+            throw new Error(
+                "Configured GPT_6_1_SOL arbitration is unavailable; no fallback",
+            );
+        }
+        const response = await this.viewAdapter.resolveWikiAmbiguity(
+            review,
+            signal,
+            async () => {
+                Object.assign(
+                    review,
+                    await this.enqueueWrite(review.corpusId, () =>
+                        this.viewStore.updateWikiAmbiguityReview(
+                            review,
+                            review.version,
+                        ),
+                    ),
+                );
+            },
+        );
+        if (
+            response &&
+            typeof response === "object" &&
+            "output" in response &&
+            "requestFingerprint" in response
+        ) {
+            review.request.raw = response.output;
+            if ("budget" in response) review.request.budget = response.budget;
+            if (typeof response.requestFingerprint === "string")
+                review.request.requestFingerprint = response.requestFingerprint;
+        } else review.request.raw = response;
+        review.request.state = "returned";
+        review.resolution = parseWikiAmbiguity(
+            review.request.raw,
+            review.participants,
+        );
+    }
+
+    private async recordWikiAmbiguityAccounting(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        review: WikiAmbiguityReview,
+    ): Promise<void> {
+        const currentJob = await this.viewStore.getViewBuild(
+            job.corpusId,
+            job.jobId,
+        );
+        const target = currentJob?.results.find(
+            (entry) => entry.viewId === result.viewId,
+        );
+        review.request.budget ??= target?.providerLimits;
+        if (
+            !review.request.transportAttempts &&
+            target?.providerRequests &&
+            review.request.requestFingerprint
+        )
+            review.request.transportRetries = Math.max(
+                0,
+                target.providerRequests.filter(
+                    (entry) =>
+                        entry.requestFingerprint ===
+                        review.request.requestFingerprint,
+                ).length - 1,
+            );
+    }
+
+    private async verifyWikiAmbiguityReview(
+        review: WikiAmbiguityReview,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!review.resolution)
+            throw new Error("Missing Wiki ambiguity resolution");
+        review.verification = [];
+        for (const participant of review.participants)
+            await this.assertWikiAmbiguitySources(participant.input, "build");
+        review.resolution = parseWikiAmbiguity(
+            review.resolution,
+            review.participants,
+        );
+        for (const group of review.resolution.groups) {
+            if (group.action === "keep_separate") {
+                const candidate = review.participants.find(
+                    (entry) => entry.id === group.ids[0] && !entry.page,
+                );
+                if (!candidate) continue;
+                if (!candidate.draft)
+                    throw new Error(
+                        "Candidate draft unavailable; original proposal remains reviewable",
+                    );
+                validateConstructedGuide(candidate.input, candidate.draft);
+                const report = await this.viewAdapter.validate(
+                    candidate.input,
+                    candidate.draft,
+                    signal,
+                );
+                review.verification.push({ ids: group.ids, support: report });
+                validateSupport(candidate.draft, report);
+            } else {
+                const output = verifyAmbiguityCombination(
+                    group,
+                    review.participants,
+                );
+                const input = ambiguityInput(group, review.participants);
+                validateConstructedGuide(input, output);
+                await this.verifyWikiAmbiguityIdentity(
+                    group,
+                    input,
+                    review,
+                    signal,
+                );
+                const support = await this.viewAdapter.validate(
+                    input,
+                    output,
+                    signal,
+                );
+                review.verification.push({ ids: group.ids, support });
+                validateSupport(output, support);
+                if (!this.viewAdapter.checkEditorial)
+                    throw new Error(
+                        "Combination requires source-support and preservation verification; checker unavailable",
+                    );
+                const editorial = await this.viewAdapter.checkEditorial(
+                    input,
+                    output,
+                    signal,
+                );
+                review.verification.push({ ids: group.ids, editorial });
+                if (
+                    !editorial.safe ||
+                    editorial.failures.length ||
+                    incompletePreservation(editorial.quality)
+                )
+                    throw new Error(
+                        "Combination failed source-support/preservation verification; retained for human review",
+                    );
+                if (editorial.quality) output.quality = editorial.quality;
+                else delete output.quality;
+                group.combined = JSON.stringify(output);
+            }
+        }
+    }
+
+    private async verifyWikiAmbiguityIdentity(
+        group: import("./wikiAmbiguity.js").WikiAmbiguityGroup,
+        input: ViewBuildSnapshot,
+        review: WikiAmbiguityReview,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!this.viewAdapter.assessWikiConsolidation)
+            throw new Error(
+                "Combination identity/scope verification is unavailable; retained for review",
+            );
+        const members = review.participants.filter((entry) =>
+            group.ids.includes(entry.id),
+        );
+        const survivor = ambiguityParticipantVersion(
+            members.find((entry) => entry.id === group.survivorId)!,
+            members,
+            input,
+        );
+        review.verification ??= [];
+        for (const participant of members.filter(
+            (entry) => entry.id !== survivor.viewId,
+        )) {
+            try {
+                const scope = await readConsolidationScope(
+                    this.viewAdapter.assessWikiConsolidation(
+                        input,
+                        survivor,
+                        ambiguityParticipantVersion(
+                            participant,
+                            members,
+                            input,
+                        ),
+                        signal,
+                    ),
+                    input,
+                );
+                review.verification.push({
+                    ids: [survivor.viewId, participant.id],
+                    scope,
+                });
+                if (scope.relation !== "samePurpose")
+                    throw new Error(
+                        "Combination identity/scope is not verified duplicate; original pages and proposal retained",
+                    );
+            } catch (error) {
+                review.verification.push({
+                    ids: [survivor.viewId, participant.id],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                    ...(error instanceof WikiAmbiguityDecisionError
+                        ? { nativeChoices: error.nativeChoices }
+                        : {}),
+                });
+                throw error;
+            }
+        }
+    }
+
+    public async listWikiAmbiguityReviews(
+        corpusId: string,
+    ): Promise<WikiAmbiguityReview[]> {
+        const runtime = await this.requireViews(corpusId);
+        const reviews = await runtime.access.read(() =>
+            this.viewStore.listWikiAmbiguityReviews(corpusId),
+        );
+        return Promise.all(
+            reviews.map(async (review) => {
+                try {
+                    for (const participant of review.participants)
+                        await this.assertWikiAmbiguitySources(
+                            participant.input,
+                            "read",
+                        );
+                    return review;
+                } catch {
+                    review.state = "conflict";
+                    review.reason =
+                        "Review evidence is unavailable under current source authorization; original work remains retained but is not disclosed";
+                    delete review.request.raw;
+                    delete review.resolution;
+                    delete review.verification;
+                    review.assessment = {
+                        disposition: "ambiguous",
+                        purpose: "Evidence access unavailable",
+                        reason: review.reason,
+                        canonicalViewId: "",
+                        sharedFragmentIds: [],
+                        ambiguousViewIds: [],
+                        essentialDistinctions: [],
+                    };
+                    review.participants = review.participants.map(
+                        (participant) => ({
+                            id: participant.id,
+                            revisionId: participant.revisionId,
+                            input: {
+                                corpusId,
+                                actor: participant.input.actor,
+                                expectedVersion:
+                                    participant.input.expectedVersion,
+                                bounds: {},
+                                inputs: [],
+                                pipeline: "informational-wiki-v1",
+                                model: "withheld",
+                                fingerprint: participant.input.fingerprint,
+                                definition: {
+                                    viewId: participant.id,
+                                    kind: "wiki",
+                                    selector: { kind: "sources", sources: [] },
+                                },
+                            },
+                        }),
+                    );
+                    return review;
+                }
+            }),
+        );
+    }
+
+    private async assertWikiAmbiguitySources(
+        input: ViewBuildSnapshot,
+        operation: "read" | "build",
+    ): Promise<void> {
+        const runtime = await this.getCorpusRuntime(input.corpusId);
+        if (operation === "build")
+            await this.assertInfluenceEligible({
+                ...input,
+                influenceSources: [
+                    ...(input.influenceSources ?? []),
+                    ...input.inputs.map(({ sourceId, revisionId }) => ({
+                        sourceId,
+                        revisionId,
+                    })),
+                ],
+            });
+        const references = [
+            ...new Map(
+                [...input.inputs, ...(input.influenceSources ?? [])].map(
+                    (entry) => [
+                        JSON.stringify([entry.sourceId, entry.revisionId]),
+                        entry,
+                    ],
+                ),
+            ).values(),
+        ];
+        for (const retained of references) {
+            const source = runtime.manifest.sources.find(
+                (entry) => entry.sourceId === retained.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (entry) => entry.revisionId === retained.revisionId,
+            );
+            const permission =
+                operation === "build" &&
+                input.inputs.some(
+                    (entry) =>
+                        entry.sourceId === retained.sourceId &&
+                        entry.revisionId === retained.revisionId,
+                )
+                    ? "build"
+                    : "read";
+            if (
+                !source ||
+                !revision ||
+                runtime.manifest.authorizedSourceRemoval?.sourceId ===
+                    source.sourceId ||
+                runtime.manifest.knowledgeSuppressions?.some(
+                    (entry) => entry.sourceId === source.sourceId,
+                ) ||
+                !(await this.sourceAllowed(source, revision, permission))
+            )
+                throw new ViewBuildStaleError(
+                    "Wiki ambiguity evidence authorization changed; proposal remains retained",
+                );
+        }
+    }
+
+    public async resolveWikiAmbiguityReview(
+        request: WikiAmbiguityReviewAction,
+    ): Promise<WikiAmbiguityReview> {
+        await this.requireViews(request.corpusId);
+        const review = (
+            await this.viewStore.listWikiAmbiguityReviews(request.corpusId)
+        ).find((entry) => entry.id === request.reviewId);
+        if (!review || review.version !== request.expectedVersion)
+            throw new Error("Wiki ambiguity review version conflict");
+        if (review.state === "resolved")
+            throw new Error("Wiki ambiguity review already resolved");
+        review.actor = "human";
+        if (request.action === "keep_separate") {
+            review.resolution = {
+                status: "resolved",
+                reason: "Human requested keep separate; no identity/merge authority inferred",
+                groups: review.participants.map((participant) => ({
+                    action: "keep_separate",
+                    ids: [participant.id],
+                    survivorId: null,
+                    combined: null,
+                    sections: [],
+                })),
+            };
+        } else if (request.action === "edit") {
+            review.resolution = parseWikiAmbiguity(
+                request.resolution,
+                review.participants,
+            );
+        } else if (request.action !== "approve")
+            throw new Error("Unsupported Wiki ambiguity action");
+        try {
+            for (const participant of review.participants)
+                await this.assertWikiAmbiguitySources(
+                    participant.input,
+                    "read",
+                );
+            for (const participant of review.participants.filter(
+                (entry) => !entry.page && !entry.draft,
+            )) {
+                await this.assertWikiAmbiguitySources(
+                    participant.input,
+                    "build",
+                );
+                const draft = await this.viewAdapter.generate(
+                    participant.input,
+                    new AbortController().signal,
+                );
+                participant.proposal = draft;
+                validateConstructedGuide(participant.input, draft);
+                participant.draft = draft;
+            }
+            await this.verifyWikiAmbiguityReview(
+                review,
+                new AbortController().signal,
+            );
+            return await this.enqueueWrite(request.corpusId, async () => {
+                for (const participant of review.participants) {
+                    await this.assertInfluenceEligible(participant.input);
+                    if (participant.page)
+                        await this.checkWikiContributionInput(
+                            participant.input,
+                            false,
+                        );
+                    else await this.recheckViewInput(participant.input);
+                }
+                return this.viewStore.updateWikiAmbiguityReview(
+                    review,
+                    request.expectedVersion,
+                    true,
+                );
+            });
+        } catch (error) {
+            review.state =
+                error instanceof ViewBuildStaleError
+                    ? "conflict"
+                    : "needsReview";
+            review.reason =
+                error instanceof Error ? error.message : String(error);
+            await this.enqueueWrite(request.corpusId, () =>
+                this.viewStore.updateWikiAmbiguityReview(
+                    review,
+                    request.expectedVersion,
+                ),
+            );
+            return (await this.listWikiAmbiguityReviews(request.corpusId)).find(
+                (entry) => entry.id === request.reviewId,
+            )!;
+        }
+    }
+
     private async recordWikiAssessment(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -9830,8 +10591,8 @@ export class FileMemoryService
                             target.state = "skipped";
                             target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
                         } else if (assessment.disposition === "ambiguous") {
-                            target.state = "blocked";
-                            target.reason = `User decision required: multiple existing Wiki pages require explicit ambiguity review (${assessment.ambiguousViewIds.join(", ")}): ${assessment.reason}`;
+                            target.state = "conflicted";
+                            target.reason = `Resolving Wiki ambiguity; candidate source-bound proposal retained (${assessment.ambiguousViewIds.join(", ")}): ${assessment.reason}`;
                         }
                     },
                     assessment.disposition === "defer"
@@ -9908,12 +10669,14 @@ export class FileMemoryService
     private scheduleWikiMaintenance(
         corpusId: string,
         kind: "wiki" | "projects" = "wiki",
+        recoveringPlan = false,
     ): void {
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.ingestionTails.has(corpusId) ||
-            this.knowledgeMaintenance.has(corpusId)
+            (!recoveringPlan &&
+                (this.ingestionTails.has(corpusId) ||
+                    this.knowledgeMaintenance.has(corpusId)))
         )
             return;
         this.maintenance.request(
@@ -10051,8 +10814,13 @@ export class FileMemoryService
                                     runtime.manifest.indexGeneration,
                                     views,
                                 );
-                            if (family.enabled && family.dirty && !family.error)
+                            if (
+                                family.enabled &&
+                                family.dirty &&
+                                !family.error
+                            ) {
                                 this.scheduleWikiMaintenance(corpusId, kind);
+                            }
                         }
                     },
                     true,
@@ -10088,6 +10856,14 @@ export class FileMemoryService
     ): Promise<WikiFamilyState> {
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
         const before = JSON.stringify(family);
+        if (
+            family.planningConflict &&
+            family.planningConflict.generation !== indexGeneration
+        ) {
+            this.clearWikiPlanningConflict(corpusId, kind, family);
+            delete family.planningConflict;
+            delete family.error;
+        }
         for (const view of views.filter(
             (view) =>
                 view.state === "draft" &&
@@ -10110,7 +10886,7 @@ export class FileMemoryService
             family.dirty = true;
             family.cursor = 0;
             delete family.candidateReadCursor;
-            delete family.error;
+            if (!family.planningConflict) delete family.error;
         }
         if (
             !family.dirty &&
@@ -10121,8 +10897,39 @@ export class FileMemoryService
             delete family.candidateReadCursor;
             delete family.error;
         }
+        if (family.planningConflict && family.planningConflict.attempts >= 3) {
+            family.dirty = true;
+            family.error = family.planningConflict.reason;
+        }
         if (JSON.stringify(family) !== before)
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
+        if (family.planningConflict && family.planningConflict.attempts >= 3) {
+            if (!this.closed) {
+                this.scheduleWikiMaintenance(corpusId, kind, true);
+                this.maintenance.park(
+                    corpusId,
+                    kind,
+                    family.planningConflict.reason,
+                );
+                this.maintenance.reportFailure(
+                    corpusId,
+                    kind,
+                    "planning-conflict",
+                    family.planningConflict.reason,
+                );
+            }
+        } else if (
+            family.enabled &&
+            family.dirty &&
+            !family.error &&
+            family.planningConflict
+        ) {
+            this.maintenance.resumeDeferred(
+                corpusId,
+                kind,
+                family.planningConflict.reason,
+            );
+        }
         return family;
     }
 
@@ -10288,6 +11095,10 @@ export class FileMemoryService
             expectedHead: snapshot.head,
             targets: [],
         };
+        if (!automatic && request.operation !== "pause") {
+            delete family.planningConflict;
+            this.maintenance.reportFailure(corpusId, kind, "planning-conflict");
+        }
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
         const active = await this.viewStore.listViewInventoryBuilds(corpusId);
@@ -10339,6 +11150,8 @@ export class FileMemoryService
             ))
         )
             return this.viewStore.recordViewMaintenance(plan);
+        const capturedFamily = structuredClone(family);
+        const preparedAt = performance.now();
         await this.ensureDocumentIndex(corpusId, runtime);
         const page = await runtime.index.listSubjects(
             family.cursor,
@@ -10374,41 +11187,107 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
-        const familyVersion = viewHash(
-            await this.viewStore.getWikiFamily(corpusId, kind),
-        );
-        const { targets, snapshots } = await this.prepareWikiTargets(
-            corpusId,
+        return this.prepareAndAdmitWikiFamily(
+            runtime,
+            request,
             family,
-            snapshot.views,
-            eligible,
-            request.operation === "rebuild",
+            capturedFamily,
             plan,
-            kind,
+            {
+                views: snapshot.views,
+                eligible,
+                automatic,
+                preparedAt,
+                nextContinuationToken: page.nextContinuationToken,
+            },
+        );
+    }
+
+    private async prepareAndAdmitWikiFamily(
+        runtime: CorpusRuntime,
+        request: Extract<
+            ViewMaintenanceRequest,
+            { family: "wiki" | "projects" }
+        >,
+        family: WikiFamilyState,
+        capturedFamily: WikiFamilyState,
+        plan: ViewMaintenancePlan,
+        context: {
+            views: ViewVersion[];
+            eligible: StoredSource[];
+            automatic: boolean;
+            preparedAt: number;
+            nextContinuationToken: string | undefined;
+        },
+    ): Promise<ViewMaintenanceResult> {
+        const corpusId = request.corpusId;
+        const kind = request.family;
+        const {
+            views,
+            eligible,
             automatic,
-        );
-        await this.assertWikiPlanCurrent(
-            corpusId,
-            kind,
-            familyVersion,
-            snapshot.views,
-        );
+            preparedAt,
+            nextContinuationToken,
+        } = context;
+        let prepared: Awaited<
+            ReturnType<FileMemoryService["prepareWikiTargets"]>
+        >;
+        let checked: Awaited<
+            ReturnType<FileMemoryService["assertWikiPlanCurrent"]>
+        >;
+        try {
+            prepared = await this.prepareWikiTargets(
+                corpusId,
+                family,
+                views,
+                eligible,
+                request.operation === "rebuild",
+                plan,
+                kind,
+                automatic,
+            );
+            checked = await this.assertWikiPlanCurrent(
+                corpusId,
+                kind,
+                capturedFamily,
+                family,
+                views,
+                plan,
+                prepared.snapshots,
+                preparedAt,
+            );
+        } catch (error) {
+            if (!(error instanceof ViewBuildStaleError)) throw error;
+            return this.deferWikiPlanning(
+                corpusId,
+                kind,
+                capturedFamily,
+                family,
+                plan,
+                preparedAt,
+            );
+        }
+        const { targets, snapshots } = prepared;
+        const currentFamily = checked.family;
         // Save discovered identities while leaving unadmitted work retryable.
-        await this.viewStore.saveWikiFamily(corpusId, family, kind);
+        await this.viewStore.saveWikiFamily(corpusId, currentFamily, kind);
         if (this.deferBatchMaintenance(corpusId, automatic))
             return this.viewStore.recordViewMaintenance(plan);
-        const nextFamily = structuredClone(family);
+        const nextFamily = structuredClone(currentFamily);
+        delete nextFamily.planningConflict;
         this.stageWikiFamilyAdmission(nextFamily, targets, automatic);
-        nextFamily.cursor = Number(page.nextContinuationToken ?? 0);
+        nextFamily.cursor = Number(nextContinuationToken ?? 0);
         if (runtime.manifest.indexGeneration)
             nextFamily.indexVersion = runtime.manifest.indexGeneration;
         else delete nextFamily.indexVersion;
-        nextFamily.dirty = this.wikiPassNeedsContinuation(
-            plan,
-            targets.length,
-            automatic,
-            !!page.nextContinuationToken,
-        );
+        nextFamily.dirty =
+            checked.contextChanged ||
+            this.wikiPassNeedsContinuation(
+                plan,
+                targets.length,
+                automatic,
+                !!nextContinuationToken,
+            );
         if (!nextFamily.dirty) {
             const decisions = plan.targets.filter(
                 (target) =>
@@ -10418,17 +11297,41 @@ export class FileMemoryService
             if (decisions.length)
                 nextFamily.error = `${decisions[0].reason}; ${decisions.length} targets require decisions; independent maintenance continues`;
         }
+        if (this.deferBatchMaintenance(corpusId, automatic))
+            return this.viewStore.recordViewMaintenance(plan);
+        try {
+            checked = await this.assertWikiPlanCurrent(
+                corpusId,
+                kind,
+                currentFamily,
+                nextFamily,
+                views,
+                plan,
+                snapshots,
+                preparedAt,
+            );
+            nextFamily.descriptors = checked.family.descriptors;
+            nextFamily.dirty ||= checked.contextChanged;
+        } catch (error) {
+            if (!(error instanceof ViewBuildStaleError)) throw error;
+            return this.deferWikiPlanning(
+                corpusId,
+                kind,
+                currentFamily,
+                nextFamily,
+                plan,
+                preparedAt,
+            );
+        }
         if (!targets.length) {
             if (!nextFamily.dirty) delete nextFamily.candidateReadCursor;
             await this.viewStore.saveWikiFamily(corpusId, nextFamily, kind);
+            this.clearWikiPlanningConflict(corpusId, kind, currentFamily);
             if (nextFamily.dirty && !nextFamily.error)
                 this.scheduleWikiMaintenance(corpusId, kind);
             return this.viewStore.recordViewMaintenance(plan);
         }
-        const head = (await this.viewStore.listViews(corpusId)).head;
-        if (this.deferBatchMaintenance(corpusId, automatic))
-            return this.viewStore.recordViewMaintenance(plan);
-        const buildRequest = { corpusId, expectedHead: head, targets };
+        const buildRequest = { corpusId, expectedHead: checked.head, targets };
         validateBuildRequest(buildRequest);
         const reservation = this.viewBuilds.reserve();
         try {
@@ -10439,10 +11342,28 @@ export class FileMemoryService
                 nextFamily,
                 kind,
             );
+            this.clearWikiPlanningConflict(corpusId, kind, currentFamily);
             if (admitted.admitted) reservation.start(admitted.job);
             return await this.viewStore.recordViewMaintenance(
                 plan,
                 admitted.job,
+            );
+        } catch (error) {
+            if (
+                !(error instanceof ViewBuildStaleError) &&
+                !(
+                    error instanceof Error &&
+                    error.message.startsWith("View history head conflict")
+                )
+            )
+                throw error;
+            return this.deferWikiPlanning(
+                corpusId,
+                kind,
+                currentFamily,
+                nextFamily,
+                plan,
+                preparedAt,
             );
         } finally {
             reservation.release();
@@ -12002,7 +12923,11 @@ export class FileMemoryService
         validateMaintenanceRequest(request, true);
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
-            this.maintenance.cancel(request.corpusId, request.family);
+            this.maintenance.cancel(
+                request.corpusId,
+                request.family,
+                request.family !== "topics",
+            );
             const result = await this.enqueueWrite(request.corpusId, () =>
                 request.family === "topics"
                     ? this.maintainTopics(runtime, request)
@@ -12010,7 +12935,11 @@ export class FileMemoryService
             );
             // Index installation can schedule work while the committed snapshot publishes.
             if (request.operation === "pause")
-                this.maintenance.cancel(request.corpusId, request.family);
+                this.maintenance.cancel(
+                    request.corpusId,
+                    request.family,
+                    request.family !== "topics",
+                );
             return result;
         }
         return this.enqueueWrite(request.corpusId, async () => {
@@ -18199,6 +19128,7 @@ export class FileMemoryService
                 );
                 const items = await Promise.all(
                     page.items.map(async (view) => ({
+                        ...(view.quality ? { quality: view.quality } : {}),
                         corpusId: view.corpusId,
                         viewId: view.viewId,
                         revisionId: view.revisionId,
@@ -18469,21 +19399,296 @@ export class FileMemoryService
         );
     }
 
+    private async recheckWikiPlanInputs(
+        corpusId: string,
+        snapshots: ViewBuildSnapshot[],
+        preparedAt: number,
+    ): Promise<void> {
+        for (const input of snapshots) {
+            try {
+                const runtime = await this.getCorpusRuntime(corpusId);
+                for (const selected of input.inputs) {
+                    const source = runtime.manifest.sources.find(
+                        (entry) => entry.sourceId === selected.sourceId,
+                    );
+                    const revision = source?.revisions.find(
+                        (entry) => entry.revisionId === selected.revisionId,
+                    );
+                    if (
+                        !source ||
+                        !revision ||
+                        source.activeRevisionId !== selected.revisionId ||
+                        revision.state !== "ready" ||
+                        !(await this.sourceAllowed(source, revision, "build"))
+                    )
+                        throw new ViewBuildStaleError(
+                            "Wiki planning source revision or construction authorization changed",
+                        );
+                }
+                await this.recheckViewInput(input);
+            } catch (error) {
+                if (error instanceof ViewBuildStaleError) {
+                    const runtime = await this.getCorpusRuntime(corpusId);
+                    for (const source of input.inputs)
+                        recordSearchTiming(
+                            "wiki.planning.source.recheck",
+                            performance.now() - preparedAt,
+                            {
+                                viewId: input.definition.viewId,
+                                sourceId: source.sourceId,
+                                capturedRevisionId: source.revisionId,
+                                capturedIndexGeneration:
+                                    input.informationalRetrieval
+                                        ?.indexGeneration,
+                                currentIndexGeneration:
+                                    runtime.manifest.indexGeneration,
+                                currentRevisionId:
+                                    runtime.manifest.sources.find(
+                                        (entry) =>
+                                            entry.sourceId === source.sourceId,
+                                    )?.activeRevisionId,
+                            },
+                            "error",
+                        );
+                }
+                throw error;
+            }
+        }
+    }
+
     private async assertWikiPlanCurrent(
         corpusId: string,
         kind: "wiki" | "projects",
-        familyVersion: string,
+        capturedFamily: WikiFamilyState,
+        plannedFamily: WikiFamilyState,
         views: ViewVersion[],
-    ): Promise<void> {
+        plan: ViewMaintenancePlan,
+        snapshots: ViewBuildSnapshot[],
+        preparedAt: number,
+    ): Promise<{
+        family: WikiFamilyState;
+        head: string | null;
+        contextChanged: boolean;
+    }> {
+        await this.recheckWikiPlanInputs(corpusId, snapshots, preparedAt);
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
         const current = await this.viewStore.listViews(corpusId);
-        if (
-            viewHash(family) !== familyVersion ||
-            viewHash(current.views.map((view) => view.revisionId)) !==
-                viewHash(views.map((view) => view.revisionId))
-        )
-            throw new ViewBuildStaleError(
-                "Informational maintenance plan changed during derivative preparation",
+        const changedDescriptors = new Set(
+            [...capturedFamily.descriptors, ...plannedFamily.descriptors]
+                .filter(
+                    (descriptor) =>
+                        viewHash(
+                            capturedFamily.descriptors.find(
+                                (entry) => entry.viewId === descriptor.viewId,
+                            ),
+                        ) !==
+                        viewHash(
+                            plannedFamily.descriptors.find(
+                                (entry) => entry.viewId === descriptor.viewId,
+                            ),
+                        ),
+                )
+                .map((descriptor) => descriptor.viewId),
+        );
+        const dependencies = new Set([
+            ...plan.targets.map((target) => target.viewId),
+            ...snapshots.map((input) => input.definition.viewId),
+        ]);
+        const descriptorDependencies = new Set([
+            ...changedDescriptors,
+            ...dependencies,
+        ]);
+        const scopedFamily = (value: WikiFamilyState) => ({
+            ...value,
+            descriptors: value.descriptors
+                .filter((descriptor) =>
+                    descriptorDependencies.has(descriptor.viewId),
+                )
+                .sort((a, b) => a.viewId.localeCompare(b.viewId)),
+        });
+        const familyChanged =
+            viewHash(scopedFamily(family)) !==
+            viewHash(scopedFamily(capturedFamily));
+        if (familyChanged)
+            for (const viewId of descriptorDependencies) {
+                const capturedDescriptorVersion = viewHash(
+                    capturedFamily.descriptors.find(
+                        (descriptor) => descriptor.viewId === viewId,
+                    ),
+                );
+                const currentDescriptorVersion = viewHash(
+                    family.descriptors.find(
+                        (descriptor) => descriptor.viewId === viewId,
+                    ),
+                );
+                if (capturedDescriptorVersion === currentDescriptorVersion)
+                    continue;
+                recordSearchTiming(
+                    "wiki.planning.descriptor.changed",
+                    performance.now() - preparedAt,
+                    {
+                        viewId,
+                        capturedDescriptorVersion,
+                        currentDescriptorVersion,
+                    },
+                    "error",
+                );
+            }
+        let viewChanged = false;
+        for (const viewId of dependencies) {
+            const captured = views.find((view) => view.viewId === viewId);
+            const latest = current.views.find((view) => view.viewId === viewId);
+            if (
+                captured?.revisionId === latest?.revisionId &&
+                captured?.state === latest?.state
+            )
+                continue;
+            viewChanged = true;
+            recordSearchTiming(
+                "wiki.planning.view.changed",
+                performance.now() - preparedAt,
+                {
+                    viewId,
+                    capturedRevisionId: captured?.revisionId,
+                    currentRevisionId: latest?.revisionId,
+                    capturedVersion: captured?.version,
+                    currentVersion: latest?.version,
+                },
+                "error",
             );
+        }
+        if (familyChanged || viewChanged) {
+            recordSearchTiming(
+                "wiki.planning.dependencies.changed",
+                performance.now() - preparedAt,
+                {
+                    familyChanged,
+                    viewChanged,
+                    capturedFamilyVersion: viewHash(capturedFamily),
+                    currentFamilyVersion: viewHash(family),
+                    dependencyCount: descriptorDependencies.size,
+                },
+                "error",
+            );
+            throw new ViewBuildStaleError(
+                "Informational maintenance dependencies changed during derivative preparation",
+            );
+        }
+        // Keep unrelated descriptor updates rather than overwriting their durable work.
+        const merged = structuredClone(plannedFamily);
+        merged.descriptors = [
+            ...plannedFamily.descriptors.flatMap((descriptor) => {
+                const latest = family.descriptors.find(
+                    (entry) => entry.viewId === descriptor.viewId,
+                );
+                return changedDescriptors.has(descriptor.viewId)
+                    ? [descriptor]
+                    : latest
+                      ? [latest]
+                      : [];
+            }),
+            ...family.descriptors.filter(
+                (descriptor) =>
+                    !changedDescriptors.has(descriptor.viewId) &&
+                    !plannedFamily.descriptors.some(
+                        (entry) => entry.viewId === descriptor.viewId,
+                    ),
+            ),
+        ];
+        const contextChanged =
+            viewHash(family) !== viewHash(capturedFamily) ||
+            viewHash(current.views.map((view) => view.revisionId)) !==
+                viewHash(views.map((view) => view.revisionId));
+        return { family: merged, head: current.head, contextChanged };
+    }
+
+    private clearWikiPlanningConflict(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        family: WikiFamilyState,
+    ): void {
+        if (family.planningConflict)
+            this.maintenance.resumeDeferred(
+                corpusId,
+                kind,
+                family.planningConflict.reason,
+            );
+        this.maintenance.reportFailure(corpusId, kind, "planning-conflict");
+    }
+
+    private async deferWikiPlanning(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        capturedFamily: WikiFamilyState,
+        plannedFamily: WikiFamilyState,
+        plan: ViewMaintenancePlan,
+        preparedAt: number,
+    ): Promise<ViewMaintenanceResult> {
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const attempts = (family.planningConflict?.attempts ?? 0) + 1;
+        const exhausted = attempts >= 3;
+        const reason = exhausted
+            ? "Repeated planning dependency conflicts; explicit maintenance is required"
+            : "Planning dependencies changed; retained work awaits the next maintenance wave";
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const conflict: NonNullable<WikiFamilyState["planningConflict"]> = {
+            reason,
+            ...(generation ? { generation } : {}),
+            capturedFamilyVersion: viewHash(capturedFamily),
+            currentFamilyVersion: viewHash(family),
+            occurredAt: new Date().toISOString(),
+            attempts,
+        };
+        family.planningConflict = conflict;
+        family.dirty = true;
+        // New discoveries have no prose yet; retain their identities without restoring removals.
+        for (const descriptor of plannedFamily.descriptors)
+            if (
+                !capturedFamily.descriptors.some(
+                    (entry) => entry.viewId === descriptor.viewId,
+                ) &&
+                !family.descriptors.some(
+                    (entry) => entry.viewId === descriptor.viewId,
+                )
+            )
+                family.descriptors.push(descriptor);
+        if (exhausted) family.error = reason;
+        await this.viewStore.saveWikiFamily(corpusId, family, kind);
+        for (const target of plan.targets)
+            if (target.state === "rebuild") {
+                target.state = "blocked";
+                target.reason = reason;
+            }
+        if (!plan.targets.length)
+            plan.targets.push(
+                ...plannedFamily.descriptors.map((descriptor) => ({
+                    viewId: descriptor.viewId,
+                    expectedVersion: 0,
+                    state: "blocked" as const,
+                    reason,
+                })),
+            );
+        recordSearchTiming(
+            "wiki.planning.deferred",
+            performance.now() - preparedAt,
+            {
+                attempts,
+                exhausted,
+                capturedFamilyVersion: conflict.capturedFamilyVersion,
+                currentFamilyVersion: conflict.currentFamilyVersion,
+            },
+        );
+        if (!this.closed) {
+            this.scheduleWikiMaintenance(corpusId, kind, true);
+            this.maintenance.park(corpusId, kind, reason);
+            if (exhausted)
+                this.maintenance.reportFailure(
+                    corpusId,
+                    kind,
+                    "planning-conflict",
+                    reason,
+                );
+        }
+        return this.viewStore.recordViewMaintenance(plan);
     }
 }

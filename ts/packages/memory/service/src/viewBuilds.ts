@@ -13,12 +13,14 @@ import type {
     WikiSubjectAssessment,
 } from "./viewTypes.js";
 import { parseWikiAssessment } from "./wikiAdmission.js";
+import { WikiAmbiguityDecisionError } from "./wikiAmbiguity.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import {
     mergeEditorialView,
     requiresEditorialCheck,
     assertEditorialAssessment,
+    parseEditorialAssessment,
     EditorialRejection,
 } from "./viewEditorial.js";
 import {
@@ -33,6 +35,7 @@ import {
 } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
+import { incompletePreservation } from "./viewSupport.js";
 import { generateTopicTarget, type TopicBuildOwner } from "./topicBuilds.js";
 import { createTopicSnapshot, type TopicGenerator } from "./topicGeneration.js";
 import { resolveTopicBuildTimeout } from "./viewBuildValidation.js";
@@ -96,6 +99,13 @@ export interface ViewBuildOwner extends TopicBuildOwner {
     canPrepareWikiAssessment?(input: ViewBuildSnapshot): Promise<boolean>;
     wikiPages?(input: ViewBuildSnapshot): Promise<WikiPagePurposeContext[]>;
     recordWikiAssessment?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    resolveWikiAmbiguity?(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         assessment: WikiSubjectAssessment,
@@ -642,7 +652,7 @@ export class ViewBuildRunner {
                 const verified = await timeSearchStage(
                     "view.editorial.verify",
                     () =>
-                        this.verifyOrRepairProjectSummary(
+                        this.verifyOrRepairEditorialUpdate(
                             result.snapshot,
                             candidate,
                             output,
@@ -888,6 +898,7 @@ export class ViewBuildRunner {
     ): Promise<void> {
         if (
             conflicts.length ||
+            result.state === "conflicted" ||
             result.snapshot.pipeline !== "informational-wiki-v1"
         )
             return;
@@ -900,20 +911,28 @@ export class ViewBuildRunner {
         signal: AbortSignal,
         forceCheck = false,
     ): Promise<void> {
-        if (!forceCheck && !requiresEditorialCheck(input, output)) return;
+        if (
+            !forceCheck &&
+            !requiresEditorialCheck(input, output) &&
+            !(output.content.kind === "wiki" && this.adapter.checkEditorial)
+        )
+            return;
         if (!this.adapter.checkEditorial)
             throw new Error(
                 "Consequential editorial update requires an actual-output checker",
             );
-        assertEditorialAssessment(
+        const assessment = parseEditorialAssessment(
             await abortable(
                 this.adapter.checkEditorial(input, output, signal),
                 signal,
             ),
         );
+        assertEditorialAssessment(assessment);
+        if (assessment.quality) output.quality = assessment.quality;
+        else delete output.quality;
     }
 
-    private async verifyOrRepairProjectSummary(
+    private async verifyOrRepairEditorialUpdate(
         input: ViewBuildSnapshot,
         candidate: ViewSynthesisOutput,
         output: ViewSynthesisOutput,
@@ -923,6 +942,12 @@ export class ViewBuildRunner {
         candidate: ViewSynthesisOutput;
         output: ViewSynthesisOutput;
     }> {
+        const repair =
+            input.pipeline === "informational-project-summary-v1"
+                ? this.adapter.repairProjectSummary
+                : input.pipeline === "informational-wiki-v1" && input.editorial
+                  ? this.adapter.repairWikiEditorial
+                  : undefined;
         let assessment: import("./viewEditorial.js").ViewEditorialAssessment;
         try {
             await this.verifyEditorialUpdate(input, output, signal);
@@ -931,27 +956,21 @@ export class ViewBuildRunner {
             if (
                 !(error instanceof EditorialRejection) ||
                 error.code !== "critical-distinction" ||
-                input.pipeline !== "informational-project-summary-v1" ||
-                !this.adapter.repairProjectSummary
+                !repair
             )
                 throw error;
             assessment = { safe: false, failures: error.failures };
         }
-        console.warn("Project summary requires evidence-contract repair");
+        console.warn("Editorial update requires evidence-contract repair");
         const repaired = await abortable(
-            this.adapter.repairProjectSummary(
-                input,
-                output,
-                assessment,
-                signal,
-            ),
+            repair.call(this.adapter, input, output, assessment, signal),
             signal,
         );
         validateConstructedGuide(input, repaired);
         const merged = mergeEditorialView(current, repaired, input.inputs);
         if (merged.conflicts.length)
             throw new Error(
-                "Project summary repair introduced protected-edit conflicts",
+                "Editorial repair introduced protected-edit conflicts",
             );
         validateConstructedGuide(input, merged.output);
         await this.verifyEditorialUpdate(input, merged.output, signal, true);
@@ -1039,6 +1058,20 @@ export class ViewBuildRunner {
             );
         }
         const { assessment, pages } = value;
+        if (assessment.disposition === "ambiguous") {
+            if (!this.owner.resolveWikiAmbiguity)
+                throw new Error(
+                    "Wiki ambiguity requires durable review handling",
+                );
+            await this.owner.resolveWikiAmbiguity(
+                job,
+                result,
+                assessment,
+                pages,
+                signal,
+            );
+            return true;
+        }
         if (assessment.disposition === "contribute") {
             if (!this.owner.contributeWikiSubject)
                 throw new Error(
@@ -1055,8 +1088,7 @@ export class ViewBuildRunner {
         }
         return (
             assessment.disposition === "covered" ||
-            assessment.disposition === "defer" ||
-            assessment.disposition === "ambiguous"
+            assessment.disposition === "defer"
         );
     }
 
@@ -1087,11 +1119,29 @@ export class ViewBuildRunner {
         input.influenceSources = sources;
         const scope = this.controllers.get(job.jobId);
         for (const source of sources) scope?.sources.add(source.sourceId);
-        const value = await this.adapter.assessWikiSubject(
-            input,
-            pages,
-            signal,
-        );
+        let value: WikiSubjectAssessment;
+        try {
+            value = await this.adapter.assessWikiSubject(input, pages, signal);
+        } catch (error) {
+            if (
+                !(error instanceof Error) ||
+                !error.message.includes("requires review: uncertain")
+            )
+                throw error;
+            value = {
+                ...(error instanceof WikiAmbiguityDecisionError
+                    ? { nativeChoices: error.nativeChoices }
+                    : {}),
+                disposition: "ambiguous",
+                ambiguityBasis: "uncertain",
+                purpose: input.definition.wiki?.query ?? "",
+                reason: error.message,
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: pages.map((page) => page.viewId),
+            };
+        }
         signal.throwIfAborted();
         const assessment = parseWikiAssessment(value, pages);
         return { assessment, pages, input };
@@ -1200,10 +1250,17 @@ export class ViewBuildRunner {
                     "skipped",
                 ].includes(result.state),
             ).length;
+            const retainedPartial = current.results.some(
+                (result) =>
+                    result.state === "conflicted" &&
+                    (incompletePreservation(result.quality) ||
+                        result.wikiConsolidation?.stage === "needsReview" ||
+                        result.wikiAmbiguityReviewId),
+            );
             current.state =
                 saved === current.results.length
                     ? "complete"
-                    : saved
+                    : saved || retainedPartial
                       ? "partial"
                       : signal.aborted
                         ? "cancelled"

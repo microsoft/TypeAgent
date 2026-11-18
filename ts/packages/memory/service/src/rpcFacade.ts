@@ -171,6 +171,12 @@ export function createMemoryServiceRpcFacade(
         listViewBuilds: (...args) =>
             service.listViewBuilds?.(...args) ??
             unsupportedCapability("view builds"),
+        listWikiAmbiguityReviews: (...args) =>
+            service.listWikiAmbiguityReviews?.(...args) ??
+            unsupportedCapability("Wiki ambiguity reviews"),
+        resolveWikiAmbiguityReview: (...args) =>
+            service.resolveWikiAmbiguityReview?.(...args) ??
+            unsupportedCapability("Wiki ambiguity reviews"),
         cancelViewBuild: (...args) =>
             service.cancelViewBuild?.(...args) ??
             unsupportedCapability("view build cancellation"),

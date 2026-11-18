@@ -93,7 +93,9 @@ export async function interactiveAppLoop(
         purgeFile,
     };
 
-    const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
+    const model = openai.createJsonChatModel(openai.GPT_6_LUNA, [
+        "PdfDownloader",
+    ]);
     const pdfDownloader = createPDFDownloadTranslator(model);
 
     const context = await createKnowProContext(captureTokenStats);

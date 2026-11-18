@@ -10,6 +10,160 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Wiki ambiguity arbitration and Inbox review
+
+G0 and D1 use the same product arbitration path. Multiple duplicate nominations
+and explicit uncertain admission, coverage or consolidation decisions retain a
+source-bound proposal rather than rejecting a page. The shared writer may prepare
+a draft; its complete response is retained even if subsequent validation fails.
+Existing articles are not deleted while review is pending.
+
+The configured `GPT_6_1_SOL` endpoint receives all participants, complete pages,
+original generation input passages, candidate evidence/draft, and the triggering
+assessment. Page prose is comparison context, never factual evidence or instructions.
+There is no input truncation, alternate-model fallback or Sol repair call.
+`createConfiguredViewSynthesisAdapter`'s optional sixth argument explicitly injects
+the arbitration model for offline tests; the ordinary writer-model injection does
+not select or replace Sol.
+
+Each frozen evidence/page-revision set has a durable reservation in View history:
+at most one logical Sol request, with complete raw response, request fingerprint,
+configured token constraints and separately reported transport retry count.
+Before dispatch, each transport attempt receives a durable budget reservation;
+its returned/failed outcome is checkpointed separately. The arbitration-local
+budget caps dispatch at four transport attempts and five minutes while preserving
+the enclosing build budget. A transport retry is not a second logical Sol request.
+Restart turns an indeterminate reservation into `needsReview`, never replays it.
+Transport/model errors, missing original support, malformed grouping, failed
+verification and changed relevant revisions retain explicit review/conflict records.
+
+Resolved grouping must account for every supplied ID exactly once. A combination
+requires a complete form, exact original section/citation/relationship preservation,
+unchanged revisions, protected-edit checks and source-support/editorial validation.
+Ordinary consolidation identity/scope checks independently verify each member
+against its survivor; these separately recorded validation calls are not Sol
+retries. Distinct or uncertain identity stays review-only. Editorial checking
+receives the survivor's captured prior context and requires verified preservation.
+Inline `[fN]` references are local to each original page: validation maps each label
+through its exact source/revision/locator/excerpt to the combined passage order.
+The shared canonical-reference scanner leaves code spans/fences, Markdown links,
+escaped labels and array-like literals unchanged, even beside actual references.
+An unrebound or invented label cannot pass. Missing qualifications or human-protected
+content changes remain review-only previews.
+
+Memory Hub Inbox shows complete proposals, evidence, combined-form previews and
+version-guarded **Keep separate**, **Approve verified combination**, and **Edit and
+revalidate** actions. Invalid edits stay pending; approval does not bypass checking.
+The typed service/client APIs are `listWikiAmbiguityReviews(corpusId)` and
+`resolveWikiAmbiguityReview({corpusId, reviewId, expectedVersion, action, resolution?})`;
+browser RPC names are `memoryListWikiAmbiguityReviews` and
+`memoryResolveWikiAmbiguityReview`. MCP exposes `memory_wiki_ambiguity_reviews`
+and `memory_wiki_ambiguity_resolve`.
+
+Verified results save drafts with original revisions/provenance retained. Existing
+pages are not automatically redirected by this arbitration path; publication,
+indexing and old-link retirement remain separate existing lifecycle operations.
+Pending review is neither technical failure nor completed/ready construction, and
+grants no publication, human-reviewed status, searchability or execution authority.
+
+## Wiki support quality
+
+Editorial support, coverage-note support and prior-claim preservation use
+`supported`, `partiallySupported`, `unsupported` and `uncertain`; inapplicable
+category checks retain `not_asserted`. Partial means useful grounded content
+with incomplete or unverified support, not an identified contradiction.
+Contradicted or materially misrepresented claims remain unsafe. Support quality
+does not overwrite the separate article-completeness status.
+Missing evidence for an added assertion is not itself a contradiction: useful
+grounded claims alongside unverified, non-contradicted assertions are partial.
+An identified contradiction, material source/scope misrepresentation, or no
+useful grounded portion is unsupported. Preservation is judged separately:
+missing evidence that prevents verifying some prior claims can be partial when
+a useful verified portion survives, but an identifiable still-supported prior
+claim or material qualification omitted/weakened in current prose is unsupported.
+Only whole-content support decides whether the article has a useful grounded
+portion. A consequential category or coverage note containing only unverified,
+non-contradicted assertions may be partial/uncertain, not unsupported merely
+because that group has no verified assertion. Group-level unsupported requires
+an identified contradiction or material source/scope misrepresentation.
+Each consequential question first checks for assertions actually present in its
+named category, using that category's description. Absent categories must be
+`not_asserted`; source-only assertions and unrelated unverified claims cannot
+make them unsupported. A SQLite claim plus an unverified West US deployment
+claim can be partial in `scope-state` while quantity, statistic/cohort,
+command/lease and correction/withdrawal remain inapplicable. An identified
+contradiction within an asserted category still makes that category unsupported.
+
+Drafts retain optional `quality` metadata with separate decision statuses,
+unresolved categories and raw native `choiceConfidence`. Its `confidence`
+is an **ordinal policy score, not a calibrated probability**: supported = 1,
+partially supported = 0.5, uncertain = 0.25, unsupported = 0. The least-supported
+applicable check determines the score; native choice confidence cannot increase
+it. An all-inapplicable assessment is uncertain, not verified support.
+
+Partial support alone neither rejects a draft nor forces a repair. Incomplete
+preservation retains a reviewable proposal and the prior article unchanged;
+it cannot silently replace a stronger supported revision or authorize a
+consolidation redirect. Modern quality lacking an explicit supported preservation
+decision is also insufficient to replace a prior article. Pending review remains distinct from technical failure
+and completed construction. Metadata grants no publication, human review,
+searchability or execution authority. Legacy `safe`/`failures` assessments and
+stored versions still load, but absence of quality is unscored, not full support.
+Human edits do not carry prior current-article quality forward; historical
+generated quality stays with its original generated content.
+
+## Canonical citation provenance
+
+Inline `[fN]` references are local to the article's generation snapshot. Before
+combining retained article prose, the host rebinds each reference to the merged
+indexed passages using its original source ID, revision, locator and excerpt.
+Matching ordinal numbers from different pages are not evidence of the same source.
+Original section prose, structured citations and redirect anchors are retained;
+only the reference labels change. The original pages are not mutated.
+
+Missing provenance, unknown ordinals and absent merged passages explicitly prevent
+automatic consolidation rather than linking a claim to an unrelated source.
+This provenance guard complements factual-support checking; a valid reference
+does not establish that its claim is supported.
+
+## Deferred Wiki planning recovery
+
+Wiki and project-family preparation checks the selected target revisions,
+changed or selected descriptor records, family scheduling configuration, and
+original source revisions and construction authorization. Prepared inputs are
+revalidated immediately before build admission; ordinary build/publication
+guards still validate canonical revisions and protected edits before effects.
+An unrelated same-corpus View addition or revision does not invalidate selected
+work. Concurrent unrelated descriptor changes are merged, not overwritten, and
+leave the family dirty for a fresh planning wave.
+
+A relevant dependency conflict retains existing saved drafts, proposals and
+their original dependency versions. Preparation itself produces source-bound
+snapshots, not new prose. The family stays durably dirty; unprocessed discovery
+and candidate-read cursors are not advanced. The maintenance receipt marks
+affected targets blocked with a next-wave reason, and the scheduler exposes
+pending/deferred work rather than terminal technical failure or readiness.
+No stale proposal is permission to overwrite a newer page or publish.
+
+The existing 30-second reconciliation wave resumes recoverable planning work;
+there is no immediate retry loop. Restart reloads durable `planningConflict`
+metadata and replans from current dependencies. Three consecutive conflicts in
+the same source-index generation stop automatic retries with an explicit
+maintenance-required error, while retaining dirty work. A changed source-index
+generation or explicit maintenance resets that conflict streak; a successful
+wave clears it. Configured automatic pass budgets still apply. Resumption and
+manual reset preserve unrelated failed-target reports.
+
+Planning diagnostics record family hashes, affected opaque View/source IDs,
+captured/current revisions, elapsed preparation time and conflict observation
+time, never raw source bodies. Non-stale preparation errors remain technical
+failures, not success-shaped deferrals.
+
+Offline regressions in `test/wikiPlanningRecovery.spec.ts` cover unrelated
+additions and revisions, relevant target/family/source/authorization changes,
+the final admission guard, next-wave recovery, restart persistence and retry
+exhaustion, and preservation of unrelated failures.
+
 ## Retained ingestion jobs
 
 Corpus status, paginated job lists, individual job reads, restart recovery and
@@ -562,9 +716,11 @@ selected separately.
 
 Fast model deployments also need verified `modelRequestConstraints` context,
 input and full output capacities for uncapped request admission. A soft reader
-target is not a provider-output reservation. The shipped `gpt_5_4_mini`
-capacities follow the provider's published limits; explicitly configured
-overrides remain authoritative. Document-scoped query translation uses its own
+target is not a provider-output reservation. Use GPT-6 Luna for generative memory
+roles, including separately configured query/reader deployments. Its default
+request capacities follow the provider's published limits; explicitly configured
+overrides remain authoritative. A separate role deployment is not evidence that
+the role is faster. Document-scoped query translation uses its own
 model and applies cache decoration after its scoped schema is installed, without
 changing the ingestion/extraction model.
 Fast query models retain the default JSON-output mode; selecting a faster model
@@ -1320,6 +1476,21 @@ consolidations independently check actual prose, with bounded evidence-grounded
 repairs that preserve stable anchors, citations, protected structures and human
 edits.
 
+Canonical comparison and contribution preservation use the same complete
+explanatory-content projection: summary, section bodies and coverage note.
+Queries, titles, headings, citations and navigation remain comparison metadata,
+not substitutes for retained explanation. Page inputs are never clipped to a
+prefix. Canonical evidence can bind an ordered range of prose witnesses so that
+a qualification across chunk boundaries is not lost; the existing 6,000-character
+proof-excerpt bound still applies. Invalid or oversized bindings require review,
+not truncation.
+
+The opt-in decision-first Wiki experiment asks preservation as a separate
+loss-search decision, independently of actual-content and coverage-note support.
+Generative checkers receive the same preservation semantics alongside their
+support checks. The shared generative writer is unchanged; these checker repairs
+do not establish model-backed quality, latency or shipping qualification.
+
 Topic maintenance retains complete raw incidence while admitting scoped,
 purposeful concepts through semantic assessment. Candidate reconciliation and
 source-local packing preserve membership and provenance; partial curation and
@@ -1651,6 +1822,45 @@ unprotected titles may advance with the generated candidate, while deliberate
 human title edits remain protected and genuine conflicts require resolution.
 The host does not retain an old unedited title against a different generated
 base or manufacture a human edit to account for that difference.
+
+Wiki rebuilds retain the prior generation's original indexed passages only
+while their revisions remain active, ready, eligible and not excluded.
+Effective-evidence fingerprints prevent transient retrieval omissions from
+invalidating otherwise unchanged input. Every changed Wiki regeneration checks
+the actual replacement against current evidence and the previous article's
+still-supported, in-scope domain claims. The prior prose is a checklist, not
+evidence. Retired revisions and valid corrections/withdrawals cannot authorize
+retaining obsolete claims. A consequential rejection permits one original-source
+editorial repair, followed by human-edit merging and another actual-output
+check; a second rejection or native uncertainty remains a visible failure.
+Consolidation repair can correct the summary, section bodies and coverage note,
+including unsupported absence or source-count claims. Section identities,
+citations, relationships and navigation anchors remain unchanged. Shared-writer
+arms separately reclassify completeness after repair before the actual-output
+recheck; classified status is not a structural mutation.
+Shared-writer canonical contribution repairs also use the prose-only schema:
+G0 separately classifies completeness, and D1 retains its native classifier.
+The author does not supply completeness in either shared-writer arm.
+Precise source-backed limitations, such as missing as-of dates or subject-specific
+eligibility, redemption and interest-rate details, remain material qualifications
+even in coverage notes. Repair narrows false blanket absence claims rather than
+discarding still-valid scoped gaps or replacing them with a generic disclaimer.
+Native Wiki editorial checking separates current-content support from
+prior-content preservation. The support request contains no prior article;
+category questions assess only their own actual assertions and whole-content
+support remains mandatory. Categories explicitly return `not_asserted` when
+inapplicable; that is not an approval of whole-article support. It contains complete title, heading and explanatory
+prose assertions, not construction status or query metadata. A separate
+preservation request carries prior prose as a checklist without query echoes.
+A correction may retire its superseded assertion, not its supported replacement
+or material qualifications. Both checks must pass; uncertainty still blocks
+publication, including when another question already reports a rejection.
+Explicit negative decisions and exclusions remain supported claims to preserve;
+silence about a rejected option does not itself preserve its rejection.
+A focused native coverage-note audit additionally checks absence, date and
+source-count assertions without the surrounding positive prose. It gates both
+editorial checking and explicit output support; an unqualified omission claim
+cannot be silently reinterpreted as a narrower, supported claim.
 
 `saveViewDraft` accepts optional `unlockProtection: string[]` with unchanged
 content, definition and relationships plus the current head/version guards.

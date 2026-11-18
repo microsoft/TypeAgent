@@ -186,7 +186,10 @@ export function validateInformationalOutput(
         );
 }
 
-export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
+export function informationalSchema(
+    ids: string[],
+    includeStatus = true,
+): StructuredOutputJsonSchema {
     return {
         name: "informational_wiki",
         strict: true,
@@ -196,10 +199,14 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
             properties: {
                 title: { type: "string" },
                 summary: { type: "string" },
-                status: {
-                    type: "string",
-                    enum: ["partial", "sufficient"],
-                },
+                ...(includeStatus
+                    ? {
+                          status: {
+                              type: "string",
+                              enum: ["partial", "sufficient"],
+                          },
+                      }
+                    : {}),
                 prose: { type: "string" },
                 limits: { type: "string" },
                 citationIds: {
@@ -210,7 +217,7 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
             required: [
                 "title",
                 "summary",
-                "status",
+                ...(includeStatus ? ["status"] : []),
                 "prose",
                 "limits",
                 "citationIds",

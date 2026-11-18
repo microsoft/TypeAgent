@@ -191,7 +191,13 @@ async function cancelHistoryImports(service, groups, retain) {
     return errors;
 }
 
-async function importHistory(service, construction, plan, record, controls) {
+export async function importHistory(
+    service,
+    construction,
+    plan,
+    record,
+    controls,
+) {
     assert.equal(
         typeof service.startBatchImport,
         "function",
@@ -384,7 +390,12 @@ async function importHistory(service, construction, plan, record, controls) {
     }
 }
 
-async function prepareKnowledge(service, construction, record, controls) {
+export async function prepareKnowledge(
+    service,
+    construction,
+    record,
+    controls,
+) {
     if (!service.createKnowledgeCheckpoint) return;
     assert.equal(typeof service.waitForKnowledgeCheckpoint, "function");
     controls.signal.throwIfAborted();

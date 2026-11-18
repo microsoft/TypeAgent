@@ -7,16 +7,22 @@ import {
     FileMemoryService,
     getConfiguredMemoryViewOptions,
     type TopicDecisionReceipt,
+    type FileMemoryServiceOptions,
 } from "@typeagent/memory-service";
 import { getConfiguredViewModelOptions } from "./viewModelOptions.js";
 
 export function createDurableMemoryService(
     rootDirectory: string,
     onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void,
+    qualificationOptions?: Pick<
+        FileMemoryServiceOptions,
+        "wikiAdmissionExperiment" | "maintenanceMode" | "sourceSynopses"
+    >,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
         ...getConfiguredMemoryViewOptions(),
         ...getConfiguredViewModelOptions(),
+        ...qualificationOptions,
         ...(onTopicDecisionReceipt ? { onTopicDecisionReceipt } : {}),
         indexSettingsFactory: () => {
             const settings = createDocMemorySettings(

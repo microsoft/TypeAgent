@@ -28,6 +28,7 @@ export * from "./auth.js";
 export * from "./tokenCounter.js";
 export * from "./requestBudget.js";
 export * from "./requestConstraints.js";
+export { isLunaChatModel, isGpt6ChatModel } from "./chatModelDefaults.js";
 export {
     getCopilotClient,
     getCopilotCliPath,

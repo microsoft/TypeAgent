@@ -89,6 +89,9 @@ export function buildSummary(
             current: !latest || latest.get(result.viewId) === job.jobId,
             ...(result.revisionId ? { revisionId: result.revisionId } : {}),
             ...(result.conflictId ? { conflictId: result.conflictId } : {}),
+            ...(result.wikiAmbiguityReviewId
+                ? { wikiAmbiguityReviewId: result.wikiAmbiguityReviewId }
+                : {}),
             snapshot: {
                 pipeline: result.snapshot.pipeline,
                 definition: { kind: result.snapshot.definition.kind },

@@ -678,6 +678,7 @@ export interface MemoryServiceCapabilities {
         publication: true;
         search: true;
         builds?: true;
+        wikiAmbiguityReviews?: true;
         editMerging?: true;
         maintenance?: true;
         informationalWiki?: true;

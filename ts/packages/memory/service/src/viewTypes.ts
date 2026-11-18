@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+export type * from "./viewSupport.js";
+export {
+    supportCategories,
+    supportStatuses,
+    parseSupportQuality,
+} from "./viewSupport.js";
 import type { MemoryInventoryService } from "./inventoryTypes.js";
 import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
 import type {
@@ -332,6 +338,7 @@ export interface ViewDefinition {
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
 export interface ViewVersion {
+    quality?: import("./viewSupport.js").ViewSupportQuality;
     redirect?: ViewRedirect;
     corpusId: string;
     viewId: string;
@@ -342,6 +349,7 @@ export interface ViewVersion {
     actor: string;
     baseRevisionId?: string;
     generation?: {
+        quality?: import("./viewSupport.js").ViewSupportQuality;
         candidateId: string;
         content: DerivedViewContent;
         fingerprint: string;
@@ -467,6 +475,12 @@ export interface MemoryViewService
         request: ViewBuildJobRequest,
     ): Promise<ViewBuildJob | undefined>;
     listViewBuilds(corpusId: string): Promise<ViewBuildJob[]>;
+    listWikiAmbiguityReviews(
+        corpusId: string,
+    ): Promise<import("./wikiAmbiguity.js").WikiAmbiguityReview[]>;
+    resolveWikiAmbiguityReview(
+        request: import("./wikiAmbiguity.js").WikiAmbiguityReviewAction,
+    ): Promise<import("./wikiAmbiguity.js").WikiAmbiguityReview>;
     cancelViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
     retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
     continueViewBuild(
@@ -560,6 +574,7 @@ export interface ViewBuildSnapshot {
     };
 }
 export interface ViewSynthesisOutput {
+    quality?: import("./viewSupport.js").ViewSupportQuality;
     content: DerivedViewContent;
     relationships: ViewRelationshipInput[];
     outcome:
@@ -731,6 +746,12 @@ export interface ViewSynthesisAdapter {
         assessment: import("./viewEditorial.js").ViewEditorialAssessment,
         signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
+    repairWikiEditorial?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     generateTopics?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
@@ -747,6 +768,11 @@ export interface ViewSynthesisAdapter {
         pages: WikiPagePurposeContext[],
         signal: AbortSignal,
     ): Promise<WikiSubjectAssessment>;
+    resolveWikiAmbiguity?(
+        review: import("./wikiAmbiguity.js").WikiAmbiguityReview,
+        signal: AbortSignal,
+        checkpoint?: () => Promise<void>,
+    ): Promise<unknown>;
     inventory?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
@@ -789,6 +815,9 @@ export interface WikiPagePurposeContext {
     sourceOverlap: { shared: number; union: number; subset: boolean };
 }
 export interface WikiSubjectAssessment {
+    nativeChoices?: import("./wikiAdmissionExperiment.js").WikiAdmissionExperimentDecisionCall[];
+    quality?: import("./viewSupport.js").ViewSupportQuality;
+    ambiguityBasis?: "multiple-duplicates" | "uncertain";
     disposition: "distinct" | "covered" | "contribute" | "ambiguous" | "defer";
     deferBasis?: "evidence" | "canonical-context";
     purpose: string;
@@ -821,6 +850,8 @@ export type ViewBuildResultState =
     | "cancelled"
     | "interrupted";
 export interface ViewBuildTargetResult {
+    quality?: import("./viewSupport.js").ViewSupportQuality;
+    wikiAmbiguityReviewId?: string;
     eligibility?: ViewEligibilityReceipt;
     providerAttempts?: Array<{
         stage: string;

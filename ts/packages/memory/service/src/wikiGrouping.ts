@@ -278,7 +278,9 @@ function applySubject(
         return;
     }
     const saved = nominations.filter((entry) =>
-        views.some((view) => view.viewId === entry.viewId),
+        views.some(
+            (view) => view.viewId === entry.viewId && view.state !== "archived",
+        ),
     );
     if (saved.length > 1) {
         family.error = `Ambiguous ${kind} selector '${query}': existing page records remain separate; queries/aliases and scope evidence require review. No pages were merged.`;

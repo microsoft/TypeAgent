@@ -13,6 +13,7 @@ import type {
 import { invokeMemory } from "./viewClient";
 import { MemoryHubInventoryPager } from "./memoryHubInventoryPager";
 import type { InboxAttentionCard } from "./memoryHubInbox";
+import { wikiAmbiguityAttention } from "./memoryHubWikiAmbiguity";
 import {
     rbButton,
     rbChip,
@@ -347,6 +348,7 @@ export function mountMemoryHubViewActivity(
         result: ViewBuildResultSummary,
         current: number,
     ): Promise<boolean> {
+        if (result.wikiAmbiguityReviewId) return true;
         if (result.conflictId) {
             if (
                 result.conflictState === "resolved" ||
@@ -564,7 +566,7 @@ export function mountMemoryHubViewActivity(
         );
         const groups = await Promise.all(
             available.map(async (corpus) => {
-                const [jobs, alerts] = await Promise.all([
+                const [jobs, alerts, reviews] = await Promise.all([
                     jobPager.includes(corpus.corpusId)
                         ? invokeMemory(
                               "memoryListViewBuildSummaries",
@@ -578,6 +580,11 @@ export function mountMemoryHubViewActivity(
                               capabilities.derivedViews?.maintenance === true,
                           )
                         : Promise.resolve(undefined),
+                    !visible && capabilities.derivedViews?.wikiAmbiguityReviews
+                        ? invokeMemory("memoryListWikiAmbiguityReviews", {
+                              corpusId: corpus.corpusId,
+                          })
+                        : Promise.resolve([]),
                 ]);
                 return {
                     corpus,
@@ -585,6 +592,7 @@ export function mountMemoryHubViewActivity(
                     alerts: alerts?.alerts ?? [],
                     jobPage: jobs,
                     attentionPage: alerts?.page,
+                    reviews,
                 };
             }),
         );
@@ -613,6 +621,24 @@ export function mountMemoryHubViewActivity(
         attentionHost.replaceChildren();
         const rendered = await renderGroups(groups, current);
         if (!rendered.current) return;
+        for (const group of groups)
+            for (const review of group.reviews.filter(
+                (entry) => entry.state !== "resolved",
+            )) {
+                const card = wikiAmbiguityAttention(
+                    review,
+                    (request) =>
+                        invokeMemory(
+                            "memoryResolveWikiAmbiguityReview",
+                            request,
+                        ),
+                    refresh,
+                    options.onOpenView,
+                );
+                attentionHost.append(
+                    options.presentAttention?.(card) ?? card.detail,
+                );
+            }
         const { total, running } = rendered;
         status.textContent = total
             ? `Showing ${total} of ${jobPager.total} view operations`

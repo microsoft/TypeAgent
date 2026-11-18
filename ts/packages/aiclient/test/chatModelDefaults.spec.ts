@@ -20,6 +20,7 @@ import {
 } from "../src/openai.js";
 import type { FunctionCallingJsonSchema } from "../src/models.js";
 import { checkSerializedRequestConstraints } from "../src/requestConstraints.js";
+import { isGpt6ChatModel, isLunaChatModel } from "../src/chatModelDefaults.js";
 
 const bare = "https://example.test/openai/deployments/gpt-4o/chat/completions";
 const luna =
@@ -29,6 +30,56 @@ const limits = {
     inputTokens: 922_000,
     outputTokens: 128_000,
 };
+
+describe("GPT-6 family identity", () => {
+    for (const provider of ["azure", "openai"] as const) {
+        const settings = {
+            provider,
+            modelType: ModelType.Chat,
+            endpoint: "https://example.test/chat/completions",
+            apiKey: "fixture-key",
+        } satisfies ApiSettings;
+        test.each([
+            { modelName: "gpt-6-luna", expected: true },
+            { modelName: "gpt-6-sol", expected: true },
+            { modelName: "gpt-6.1-terra", expected: true },
+            { modelName: "GPT-6.1-SOL", expected: true },
+            { modelName: "gpt-5.4-mini", expected: false },
+            { modelName: "gpt-4.1", expected: false },
+            { modelName: "gpt-60-sol", expected: false },
+            { modelName: "gpt-6.10-sol", expected: false },
+            { modelName: "gpt-6.2-sol", expected: false },
+            { modelName: undefined, expected: false },
+        ])(`${provider} identifies $modelName`, ({ modelName, expected }) => {
+            const resolved =
+                modelName === undefined ? settings : { ...settings, modelName };
+            expect(isGpt6ChatModel(resolved)).toBe(expected);
+        });
+        test(`${provider} excludes non-chat models`, () => {
+            expect(
+                isGpt6ChatModel({
+                    ...settings,
+                    modelName: "gpt-6.1-terra",
+                    modelType: ModelType.Embedding,
+                }),
+            ).toBe(false);
+        });
+    }
+    test("Azure deployment fallback recognizes 6.1 without treating it as Luna", () => {
+        const settings: ApiSettings = {
+            provider: "azure",
+            modelType: ModelType.Chat,
+            endpoint:
+                "https://example.test/openai/deployments/gpt-6.1-terra/chat/completions",
+            apiKey: "fixture-key",
+        };
+        expect(isGpt6ChatModel(settings)).toBe(true);
+        expect(isLunaChatModel(settings)).toBe(false);
+        expect(
+            isGpt6ChatModel({ ...settings, modelName: "gpt-5.4-mini" }),
+        ).toBe(false);
+    });
+});
 
 describe("Luna runtime chat defaults", () => {
     const originalEnv = process.env;

@@ -57,6 +57,10 @@ import type {
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { z } from "zod";
 import { registerSchemaViewTools } from "./schemaViewTools.js";
+import {
+    wikiAmbiguityReviewActionSchema,
+    wikiAmbiguityToolNames,
+} from "@typeagent/memory-client";
 
 export function registerViewTools(
     server: McpServer,
@@ -66,6 +70,36 @@ export function registerViewTools(
     registerSchemaViewTools(server, service, run);
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
+    server.registerTool(
+        wikiAmbiguityToolNames.list,
+        {
+            description:
+                "List durable Wiki ambiguity proposals with full source evidence and combination previews",
+            inputSchema: corpus,
+        },
+        async ({ corpusId }) =>
+            run(() => views.listWikiAmbiguityReviews(corpusId)),
+    );
+    server.registerTool(
+        wikiAmbiguityToolNames.resolve,
+        {
+            description:
+                "Keep separate, approve, or edit and revalidate a version-bound Wiki ambiguity proposal",
+            inputSchema: wikiAmbiguityReviewActionSchema,
+        },
+        async (request) =>
+            run(() =>
+                views.resolveWikiAmbiguityReview({
+                    corpusId: request.corpusId,
+                    reviewId: request.reviewId,
+                    expectedVersion: request.expectedVersion,
+                    action: request.action,
+                    ...(request.resolution
+                        ? { resolution: request.resolution }
+                        : {}),
+                }),
+            ),
+    );
     server.registerTool(
         topicToolNames.queryTopics,
         {

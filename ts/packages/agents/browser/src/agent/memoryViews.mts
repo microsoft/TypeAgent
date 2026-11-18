@@ -65,6 +65,8 @@ type ViewMethods = Pick<
     | "memoryGetViewMaintenance"
     | "memoryGetViewBuild"
     | "memoryListViewBuilds"
+    | "memoryListWikiAmbiguityReviews"
+    | "memoryResolveWikiAmbiguityReview"
     | "memoryCancelViewBuild"
     | "memoryRetryViewBuild"
     | "memoryContinueViewBuild"
@@ -216,6 +218,10 @@ export function createMemoryViewFunctions(
         memoryGetViewBuild: (request) => views().getViewBuild(request),
         memoryListViewBuilds: ({ corpusId }) =>
             views().listViewBuilds(corpusId),
+        memoryListWikiAmbiguityReviews: ({ corpusId }) =>
+            views().listWikiAmbiguityReviews(corpusId),
+        memoryResolveWikiAmbiguityReview: (request) =>
+            views().resolveWikiAmbiguityReview(request),
         memoryCancelViewBuild: (request) => views().cancelViewBuild(request),
         memoryRetryViewBuild: (request) => views().retryViewBuild(request),
         memoryContinueViewBuild: (request) =>
