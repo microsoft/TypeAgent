@@ -50,3 +50,18 @@ Phase 1 decisions, agreed with the human. The design is `list.ts` and
   forbidden `undo-wrong-order` and `redo-survives-change`, to be proved
   in `proof/List.lean`. The reference that `typearc check` judges them on
   is `listkit.ts`, built from the vocabulary's `apply` and `unapply`.
+- 2026-11-19: phase 1p, `proof/List.lean` (Lean 4, core only; `typearc
+  check` runs it). The rules are consistent (`consistent`) and fix the
+  state after every call (`determined`). The laws hold: an edit then undo
+  restores the items and past (`edit_then_undo`); undo then redo, and
+  redo then undo, restore the whole state (`undo_then_redo`,
+  `redo_then_undo`); every reachable state's items are its past replayed
+  on the empty list (`reached_reachable`). The brief's sentences: "back
+  to the empty list" (`back_to_empty`), "redone until a new change"
+  (`undo_then_redo` and `change_ends_redo`); "report whether there is
+  anything to undo or redo" is the can-undo and can-redo invariants
+  themselves. The forbidden scenarios are theorems with their names
+  (`undo_wrong_order`, `redo_survives_change`). The translation is by
+  hand: dropping "future is emptied" from add's `records` makes
+  `determined` and `redo_survives_change` fail, as it should, but a
+  translation that drifted from list.ts would not be noticed.

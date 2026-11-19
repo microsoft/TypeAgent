@@ -255,7 +255,9 @@ checked on every call:
 - **Forbidden:** one witness that breaks a rule proves nothing, since
   another might not. Showing that no witness satisfies the rules is
   entailment, so a forbidden scenario is proved (phase 1p) and until
-  then is reported as unproved. Evaluation still catches one fault
+  then is reported as unproved. A theorem with the scenario's ID
+  (dashes as underscores) proves it, as a test with a rule's ID checks
+  the rule. Evaluation still catches one fault
   fast: if the references play a forbidden scenario without breaking a
   rule, the rules allow it.
 - A scenario that breaks a `@requires` rule is outside the rules, and a

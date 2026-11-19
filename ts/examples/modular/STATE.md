@@ -167,8 +167,10 @@ with the goal of then adding a feature to circles with the tool:
    compiled and typechecked, the scenario subset (parsed with
    `typescript-6`), scenarios judged on references, and Lean proofs if
    the project has any. Circles' catalog, ruleGen and ruleCheck now use
-   the same code. Next here: `undo/proof/List.lean` (the laws, the two
-   forbidden scenarios, the brief's sentences).
+   the same code. `undo/proof/List.lean` proves the laws, the two
+   forbidden scenarios and the brief's sentences; a forbidden scenario
+   is proved by a theorem with its name. Open: generating the Lean from
+   the rule expressions, since the translation is by hand.
 2. A generic contract driver: random calls that satisfy `@requires`,
    judged by the rules.
 3. `typearc design`: a Claude Code session whose permissions and hooks

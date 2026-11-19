@@ -33,7 +33,8 @@
  * - scenario subset: the scenarios file is written in the subset
  *   (scenarios.ts here);
  * - scenarios: each is judged on the references (scenarios.ts here);
- * - proofs: each .lean file under proof/ is checked, if Lean is installed.
+ * - proofs: each .lean file under proof/ is checked, if Lean is installed,
+ *   and a forbidden scenario counts as proved by a theorem with its name.
  * Imports: design.ts, ruleGen.ts, ruleCheck.ts, scenarios.ts,
  * node:child_process, node:fs, node:os, node:path, node:url
  */
@@ -184,21 +185,33 @@ function leanCommand(): string | undefined {
   return existsSync(elan) ? elan : undefined;
 }
 
-function proofs(p: Project): Outcome {
+/** The proofs' outcome, and the names of the theorems in the proof files that check. */
+function proofs(p: Project): Outcome & { proved: ReadonlySet<string> } {
   const dir = join(p.dir, "proof");
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".lean")) : [];
-  if (files.length === 0) return { name: "proofs", problems: [], skipped: "no proof/*.lean" };
+  const proved = new Set<string>();
+  if (files.length === 0) return { name: "proofs", problems: [], skipped: "no proof/*.lean", proved };
   const lean = leanCommand();
-  if (!lean) return { name: "proofs", problems: [], skipped: "Lean isn't installed" };
+  if (!lean) return { name: "proofs", problems: [], skipped: "Lean isn't installed", proved };
   const problems = files.flatMap((f) => {
     const run = spawnSync(lean, [f], { cwd: dir, encoding: "utf8" });
-    return run.status === 0 ? [] : [`proof/${f}:`, ...`${run.stdout}${run.stderr}`.split(/\r?\n/).filter((l) => l.trim() !== "")];
+    if (run.status !== 0) return [`proof/${f}:`, ...`${run.stdout}${run.stderr}`.split(/\r?\n/).filter((l) => l.trim() !== "")];
+    // A file that checks has no sorry: Lean reports one as a warning, so look for it.
+    if (/declaration uses [`']sorry[`']/.test(`${run.stdout}${run.stderr}`)) return [`proof/${f}: uses sorry`];
+    for (const m of readFileSync(join(dir, f), "utf8").matchAll(/^theorem\s+(\S+)/gm)) proved.add(m[1]);
+    return [];
   });
-  return { name: "proofs", problems, note: `${files.length} files` };
+  return { name: "proofs", problems, note: `${files.length} ${files.length === 1 ? "file" : "files"}`, proved };
 }
 
-/** The subset check and the judge; the judge runs only when the subset and the rules compile. */
-async function scenarioChecks(p: Project, compiled: Outcome): Promise<Outcome[]> {
+/**
+ * The subset check and the judge; the judge runs only when the subset and
+ * the rules compile. A forbidden scenario is proved when a proof file that
+ * checks has a theorem with its ID, dashes written as underscores
+ * (undo-wrong-order: theorem undo_wrong_order). The name links them; that
+ * the theorem states the scenario faithfully is for its reviewer.
+ */
+async function scenarioChecks(p: Project, compiled: Outcome, proved: ReadonlySet<string>): Promise<Outcome[]> {
   if (!p.scenarios) return [{ name: "scenarios", problems: [], skipped: "no scenarios file" }];
   const interfaces = new Set(parseDesign(p.dir, p.interfaces).filter((i) => !i.module).map((i) => i.name));
   const syntax = parseScenarios(p.dir, p.scenarios, interfaces);
@@ -208,20 +221,26 @@ async function scenarioChecks(p: Project, compiled: Outcome): Promise<Outcome[]>
   }
   const rules = (await import(pathToFileURL(join(p.dir, generated)).href)) as RuleSet;
   const j = await judgeScenarios({ dir: p.dir, scenariosFile: p.scenarios, ruleLanguage: p.ruleLanguage, rules, references: p.references, syntax });
-  const note = `${j.judged.length} allowed judged${j.unproved.length ? `; forbidden, unproved until a proof: ${j.unproved.join(", ")}` : ""}`;
+  const isProved = (id: string) => proved.has(id.replace(/-/g, "_"));
+  const done = j.unproved.filter(isProved);
+  const open = j.unproved.filter((id) => !isProved(id));
+  const note = `${j.judged.length} allowed judged` +
+    (done.length ? `; ${done.length} forbidden proved` : "") +
+    (open.length ? `; forbidden, unproved until a proof: ${open.join(", ")}` : "");
   return [subset, { name: "scenarios", problems: j.problems, note }];
 }
 
 async function check(dir: string): Promise<boolean> {
   const p = loadProject(dir);
   const compiled = await rulesCompile(p);
+  const proof = proofs(p);
   const outcomes: Outcome[] = [
     ruleFormat(p),
     { name: "boundary", problems: boundaryProblems(p.dir, designFiles(p)) },
     vocabularyPurity(p),
     compiled,
-    ...(await scenarioChecks(p, compiled)),
-    proofs(p),
+    ...(await scenarioChecks(p, compiled, proof.proved)),
+    proof,
   ];
   for (const o of outcomes) {
     const status = o.skipped ? "skip" : o.problems.length ? "FAIL" : "ok";
