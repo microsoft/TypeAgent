@@ -6,7 +6,7 @@ import type { DataModel, DataModelReader, MessageProcessor, ModelChangeEvents, O
 import type { Shape, ShapeId } from "./shape.ts";
 import type { AddShape, ClearShapes, RemoveShapes, ShapeCollection, ShapeCollectionWriter, ShapeMessageProcessor } from "./shapeModel.ts";
 import { deepEqual, history, isStrictlySorted, logged, queuedSince, sameOps } from "./dataModel.vocab.ts";
-import { addOf, applied, collectionMembers, compareOrder, disjoint, emitted, entries, ids, implies, inRange, isAckOf, isAdd, isClear, isRemove, knew, localAdds, nested, newIds, onlyMembers, removedBy, steps, unique } from "./shapeModel.vocab.ts";
+import { addOf, applied, collectionMembers, compareShapes, disjoint, emitted, entries, ids, implies, inRange, isAckOf, isAdd, isClear, isRemove, knew, localAdds, nested, newIds, onlyMembers, removedBy, steps, unique } from "./shapeModel.vocab.ts";
 
 /** When a rule is checked: on entry to a call, on return from it, (an invariant) whenever the object is checked or emits an event, or (initially) before the object's first call. */
 export type When = "entry" | "return" | "invariant" | "initially";
@@ -279,7 +279,7 @@ function post21<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: 
     this.model.on("change", f) === this.model && this.model.off("change", f) === this.model;
 }
 
-// ShapeMessageProcessor.add-on-z: The shapes are in compareOrder of their adds (shapeModel.vocab.ts).
+// ShapeMessageProcessor.empty: A processor starts with no shapes.
 function pre22<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [] as const;
 }
@@ -287,10 +287,10 @@ function at22<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: 
   return [] as const;
 }
 function post22<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre22<S>>, __at: readonly ReturnType<typeof at22<S>>[], result: unknown, ...args: unknown[]) {
-  return isStrictlySorted(ids(this.model), (a, b) => compareOrder(addOf(applied(this), a)!, addOf(applied(this), b)!));
+  return this.model.size === 0;
 }
 
-// ShapeMessageProcessor.kept: Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add.
+// ShapeMessageProcessor.only-applied: Every present shape was made by an applied add.
 function pre23<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [] as const;
 }
@@ -298,10 +298,10 @@ function at23<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: 
   return [] as const;
 }
 function post23<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre23<S>>, __at: readonly ReturnType<typeof at23<S>>[], result: unknown, ...args: unknown[]) {
-  return applied(this).filter(isAdd).every((a) => removedBy(applied(this), a) || deepEqual(this.model.get(a.id), a.shape));
+  return ids(this.model).every((id) => addOf(applied(this), id) !== undefined);
 }
 
-// ShapeMessageProcessor.remove-listed: No shape that an applied remove lists is present.
+// ShapeMessageProcessor.add-on-z: The shapes are in compareOrder of their adds (shapeModel.vocab.ts).
 function pre24<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [] as const;
 }
@@ -309,10 +309,10 @@ function at24<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: 
   return [] as const;
 }
 function post24<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre24<S>>, __at: readonly ReturnType<typeof at24<S>>[], result: unknown, ...args: unknown[]) {
-  return applied(this).filter(isRemove).every((r) => r.ids.every((id) => this.model.get(id) === undefined));
+  return isStrictlySorted(ids(this.model), (a, b) => compareShapes(applied(this), a, b));
 }
 
-// ShapeMessageProcessor.clear-known: No shape whose add an applied clear knew is present.
+// ShapeMessageProcessor.kept: Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add.
 function pre25<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [] as const;
 }
@@ -320,29 +320,51 @@ function at25<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: 
   return [] as const;
 }
 function post25<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre25<S>>, __at: readonly ReturnType<typeof at25<S>>[], result: unknown, ...args: unknown[]) {
-  return applied(this).filter(isClear).every((c) => ids(this.model).every((id) => !knew(c, addOf(applied(this), id)!)));
+  return applied(this).filter(isAdd).every((a) => removedBy(applied(this), a) || deepEqual(this.model.get(a.id), a.shape));
+}
+
+// ShapeMessageProcessor.remove-listed: No shape that an applied remove lists is present.
+function pre26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+  return [] as const;
+}
+function at26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+  return [] as const;
+}
+function post26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre26<S>>, __at: readonly ReturnType<typeof at26<S>>[], result: unknown, ...args: unknown[]) {
+  return applied(this).filter(isRemove).every((r) => r.ids.every((id) => this.model.get(id) === undefined));
+}
+
+// ShapeMessageProcessor.clear-known: No shape whose add an applied clear knew is present.
+function pre27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+  return [] as const;
+}
+function at27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+  return [] as const;
+}
+function post27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre27<S>>, __at: readonly ReturnType<typeof at27<S>>[], result: unknown, ...args: unknown[]) {
+  return applied(this).filter(isClear).every((c) => applied(this).filter(isAdd).every((a) => !knew(c, a) || this.model.get(a.id) === undefined));
 }
 
 // ShapeMessageProcessor.ack-keeps-z: Applying an acknowledgment doesn't change the shapes or their z-order, or emit change.
-function pre26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+function pre28<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [entries(this.model)] as const;
 }
-function at26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+function at28<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [entries(this.model), entries(this.model)] as const;
 }
-function post26<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre26<S>>, __at: readonly ReturnType<typeof at26<S>>[], result: unknown, ...args: unknown[]) {
+function post28<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre28<S>>, __at: readonly ReturnType<typeof at28<S>>[], result: unknown, ...args: unknown[]) {
   return steps(this).every((s) => !isAckOf(this, s.op) || (s.changes.length === 0 &&
     deepEqual(__at[s.at]?.[0], s.from < 0 ? __old[0] : __at[s.from]?.[1])));
 }
 
 // ShapeMessageProcessor.one-change: Each operation that changes the shapes emits change once, when the shapes already show its whole effect, and before logOperations reports the operation; one that changes nothing emits nothing; and no change is emitted apart from an operation.
-function pre27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+function pre29<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [entries(this.model)] as const;
 }
-function at27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
+function at29<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, ...args: unknown[]) {
   return [entries(this.model), entries(this.model), entries(this.model), entries(this.model)] as const;
 }
-function post27<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre27<S>>, __at: readonly ReturnType<typeof at27<S>>[], result: unknown, ...args: unknown[]) {
+function post29<S extends Shape = Shape>(this: ShapeMessageProcessor<S>, __old: ReturnType<typeof pre29<S>>, __at: readonly ReturnType<typeof at29<S>>[], result: unknown, ...args: unknown[]) {
   return steps(this).every((s) => s.changes.length ===
     (deepEqual(__at[s.at]?.[0], s.from < 0 ? __old[0] : __at[s.from]?.[1]) ? 0 : 1) &&
     s.changes.every((i) => deepEqual(__at[i]?.[2], __at[s.at]?.[3]))) &&
@@ -372,12 +394,14 @@ export const compiledRules: readonly CompiledRule[] = [
   { id: "ShapeMessageProcessor.in-range", tag: "requires", iface: "ShapeMessageProcessor", member: null, when: "entry", pre: pre19, at: at19, post: post19 },
   { id: "ShapeMessageProcessor.new-ids", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre20, at: at20, post: post20 },
   { id: "ShapeMessageProcessor.read-facet", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre21, at: at21, post: post21 },
-  { id: "ShapeMessageProcessor.add-on-z", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre22, at: at22, post: post22 },
-  { id: "ShapeMessageProcessor.kept", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre23, at: at23, post: post23 },
-  { id: "ShapeMessageProcessor.remove-listed", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre24, at: at24, post: post24 },
-  { id: "ShapeMessageProcessor.clear-known", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre25, at: at25, post: post25 },
-  { id: "ShapeMessageProcessor.ack-keeps-z", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre26, at: at26, post: post26 },
-  { id: "ShapeMessageProcessor.one-change", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre27, at: at27, post: post27 },
+  { id: "ShapeMessageProcessor.empty", tag: "initially", iface: "ShapeMessageProcessor", member: null, when: "initially", pre: pre22, at: at22, post: post22 },
+  { id: "ShapeMessageProcessor.only-applied", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre23, at: at23, post: post23 },
+  { id: "ShapeMessageProcessor.add-on-z", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre24, at: at24, post: post24 },
+  { id: "ShapeMessageProcessor.kept", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre25, at: at25, post: post25 },
+  { id: "ShapeMessageProcessor.remove-listed", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre26, at: at26, post: post26 },
+  { id: "ShapeMessageProcessor.clear-known", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre27, at: at27, post: post27 },
+  { id: "ShapeMessageProcessor.ack-keeps-z", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre28, at: at28, post: post28 },
+  { id: "ShapeMessageProcessor.one-change", tag: "ensures", iface: "ShapeMessageProcessor", member: null, when: "return", pre: pre29, at: at29, post: post29 },
 ];
 
 /** Each interface's ancestors (itself first) and own members. */

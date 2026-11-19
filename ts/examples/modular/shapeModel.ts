@@ -148,14 +148,18 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * @ensures read-facet  model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it.
  *   (f: () => void) => onlyMembers(this.model, collectionMembers) &&
  *     this.model.on("change", f) === this.model && this.model.off("change", f) === this.model
+ * @initially empty  A processor starts with no shapes.
+ *   this.model.size === 0
+ * @ensures only-applied  Every present shape was made by an applied add.
+ *   ids(this.model).every((id) => addOf(applied(this), id) !== undefined)
  * @ensures add-on-z  The shapes are in compareOrder of their adds (shapeModel.vocab.ts).
- *   isStrictlySorted(ids(this.model), (a, b) => compareOrder(addOf(applied(this), a)!, addOf(applied(this), b)!))
+ *   isStrictlySorted(ids(this.model), (a, b) => compareShapes(applied(this), a, b))
  * @ensures kept  Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add.
  *   applied(this).filter(isAdd).every((a) => removedBy(applied(this), a) || deepEqual(this.model.get(a.id), a.shape))
  * @ensures remove-listed  No shape that an applied remove lists is present.
  *   applied(this).filter(isRemove).every((r) => r.ids.every((id) => this.model.get(id) === undefined))
  * @ensures clear-known  No shape whose add an applied clear knew is present.
- *   applied(this).filter(isClear).every((c) => ids(this.model).every((id) => !knew(c, addOf(applied(this), id)!)))
+ *   applied(this).filter(isClear).every((c) => applied(this).filter(isAdd).every((a) => !knew(c, a) || this.model.get(a.id) === undefined))
  * @ensures ack-keeps-z  Applying an acknowledgment doesn't change the shapes or their z-order, or emit change.
  *   steps(this).every((s) => !isAckOf(this, s.op) || (s.changes.length === 0 &&
  *     deepEqual(atEvent(s.at, entries(this.model)), s.from < 0 ? old(entries(this.model)) : atEvent(s.from, entries(this.model)))))

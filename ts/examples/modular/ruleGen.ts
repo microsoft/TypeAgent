@@ -158,6 +158,9 @@ async function generate(): Promise<string> {
     use(typeImports, i.file, i.name);
     for (const r of i.rules) {
       if (!r.expression || !["requires", "ensures", "invariant", "initially"].includes(r.tag)) continue;
+      // A rule says true or false in every state; a non-null assertion (x!)
+      // would make it crash where its operand is undefined instead.
+      if (/[\w)\]]!(?!=)/.test(r.expression)) throw new Error(`${r.id}: a rule expression must be total; replace the non-null assertion (!)`);
       const parts = r.id.split(".");
       const member = parts.length === 3 ? parts[1] : null;
       const signature = member ? i.members.find((m) => m.name === member)?.signature : undefined;

@@ -472,6 +472,8 @@ No rules of its own.
 | `ShapeMessageProcessor.in-range` | requires | Each add's shape has its bounding box within ±1e300, right and bottom edges included. | caller's obligation |  |
 | `ShapeMessageProcessor.new-ids` | ensures | newShapeId never returns an ID twice, nor one that a processor with a different clientId has returned. | tested | 2 |
 | `ShapeMessageProcessor.read-facet` | ensures | model has only ShapeCollection's members, own or inherited, and its on and off return the model itself, so whoever holds it can't reach the writer through it. | tested | 3 |
+| `ShapeMessageProcessor.empty` | initially | A processor starts with no shapes. | tested | 1 |
+| `ShapeMessageProcessor.only-applied` | ensures | Every present shape was made by an applied add. | tested | 1 |
 | `ShapeMessageProcessor.add-on-z` | ensures | The shapes are in compareOrder of their adds (shapeModel.vocab.ts). | tested | 1 |
 | `ShapeMessageProcessor.kept` | ensures | Each applied add's shape is present, under its id, unless an applied remove lists it or an applied clear knew its add. | tested | 4 |
 | `ShapeMessageProcessor.remove-listed` | ensures | No shape that an applied remove lists is present. | tested | 1 |

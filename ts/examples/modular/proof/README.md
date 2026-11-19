@@ -31,12 +31,41 @@ source in a comment.
    `consistent_remote_first`). So these rules leave the order of the
    queues open, which is now a theorem rather than a reading.
 
+## What `ShapeModel.lean` proves
+
+Whether `ShapeMessageProcessor`'s rules about what is present (`kept`,
+`remove-listed`, `clear-known`, `add-on-z`) determine the model.
+
+1. **As written, they don't** (`rules_allow_a_stray_shape`). A model
+   holding a shape that no applied add made satisfies all four: each
+   speaks only of shapes that adds made. With nothing applied, both the
+   empty model and a one-shape model satisfy them.
+2. **With one more rule, they do** (`rules_determine_model`). Adding
+   `only-applied` (every present shape's ID has an applied add), any two
+   models that satisfy the rules are equal, order included. The proof
+   needs only that `compareOrder` is irreflexive and asymmetric.
+
+**What the tests do today** (checked 2026-11-18 with a temporary probe, a
+reference processor that adds one stray shape in its first `process`):
+34 of the contract's tests fail, but every failure is the same
+`TypeError`. `add-on-z`'s expression uses `addOf(applied(this), id)!`,
+which is undefined for the stray shape, so `compareOrder` reads `.seq` of
+`undefined`. The fault is noticed by the expression crashing, not by any
+rule saying the shape shouldn't be there; and a stray shape present
+before the first `process` (a writer that doesn't start empty) is checked
+by nothing.
+
 ## How the translation went
 
 The rule expressions are side-effect-free TypeScript over lists, and they
 translated almost one for one: `isStrictlySorted` is `List.Pairwise`,
 `sameOps` is `List.Perm` on keys, `filter` is `List.filter`. Every proof
 was short and passed on the first try.
+
+Translating forced each partial expression to be read one way or
+another. `!` (TypeScript's non-null assertion) makes a rule crash where it
+doesn't apply, and that is how the gap above stayed hidden: a rule
+expression should be total, saying true or false in every state.
 
 Two `@requires` rules, `remote-seq` and `client-order`, have no
 expression yet. Their Lean definitions here (`RemoteSeq`, `ClientOrder`)

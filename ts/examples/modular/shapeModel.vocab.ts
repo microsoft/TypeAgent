@@ -44,6 +44,16 @@ export function compareOrder(a: Operation, b: Operation): number {
   return a.clientSeq - b.clientSeq;
 }
 
+/**
+ * compareOrder of the adds among ops that made shapes a and b, or NaN, which
+ * orders nothing, when either has no add.
+ */
+export function compareShapes(ops: readonly ShapeOp[], a: ShapeId, b: ShapeId): number {
+  const x = addOf(ops, a);
+  const y = addOf(ops, b);
+  return x === undefined || y === undefined ? NaN : compareOrder(x, y);
+}
+
 export const isAdd = (op: ShapeOp): op is AddShape => op.type === "add";
 export const isRemove = (op: ShapeOp): op is RemoveShapes => op.type === "remove";
 export const isClear = (op: ShapeOp): op is ClearShapes => op.type === "clear";

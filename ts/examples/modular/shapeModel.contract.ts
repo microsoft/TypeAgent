@@ -321,7 +321,8 @@ export function shapeMessageProcessorContract(make: (clientId: string) => ShapeM
     });
 
     for (const id of [
-      "ShapeMessageProcessor.new-ids", "ShapeMessageProcessor.read-facet", "ShapeMessageProcessor.add-on-z",
+      "ShapeMessageProcessor.new-ids", "ShapeMessageProcessor.read-facet", "ShapeMessageProcessor.empty",
+      "ShapeMessageProcessor.only-applied", "ShapeMessageProcessor.add-on-z",
       "ShapeMessageProcessor.kept", "ShapeMessageProcessor.remove-listed", "ShapeMessageProcessor.clear-known",
       "ShapeMessageProcessor.ack-keeps-z", "ShapeMessageProcessor.one-change",
       "ShapeCollection.size", "ShapeCollection.z-order", "ShapeCollection.get-agrees", "ShapeCollection.read-only",
