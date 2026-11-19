@@ -154,14 +154,28 @@ deferred.
 
 ## Next session
 
-1. Step 0 for the docgent: a `project.json` per project, so the tooling
-   serves circles and `docgent/` (interface lists are hardcoded in
-   `task.ts`, `catalog.ts` and `ruleGen.ts`; `ruleCheck.ts` must take each
-   project's compiled rules instead of importing circles').
-2. The docgent's phase 1 (`docgent/phase1-proposal.md`, three questions)
-   and the human's edits to the gold Q&A.
-3. Later: assess extracting an existing repository into a blueprint (the
-   colleague's question); compile `shape.ts`'s rules next.
+The work has turned from the circles example to the method and its tool
+(2026-11-18, after feedback from experienced developers): `tool/elements.md`
+defines the elements, `method.md` has phase 1p (prove), and `proof/` has
+the Lean pilot.
+
+1. **The workflows document** (the priority): how a developer creates,
+   agrees, implements, reviews and changes blueprints and modules, and
+   how a change propagates. It will inform the items below.
+2. The `task.ts lint` rule that every "Decided behavior" item cites a
+   rule or moves to "Left to the implementer", and the circles
+   `Controller` placeholder blueprint (`tool/elements.md`).
+3. The app's external interface (members and rules to agree), which the
+   general scenario form depends on.
+4. The clear workloads and performance adversaries for
+   `ShapeMessageProcessor.log-amortized` (workload names to agree).
+5. Prose experiments, steps 3 and 4 (`experiments/prose-1/RESULT.md`).
+6. Next proofs: `converges`, and the refinement obligations.
+7. Tooling: step 0's `project.json`, module boundary checks, generated
+   Lean.
+8. Later: the docgent's phase 1 questions; extraction of an existing
+   repository; `shape.ts`'s rule expressions; errors and failure
+   (deferred).
 
 ## Expected failures until phase 2 finishes
 

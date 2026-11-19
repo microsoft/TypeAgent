@@ -126,6 +126,7 @@ export type ProcessorBug =
   | "marks-remote"        // returns the queued remote operation itself, and marks it when applying it
   | "applies-at-once"     // enqueue on local applies the operation immediately
   | "applies-on-read"     // reading the model first applies whatever is queued
+  | "emits-on-read"       // reading the model emits change, though nothing changed
   | "self-schedules"      // enqueue schedules process itself
   | "remote-on-top"       // puts a remote add on top, above pending local adds
   | "local-newest-bottom" // puts a local add below the pending local adds before it
@@ -167,8 +168,24 @@ export class TestShapeProcessor implements ShapeMessageProcessor {
     const facet = readFacet(this.writer);
     this.model = bug === "exposes-writer" ? this.writer
       : bug === "applies-on-read" ? this.lazy(facet)
+      : bug === "emits-on-read" ? this.noisy(facet)
       : bug === "facet-keeps-writer" ? Object.assign(Object.create(facet) as ShapeCollection, { writer: this.writer })
       : facet;
+  }
+
+  /** A facet that emits change on each read, without changing anything. */
+  private noisy(facet: ShapeCollection): ShapeCollection {
+    const ping = () => this.writer.emit("change");
+    return {
+      get: (id) => { ping(); return facet.get(id); },
+      get size() { ping(); return facet.size; },
+      forEach: (visit) => { ping(); facet.forEach(visit); },
+      compareZ: (a, b) => { ping(); return facet.compareZ(a, b); },
+      inRect: (r, out) => { ping(); return facet.inRect(r, out); },
+      atPoint: (p, out) => { ping(); return facet.atPoint(p, out); },
+      on(event, listener) { facet.on(event, listener); return this; },
+      off(event, listener) { facet.off(event, listener); return this; },
+    };
   }
 
   /** A facet that applies what is queued before each read. */

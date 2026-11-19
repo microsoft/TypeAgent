@@ -33,7 +33,10 @@ usage limit:
 - By 2026-11-13, all the design and implementation work to date had used
   about 6% of the week: roughly $100 at list prices, on that estimate.
 - Human time on 2026-11-13: about 3 hours; on 2026-11-16, about 15
-  minutes of attention (reviews of 9.2 and 9.d, one rule decided).
+  minutes of attention (reviews of 9.2 and 9.d, one rule decided); on
+  2026-11-18, about 1.5 hours, almost all on designing the method itself,
+  recorded under the phase "method design" so it can be counted apart
+  from building the example.
 
 Two thresholds frame the numbers:
 - **Independent developers** ($100 to $200 a month): success means rarely

@@ -199,6 +199,22 @@ are left until a project needs them.
 data: actions, network steps, and effects on the visible canvas.
 `driver.ts` and `scenariokit.ts` play them.
 
+## Placeholder blueprints
+
+Status: agreed 2026-11-18. None written yet.
+
+**What it is.** A blueprint whose design is left to the implementer, but
+which states the obligations any design of it must meet. It names the
+interface and gives its rules, and may leave its members open.
+
+**Why.** Rules elsewhere can need a part nobody has designed: the
+`MessageProcessor` rules `formed-now` and `infrastructure-only` speak of
+a controller, which has no interface. A placeholder makes that part, and
+what it owes the rest, explicit, instead of leaving it to prose.
+
+**In the example.** The first is to be a `Controller` placeholder in
+circles, for the part that turns a user's input into operations.
+
 ## Test infrastructure
 
 Status: agreed 2026-11-18.
@@ -361,7 +377,10 @@ fresh spec, run both ways.
   divided into modules.
 - Proof for some rules, as an alternative to testing (see [Rules](#rules)).
 - The workflows: how a developer creates, agrees, implements, reviews
-  and changes these elements. That is the next document.
+  and changes these elements. That is the next document, and the next
+  session's priority.
+- Errors and failure: how a rule states what a call does when it fails.
+  Deferred, as a large topic of its own.
 
 ## Decisions
 
@@ -393,6 +412,11 @@ fresh spec, run both ways.
   interfaces only, for now.
 - 2026-11-18: a budget's complexity class holds for every call in every
   state; its workloads only measure it (`within` in `rules.ts`).
+- 2026-11-18: placeholder blueprints state the obligations of a part
+  whose design is left to the implementer. Every "Decided behavior" item
+  in a task spec cites a rule, or moves to "Left to the implementer",
+  enforced by `task.ts lint` (to be built). The circles files stay flat
+  until the tool exists. Errors are deferred.
 - 2026-11-18: rules speak of instances, not creation: arrow-function
   rules quantify over all instances, and `@initially` (new) says what
   holds before an instance's first call. No factory types in the design.

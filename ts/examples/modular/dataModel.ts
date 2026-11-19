@@ -155,8 +155,10 @@ export interface OperationLogging<TOp extends Operation> {
  * @requires formed-now  A controller sends each local operation in the same synchronous turn in which it read the model to form it.
  * @requires infrastructure-only  Only the message infrastructure enqueues and calls process; controllers send through a LocalSend.
  * @requires remote-seq  Each remote operation has an assigned seq, greater than any earlier remote operation's.
+ *   remoteOps(this).every((op) => op.seq >= 0) && isStrictlySorted(remoteOps(this), (a, b) => a.seq - b.seq)
  * @requires unique-identity  No two operations share a clientId and clientSeq, except a local operation and its acknowledgment.
  * @requires client-order  Each client's operations arrive on remote in clientSeq order, as a protocol that sequences each client's operations in the order sent delivers them; so acknowledgments arrive in the order the local operations were enqueued.
+ *   remoteOps(this).every((a, i) => remoteOps(this).every((b, j) => j <= i || a.clientId !== b.clientId || a.clientSeq < b.clientSeq))
  * @deferred client-reorder  A protocol may sequence a client's operations out of clientSeq order, and processors still converge.
  *   when: a collaboration protocol that reorders a client's operations is specified.
  *   how: each DDS says what an acknowledgment that arrives out of order does (for shapes, whether it may move a shape, or z-order is defined by something other than seq); client-order is dropped; the processor contract delivers acknowledgments out of clientSeq order, with an adversary that matches an acknowledgment to the oldest pending operation without checking clientSeq.

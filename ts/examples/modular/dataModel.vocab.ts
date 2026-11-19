@@ -82,6 +82,11 @@ export function sameOps(a: readonly Operation[], b: readonly Operation[]): boole
   return ka.length === kb.length && ka.every((k, i) => k === kb[i]);
 }
 
+/** The operations enqueued on p's remote queue, in order, over its whole history. */
+export function remoteOps<TOp extends Operation>(p: MessageProcessor<DataModelReader, TOp>): TOp[] {
+  return history(p).filter((c) => c.member === "remote.enqueue").map((c) => c.args[0] as TOp);
+}
+
 /** Whether op is the acknowledgment of one of p's local operations. */
 export function isAckOf(p: MessageProcessor<DataModelReader, Operation>, op: Operation): boolean {
   return op.clientId === p.clientId && op.seq !== -1;

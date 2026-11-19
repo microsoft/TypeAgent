@@ -58,5 +58,12 @@
     "phase": "experiment",
     "what": "prose-1: task 9.2 on Sonnet, tests runnable not readable, TASK.md task section cut to Exports, Imports and budget IDs (make --prose minimal); checks pass first time; a clear that knows shapes scans all present shapes (budget read literally). Not collected; experiments/prose-1. 25 turns, 12.5 min",
     "usd": 1.31
+  },
+  {
+    "date": "2026-11-18",
+    "round": 5,
+    "phase": "method design",
+    "what": "the method itself, not the circles example: elements (blueprints, modules), visibility and prose experiments, @initially, budget meaning, Lean proofs and phase 1p; human time about 1.5 hours",
+    "humanHours": 1.5
   }
 ]
