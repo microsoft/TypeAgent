@@ -37,6 +37,7 @@ import {
 } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
+import { incompletePreservation } from "./viewSupport.js";
 import { generateTopicTarget, type TopicBuildOwner } from "./topicBuilds.js";
 import { createTopicSnapshot, type TopicGenerator } from "./topicGeneration.js";
 import { resolveTopicBuildTimeout } from "./viewBuildValidation.js";
@@ -116,6 +117,13 @@ export interface ViewBuildOwner extends TopicBuildOwner {
     canPrepareWikiAssessment?(input: ViewBuildSnapshot): Promise<boolean>;
     wikiPages?(input: ViewBuildSnapshot): Promise<WikiPagePurposeContext[]>;
     recordWikiAssessment?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    resolveWikiAmbiguity?(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         assessment: WikiSubjectAssessment,
@@ -989,6 +997,7 @@ export class ViewBuildRunner {
     ): Promise<void> {
         if (
             conflicts.length ||
+            result.state === "conflicted" ||
             result.snapshot.pipeline !== "informational-wiki-v1"
         )
             return;
@@ -1001,7 +1010,12 @@ export class ViewBuildRunner {
         signal: AbortSignal,
         forceCheck = false,
     ): Promise<void> {
-        if (!forceCheck && !requiresEditorialCheck(input, output)) return;
+        if (
+            !forceCheck &&
+            !requiresEditorialCheck(input, output) &&
+            !(output.content.kind === "wiki" && this.adapter.checkEditorial)
+        )
+            return;
         if (!this.adapter.checkEditorial)
             throw new Error(
                 "Informational build requires an actual-output factual checker",
@@ -1014,6 +1028,15 @@ export class ViewBuildRunner {
         );
         assertEditorialDiagnostics(assessment, input, output);
         assertEditorialAssessment(assessment);
+        if (assessment.quality) {
+            if (assessment.quality.status === "uncertain")
+                throw new Error("Uncertain Wiki support requires review");
+            if (
+                !output.quality ||
+                assessment.quality.confidence < output.quality.confidence
+            )
+                output.quality = assessment.quality;
+        }
     }
 
     private async verifyOrRepairEditorial(
@@ -1152,6 +1175,20 @@ export class ViewBuildRunner {
             );
         }
         const { assessment, pages } = value;
+        if (assessment.disposition === "ambiguous") {
+            if (!this.owner.resolveWikiAmbiguity)
+                throw new Error(
+                    "Wiki ambiguity requires durable review handling",
+                );
+            await this.owner.resolveWikiAmbiguity(
+                job,
+                result,
+                assessment,
+                pages,
+                signal,
+            );
+            return true;
+        }
         if (assessment.disposition === "contribute") {
             if (!this.owner.contributeWikiSubject)
                 throw new Error(
@@ -1173,8 +1210,7 @@ export class ViewBuildRunner {
         }
         return (
             assessment.disposition === "covered" ||
-            assessment.disposition === "defer" ||
-            assessment.disposition === "ambiguous"
+            assessment.disposition === "defer"
         );
     }
 
@@ -1482,10 +1518,17 @@ export class ViewBuildRunner {
                     "skipped",
                 ].includes(result.state),
             ).length;
+            const retainedPartial = current.results.some(
+                (result) =>
+                    result.state === "conflicted" &&
+                    (incompletePreservation(result.quality) ||
+                        result.wikiConsolidation?.stage === "needsReview" ||
+                        result.wikiAmbiguityReviewId),
+            );
             current.state =
                 saved === current.results.length
                     ? "complete"
-                    : saved
+                    : saved || retainedPartial
                       ? "partial"
                       : signal.aborted
                         ? "cancelled"

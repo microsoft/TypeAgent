@@ -159,6 +159,7 @@ export function getConfiguredMemoryViewOptions(
     | "maintenanceShortBuildReservation"
     | "maintenanceShortBuildPriority"
     | "wikiAssessmentConcurrency"
+    | "wikiReview"
 > {
     const wikiAssessmentConcurrency =
         environment.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY;
@@ -183,6 +184,14 @@ export function getConfiguredMemoryViewOptions(
             "Generative topic settings cannot configure Decision topics",
         );
     return {
+        ...(environment.TYPEAGENT_MEMORY_WIKI_REVIEW === undefined
+            ? {}
+            : {
+                  wikiReview: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_WIKI_REVIEW,
+                      "TYPEAGENT_MEMORY_WIKI_REVIEW",
+                  ),
+              }),
         ...(environment.TYPEAGENT_MEMORY_DATAFRAMES === undefined
             ? {}
             : {

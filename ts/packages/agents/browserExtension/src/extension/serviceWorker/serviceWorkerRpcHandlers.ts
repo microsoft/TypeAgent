@@ -139,6 +139,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryGetViewBuild: (params) => forward("memoryGetViewBuild", params),
         memoryListViewBuilds: (params) =>
             forward("memoryListViewBuilds", params),
+        memoryListWikiAmbiguityReviews: (params) =>
+            forward("memoryListWikiAmbiguityReviews", params),
+        memoryResolveWikiAmbiguityReview: (params) =>
+            forward("memoryResolveWikiAmbiguityReview", params),
         memoryCancelViewBuild: (params) =>
             forward("memoryCancelViewBuild", params),
         memoryRetryViewBuild: (params) =>

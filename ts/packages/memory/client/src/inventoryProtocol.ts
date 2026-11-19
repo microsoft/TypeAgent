@@ -67,6 +67,7 @@ export const viewSummarySchema = viewVersionSchema
         viewId: true,
         revisionId: true,
         state: true,
+        quality: true,
     })
     .extend({
         content: z.strictObject({
@@ -138,6 +139,8 @@ export const viewBuildSummarySchema = viewBuildJobSchema
                 reason: true,
                 revisionId: true,
                 conflictId: true,
+                wikiAmbiguityReviewId: true,
+                quality: true,
             })
             .extend({
                 semanticReview: result.shape.semanticReview

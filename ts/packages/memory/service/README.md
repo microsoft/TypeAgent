@@ -42,6 +42,41 @@ the prose and Wiki decision model identities. Earlier `evidence-first-v25`
 results remain historical evidence, not validation of this combined policy.
 Rollback requires reverting this policy change, not changing the global prose model.
 
+## Opt-in shared Wiki review
+
+`FileMemoryServiceOptions.wikiReview` defaults to `false`. Hosts using
+`getConfiguredMemoryViewOptions` can opt in with `TYPEAGENT_MEMORY_WIKI_REVIEW=true`
+(also accepts `1`; `false`/`0` disable it; other strings fail configuration).
+The shared workflow uses the existing **choice-only GPT_6_LUNA** adapter, not
+native Decision APIs. It distinguishes duplicate, related, distinct and uncertain
+relationships using complete page prose and original evidence. Related is navigation,
+never merge authority. Legacy admission and editorial decisions remain in use when disabled.
+
+Ambiguity reserves one durable logical `GPT_6_1_SOL` request per frozen evidence/revision
+set before dispatch. Complete participants and original passages are retained without
+truncation. At most four audited transport attempts share the same request and a
+five-minute budget; there is no alternate-model fallback, response repair or restart replay.
+Uncertain, malformed, failed and interrupted proposals remain reviewable through
+`listWikiAmbiguityReviews`; `resolveWikiAmbiguityReview` supports keep-separate,
+approval or an explicitly edited resolution with optimistic version checks.
+Resolution saves drafts only; it never publishes, redirects or deletes original pages.
+Source revisions and build authorization are rechecked inside the final write callback
+after asynchronous verification for both automatic and manual application.
+
+Only new keep-separate drafts may retain partially supported content without a known
+contradiction. Their structured `quality` survives persistence, summaries and restart.
+Confidence is an ordinal policy score, not a calibrated probability. The worst prior
+quality is retained; partial or uncertain quality cannot publish, become index-ready
+or authorize combining, redirects, deletion, execution or human-reviewed status.
+Exact citation rebinding, original sections, protected edits, supported prior claims,
+inventory exclusions and publication gates remain mandatory.
+
+Disabling review prevents new arbitration and all resolution application. Existing
+stored reviews remain readable subject to normal source authorization; revocation
+redacts evidence without deleting retained work, while source forgetting purges it.
+`derivedViews.wikiAmbiguityReviews` advertises read support independently of
+`derivedViews.wikiAmbiguityResolution`, which is true only while review is enabled.
+
 ## Retained ingestion jobs
 
 Corpus status, paginated job lists, individual job reads, restart recovery and

@@ -11,6 +11,7 @@ export type {
 } from "@typeagent/memory-service";
 export * from "./protocol.js";
 export * from "./viewProtocol.js";
+export * from "./wikiAmbiguityProtocol.js";
 export * from "./viewDetailProtocol.js";
 export * from "./viewSeparationProtocol.js";
 export * from "./topicProtocol.js";

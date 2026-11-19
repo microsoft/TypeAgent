@@ -360,6 +360,12 @@ export type MemoryCenterInvokeFunctions = {
         params: ViewBuildJobRequest,
     ): Promise<ViewBuildJob | undefined>;
     memoryListViewBuilds(params: { corpusId: string }): Promise<ViewBuildJob[]>;
+    memoryListWikiAmbiguityReviews(params: {
+        corpusId: string;
+    }): Promise<import("@typeagent/memory-service").WikiAmbiguityReview[]>;
+    memoryResolveWikiAmbiguityReview(
+        params: import("@typeagent/memory-service").WikiAmbiguityReviewAction,
+    ): Promise<import("@typeagent/memory-service").WikiAmbiguityReview>;
     memoryCancelViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
     memoryRetryViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
     memoryContinueViewBuild(

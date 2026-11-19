@@ -60,6 +60,13 @@ import {
     type ViewSemanticReview,
 } from "./viewSemanticReview.js";
 import { wikiContributionTargets } from "./wikiContribution.js";
+import { ambiguityInput, verifyAmbiguityCombination } from "./wikiAmbiguity.js";
+import type { WikiAmbiguityReview } from "./wikiAmbiguity.js";
+import {
+    incompletePreservation,
+    parseSupportQuality,
+    worstSupportQuality,
+} from "./viewSupport.js";
 import {
     assertWikiRedirectCapacity,
     automaticallyConsolidatable,
@@ -108,6 +115,7 @@ import { knowledgeBuildDiagnostics } from "./knowledgeDiagnostics.js";
 
 interface ViewStoreState {
     separations?: Record<string, ViewSeparationReceipt>;
+    wikiAmbiguityReviews?: Record<string, WikiAmbiguityReview>;
     knowledge?: KnowledgeStatus;
     views: Record<string, ViewVersion[]>;
     builds?: Record<string, ViewBuildJob>;
@@ -300,6 +308,25 @@ function installTopicSnapshot(
                 : {}),
         };
     }
+}
+
+function preserveBuildSupport(
+    result: ViewBuildTargetResult,
+    current: ViewVersion | undefined,
+    output: ViewSynthesisOutput,
+    conflicts: string[],
+): string[] {
+    const quality = worstSupportQuality(current?.quality, output.quality);
+    if (quality) output.quality = quality;
+    if (quality?.status === "unsupported")
+        throw new Error(
+            "Unsupported editorial output cannot be accepted as an article",
+        );
+    if (quality) result.quality = quality;
+    else delete result.quality;
+    return current && incompletePreservation(result.quality)
+        ? [...new Set([...conflicts, "editorial:preservation"])]
+        : conflicts;
 }
 
 export class TypedViewStore {
@@ -938,6 +965,8 @@ export class TypedViewStore {
         if (
             current?.revisionId !== version.revisionId ||
             current.state !== "draft" ||
+            (current.quality !== undefined &&
+                current.quality.status !== "supported") ||
             !informationalView(current.content) ||
             current.generation?.input?.publicationPolicy?.buildOverride ===
                 false
@@ -1139,6 +1168,9 @@ export class TypedViewStore {
             createdAt: timestamp(),
             actor: this.actor,
             provenance: "human",
+            ...(current?.quality
+                ? { quality: structuredClone(current.quality) }
+                : {}),
             ...(validation ? { validation } : {}),
             ...(current?.generation
                 ? { generation: structuredClone(current.generation) }
@@ -1442,6 +1474,172 @@ export class TypedViewStore {
         return [...latest.values()];
     }
 
+    public async listWikiAmbiguityReviews(
+        corpusId: string,
+    ): Promise<WikiAmbiguityReview[]> {
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(
+            Object.values(state.wikiAmbiguityReviews ?? {}).sort((a, b) =>
+                b.createdAt.localeCompare(a.createdAt),
+            ),
+        );
+    }
+
+    public async reserveWikiAmbiguityReview(
+        review: WikiAmbiguityReview,
+    ): Promise<{ review: WikiAmbiguityReview; reserved: boolean }> {
+        const { head, state } = await this.history(review.corpusId).read();
+        state.wikiAmbiguityReviews ??= {};
+        const prior = state.wikiAmbiguityReviews[review.id];
+        const value = prior ?? structuredClone(review);
+        if (!prior) state.wikiAmbiguityReviews[review.id] = value;
+        const target = state.builds?.[review.jobId]?.results.find(
+            (entry) => entry.viewId === review.candidateId,
+        );
+        if (!target) throw new Error("Ambiguity candidate build was removed");
+        target.wikiAmbiguityReviewId = value.id;
+        target.state = value.state === "resolved" ? "skipped" : "conflicted";
+        target.reason = `Wiki ambiguity ${value.state}: ${value.reason}; review ${value.id}`;
+        await this.commitBuildState(
+            review.corpusId,
+            head,
+            state,
+            "Reserve durable one-shot Wiki ambiguity review",
+        );
+        return { review: structuredClone(value), reserved: !prior };
+    }
+
+    public async updateWikiAmbiguityReview(
+        review: WikiAmbiguityReview,
+        expectedVersion: number,
+        apply = false,
+    ): Promise<WikiAmbiguityReview> {
+        const { head, state } = await this.history(review.corpusId).read();
+        const prior = state.wikiAmbiguityReviews?.[review.id];
+        if (!prior || prior.version !== expectedVersion)
+            throw new Error("Wiki ambiguity review version conflict");
+        const next = structuredClone(review);
+        if (apply) this.applyWikiAmbiguityResolution(state, next);
+        next.version = expectedVersion + 1;
+        next.updatedAt = timestamp();
+        state.wikiAmbiguityReviews![next.id] = next;
+        this.bindWikiAmbiguityResult(state, next);
+        await this.commitBuildState(
+            review.corpusId,
+            head,
+            state,
+            "Retain/reconcile Wiki ambiguity review",
+        );
+        return structuredClone(next);
+    }
+
+    private applyWikiAmbiguityResolution(
+        state: ViewStoreState,
+        next: WikiAmbiguityReview,
+    ): void {
+        if (next.resolution?.status !== "resolved")
+            throw new Error("Unresolved combination cannot apply");
+        for (const participant of next.participants) {
+            const current = viewVersions(state, participant.id).at(-1);
+            if (
+                (current?.revisionId ?? null) !== participant.revisionId ||
+                current?.state === "archived" ||
+                current?.redirect
+            )
+                throw new Error("Wiki ambiguity participant revision conflict");
+        }
+        next.appliedRevisions = {};
+        for (const group of next.resolution.groups) {
+            if (group.action === "keep_separate") {
+                const participant = next.participants.find(
+                    (entry) => entry.id === group.ids[0],
+                )!;
+                if (participant.page) continue;
+                if (!participant.draft)
+                    throw new Error(
+                        "Candidate has no verified source-bound draft",
+                    );
+                const version = this.generatedVersion(
+                    participant.input,
+                    undefined,
+                    participant.draft,
+                    participant.draft,
+                );
+                state.views[participant.id] = [
+                    ...viewVersions(state, participant.id),
+                    version,
+                ];
+                next.appliedRevisions[participant.id] = version.revisionId;
+            } else {
+                const output = verifyAmbiguityCombination(
+                    group,
+                    next.participants,
+                );
+                const input = ambiguityInput(group, next.participants);
+                const current = viewVersions(state, input.definition.viewId).at(
+                    -1,
+                );
+                const version = this.generatedVersion(
+                    input,
+                    current,
+                    output,
+                    output,
+                );
+                state.views[version.viewId] = [
+                    ...viewVersions(state, version.viewId),
+                    version,
+                ];
+                next.appliedRevisions[version.viewId] = version.revisionId;
+            }
+        }
+        next.state = "resolved";
+        next.reason = `${next.resolution.reason}; verified drafts saved; original revisions/pages retained; publication and redirect readiness remain separate`;
+    }
+
+    private bindWikiAmbiguityResult(
+        state: ViewStoreState,
+        next: WikiAmbiguityReview,
+    ): void {
+        const target = state.builds?.[next.jobId]?.results.find(
+            (entry) => entry.viewId === next.candidateId,
+        );
+        if (target) {
+            target.wikiAmbiguityReviewId = next.id;
+            target.state = next.state === "resolved" ? "draft" : "conflicted";
+            target.reason = `Wiki ambiguity ${next.state}: ${next.reason}`;
+            const revision = next.appliedRevisions?.[next.candidateId];
+            if (revision) {
+                target.revisionId = revision;
+                const quality = viewVersions(state, next.candidateId).find(
+                    (version) => version.revisionId === revision,
+                )?.quality;
+                if (quality) target.quality = quality;
+                else delete target.quality;
+            } else if (next.state === "resolved") {
+                target.state = "skipped";
+                const group = next.resolution?.groups.find(
+                    (entry) =>
+                        entry.action === "combine" &&
+                        entry.ids.includes(next.candidateId),
+                );
+                if (
+                    group?.survivorId &&
+                    next.appliedRevisions?.[group.survivorId] &&
+                    target.wikiAssessment
+                )
+                    target.wikiAssessment = {
+                        ...target.wikiAssessment,
+                        disposition: "covered",
+                        canonicalViewId: group.survivorId,
+                        canonicalRevisionId:
+                            next.appliedRevisions[group.survivorId],
+                        ambiguousViewIds: [],
+                        reason: "Verified Sol combination retains complete candidate content and original evidence",
+                    };
+            }
+        }
+    }
+
     public async getViewBuild(
         corpusId: string,
         jobId: string,
@@ -1742,13 +1940,29 @@ export class TypedViewStore {
 
     public async recoverViewBuilds(corpusId: string): Promise<void> {
         const { head, state } = await this.history(corpusId).read();
+        const resolving = Object.values(
+            state.wikiAmbiguityReviews ?? {},
+        ).filter((review) => review.state === "resolving");
+        for (const review of resolving) {
+            review.state = "needsReview";
+            review.request.state = "interrupted";
+            review.reason =
+                "Service restarted after reserving one logical Sol arbitration. Outcome is indeterminate; no automatic replay or repair.";
+            review.version++;
+            review.updatedAt = timestamp();
+        }
         const running = Object.values(state.builds ?? {}).filter(
             (job) => job.state === "running",
         );
         const interruptedSeparations = Object.values(
             state.separations ?? {},
         ).filter((receipt) => receipt.state === "confirmed");
-        if (!running.length && !interruptedSeparations.length) return;
+        if (
+            !running.length &&
+            !interruptedSeparations.length &&
+            !resolving.length
+        )
+            return;
         for (const receipt of interruptedSeparations) {
             receipt.state = "incomplete";
             receipt.reasonForState =
@@ -1978,6 +2192,7 @@ export class TypedViewStore {
             current?.state === "archived"
         )
             throw new Error("View target changed during build");
+        conflicts = preserveBuildSupport(result, current, merged, conflicts);
         if (conflicts.length) {
             if (!current)
                 throw new Error("A missing target cannot have edit conflicts");
@@ -2109,6 +2324,7 @@ export class TypedViewStore {
             receipt.assessment.relation !== "samePurpose" ||
             !receipt.verification.safe ||
             receipt.verification.failures.length ||
+            incompletePreservation(receipt.verification.quality) ||
             !survivor ||
             !retiring ||
             !generated(survivor) ||
@@ -2290,7 +2506,9 @@ export class TypedViewStore {
                 human: current,
                 candidate,
                 targets,
-                reason: "Explicit edits cannot be preserved safely; authenticated resolution required",
+                reason: targets.includes("editorial:preservation")
+                    ? "Incomplete preservation proposal retained for review; prior supported article unchanged"
+                    : "Explicit edits cannot be preserved safely; authenticated resolution required",
             };
             state.conflicts[conflict.conflictId] = conflict;
         }
@@ -2308,8 +2526,27 @@ export class TypedViewStore {
         generation: NonNullable<ViewVersion["generation"]>;
         edits: NonNullable<ViewVersion["edits"]>;
     } {
+        const quality = worstSupportQuality(
+            current?.quality,
+            candidate.quality,
+            merged.quality,
+        );
+        if (quality) merged = { ...merged, quality };
+        if (
+            merged.quality &&
+            ["unsupported", "uncertain"].includes(
+                parseSupportQuality(merged.quality).status,
+            )
+        )
+            throw new Error(
+                "Unsupported editorial output cannot be accepted as an article",
+            );
         const candidateId = randomUUID();
         const edits = rebaseViewEdits(current, candidate, merged, candidateId);
+        const candidateQuality =
+            viewHash(candidate.content) === viewHash(merged.content)
+                ? merged.quality
+                : candidate.quality;
         const version: ViewVersion & {
             generation: NonNullable<ViewVersion["generation"]>;
             edits: NonNullable<ViewVersion["edits"]>;
@@ -2330,6 +2567,9 @@ export class TypedViewStore {
                 current?.definition,
             ),
             content: structuredClone(merged.content),
+            ...(merged.quality
+                ? { quality: parseSupportQuality(merged.quality) }
+                : {}),
             generation: {
                 candidateId,
                 content: structuredClone(candidate.content),
@@ -2338,6 +2578,9 @@ export class TypedViewStore {
                 input,
                 outcome: candidate.outcome,
                 missingEvidence: merged.missingEvidence,
+                ...(candidateQuality
+                    ? { quality: parseSupportQuality(candidateQuality) }
+                    : {}),
                 ...inventoryEvidence(merged),
             },
             edits,
@@ -2376,6 +2619,13 @@ export class TypedViewStore {
         )
             throw new Error(
                 "Conflict resolution head/target/input guard changed",
+            );
+        if (
+            request.choice !== "human" &&
+            incompletePreservation(output.quality ?? conflict.candidate.quality)
+        )
+            throw new Error(
+                "Incomplete preservation proposal requires revalidation before replacing the prior article",
             );
         const version = this.generatedVersion(
             conflict.input,
@@ -2694,6 +2944,19 @@ export class TypedViewStore {
                     ),
             ),
         );
+        state.wikiAmbiguityReviews = Object.fromEntries(
+            Object.entries(state.wikiAmbiguityReviews ?? {}).filter(
+                ([, review]) =>
+                    !clearingDerived &&
+                    !review.participants.some(
+                        (participant) =>
+                            affected.has(participant.id) ||
+                            participant.input.inputs.some(matches) ||
+                            participant.input.influenceSources?.some(matches) ||
+                            selected(participant.input.definition),
+                    ),
+            ),
+        );
         state.conflicts = Object.fromEntries(
             Object.entries(state.conflicts ?? {}).filter(
                 ([, conflict]) =>
@@ -2803,6 +3066,7 @@ export class TypedViewStore {
             !Object.keys(state.views).length &&
             !Object.keys(state.builds ?? {}).length &&
             !Object.keys(state.conflicts ?? {}).length &&
+            !Object.keys(state.wikiAmbiguityReviews ?? {}).length &&
             !state.topics &&
             !Object.keys(state.maintenanceReceipts ?? {}).length &&
             !Object.keys(state.publications ?? {}).length &&
@@ -3033,8 +3297,15 @@ export class TypedViewStore {
             (conflict) =>
                 conflict.viewId === viewId && conflict.state === "pending",
         );
+        const quality = viewVersions(state, viewId).at(-1)?.quality;
         return {
             ...publication,
+            ...(quality && quality.status !== "supported"
+                ? {
+                      blockedReason:
+                          "Partial or uncertain support requires a separately verified revision before publication or indexing",
+                  }
+                : {}),
             ...(pending
                 ? {
                       blockedReason:
@@ -3057,6 +3328,8 @@ export class TypedViewStore {
             throw new Error("Publication head or target revision conflict");
         if (current.state !== "draft")
             throw new Error("Only a current eligible draft may publish");
+        if (current.quality && current.quality.status !== "supported")
+            throw new Error("Partial or uncertain support cannot publish");
         if (
             Object.values(state.conflicts ?? {}).some(
                 (conflict) =>
