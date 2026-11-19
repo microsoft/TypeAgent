@@ -80,6 +80,16 @@ Outside the design:
 - **Platform subsets**, such as `canvas.ts` and `dom.ts`, only where an implementation needs a double for its platform (see below).
 - **Implementation specs** in `impl-specs.md`.
 - **A contract suite** for each interface (`<interface>.contract.ts`). Each test is named after the rule ID it checks. Each suite has an input coverage test that fails if its generators stop reaching an input class. Where rules are compiled, the suite only generates the calls and never restates an expression: the design's own expressions decide pass or fail.
+- **Budgets are checked like rules** (agreed 2026-11-18). A budget's
+  complexity class holds for every call in every state (`within` in
+  `rules.ts`). For each budgeted operation the design agent writes a
+  workload for each case its rules tell apart (for a clear: knowing
+  nothing, knowing some shapes by refSeq, knowing some by its own client,
+  knowing all), and performance adversaries, each slow in a real way
+  (scanning every shape present, splicing an array, deleting lazily),
+  which the workloads must catch. Workloads and adversaries make a
+  violation easier to catch; they never define the budget. 2b still reads
+  each operation's algorithm, measured or not.
 - **An observer table** for each stateful interface (`observer-tables.md`): every call against everything observable afterward, each cell settled by a rule.
 - **Scenarios** for whole features (`scenarios.ts`): named stories, as data, of what a user does and what the core visual then shows, with exact positions. Every scenario has a test, and the test defines it; a scenario's story is a gloss. An action says what the user does, not which control does it. They run through a driver each platform writes, which does the actions with its own controls (`Driver` in `scenario.contract.ts`; the test platform's is `driver.ts`), so the same scenarios run on any platform and any mix of real parts and doubles. Every scenario must pass on the reference assembly, which checks it against the rules. Wiring adversaries, each one wrong part among references, are named after the scenario that must catch them.
 
@@ -152,6 +162,55 @@ with a suggested new test.
 **Output:** a single list of findings. Each one is marked as a *bug* in the
 spec or tests, a *decision* for the human, or a *format* issue. The human
 decides each item, and phase 1 is revised before phase 2 starts.
+
+## 1p. Prove (agreed 2026-11-18; pilot in `proof/`)
+
+Rules say what must hold. Proofs say what the rules mean: whether they can
+all hold, whether they say enough, whether each one says something, and
+whether what we say about them is true. They need the rules and the
+vocabulary, not an implementation, so they run before phase 2. The human
+agrees the theorem statements, which are in design terms like the rules,
+and never reads a proof: Lean checks it.
+
+**The obligations,** for each interface whose rules translate to logic:
+
+- **Consistency.** Some implementation can meet all the rules. A proof
+  that two different behaviors both meet them certifies a freedom (the
+  order in which `process` takes its queues was the first).
+- **Determinacy.** The rules fix what can be observed, or the theorem
+  names exactly what they leave free. The first attempt found that
+  `ShapeMessageProcessor`'s rules allowed a shape that no operation made,
+  which became `only-applied`.
+- **Totality.** Every rule expression is true or false in every state;
+  `ruleGen.ts` refuses a non-null assertion, which crashes instead.
+- **Derivations.** Every "so" or "which is" in a gloss, a headline or a
+  task's text is a proved theorem, or is deleted.
+- **Refinement.** Each `@abstract` rule follows from the rules that
+  refine it, rather than only being linked to them.
+
+**Getting more from proofs:**
+
+1. **The catalog shows each obligation** as proved, refuted by a
+   counterexample, or not attempted, as visibly as test status.
+2. **The Lean is generated, not hand-written,** from the rule expressions
+   and vocabulary, as `rules.gen.ts` is, so proofs can't drift from the
+   rules. Rule expressions are functional TypeScript over lists, and the
+   pilot translated them almost one for one.
+3. **A counterexample becomes an adversary.** A failed determinacy proof
+   hands over a model the rules allow but shouldn't; that is a real fault
+   for the tests to catch.
+4. **Derivation prose becomes theorems.** Proving or deleting each
+   derived statement is how proof serves the aim of giving implementers
+   as little prose as possible.
+5. **Freedoms feed phase 3.** A freedom proved here is one phase 3's
+   distinguishing tests need not discover.
+6. **A fresh agent writes the proofs.** The human agrees the statements,
+   the prover agent writes the proofs, and Lean enforces them.
+
+Rules that need a model of floating-point numbers or of object identity,
+and budgets, timing and rendering, are outside this phase for now
+(`proof/survey.md`). Proving that an implementation meets its rules is
+possible too, but implementations are usually too complex to be worth it.
 
 ## 2. Generate (a fresh agent)
 

@@ -22,8 +22,9 @@ Where things stand now, and what has been deferred, is in `STATE.md`.
 ## The method
 
 - `method.md` is the procedure in brief: phase 1 (agree), 1b (challenge),
-  2 (generate), 2b (review), 3 (distinguish two runs), 3b, platform
-  subsets, scenarios and tasks.
+  1p (prove properties of the rules in Lean; `proof/`), 2 (generate), 2b
+  (review), 3 (distinguish two runs), 3b, platform subsets, scenarios and
+  tasks.
 - `moduleTooling.md` is the full version: roles, files, commands, the rule
   format, each phase step by step, and why the procedure looks like this.
 - `impl-specs.md` holds the implementation tasks by round, with their
