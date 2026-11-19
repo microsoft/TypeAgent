@@ -5,6 +5,7 @@ import type {
     ChatModel,
     StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import { openai } from "@typeagent/aiclient";
 import {
     hydrateSchemaAnswers,
@@ -147,7 +148,11 @@ function controlledModel(
         },
     };
     return {
-        adapter: createConfiguredViewSynthesisAdapter(undefined, 4000, model),
+        adapter: createConfiguredViewSynthesisAdapter(
+            undefined,
+            4000,
+            withWikiChoiceResponses(model),
+        ),
         calls,
         model,
     };

@@ -52,7 +52,7 @@ test("consequential topic rejection clears unsupported prose without stopping ot
             const prompt = JSON.stringify(messages);
             prompts.push(prompt);
             const unsafe = prompt.includes("Orders");
-            const response = prompt.includes("Check the ACTUAL")
+            const response = prompt.includes("Audit the proposed output")
                 ? {
                       safe: !unsafe,
                       failures: unsafe
@@ -93,7 +93,9 @@ test("consequential topic rejection clears unsupported prose without stopping ot
         expect(snapshot.occurrences).toEqual(occurrences);
         expect(snapshot.influenceSources).toEqual(input.influenceSources);
         expect(
-            prompts.filter((prompt) => prompt.includes("Check the ACTUAL")),
+            prompts.filter((prompt) =>
+                prompt.includes("Audit the proposed output"),
+            ),
         ).toHaveLength(2);
         expect(prompts.join("\n")).not.toContain("synopsis:generated");
         expect(errors).toHaveBeenCalledTimes(1);

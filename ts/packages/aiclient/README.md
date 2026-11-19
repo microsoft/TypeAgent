@@ -11,6 +11,16 @@ Supported services:
 
 The library includes support for getting settings needed to call these services from environment variables.
 
+## Incomplete Responses API output
+
+The Responses API adapter rejects `status: "incomplete"` responses and throws on
+`response.incomplete` stream events, even when partial text is present. If the
+provider supplies a nonempty string in `incomplete_details.reason` (for example,
+`max_output_tokens` or `content_filter`), the error includes that reason:
+`Model response is incomplete (reason: max_output_tokens)`. Missing or malformed
+reasons retain the generic `Model response is incomplete` error. This only changes
+diagnostics; it does not accept partial output or change request or retry policy.
+
 ## Native decisions
 
 `createDecisionModel({ config?, provider? })` returns a `DecisionResult<DecisionModel>`

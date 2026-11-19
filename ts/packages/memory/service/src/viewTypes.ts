@@ -38,6 +38,8 @@ import type {
 export type * from "./viewMaintenanceTypes.js";
 export type * from "./topicTypes.js";
 export type * from "./viewExtensionTypes.js";
+export type * from "./viewSemanticReview.js";
+export type * from "./viewSeparation.js";
 import type {
     ExtensionViewContent,
     ViewExtensionDefinition,
@@ -429,6 +431,9 @@ export interface MemoryViewService
         Partial<MemorySchemaViewService>,
         Partial<MemoryKnowledgeService>,
         Partial<MemoryAcquisitionService> {
+    separateView?(
+        request: import("./viewSeparation.js").ViewSeparationRequest,
+    ): Promise<import("./viewSeparation.js").ViewSeparationResult>;
     getViewDetailPage?(
         request: import("./viewDetail.js").ViewDetailPageRequest,
     ): Promise<import("./viewDetail.js").ViewDetailPage | undefined>;
@@ -517,6 +522,7 @@ export interface ViewRetainedInput {
     };
 }
 export interface ViewBuildSnapshot {
+    semanticReviewOnly?: "explicit" | "automatic";
     corpusId: string;
     actor: string;
     definition: ViewDefinitionInput;
@@ -681,12 +687,17 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
-    repairInformational?(
+    repairInformationalSupport?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
         report: ViewSupportReport,
         signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
+    reviewInformational?(
+        input: ViewBuildSnapshot,
+        accepted: ViewVersion,
+        signal: AbortSignal,
+    ): Promise<import("./viewSemanticReview.js").ViewSemanticAssessment>;
     /** Inspect complete configured schema-generation wire requests, without inference.
      * Implementations must also inspect every schema audit and repair before dispatch.
      */
@@ -739,6 +750,12 @@ export interface ViewSynthesisAdapter {
         signal: AbortSignal,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
     repairProjectSummary?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
+    repairInformational?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
         assessment: import("./viewEditorial.js").ViewEditorialAssessment,
@@ -834,6 +851,7 @@ export type ViewBuildResultState =
     | "cancelled"
     | "interrupted";
 export interface ViewBuildTargetResult {
+    semanticReview?: import("./viewSemanticReview.js").ViewSemanticReview;
     eligibility?: ViewEligibilityReceipt;
     providerAttempts?: Array<{
         stage: string;
@@ -885,6 +903,7 @@ export interface ViewBuildTargetResult {
     publication?: ViewPublicationStatus;
     wikiAssessment?: WikiSubjectAssessment & { canonicalRevisionId?: string };
     wikiAssessmentKey?: string;
+    wikiAmbiguityDependencies?: Array<{ viewId: string; revisionId: string }>;
     wikiContribution?: {
         input: ViewBuildSnapshot;
         revisionId: string;

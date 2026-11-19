@@ -23,6 +23,7 @@ import {
     publicationProof,
 } from "../src/viewPublication.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
+import { wikiIndex } from "../src/viewContent.js";
 import { versionRelationships } from "../src/viewRelationships.js";
 import type {
     ViewBuildJob,
@@ -101,7 +102,7 @@ function fixture(project = false) {
     const common = {
         title: "Atlas",
         summary: "Atlas is an active reference project.",
-        limits: "",
+        limits: null,
         citationIds: ["f0"],
     };
     const output = project
@@ -149,6 +150,56 @@ function rejection(output: ViewSynthesisOutput): ViewSupportReport {
     });
     return report;
 }
+
+test("configured factual repair preserves every section of a combined wiki", async () => {
+    const { input, output } = fixture();
+    if (output.content.kind !== "wiki")
+        throw new Error("Expected wiki fixture");
+    const original = {
+        ...output,
+        content: {
+            ...output.content,
+            sections: [
+                ...output.content.sections,
+                {
+                    ...output.content.sections[0],
+                    id: "atlas:qualifications",
+                    heading: "Qualifications",
+                    body: "Its owner is not identified.",
+                },
+            ],
+        },
+    };
+    const responses: string[] = [];
+    original.content.index = wikiIndex(original.content.sections);
+    const adapter = createConfiguredViewSynthesisAdapter(undefined, 4000, {
+        completionSettings: {},
+        complete: async (_messages, _usage, schema) => {
+            if (!schema || Array.isArray(schema))
+                throw new Error("Expected a structured repair schema");
+            responses.push(schema.name);
+            return {
+                success: true,
+                data: JSON.stringify({
+                    summary: original.content.summary,
+                    sections: original.content.sections.map(({ id, body }) => ({
+                        id,
+                        body,
+                    })),
+                }),
+            };
+        },
+    });
+    const repaired = await adapter.repairInformationalSupport!(
+        input,
+        original,
+        rejection(original),
+        new AbortController().signal,
+    );
+    expect(responses).toEqual(["wiki_consolidation_repair"]);
+    expect(repaired).toEqual(original);
+    expect(repaired).not.toBe(original);
+});
 
 function wireAssessment(output: ViewSynthesisOutput) {
     return {
@@ -328,7 +379,7 @@ test.each([false, true])(
             model,
         );
         await expect(
-            adapter.repairInformational!(
+            adapter.repairInformationalSupport!(
                 input,
                 output,
                 rejection(output),
@@ -376,7 +427,7 @@ test.each(["accept", "repair", "repeat", "malformed", "conflict", "abort"])(
                         ? controlledInformationalSupport(actual)
                         : rejection(actual);
                 },
-                repairInformational: async (_input, actual) => {
+                repairInformationalSupport: async (_input, actual) => {
                     repairs++;
                     if (mode === "abort")
                         control.abort(
@@ -551,6 +602,10 @@ describe.each([false, true])(
                     {
                         identity: "controlled",
                         generate: async () => structuredClone(output),
+                        checkEditorial: async () => ({
+                            safe: true,
+                            failures: [],
+                        }),
                         validate: async (_input, actual) => {
                             audits++;
                             if (mode === "missing-checker-contract") {
@@ -567,7 +622,7 @@ describe.each([false, true])(
                         ...(mode === "reject"
                             ? {}
                             : {
-                                  repairInformational: async (
+                                  repairInformationalSupport: async (
                                       _input: ViewBuildSnapshot,
                                       actual: ViewSynthesisOutput,
                                   ) => {

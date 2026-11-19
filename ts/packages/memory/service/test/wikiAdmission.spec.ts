@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 import { controlledInformationalValidation } from "./informationalSupportTestModel.js";
 
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import {
     nominateWikiPages,
     parseWikiAssessment,
@@ -606,7 +607,7 @@ test.each([
             const adapter = createConfiguredViewSynthesisAdapter(
                 "openai:WIKI_REPAIR",
                 4000,
-                model,
+                withWikiChoiceResponses(model),
             );
             const signal = new AbortController().signal;
             let merges = 0;
@@ -694,7 +695,7 @@ test.each(["covered", "contribute"] as const)(
         const adapter = createConfiguredViewSynthesisAdapter(
             undefined,
             4000,
-            model,
+            withWikiChoiceResponses(model),
         );
         const result = await adapter.assessWikiSubject!(
             input(),
@@ -734,7 +735,7 @@ test("configured assessment rejects a second invalid response without further re
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     await expect(
         adapter.assessWikiSubject!(
@@ -813,7 +814,7 @@ test("configured Wiki repair identifies omitted fragments and nonverbatim witnes
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     const assessment = await adapter.assessWikiSubject!(
         frozen,
@@ -1058,7 +1059,7 @@ test.each(["sparse-first-page", "sparse-overlap", "useful-ambiguity"] as const)(
             const adapter = createConfiguredViewSynthesisAdapter(
                 "openai:WIKI_UTILITY",
                 4000,
-                model,
+                withWikiChoiceResponses(model),
             );
             expect(
                 await adapter.assessWikiSubject!(
@@ -1153,6 +1154,7 @@ test("one informational target timeout does not cancel independent peers", async
                 });
             },
             validate: controlledInformationalValidation,
+            checkEditorial: async () => ({ safe: true, failures: [] }),
         },
         {
             current: async () => undefined,
@@ -1515,6 +1517,7 @@ test("automatic family compares earlier same-job page, persists skip and replays
                 ],
             };
         },
+        checkEditorial: async () => ({ safe: true, failures: [] }),
         generate: async (snapshot: ViewBuildSnapshot) => {
             generated++;
             return hydrateInformational(snapshot, {
@@ -1621,6 +1624,8 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
         );
         let assessed = 0;
         let model = "offline-utility-reuse-v1";
+        let deferredViewId: string | undefined;
+        const generatedViewIds: string[] = [];
         const adapter = {
             checkEditorial: async () => ({ safe: true, failures: [] }),
             assessWikiSubject: async (
@@ -1628,16 +1633,27 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             ): Promise<WikiSubjectAssessment> => {
                 const sparse =
                     snapshot.definition.wiki?.query === "cache propagation";
-                if (sparse) assessed++;
+                const deferred =
+                    sparse &&
+                    !snapshot.inputs.some((input) =>
+                        input.content.includes(
+                            "verifier metadata refresh across replicas",
+                        ),
+                    );
+                if (sparse) {
+                    assessed++;
+                    deferredViewId ??= snapshot.definition.viewId;
+                    expect(snapshot.definition.viewId).toBe(deferredViewId);
+                }
                 return {
-                    disposition: sparse ? "defer" : "distinct",
-                    ...(sparse && basis !== "legacy"
+                    disposition: deferred ? "defer" : "distinct",
+                    ...(deferred && basis !== "legacy"
                         ? { deferBasis: basis }
                         : {}),
-                    purpose: sparse
+                    purpose: deferred
                         ? "Passing cache reference"
                         : "Open review explanation",
-                    reason: sparse
+                    reason: deferred
                         ? "Insufficient standalone utility"
                         : "Substantive scoped reference",
                     canonicalViewId: "",
@@ -1646,15 +1662,17 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
                     essentialDistinctions: [],
                 };
             },
-            generate: async (snapshot: ViewBuildSnapshot) =>
-                hydrateInformational(snapshot, {
+            generate: async (snapshot: ViewBuildSnapshot) => {
+                generatedViewIds.push(snapshot.definition.viewId);
+                return hydrateInformational(snapshot, {
                     summary: "Grounded reference summary.",
                     status: "partial",
                     title: "Open review",
                     prose: snapshot.inputs[0].content,
                     limits: "Selected evidence",
                     citationIds: ["f0"],
-                }),
+                });
+            },
             validate: controlledInformationalValidation,
         };
         const open = () =>
@@ -1739,11 +1757,25 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             expect(assessed).toBeGreaterThan(afterEdit);
             const afterModel = assessed;
             await ingest(
-                `${source.text} New indexed evidence records a second review condition.`,
+                `${source.text} Cache propagation controls verifier metadata refresh across replicas; cached verifier keys expire after one minute and refresh from the current authoritative key set.`,
             );
+            await service.close();
+            service = open();
             await maintain("resume");
             await maintain("pause");
             expect(assessed).toBeGreaterThan(afterModel);
+            expect(deferredViewId).toBeDefined();
+            expect(
+                generatedViewIds.filter((id) => id === deferredViewId),
+            ).toHaveLength(1);
+            const recovered = await service.getView({
+                corpusId,
+                viewId: deferredViewId!,
+                includeContext: false,
+            });
+            expect(recovered?.content.sections[0].body).toContain(
+                "verifier metadata refresh across replicas",
+            );
         } finally {
             await service.close();
             await rm(root, { recursive: true, force: true });

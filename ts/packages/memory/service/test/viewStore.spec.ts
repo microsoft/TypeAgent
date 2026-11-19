@@ -53,6 +53,112 @@ describe("derived-only View persistence", () => {
     });
     afterEach(async () => rm(root, { recursive: true, force: true }));
 
+    test("canonical ambiguity reopens on a competing revision change while human conflicts stay parked", async () => {
+        const first = await store.saveViewDraft({
+            ...request,
+            viewId: "first",
+            definition: { ...request.definition!, viewId: "first" },
+        });
+        const second = await store.saveViewDraft({
+            ...request,
+            viewId: "second",
+            definition: { ...request.definition!, viewId: "second" },
+            expectedHead: first.commitId,
+        });
+        const snapshot: ViewBuildSnapshot = {
+            corpusId,
+            actor: "owner",
+            definition: request.definition,
+            expectedVersion: 0,
+            bounds: {},
+            inputs: [],
+            pipeline: "informational-wiki-v1",
+            model: "test",
+            fingerprint: "candidate",
+        };
+        const admitted = await store.admitViewBuild(
+            {
+                corpusId,
+                expectedHead: second.commitId,
+                targets: [
+                    { definition: snapshot.definition, expectedVersion: 0 },
+                ],
+            },
+            [snapshot],
+        );
+        await store.updateViewBuild(corpusId, admitted.job.jobId, (job) => {
+            job.state = "partial";
+            job.results[0].state = "blocked";
+            job.results[0].wikiAssessment = {
+                disposition: "ambiguous",
+                purpose: "Candidate purpose",
+                reason: "Two competing pages",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: ["first", "second"],
+            };
+            job.results[0].wikiAmbiguityDependencies = [first, second].map(
+                ({ version }) => ({
+                    viewId: version.viewId,
+                    revisionId: version.revisionId,
+                }),
+            );
+        });
+        const consulted: string[] = [];
+        expect(
+            await store.hasPendingInformationalInput(
+                corpusId,
+                "guide",
+                snapshot,
+                true,
+                (viewId) => consulted.push(viewId),
+            ),
+        ).toBe(true);
+        expect(consulted).toEqual(["first", "second"]);
+        expect(await store.hasInvalidatedWikiAmbiguity(corpusId)).toBe(false);
+        const unchanged = await store.listViews(corpusId);
+        await store.saveViewDraft({
+            ...request,
+            viewId: "unrelated",
+            definition: { ...request.definition!, viewId: "unrelated" },
+            expectedHead: unchanged.head,
+        });
+        expect(
+            await store.hasPendingInformationalInput(
+                corpusId,
+                "guide",
+                snapshot,
+            ),
+        ).toBe(true);
+        const head = (await store.listViews(corpusId)).head!;
+        await store.archiveView({
+            corpusId,
+            viewId: "second",
+            expectedHead: head,
+            expectedVersion: 1,
+        });
+        expect(
+            await store.hasPendingInformationalInput(
+                corpusId,
+                "guide",
+                snapshot,
+            ),
+        ).toBe(false);
+        expect(await store.hasInvalidatedWikiAmbiguity(corpusId)).toBe(true);
+        await store.updateViewBuild(corpusId, admitted.job.jobId, (job) => {
+            job.results[0].state = "conflicted";
+        });
+        expect(
+            await store.hasPendingInformationalInput(
+                corpusId,
+                "guide",
+                snapshot,
+            ),
+        ).toBe(true);
+        expect(await store.hasInvalidatedWikiAmbiguity(corpusId)).toBe(false);
+    });
+
     test("metadata polling selects real retained history fields and preserves committed snapshots", async () => {
         const job: ViewBuildJob = {
             jobId: "current",

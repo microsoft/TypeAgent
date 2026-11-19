@@ -188,7 +188,7 @@ async function readCapture(root, caseId) {
     return capture;
 }
 
-async function checkpointArtifacts(root) {
+async function checkpointArtifacts(root, completed, reason) {
     const schedule = await optionalText(root, "checkpoints.json");
     if (schedule === null) return null;
     const checkpoints = JSON.parse(schedule).checkpoints;
@@ -211,10 +211,31 @@ async function checkpointArtifacts(root) {
             ),
         });
     }
+    const interrupted = checkpoints.filter(
+        (checkpoint) => checkpoint.status === "running",
+    );
+    check(
+        !completed || interrupted.length === 0,
+        "Completed execution has nonterminal checkpoints",
+    );
     return {
         contract: "memory-view-checkpoint-artifacts-v1",
         schedule,
         records,
+        ...(interrupted.length
+            ? {
+                  reconciliation: {
+                      contract: "memory-view-checkpoint-reconciliation-v1",
+                      scheduleHash: sha256(schedule),
+                      checkpoints: interrupted.map(({ sequence }) => ({
+                          sequence,
+                          status: "failed",
+                          stage: "reconciliation",
+                          reason,
+                      })),
+                  },
+              }
+            : {}),
     };
 }
 
@@ -299,7 +320,7 @@ async function collectSlot(slot, root, packet, completed, reason) {
             ),
         });
     }
-    const checkpoints = await checkpointArtifacts(root);
+    const checkpoints = await checkpointArtifacts(root, completed, reason);
     row.checkpointArtifacts =
         checkpoints ??
         emptySlot(slot, "failed", reason, true).checkpointArtifacts;

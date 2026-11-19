@@ -40,6 +40,11 @@ import { ViewBuildStaleError } from "../src/viewBuilds.js";
 import { parseTemporalValue } from "@typeagent/knowpro";
 import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 import { viewContentToText } from "../src/viewText.js";
+import {
+    parseSemanticAssessment,
+    semanticReviewFacets,
+} from "../src/viewSemanticReview.js";
+import type { ViewEditorialAssessment } from "../src/viewEditorial.js";
 
 test("wiki and project summaries preserve semantic warnings and source dates across host clocks", () => {
     const input: ViewBuildSnapshot = {
@@ -130,27 +135,25 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
         expect(brief.content.status).toBe("partial");
-        for (const limits of ["", "   "]) {
-            const wikiWithoutGaps = hydrateInformational(input, {
-                ...value,
-                limits,
-            });
-            const projectWithoutGaps = hydrateProjectSummary(input, {
-                ...project,
-                limits,
-            });
-            expect(wikiWithoutGaps.content.coverageNote).toBe("");
-            expect(wikiWithoutGaps.missingEvidence).toEqual([]);
-            expect(projectWithoutGaps.content.coverageNote).toBe("");
-            expect(projectWithoutGaps.missingEvidence).toEqual([]);
-            expect(viewContentToText(wikiWithoutGaps.content)).not.toContain(
-                "Coverage limits:",
-            );
-            expect(viewContentToText(projectWithoutGaps.content)).not.toContain(
-                "Coverage limits:",
-            );
-            expect(projectWithoutGaps.content.sections).toHaveLength(7);
-        }
+        const wikiWithoutGaps = hydrateInformational(input, {
+            ...value,
+            limits: null,
+        });
+        const projectWithoutGaps = hydrateProjectSummary(input, {
+            ...project,
+            limits: null,
+        });
+        expect(wikiWithoutGaps.content.coverageNote).toBe("");
+        expect(wikiWithoutGaps.missingEvidence).toEqual([]);
+        expect(projectWithoutGaps.content.coverageNote).toBe("");
+        expect(projectWithoutGaps.missingEvidence).toEqual([]);
+        expect(viewContentToText(wikiWithoutGaps.content)).not.toContain(
+            "Coverage limits:",
+        );
+        expect(viewContentToText(projectWithoutGaps.content)).not.toContain(
+            "Coverage limits:",
+        );
+        expect(projectWithoutGaps.content.sections).toHaveLength(7);
         expect(() =>
             hydrateProjectSummary(input, {
                 ...project,
@@ -417,7 +420,11 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 : {}),
         });
     beforeEach(async () => {
+        adapter.checkEditorial = async () => ({ safe: true, failures: [] });
+        delete adapter.repairInformational;
+        delete adapter.repairProjectSummary;
         delete adapter.assessWikiSubject;
+        delete adapter.reviewInformational;
         MockIndexedCorpus.messageTime = undefined;
         MockIndexedCorpus.fragmentRequests = [];
         MockIndexedCorpus.subjects = ["acquisition"];
@@ -446,7 +453,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
 
     async function update(
         corpusId: string,
-        operation: "update" | "pause" | "resume" = "update",
+        operation: "update" | "review" | "pause" | "resume" = "update",
     ) {
         const maintain = async () => {
             for (let attempt = 0; attempt < 10; attempt++) {
@@ -489,6 +496,435 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             ).state,
         ).toBe("complete");
     }
+
+    test.each(["wiki", "projectBrief"] as const)(
+        "rejects an unsupported first %s build after one unsuccessful repair",
+        async (kind) => {
+            const { corpusId } = await service.createCorpus(
+                "First-build factual support",
+            );
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "source",
+                "Acquisition prevents lease-related memory exhaustion.",
+            );
+            let checks = 0;
+            let repairs = 0;
+            adapter.checkEditorial = async (
+                _input,
+                output,
+            ): Promise<ViewEditorialAssessment> => {
+                checks++;
+                return {
+                    safe: false,
+                    failures: ["unsupported-claim"],
+                    diagnostics: [
+                        {
+                            kind: "unsupported-claim",
+                            location: "/content/summary",
+                            quote: output.content.summary!,
+                            reason: "This summary is not supported by the selected source.",
+                            evidence: [],
+                            correction:
+                                "Describe acquisition's memory-exhaustion purpose instead.",
+                        },
+                    ],
+                };
+            };
+            adapter.repairInformational = async (
+                _input,
+                output,
+                assessment,
+            ) => {
+                repairs++;
+                expect(assessment.diagnostics![0].location).toBe(
+                    "/content/summary",
+                );
+                return output;
+            };
+            const job = await buildFactualCase(corpusId, kind);
+            expect(checks).toBe(2);
+            expect(repairs).toBe(1);
+            expect(job.results[0].reason).toContain(
+                "Required correction: Describe acquisition",
+            );
+            expect((await service.listViews(corpusId)).views).toHaveLength(0);
+        },
+    );
+
+    test.each(["wiki", "projectBrief"] as const)(
+        "repairs an unsupported first %s build and retains it when a later repair fails",
+        async (kind) => {
+            maintenanceMode = "manual";
+            await service.close();
+            service = open();
+            const { corpusId } = await service.createCorpus(
+                "Bounded factual repair",
+            );
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "source",
+                "Acquisition prevents lease-related memory exhaustion.",
+            );
+            const supported =
+                "Acquisition prevents lease-related memory exhaustion.";
+            adapter.checkEditorial = async (_input, output) =>
+                output.content.summary === supported
+                    ? { safe: true, failures: [] }
+                    : {
+                          safe: false,
+                          failures: ["unsupported-claim"],
+                          diagnostics: [
+                              {
+                                  kind: "unsupported-claim",
+                                  location: "/content/summary",
+                                  quote: output.content.summary!,
+                                  reason: "The source does not establish this summary.",
+                                  evidence: [],
+                                  correction: `Use: ${supported}`,
+                              },
+                          ],
+                      };
+            adapter.repairInformational = async (_input, output) => ({
+                ...output,
+                content: { ...output.content, summary: supported },
+            });
+            const first = await buildFactualCase(corpusId, kind);
+            expect(first.results[0].state).toBe("draft");
+            const accepted = (await service.listViews(corpusId)).views[0];
+            expect(accepted.content.summary).toBe(supported);
+            await add(
+                corpusId,
+                "correction",
+                `${supported} The trial remains proposed.`,
+            );
+            adapter.repairInformational = async (_input, output) => output;
+            const failed = await buildFactualCase(
+                corpusId,
+                kind,
+                accepted.version,
+            );
+            expect(failed.results[0].state).not.toBe("draft");
+            expect(
+                (await service.listViews(corpusId)).views[0].revisionId,
+            ).toBe(accepted.revisionId);
+        },
+    );
+
+    async function buildFactualCase(
+        corpusId: string,
+        kind: "wiki" | "projectBrief",
+        expectedVersion = 0,
+    ) {
+        const sources = (await service.listSources(corpusId)).map((source) => ({
+            sourceId: source.sourceId,
+            revisionId: source.activeRevisionId,
+        }));
+        return waitForViewBuild(
+            service,
+            await service.buildViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                targets: [
+                    {
+                        expectedVersion,
+                        definition: {
+                            viewId: "factual-case",
+                            kind,
+                            selector: { kind: "sources", sources },
+                            ...(kind === "wiki"
+                                ? {
+                                      wiki: {
+                                          construction:
+                                              "informational-wiki-v1" as const,
+                                          query: "Acquisition",
+                                          aliases: [],
+                                          excludedSourceIds: [],
+                                      },
+                                  }
+                                : {
+                                      projectSummary: {
+                                          construction:
+                                              "informational-project-summary-v1" as const,
+                                          query: "Acquisition",
+                                          aliases: [],
+                                          excludedSourceIds: [],
+                                      },
+                                  }),
+                        },
+                    },
+                ],
+            }),
+        );
+    }
+
+    test("failed assessment is independently recoverable across restart without resynthesis or version churn", async () => {
+        let reviews = 0;
+        adapter.reviewInformational = async (input, view) => {
+            if (++reviews === 1)
+                throw new Error("Injected pre-receipt review failure");
+            return parseSemanticAssessment(
+                {
+                    purpose: "Explain acquisition",
+                    facets: semanticReviewFacets(input).map((id) => ({
+                        id,
+                        state: "partial",
+                        reason: "Owner decision remains unknown",
+                        evidenceIds: ["f0"],
+                    })),
+                    gaps: [
+                        {
+                            facetId: "qualifications",
+                            kind: "missing",
+                            basis: "scope-absence",
+                            description:
+                                "Accountable owner is not established by this packet",
+                            resolutionCondition:
+                                "A source identifies the accountable owner",
+                            evidenceIds: [],
+                        },
+                    ],
+                    separation: null,
+                },
+                input,
+                view,
+            );
+        };
+        const { corpusId } = await service.createCorpus(
+            "Recoverable semantic assessment",
+        );
+        await add(
+            corpusId,
+            "source",
+            "Acquisition is the process for preparing and approving retained evidence.",
+        );
+        await service.drainMaintenance(10_000);
+        const before = (await service.listViews(corpusId)).views[0];
+        const build = (await service.listViewBuilds(corpusId)).find((job) =>
+            job.results.some(
+                (target) => target.semanticReview?.state === "failed",
+            ),
+        )!;
+        expect(build.results[0].state).toBe("draft");
+        expect(build.results[0].semanticReview?.reason).toContain(
+            "Injected pre-receipt",
+        );
+        expect(generated).toBe(1);
+        const store = new TypedViewStore(root);
+        await store.updateViewBuild(corpusId, build.jobId, (job) => {
+            job.results[0].semanticReview!.dueAt = new Date(0).toISOString();
+        });
+        await service.close();
+        service = open();
+        await service.initialize();
+        await service.drainMaintenance(10_000);
+        const after = (await service.listViews(corpusId)).views[0];
+        expect(after.revisionId).toBe(before.revisionId);
+        expect(generated).toBe(1);
+        expect(reviews).toBe(2);
+        const latest = (await store.listSemanticReviews(corpusId))[0].review;
+        expect(latest.state).toBe("complete");
+        expect(latest.attempts).toBe(2);
+        expect(latest.assessment?.gaps[0].basis).toBe("scope-absence");
+        expect(latest.acceptedRevisionId).toBe(after.revisionId);
+        await update(corpusId);
+        expect(reviews).toBe(2);
+        expect(generated).toBe(1);
+    });
+
+    test("explicit review reassesses unchanged accepted content and remains read-only", async () => {
+        let reviews = 0;
+        adapter.reviewInformational = async (input, view) => {
+            reviews++;
+            return parseSemanticAssessment(
+                {
+                    purpose: "Explain acquisition",
+                    facets: semanticReviewFacets(input).map((id) => ({
+                        id,
+                        state: "unresolved",
+                        reason: "Bounded evidence does not settle the facet",
+                        evidenceIds: [],
+                    })),
+                    gaps: [],
+                    separation: null,
+                },
+                input,
+                view,
+            );
+        };
+        const { corpusId } = await service.createCorpus("Explicit assessment");
+        await add(
+            corpusId,
+            "source",
+            "Acquisition is the process for preparing and approving retained evidence.",
+        );
+        await service.drainMaintenance(10_000);
+        const before = (await service.listViews(corpusId)).views[0];
+        expect(reviews).toBe(1);
+        const result = await update(corpusId, "review");
+        expect(result.job?.results).toHaveLength(1);
+        expect(reviews).toBe(2);
+        expect(generated).toBe(1);
+        expect(
+            (await service.getView({ corpusId, viewId: before.viewId }))
+                ?.revisionId,
+        ).toBe(before.revisionId);
+        await update(corpusId, "pause");
+        expect((await update(corpusId, "review")).job).toBeUndefined();
+        expect(reviews).toBe(2);
+    });
+
+    test("forgetting original evidence purges structured assessments and restart cannot recreate them", async () => {
+        adapter.reviewInformational = async (input, view) =>
+            parseSemanticAssessment(
+                {
+                    purpose: "Explain acquisition",
+                    facets: semanticReviewFacets(input).map((id) => ({
+                        id,
+                        state: "covered",
+                        reason: "Original retained evidence",
+                        evidenceIds: ["f0"],
+                    })),
+                    gaps: [],
+                    separation: null,
+                },
+                input,
+                view,
+            );
+        const { corpusId } = await service.createCorpus(
+            "Private review evidence",
+        );
+        await add(
+            corpusId,
+            "source",
+            "Acquisition is the process for preparing and approving retained evidence.",
+        );
+        await service.drainMaintenance(10_000);
+        const store = new TypedViewStore(root);
+        expect(
+            (await store.listSemanticReviews(corpusId))[0].review.assessment,
+        ).toBeDefined();
+        const preview = await service.previewForgetSource(corpusId, "source");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "source",
+            confirmationToken: preview.confirmationToken,
+        });
+        expect(await store.listSemanticReviews(corpusId)).toEqual([]);
+        const before = generated;
+        await service.close();
+        service = open();
+        await service.initialize();
+        await service.drainMaintenance(10_000);
+        expect(await store.listSemanticReviews(corpusId)).toEqual([]);
+        expect((await service.listViews(corpusId)).views).toEqual([]);
+        expect(generated).toBe(before);
+    });
+
+    test("daily automatic review admits one due article per pass and rotates across restarts", async () => {
+        let reviews = 0;
+        const reviewed: string[] = [];
+        adapter.reviewInformational = async (input, view) => {
+            reviews++;
+            reviewed.push(view.viewId);
+            return parseSemanticAssessment(
+                {
+                    purpose: "Explain the selected subject",
+                    facets: semanticReviewFacets(input).map((id) => ({
+                        id,
+                        state: "unresolved",
+                        reason: "Bounded packet",
+                        evidenceIds: [],
+                    })),
+                    gaps: [],
+                    separation: null,
+                },
+                input,
+                view,
+            );
+        };
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        const { corpusId } = await service.createCorpus(
+            "Fair daily assessment",
+        );
+        await add(
+            corpusId,
+            "source",
+            "Acquisition is the process for preparing and approving retained evidence. Capacity defines the amount of retained evidence the service supports.",
+        );
+        await service.drainMaintenance(10_000);
+        expect(generated).toBe(2);
+        const store = new TypedViewStore(root);
+        for (const { jobId, viewId } of await store.listSemanticReviews(
+            corpusId,
+        ))
+            await store.updateViewBuild(corpusId, jobId, (job) => {
+                job.results.find(
+                    (target) => target.viewId === viewId,
+                )!.semanticReview!.dueAt = new Date(0).toISOString();
+            });
+        const initial = reviews;
+        for (let pass = 1; pass <= 2; pass++) {
+            await service.close();
+            service = open();
+            await service.initialize();
+            await service.drainMaintenance(10_000);
+            expect(reviews).toBe(initial + pass);
+        }
+        expect(new Set(reviewed.slice(initial)).size).toBe(2);
+        expect(generated).toBe(2);
+    });
+
+    test("an assessment cannot certify prose changed by a human while review was running", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Guard accepted content",
+        );
+        await add(
+            corpusId,
+            "source",
+            "Acquisition is the process for preparing and approving retained evidence.",
+        );
+        await service.drainMaintenance(10_000);
+        adapter.reviewInformational = async (input, view) => {
+            await service.saveViewDraft({
+                corpusId,
+                viewId: view.viewId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                expectedVersion: view.version,
+                content: { ...view.content, title: "Human-scoped acquisition" },
+                definition: derivedDefinitionInput(view),
+                relationships: authoredRelationships(view),
+            });
+            return parseSemanticAssessment(
+                {
+                    purpose: "Explain acquisition",
+                    facets: semanticReviewFacets(input).map((id) => ({
+                        id,
+                        state: "covered",
+                        reason: "Original evidence",
+                        evidenceIds: ["f0"],
+                    })),
+                    gaps: [],
+                    separation: null,
+                },
+                input,
+                view,
+            );
+        };
+        const result = await update(corpusId, "review");
+        const job = await service.getViewBuild({
+            corpusId,
+            jobId: result.job!.jobId,
+        });
+        expect(job?.results[0].semanticReview?.state).toBe("stale");
+        expect(job?.results[0].semanticReview?.assessment).toBeUndefined();
+        expect((await service.listViews(corpusId)).views[0].content.title).toBe(
+            "Human-scoped acquisition",
+        );
+        expect(generated).toBe(1);
+    });
 
     test("exact native wiki reads can disable corpus-wide contextual expansion without changing the default", async () => {
         maintenanceMode = "manual";
@@ -2267,8 +2703,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 release();
                 const outcome = await maintaining;
                 if (suppress) {
-                    expect(outcome.error).toBeInstanceOf(ViewBuildStaleError);
-                    expect(outcome.result).toBeUndefined();
+                    expect(outcome.error).toBeUndefined();
+                    expect(outcome.result?.job).toBeUndefined();
+                    const family = await new TypedViewStore(root).getWikiFamily(
+                        corpusId,
+                    );
+                    expect(family.dirty).toBe(true);
+                    expect(family.planningConflict?.attempts).toBe(1);
                 } else {
                     expect(outcome.error).toBeUndefined();
                     expect(outcome.result?.job).toBeDefined();

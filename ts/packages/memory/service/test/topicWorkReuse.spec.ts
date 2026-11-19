@@ -216,8 +216,9 @@ test.each([false, true])(
                 (await service.queryTopics({ corpusId, pageSize: 100 }))
                     .totalNodes,
             ).toBe(54);
-            expect(calls).toBe(reuse ? 10 : 18);
-            expect(processedNodes).toBe(reuse ? 120 : 396);
+            // Restricted-output fallback rechecks up to 24 nominated deferrals per tail window.
+            expect(calls).toBe(reuse ? 21 : 29);
+            expect(processedNodes).toBe(reuse ? 324 : 642);
             const current = await new TypedViewStore(root).getTopicState(
                 corpusId,
             );
@@ -480,9 +481,9 @@ function deferred() {
 }
 
 test.each([
-    [48, "zz-added", 2],
-    [55, "zz-added", 2],
-    [48, "aa-added", 6],
+    [48, "zz-added", 5],
+    [55, "zz-added", 5],
+    [48, "aa-added", 11],
 ] as const)(
     "packet prefix replay preserves current output and respects ordering and tail boundaries: %s %s",
     async (count, sourceId, remainingCalls) => {
@@ -679,7 +680,7 @@ test("packet receipts compact prior concept membership and replay exact consolid
     });
     const before = calls;
     const candidate = await generate(next, new AbortController().signal);
-    expect(calls - before).toBe(3);
+    expect(calls - before).toBe(4);
     delete next.topicInput!.reusableCurationPackets;
     const control = await generate(next, new AbortController().signal);
     expect(candidate.curation).toEqual(control.curation);
@@ -813,7 +814,7 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                     48,
                 );
                 expect(state.family.dirty).toBe(true);
-                expect(calls).toBe(4);
+                expect(calls).toBe(6);
                 if (change === "forget") {
                     const preview = await service.previewForgetSource(
                         corpusId,
@@ -890,7 +891,10 @@ test.each(["append", "correction", "forget", "staged-correction"] as const)(
                       ? 2
                       : 1;
             expect(calls - before).toBe(
-                change === "append" ? 2 : expectedCalls * 2,
+                expectedCalls * 3 +
+                    (change === "append" || change === "staged-correction"
+                        ? 2
+                        : 0),
             );
             const page = await service.queryTopics({ corpusId, pageSize: 100 });
             expect(page.totalNodes).toBe(
@@ -1007,10 +1011,10 @@ async function waitTopicJob(service: FileMemoryService, job: ViewBuildJob) {
 }
 
 test.each([
-    [false, "unrelated", 6],
-    [true, "unrelated", 2],
-    [true, "correction", 6],
-    [true, "new-topic", 6],
+    [false, "unrelated", 11],
+    [true, "unrelated", 5],
+    [true, "correction", 11],
+    [true, "new-topic", 11],
 ] as const)(
     "production checkpoint churn preserves only unaffected work and reaches current durable output: reuse=%s change=%s",
     async (reuse, change, expectedRemainingCalls) => {
@@ -1098,7 +1102,7 @@ test.each([
             await ingest("seed", "The pilot remains blocked.");
             const obsolete = await service.rebuildTopics(corpusId);
             await checkpointed.promise;
-            expect(calls).toBe(4);
+            expect(calls).toBe(6);
             await ingest(
                 change === "correction" ? "seed" : "additional",
                 change === "unrelated"
@@ -1145,7 +1149,7 @@ test.each([
                     )
                 ).state,
             ).toBe("complete");
-            expect(calls - completedCalls).toBe(reuse ? 0 : 6);
+            expect(calls - completedCalls).toBe(reuse ? 0 : 11);
             expect(
                 (await service.queryTopics({ corpusId, pageSize: 100 })).nodes,
             ).toEqual(page.nodes);

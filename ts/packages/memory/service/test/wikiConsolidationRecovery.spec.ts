@@ -8,6 +8,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import type { ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { waitForTestState } from "./waitForTestState.js";
+import { semanticReviewFacets } from "../src/viewSemanticReview.js";
 import {
     ConsolidationIndex,
     changeFamily,
@@ -73,6 +74,91 @@ beforeAll(async () => {
 afterAll(async () => {
     if (baseline) await rm(baseline, { recursive: true, force: true });
 });
+
+test("scope-review failure before a consolidation receipt is recoverable without article resynthesis", async () => {
+    const root = await mkdtemp(
+        path.join(os.tmpdir(), "memory-consolidation-review-"),
+    );
+    const { adapter, calls } = offlineConsolidationAdapter();
+    const assess = adapter.assessWikiConsolidation!;
+    adapter.reviewInformational = async (input, view) => ({
+        purpose: view.content.title,
+        facets: semanticReviewFacets(input).map((id) => ({
+            id,
+            state: "covered",
+            reason: "Supported by the retained original evidence",
+            citations: input.inputs
+                .flatMap((source) => source.passages ?? [])
+                .slice(0, 1),
+        })),
+        gaps: [],
+        separation: null,
+    });
+    let fail = true;
+    adapter.assessWikiConsolidation = async (...args) => {
+        if (fail)
+            throw new Error(
+                "Injected scope review failure before application receipt",
+            );
+        return assess(...args);
+    };
+    let service = openService(root, adapter);
+    try {
+        await cp(baseline, root, { recursive: true });
+        await service.initialize();
+        await ingestFixture(
+            service,
+            corpusId,
+            "t1",
+            "document-021.md",
+            "review",
+        );
+        await changeFamily(service, corpusId, "resume");
+        await settleConsolidation(service, corpusId);
+        const jobs = await service.listViewBuilds(corpusId);
+        const failed = jobs
+            .flatMap((job) => job.results.map((target) => ({ job, target })))
+            .filter(({ target }) => target.semanticReview?.state === "failed");
+        expect(failed.length).toBeGreaterThan(0);
+        expect(
+            failed.every(
+                ({ target }) =>
+                    target.state !== "failed" &&
+                    !target.wikiConsolidation &&
+                    target.semanticReview?.assessment &&
+                    target.semanticReview.assessmentCompletedAt,
+            ),
+        ).toBe(true);
+        const generated = calls.generation;
+        const store = new TypedViewStore(root);
+        for (const { job, target } of failed)
+            await store.updateViewBuild(corpusId, job.jobId, (current) => {
+                current.results.find(
+                    (entry) => entry.viewId === target.viewId,
+                )!.semanticReview!.dueAt = new Date(
+                    target.snapshot.definition.wiki?.query.endsWith("review")
+                        ? 0
+                        : Date.now() + 24 * 60 * 60 * 1000,
+                ).toISOString();
+            });
+        await service.close();
+        fail = false;
+        service = openService(root, adapter);
+        await service.initialize();
+        await settleConsolidation(service, corpusId);
+        expect(calls.generation).toBe(generated);
+        expect(
+            (await service.listViewBuilds(corpusId)).some((job) =>
+                job.results.some(
+                    (target) => target.wikiConsolidation?.stage === "ready",
+                ),
+            ),
+        ).toBe(true);
+    } finally {
+        await service.close();
+        await rm(root, { recursive: true, force: true });
+    }
+}, 60000);
 
 test.each(phases)(
     "actual P0 interrupted %s effect resumes exact canonical/redirect/index without synthesis or duplicate versions",

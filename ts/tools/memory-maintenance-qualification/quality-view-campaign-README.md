@@ -105,6 +105,11 @@ Output rows can include `checkpointArtifacts`, contract
 per checkpoint containing its scheduled fields plus exact `saved`, `rendered`,
 and `evidence` strings or null. `hashes.checkpointArtifactsHash` binds this entire
 object. Accepted prefixes are not reclassified if a later update/export fails.
+If a child stops with a checkpoint still `running`, the coordinator retains that
+original schedule and record unchanged. A hash-bound
+`memory-view-checkpoint-reconciliation-v1` entry records its terminal execution
+failure separately. Measurement reviews use that failed reconciliation status
+and stage; reconciliation cannot promote any checkpoint to accepted.
 
 ## Reviewed measurements and release assessment
 
@@ -164,9 +169,11 @@ Empty denominators and missing telemetry are unknown, never perfect/zero.
 
 Topic evaluation remains separate from summary usefulness: pass actual `nodes`,
 `curation.concepts/memberIds`, `curation.deferred/nodeId`, and a complete
-`hierarchy` edge inventory `{id, child, parent}`. Existing adjudicated topic
+production `parents` edge inventory `{parentId, childId}` referencing topic nodes,
+not curated concepts. Existing adjudicated topic
 annotations supply admission/group labels; add a complete hierarchy verdict
-inventory with `acceptable` and `rationale`. Review binds `{snapshot, annotations}`.
+inventory in `annotations.hierarchy` with those exact node endpoints, `acceptable`
+and `rationale`. Review binds `{snapshot, annotations}`.
 The scorer reuses existing admission/pair scoring for membership, false merges/
 splits and separately reports hierarchy acceptability. It rejects duplicate or
 unknown membership, incomplete admission/deferral and selectively reviewed edges.
@@ -428,7 +435,9 @@ meeting cluster for all queries on that meeting and whole-project clusters for
 evolving revisions. Separate datasets/phases require separate packets.
 
 External development can expose descriptive scores with `thresholds: null`,
-but never qualifies quality. External confirmation requires preregistration:
+but never qualifies quality. Every confirmation campaign (including original synthetic cases) requires
+preregistration, evaluator-custodied group splits and an approved calibrated
+review protocol:
 
 ```js
 thresholds: {
@@ -681,6 +690,193 @@ Still required from integration/evaluation owners: licensed approved assets,
 independently reviewed gold/labels, protected confirmation custody, calibrated
 preregistration, explicit model budgets and actual approved live comparisons.
 Engineering tests do not supply those assets or establish prompt improvement.
+
+## Independent review preparation
+
+The bounded example adapter prepares an existing owned **live development**
+run without acquiring data, calling models or opening frozen evaluator labels:
+
+```powershell
+node tools\memory-maintenance-qualification\quality-view-campaign-prepare.mjs `
+  --input examples\viewExamples\.runs\<retained-development-run> `
+  --output <new-review-package-directory> --seed <custodian-blinding-seed> `
+  --pilot-manifest tools\memory-maintenance-qualification\quality-fixtures\manifest.json
+```
+
+The optional pilot flag reads only manifest metadata. Explicit input/output roots
+may be absolute; input requires `.wiki-views-owned.json`. Output must not exist.
+Source files and all other input artifacts remain unchanged. Artifact symlinks,
+unsafe case identities, credential roots and frozen/holdout roots are refused.
+
+Distribute **only `reviewer`**, never `custodian`, the seed or a terminal
+transcript containing it. Reviewer samples have randomized opaque identities,
+projected saved content and rendered text, retained original source text, draft
+requirements and blank judgments. Model/configuration provenance is withheld.
+This is arm blinding, not a claim that human readers cannot recognize scenarios.
+Keep the output judgments independent from the subsequent unblinded request audit.
+
+`custodian` retains exact original files with both SHA-256 byte hashes and
+existing string identities, canonical construction/mapping, actual revision
+witness candidates, gold and annotation drafts, reverse sample mapping,
+provider events and model tape. Every scheduled checkpoint appears, including
+failed and missing outputs. Draft answerability/criticality/verdicts remain
+`null`; authored expectations are not atomized or promoted to independent gold.
+Source witnesses are candidates, not an automated support judgment.
+
+Provider capture preserves **actualSerializedRequest**, provider-reported model
+and raw usage, request/prompt/schema/settings identities, failures and explicit
+unknown usage. Inspected requests never substitute for actual requests.
+Case-level provider calls outside checkpoint job windows remain retained and
+unassigned. Job-time-window joins are explicitly labeled associations, not
+authoritative call/repair phase receipts. Runner ingestion timings are not
+provider timings. The adapter reports which frozen hash encoding was verified
+and separately retains exact frozen-file byte hashes.
+
+These packages are not canonical scored outputs or quality-matrix rows:
+independent reviews are still required. Missing service receipts are listed,
+never fabricated. Source-removal and protected-edit outcomes are not inferred
+from ordinary additive checkpoints.
+Already exposed scenarios remain development; wiki/brief variants and adjacent
+checkpoints share their whole scenario/source/project cluster. Twelve checkpoints
+from two scenarios are **two**, not twelve, independent scenario clusters.
+
+### Citation and maintenance execution receipts
+
+`quality-view-campaign-capture.mjs` exports:
+
+- `captureCitationResolutions(service, saved)` reads **exact saved-file text**,
+  resolves each unique accepted original passage through
+  `getSourceContent({corpusId, sourceId, revisionId, indexedLocator})`, and retains
+  actual request/response pairs. Citations absent from the accepted selection
+  fail instead of being relabeled selected evidence.
+- `validateCitationCapture(capture, saved)` verifies exact saved-byte binding,
+  complete unique selection coverage, source/revision/locator identity,
+  nontruncation, full original block hashes, UTF-16 ranges and resolved excerpts.
+
+The bounded-source capture adapter additionally reads retained source content.
+It requires the original indexed block to match the complete retained text or
+an exact retained paragraph, with its hash verified. Truncated source reads
+(over 100,000 characters) and unavailable complete blocks fail explicitly;
+they never become reconstructed or successful resolution receipts. A generated
+article is not used as evidence.
+
+Retain the result as `checkpoint-N-evidence.json`. Preparation validates and
+preserves it, removing the missing-citation blocker only for a complete bound
+capture. It does not convert citation resolution into factual-quality approval.
+
+Optional `checkpoint-N-operations.json` arrays retain actual synthetic service
+operations, including failed attempts and successful resumptions. Blinded
+projections expose protected editorial text, edited content, split children and
+the retained overview, but not model provenance or confirmation tokens.
+Missing-experiment reporting requires completed operation-specific checks:
+saving a human edit alone does not establish protection during a later refresh.
+Forgetting that purges an article is operation-only expected-absence evidence,
+not a fabricated successful saved/rendered construction or preservation score.
+
+An expanded live development handoff contains 19 original accepted checkpoints
+across five independent scenario clusters, all with verified citation receipts.
+It includes a native two-destination split with explicit synthetic confirmation,
+protected-edit correction/restart, and source forgetting across inventory,
+history, indexed citations, split navigation, children and restart while an
+unrelated accepted article remains unchanged. Its 81 instrumented logical view
+calls all completed; source extraction, embedding/backfill, topic calls outside
+that adapter and internal transport retries remain outside this measurement.
+Independent annotations, calibrated agreement, numeric thresholds and sealed
+confirmation remain pending. No human approval is implied by these executions.
+The reported v25 live observations predate integration of choice-only Wiki
+verdicts and restricted topic-reconciliation routing; they do not qualify that
+combined decision policy.
+
+### Frozen review and split guard
+
+`quality-view-campaign-review.mjs` exports `validateGroupSplit(inventory,
+assignments)`, `validateCampaignSplit(campaign)` and
+`validateReviewProtocol(protocol, campaign, run)`. Custodians validate the whole
+cohort's opaque cluster metadata without distributing confirmation sources or
+labels to prompt authors. A cluster reused across source/project/topic/meeting
+identities cannot cross development/confirmation.
+
+Confirmation campaigns must include
+`splitCustody: {inventory, assignments: [{id, phase}]}`. Construction bundles
+must match their custodied clusters and phase exactly. Do not populate this with
+checkpoint-level random splits. Optional `campaign.split` likewise binds
+construction inventory to one phase.
+
+`campaign.reviewProtocol` must contain schemaVersion 1, independent author and
+reviewer, approved status, reviewedAt, rubricHash and calibration. Calibration
+must carry the same rubricHash, approved status, two independent reviewer IDs,
+reviewedAt, explicit positive minimumAgreement and nonempty judgments:
+`{id, artifactHash, votes: [{reviewer, verdict}], resolution}`. Every reviewer
+must vote on every retained sample. The validator computes agreement from those
+votes rather than trusting a reported score. These are human attestations,
+not authenticated identities or trusted timestamps.
+
+Calibration precedes protocol approval, which precedes threshold registration;
+registration must strictly precede confirmation execution. Thresholds bind the
+exact rubric/calibration identities. `protocol.candidateHashes` must equal the
+identities of all frozen run arms, preventing post-registration prompt,
+configuration or model changes. Pending drafts cannot pass any of these gates.
+No real human reviewer, calibration judgments or numerical thresholds are
+created by preparation.
+
+### Additional task annotations
+
+Core gold and annotation contracts remain unchanged. Optional `gold.cases[].tasks`
+and matching `annotation.tasks` extend the existing scorecard, not a separate
+benchmark. All tasks require id, metric, requirement, criticality and original
+revision witnesses (a human-edit task may instead have no source witnesses).
+Task verdicts require id, boolean correct, rationale and exact
+`evidence: [{artifact: "saved" | "rendered", quote}]`.
+An outputless failed/missing attempt instead requires an empty evidence array
+and a false or null verdict (topic observations remain uncertain). It retains
+its scheduled denominator without fabricated output quotes or success credit.
+
+- `issueOrdering`: gold before/after issue identities and basis
+  (`source-stated`, `supported-consequence`, `reader-order`). Verdicts include
+  beforeQuote/afterQuote; a passing verdict must agree with actual rendered
+  order. Reviewers establish materiality without inventing formal severity.
+- `topicFalseMerge` / `topicFalseSplit`: gold subject and expected
+  `different` / `same`; observed is same/different/uncertain. Scores are error
+  rates over decisive observed pairs. Uncertain/missing pairs do not become
+  successes and have unknown denominators when no decisive judgments exist.
+- `topicAdmission`: expected and observed admitted/deferred judgments.
+- `correctionUptake`, `staleClaimRemoval`, `unaffectedPreservation`,
+  `sourceForgetting`, `humanEditGuard`: per-checkpoint behavioral accuracy.
+  Shared gold identifies the predecessor **case ID** with previousCheckpointId.
+  Each output's `taskBindings: [{id, previousSavedHash, previousRenderedHash}]`
+  binds that task to the exact predecessor bytes on the same arm/generation.
+  Different arms/generations may have different predecessor artifacts; shared
+  gold must not contain artifact hashes. The predecessor must be a different
+  scheduled attempt. Missing predecessor artifacts cannot earn success credit.
+  Removal tasks additionally define obsoleteQuote and expected
+  `absent` or `historical-only`; absence is checked in saved and rendered bytes,
+  while historical-only interpretation is a human judgment.
+
+Source-forgetting tasks require removedSourceId.
+Protected-edit tasks require protectedQuote (rendered), protectedSavedQuote
+(exact saved serialization). Each corresponding per-attempt task binding also
+requires operationReceiptHash. Retain the exact receipt
+string in `row.taskReceipts`; its string identity must match. Parsed receipts
+must have the same caseId, state complete and kind source-removal/human-edit;
+removal binds sourceId, editing binds protectedQuote. Removed sources cannot
+remain in selected evidence. These receipts attest execution, not semantic
+truth. Do not create them for experiments that were never performed.
+
+Task metrics with no reviewed targets remain null. Critical reviewed task errors
+join the existing critical-error gate. Retained failed attempts cannot gain task
+preservation credit. `selectedFact` and `preservedFact` separately report request
+selection and correct rendered preservation across all accessible gold targets,
+in addition to qualification-specific selection/preservation metrics.
+
+Focused offline checks (regressions, not live quality evidence):
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+node --test tools\memory-maintenance-qualification\quality-view-campaign.test.mjs `
+  tools\memory-maintenance-qualification\quality-view-campaign-cli.test.mjs `
+  tools\memory-maintenance-qualification\quality-view-campaign-review.test.mjs `
+  tools\memory-maintenance-qualification\quality-view-campaign-prepare.test.mjs
+```
 
 ## Existing example-runner artifact bridge
 

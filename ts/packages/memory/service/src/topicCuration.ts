@@ -22,6 +22,7 @@ import { validateTopicMaintenance } from "./topicClusterMaintenance.js";
 import {
     TopicEvidenceIndex,
     TopicNominationIndex,
+    nominateDeferredTopics,
     topicSourceKey,
 } from "./topicLookup.js";
 import { yieldMaintenanceBuild } from "./maintenanceConcurrency.js";
@@ -45,6 +46,10 @@ import {
     reconcileFrozenTopics,
     runFrozenTopicWindows,
 } from "./topicFrozenPreparation.js";
+import {
+    withGenerativeTopicDecisions,
+    type TopicGenerativeDecisionReceipt,
+} from "./topicGenerativeDecision.js";
 import {
     indexTopicDecisionEvidence,
     topicClusterSignature,
@@ -89,6 +94,9 @@ export interface TopicCurationCall {
     signal: AbortSignal;
 }
 export interface TopicCurationOptions extends TopicCurationSettings {
+    onGenerativeDecision?:
+        | ((receipt: TopicGenerativeDecisionReceipt) => void)
+        | undefined;
     candidates?: Candidate[];
     replayPackets?: TopicCurationPacket[];
     onPacket?: (packet: TopicCurationPacket) => void;
@@ -441,6 +449,10 @@ function prepareTopicPacket(
         payload,
         schema,
         batch.map((node) => [node.id, node.memberIds ?? [node.id]]),
+        ...(options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
+            ? ["generative-partition-v1", options.generativeDecisionStage]
+            : []),
     ]);
     recordSearchTiming("topic.curation.packet", performance.now() - started, {
         ordinal,
@@ -542,6 +554,19 @@ function createTopicCuration(
             "Topic packet replay requires lazy curation with ordered installation",
         );
     options = { ...options };
+    if (
+        options.generativeDecisionStage &&
+        options.generativeDecisionStage !== "original"
+    ) {
+        complete = withGenerativeTopicDecisions(
+            complete,
+            options.generativeDecisionStage,
+            options.onGenerativeDecision,
+            options.inspectRequest ?? complete.inspectRequest,
+        );
+        if (complete.inspectRequest)
+            options.inspectRequest = complete.inspectRequest;
+    }
     if (options.compactIds) {
         complete = compactTopicCompletion(complete, options.inspectRequest);
         if (complete.inspectRequest)
@@ -864,6 +889,13 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
         );
         result.concepts.push(...decisions.concepts);
         nominations.replace(packet.reconsidered, decisions.concepts);
+        const reassessed = new Set([
+            ...decisions.concepts.flatMap((concept) => concept.memberIds),
+            ...decisions.deferred.map((entry) => entry.nodeId),
+        ]);
+        result.deferred = result.deferred.filter(
+            (entry) => !reassessed.has(entry.nodeId),
+        );
         result.deferred.push(...decisions.deferred);
         signal.throwIfAborted();
         if (options.onPacket) {
@@ -927,8 +959,14 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                     0,
                     { fingerprint: viewHash(value) },
                 );
+            const deferred = nominateDeferredTopics(
+                snapshot,
+                result,
+                packets.flatMap((packet) => packet.batch),
+            );
             const batch: Candidate[] = [
                 ...packets.flatMap((packet) => packet.batch),
+                ...deferred,
                 ...result.concepts.map((concept) => ({
                     ...concept,
                     prior: concept,
@@ -938,6 +976,7 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                 ...new Map(
                     [
                         ...packets.flatMap((packet) => packet.supplied),
+                        ...deferred.flatMap(evidenceFor),
                         ...result.concepts.flatMap(
                             (concept) => concept.citations,
                         ),
@@ -961,7 +1000,7 @@ ${options.priorDeltas ? "Each role new node must appear EXACTLY once; unchanged 
                 schema,
                 ordinal: Math.ceil(packets[0].ordinal / 2),
                 fingerprint: viewHash([
-                    "frozen-window-v1",
+                    "frozen-window-v2",
                     topicCurationPolicy(true, options),
                     snapshot.recipe,
                     rules,

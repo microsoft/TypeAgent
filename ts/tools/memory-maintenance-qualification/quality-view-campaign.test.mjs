@@ -634,6 +634,49 @@ test("v2 rejects self-review and tampered review bindings", () => {
     assert.throws(() => measure(f), /artifact binding/);
 });
 
+test("v2 scores interrupted checkpoints without rewriting their captured schedule", () => {
+    const f = measurementFixture();
+    const row = f.input.outputs.records[0];
+    row.status = "failed";
+    row.reason = "Synthetic child interruption";
+    const artifacts = row.checkpointArtifacts;
+    const captured = artifacts.records[0];
+    captured.status = "running";
+    captured.stage = "construction";
+    const { saved, rendered, evidence, ...original } = captured;
+    artifacts.schedule = JSON.stringify({ checkpoints: [original] });
+    const schedule = artifacts.schedule;
+    artifacts.reconciliation = {
+        contract: "memory-view-checkpoint-reconciliation-v1",
+        scheduleHash: sha256(schedule),
+        checkpoints: [
+            {
+                sequence: captured.sequence,
+                status: "failed",
+                stage: "reconciliation",
+                reason: row.reason,
+            },
+        ],
+    };
+    const review = f.measurements.records[0].checkpoints[0];
+    review.status = "failed";
+    review.stage = "reconciliation";
+    review.expectations[0].satisfied = false;
+    bindMeasurements(f);
+    const scored = measure(f).details[0].checkpoints[0];
+    assert.equal(scored.status, "failed");
+    assert.equal(scored.metrics.newFactUptake.value, 0);
+    assert.equal(artifacts.schedule, schedule);
+    assert.equal(captured.status, "running");
+    artifacts.reconciliation.scheduleHash = h;
+    bindMeasurements(f);
+    assert.throws(() => measure(f), /bind the original schedule/);
+    artifacts.reconciliation.scheduleHash = sha256(schedule);
+    artifacts.reconciliation.checkpoints[0].status = "accepted";
+    bindMeasurements(f);
+    assert.throws(() => measure(f), /only fail interrupted/);
+});
+
 test("v2 scores exact reviewed issue spans, allowing ties/incomparability through absent constraints", () => {
     const f = measurementFixture();
     f.rubric.cases[0].ordering = [
@@ -686,7 +729,7 @@ test("topic measurements reuse admission/merge/split scoring with complete hiera
             ],
             deferred: [{ nodeId: "c" }],
         },
-        hierarchy: [{ id: "edge", child: "one", parent: "two" }],
+        parents: [{ childId: "a", parentId: "b" }],
     };
     const annotations = {
         splitId: "synthetic-development",
@@ -699,7 +742,7 @@ test("topic measurements reuse admission/merge/split scoring with complete hiera
         ],
         hierarchy: [
             {
-                ...snapshot.hierarchy[0],
+                ...snapshot.parents[0],
                 acceptable: true,
                 rationale: "Synthetic reviewed edge",
             },
@@ -714,6 +757,22 @@ test("topic measurements reuse admission/merge/split scoring with complete hiera
     assert.equal(result.falseMerges, 0);
     assert.equal(result.annotationMetrics.admission.recall, 1);
     assert.equal(result.hierarchyAcceptability.value, 1);
+    const invalid = structuredClone(snapshot);
+    invalid.parents[0].parentId = "one";
+    const invalidAnnotations = structuredClone(annotations);
+    invalidAnnotations.hierarchy[0].parentId = "one";
+    assert.throws(
+        () =>
+            scoreReviewedTopicSnapshot(
+                invalid,
+                invalidAnnotations,
+                reviewed({
+                    snapshot: invalid,
+                    annotations: invalidAnnotations,
+                }),
+            ),
+        /actual topic nodes/,
+    );
     snapshot.curation.concepts[0].memberIds.push("b");
     assert.throws(
         () =>
@@ -1020,6 +1079,11 @@ for (const [name, mutate, pattern] of [
     test(`release protocol rejects ${name}`, () => {
         const f = releaseFixture();
         mutate(f);
+        if (["identical controls", "provider confounding"].includes(name)) {
+            freezeConfirmationReview(f.input);
+            bindMeasurements(f);
+            f.registration.campaignHash = identity(f.input.campaign);
+        }
         if (
             [
                 "identical controls",
@@ -1237,6 +1301,88 @@ test("campaign binds exact admitted requests and annotations, excluding auditor-
     assert.throws(() => score(f), /construction/i);
 });
 
+test("reviewed task metrics join the existing scorecard and critical gate without inventing targets", () => {
+    const f = fixture();
+    f.gold.cases[0].tasks = [
+        {
+            id: "admit",
+            metric: "topicAdmission",
+            subject: "ownership",
+            expected: "admitted",
+            critical: true,
+            requirement: "Useful scoped topic",
+            witnesses: f.gold.cases[0].expectations[0].witnesses,
+        },
+    ];
+    f.annotations.records[0].tasks = [
+        {
+            id: "admit",
+            correct: false,
+            observed: "deferred",
+            rationale: "Reviewed useful evidence was deferred",
+            evidence: [{ artifact: "rendered", quote }],
+        },
+    ];
+    rebind(f);
+    const summary = score(f).arms.baseline;
+    assert.equal(summary.metrics.topicAdmission.value, 0);
+    assert.equal(summary.metrics.sourceForgetting.denominator, null);
+    assert.equal(summary.metrics.selectedFact.value, 1);
+    assert.equal(summary.metrics.preservedFact.value, 1);
+    assert.equal(summary.criticalErrors, 1);
+    assert.equal(summary.gate.status, "failed");
+    f.annotations.records[0].tasks = [];
+    assert.throws(() => score(f), /Missing\/unknown task annotation/);
+});
+
+test("failed requests with assigned tasks remain in the campaign denominator without output quotes", () => {
+    const f = fixture();
+    f.gold.cases[0].tasks = [
+        {
+            id: "admit",
+            metric: "topicAdmission",
+            subject: "ownership",
+            expected: "admitted",
+            critical: false,
+            requirement: "Useful scoped topic",
+            witnesses: f.gold.cases[0].expectations[0].witnesses,
+        },
+    ];
+    const row = f.outputs.records[0];
+    Object.assign(row, {
+        status: "failed",
+        saved: null,
+        rendered: null,
+        citationResolutions: [],
+    });
+    const annotation = f.annotations.records[0];
+    annotation.claims = [];
+    annotation.savedConsistent = false;
+    annotation.expectations.forEach((label) =>
+        Object.assign(label, {
+            preserved: false,
+            correct: false,
+            savedQuote: null,
+            outputQuote: null,
+        }),
+    );
+    annotation.tasks = [
+        {
+            id: "admit",
+            correct: null,
+            observed: "uncertain",
+            rationale: "Request retained; provider failed before output",
+            evidence: [],
+        },
+    ];
+    rebind(f);
+    const summary = score(f).arms.baseline;
+    assert.equal(summary.attempts, 1);
+    assert.equal(summary.failures.value, 1);
+    assert.equal(summary.metrics.topicAdmission.denominator, 1);
+    assert.equal(summary.metrics.topicAdmission.numerator, 0);
+});
+
 test("versioned variable inventory, exact artifacts and independently reviewed scorecard", () => {
     const f = fixture();
     assert.equal(validateConstructionPacket(f.packet), identity(f.packet));
@@ -1333,7 +1479,7 @@ function exampleArtifacts(f) {
     };
 }
 
-async function executionFixture(t, calls = 4) {
+async function executionFixture(t, calls = 4, interrupted = false) {
     const project = fileURLToPath(new URL("../../", import.meta.url));
     const parent = path.join(project, "examples", "viewExamples", ".test-runs");
     await mkdir(parent, { recursive: true });
@@ -1402,8 +1548,8 @@ async function executionFixture(t, calls = 4) {
             checkpoints: [
                 {
                     sequence: 1,
-                    status: "accepted",
-                    stage: "complete",
+                    status: interrupted ? "running" : "accepted",
+                    stage: interrupted ? "construction" : "complete",
                     revisionId: receipt.revisionId,
                 },
             ],
@@ -1433,6 +1579,7 @@ for (const [name, data] of Object.entries(files)) {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, data, { flag: "wx" });
 }
+if (${interrupted}) throw new Error("Synthetic child interruption");
 `;
     const bindings = [];
     const arms = [];
@@ -1556,6 +1703,45 @@ for (const [name, data] of Object.entries(files)) {
     };
 }
 
+function freezeConfirmationReview(f) {
+    const calibration = {
+        status: "approved-independent-human-review",
+        rubricHash: f.campaign.thresholds.rubricHash,
+        reviewers: ["calibrator-1", "calibrator-2"],
+        minimumAgreement: 1,
+        reviewedAt: "2026-11-07T08:00:00Z",
+        judgments: [
+            {
+                id: "calibration-regression-fixture",
+                artifactHash: identity(f.outputs.records[0].saved),
+                votes: [
+                    { reviewer: "calibrator-1", verdict: "supported" },
+                    { reviewer: "calibrator-2", verdict: "supported" },
+                ],
+                resolution: "Synthetic regression votes agree",
+            },
+        ],
+    };
+    f.campaign.reviewProtocol = {
+        schemaVersion: 1,
+        status: "approved-independent-human-review",
+        author: "rubric-author",
+        reviewer: "independent-owner",
+        reviewedAt: "2026-11-07T09:00:00Z",
+        rubricHash: calibration.rubricHash,
+        calibration,
+        candidateHashes: f.run.arms.map(identity),
+    };
+    f.campaign.splitCustody = {
+        inventory: f.campaign.inventory,
+        assignments: f.campaign.inventory.map(({ id }) => ({
+            id,
+            phase: "confirmation",
+        })),
+    };
+    f.campaign.thresholds.calibrationRecordHash = identity(calibration);
+}
+
 function upgradeCampaignV2(f) {
     const { input } = f;
     input.campaign.schemaVersion = 2;
@@ -1601,6 +1787,8 @@ function upgradeCampaignV2(f) {
                 .map((record) => ({ ...record, attemptId: row.id })),
         ),
     };
+    if (input.campaign.phase === "confirmation")
+        freezeConfirmationReview(input);
 }
 
 test("campaign coordinator executes all frozen arm/generation slots through child protocol and retains unknown usage", async (t) => {
@@ -1650,6 +1838,38 @@ test("campaign coordinator records every unattempted slot after reservation exha
             .slice(1)
             .every((slot) => slot.status === "not-attempted"),
     );
+});
+
+test("campaign coordinator reconciles interrupted children while retaining raw checkpoint schedules", async (t) => {
+    const spec = await executionFixture(t, 4, true);
+    const result = await executeCampaign(spec);
+    assert.equal(result.outputs.records.length, 4);
+    assert.deepEqual(
+        result.outputs.records.map((row) => row.status),
+        ["failed", "missing", "missing", "missing"],
+    );
+    for (const row of result.outputs.records.slice(0, 1)) {
+        const artifacts = row.checkpointArtifacts;
+        assert.equal(
+            JSON.parse(artifacts.schedule).checkpoints[0].status,
+            "running",
+        );
+        assert.equal(artifacts.records[0].status, "running");
+        assert.equal(
+            artifacts.reconciliation.scheduleHash,
+            sha256(artifacts.schedule),
+        );
+        assert.equal(artifacts.reconciliation.checkpoints[0].status, "failed");
+        assert.equal(
+            artifacts.reconciliation.checkpoints[0].stage,
+            "reconciliation",
+        );
+        assert.match(
+            artifacts.reconciliation.checkpoints[0].reason,
+            /Synthetic child interruption/,
+        );
+        assert.equal(row.hashes.checkpointArtifactsHash, identity(artifacts));
+    }
 });
 
 test("campaign coordinator rejects unauthorized settings and mutated frozen implementations before execution", async (t) => {
@@ -2046,6 +2266,7 @@ test("external thresholds are explicit preregistration, not frozen pilot default
             },
         ],
     };
+    freezeConfirmationReview(f);
     rebind(f);
     const result = score(f).arms.baseline;
     assert.equal(result.gate.status, "passed-preregistered-gates");

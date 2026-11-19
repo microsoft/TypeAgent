@@ -23,10 +23,12 @@ export function projectSummaryTestResponse(fragments: Array<{ text: string }>) {
         risks: "Headroom remains an open question.",
         context: "Project knowledge as-of unknown.",
         limits: "Only selected indexed fragments were retrieved.",
-        citationIds: fragments.map((_, position) => `f${position}`),
-        sectionCitationIds: projectSectionCitations(
-            fragments.map((_, position) => `f${position}`),
-        ),
+        citationIds: {
+            article: fragments.map((_, position) => `f${position}`),
+            ...projectSectionCitations(
+                fragments.map((_, position) => `f${position}`),
+            ),
+        },
         projectState: "active",
         incidentState: "closed",
         capacityState: "pendingOwnerReview",

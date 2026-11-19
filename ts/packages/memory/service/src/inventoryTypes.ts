@@ -72,6 +72,10 @@ export interface ViewBuildResultSummary
         ViewBuildTargetResult,
         "viewId" | "state" | "reason" | "revisionId" | "conflictId"
     > {
+    semanticReview?: Pick<
+        NonNullable<ViewBuildTargetResult["semanticReview"]>,
+        "state" | "reason" | "acceptedRevisionId" | "dueAt"
+    >;
     current: boolean;
     conflictState?: ViewMergeConflict["state"] | "missing";
     snapshot: Pick<ViewBuildSnapshot, "pipeline"> & {

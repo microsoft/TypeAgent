@@ -3,6 +3,7 @@
 import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
+import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -420,7 +421,7 @@ test("configured scope comparison binds each article's query and aliases indepen
         const adapter = createConfiguredViewSynthesisAdapter(
             undefined,
             4000,
-            model,
+            withWikiChoiceResponses(model),
         );
         expect(
             await adapter.assessWikiConsolidation!(
@@ -475,7 +476,7 @@ test("configured consolidation repair uses unchanged originals and checks preser
     const adapter = createConfiguredViewSynthesisAdapter(
         undefined,
         4000,
-        model,
+        withWikiChoiceResponses(model),
     );
     const signal = new AbortController().signal;
     const repaired = await adapter.repairWikiConsolidation!(
@@ -975,6 +976,7 @@ test.each([
                 generate: async (snapshot) => output(snapshot),
                 validate: async (_input, output) =>
                     controlledInformationalSupport(output),
+                checkEditorial: async () => ({ safe: true, failures: [] }),
             },
             {
                 update: async (_corpus, _job, update) => {

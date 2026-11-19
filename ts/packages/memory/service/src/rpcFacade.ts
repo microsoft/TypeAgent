@@ -138,6 +138,9 @@ export function createMemoryServiceRpcFacade(
         planViewMaintenance: (...args) =>
             service.planViewMaintenance?.(...args) ??
             unsupportedCapability("view maintenance planning"),
+        separateView: (request) =>
+            service.separateView?.(request) ??
+            unsupportedCapability("confirmed view separation"),
         maintainViews: (...args) =>
             service.maintainViews?.(...args) ??
             unsupportedCapability("view maintenance"),

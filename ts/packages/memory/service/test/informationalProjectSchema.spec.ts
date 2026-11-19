@@ -25,7 +25,6 @@ test("project summary schema has indexed citations and typed states without inve
         "context",
         "limits",
         "citationIds",
-        "sectionCitationIds",
         "projectState",
         "incidentState",
         "capacityState",
@@ -37,7 +36,13 @@ test("project summary schema has indexed citations and typed states without inve
     ]);
     expect(Object.keys(properties).length).toBeLessThanOrEqual(21);
     expect(
-        evidenceRecord(evidenceRecord(properties.citationIds).items).enum,
+        evidenceRecord(
+            evidenceRecord(
+                evidenceRecord(
+                    evidenceRecord(properties.citationIds).properties,
+                ).article,
+            ).items,
+        ).enum,
     ).toEqual(["f0"]);
     for (const role of ["title", "summary", ...projectBriefRoles])
         expect(properties[role]).toMatchObject({
@@ -45,7 +50,9 @@ test("project summary schema has indexed citations and typed states without inve
             pattern: "\\S",
         });
     expect(properties.summary).toMatchObject({ maxLength: 4000 });
-    expect(properties.limits).toMatchObject({ maxLength: 4000 });
+    expect(properties.limits).toMatchObject({
+        anyOf: [{ type: "string", maxLength: 4000 }, { type: "null" }],
+    });
     expect(evidenceRecord(properties.capacityState).enum).toEqual([
         "unknown",
         "pendingOwnerReview",

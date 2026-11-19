@@ -85,6 +85,7 @@ test.each(["semantic", "transient", "derivative"] as const)(
         let rejectTarget = true;
         const adapter = {
             identity: "offline-foundation-v1",
+            checkEditorial: async () => ({ safe: true, failures: [] }),
             assessWikiSubject: async (): Promise<WikiSubjectAssessment> => ({
                 disposition: "distinct",
                 purpose: "Independent explanation",

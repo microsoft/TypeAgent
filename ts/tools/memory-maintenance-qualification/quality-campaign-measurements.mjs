@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { check, hash, identity, text, unique } from "./quality-contract.mjs";
+import {
+    check,
+    hash,
+    identity,
+    sha256,
+    text,
+    unique,
+} from "./quality-contract.mjs";
 import {
     campaignRatio,
     scoreCampaignArtifacts,
@@ -320,6 +327,37 @@ function checkpointClaims(checkpoint, bundle, mapping) {
     };
 }
 
+function reconciledCheckpoints(artifacts) {
+    const result = new Map();
+    const reconciliation = artifacts.reconciliation;
+    if (reconciliation === undefined) return result;
+    const interrupted = artifacts.records.filter(
+        (checkpoint) => checkpoint.status === "running",
+    );
+    check(
+        reconciliation?.contract ===
+            "memory-view-checkpoint-reconciliation-v1" &&
+            reconciliation.scheduleHash === sha256(artifacts.schedule) &&
+            Array.isArray(reconciliation.checkpoints) &&
+            reconciliation.checkpoints.length === interrupted.length,
+        "Interrupted checkpoint reconciliation must bind the original schedule",
+    );
+    for (const checkpoint of reconciliation.checkpoints) {
+        check(
+            interrupted.some(
+                (captured) => captured.sequence === checkpoint.sequence,
+            ) &&
+                !result.has(checkpoint.sequence) &&
+                checkpoint.status === "failed" &&
+                checkpoint.stage === "reconciliation",
+            "Reconciliation may only fail interrupted checkpoints",
+        );
+        text(checkpoint.reason, "checkpoint interruption reason");
+        result.set(checkpoint.sequence, checkpoint);
+    }
+    return result;
+}
+
 function checkpointMetrics(rubric, record, bundle, mapping, artifacts) {
     check(
         artifacts?.contract === "memory-view-checkpoint-artifacts-v1" &&
@@ -338,6 +376,7 @@ function checkpointMetrics(rubric, record, bundle, mapping, artifacts) {
                 ),
         "Original checkpoint schedule/artifact binding required",
     );
+    const reconciled = reconciledCheckpoints(artifacts);
     check(
         Array.isArray(record.checkpoints) &&
             record.checkpoints.length === rubric.checkpoints.length,
@@ -346,13 +385,14 @@ function checkpointMetrics(rubric, record, bundle, mapping, artifacts) {
     return rubric.checkpoints.map((expected, index) => {
         const actual = record.checkpoints[index];
         const captured = artifacts.records[index];
+        const outcome = reconciled.get(captured?.sequence) ?? captured;
         check(
             captured &&
-                actual.status === captured.status &&
+                actual.status === outcome.status &&
                 actual.sequence === captured.sequence &&
                 actual.saved === captured.saved &&
                 actual.rendered === captured.rendered &&
-                actual.stage === captured.stage,
+                actual.stage === outcome.stage,
             "Checkpoint review must bind captured execution artifacts",
         );
         check(
@@ -590,21 +630,34 @@ export function scoreReviewedTopicSnapshot(snapshot, annotations, review) {
         "Full topic annotation required",
     );
     const result = evaluateTopicDecision(snapshot, annotations);
-    const edges = unique(snapshot.hierarchy, "id", "actual hierarchy edges");
-    sameInventory(
-        annotations.hierarchy,
-        snapshot.hierarchy,
-        "hierarchy judgments",
+    check(
+        Array.isArray(snapshot.parents),
+        "Actual topic parent edges required",
     );
-    for (const edge of annotations.hierarchy) {
+    check(
+        Array.isArray(annotations.hierarchy),
+        "Full hierarchy review required",
+    );
+    const edgeId = ({ parentId, childId }) => identity([parentId, childId]);
+    const hierarchy = snapshot.parents.map((edge) => ({
+        ...edge,
+        id: edgeId(edge),
+    }));
+    const judgments = annotations.hierarchy.map((edge) => ({
+        ...edge,
+        id: edgeId(edge),
+    }));
+    const edges = unique(hierarchy, "id", "actual hierarchy edges");
+    sameInventory(judgments, hierarchy, "hierarchy judgments");
+    for (const edge of judgments) {
         const actual = edges.get(edge.id);
         check(
-            concepts.has(edge.child) &&
-                concepts.has(edge.parent) &&
-                edge.child !== edge.parent &&
-                edge.child === actual.child &&
-                edge.parent === actual.parent,
-            "Hierarchy edge needs distinct actual concepts",
+            nodes.has(edge.childId) &&
+                nodes.has(edge.parentId) &&
+                edge.childId !== edge.parentId &&
+                edge.childId === actual.childId &&
+                edge.parentId === actual.parentId,
+            "Hierarchy edge needs distinct actual topic nodes",
         );
         flag(edge.acceptable, "hierarchy acceptability");
         text(edge.rationale, "hierarchy rationale");

@@ -348,7 +348,10 @@ test("named generative settings and Decision factories retain distinct recipes",
                 };
             },
         },
-        mode: { kind: "generative" },
+        mode: {
+            kind: "generative",
+            settings: { generativeDecisionStage: "original" },
+        },
     });
     const result = await generate(input(1), new AbortController().signal);
     expect(curationCalls).toBe(2);
@@ -538,7 +541,10 @@ test.each([false, true])(
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const snapshot = await generator(
             input(7),
@@ -664,7 +670,10 @@ test.each([
                     };
                 },
             },
-            mode: { kind: "generative" },
+            mode: {
+                kind: "generative",
+                settings: { generativeDecisionStage: "original" },
+            },
         });
         const outcome = generator(input(2), controller.signal);
         if (mode === "repeated" || mode === "transport" || mode === "abort") {
@@ -776,6 +785,11 @@ test.each([1, 8, 9, 17])(
                     throw new Error("Expected text payload");
                 const payload = JSON.parse(content);
                 expect(payload.evidence).toHaveLength(count);
+                if (calls === 0)
+                    expect(payload.evidence[count - 1]).toEqual({
+                        id: count - 1,
+                        ...citations[count - 1],
+                    });
                 return {
                     success: true,
                     data: JSON.stringify(
@@ -820,7 +834,11 @@ test.each([-1, 0.5, 9, "8"])(
                     purpose: "Test",
                     memberIds: ["topic:one"],
                     summary: "",
-                    citations: occurrence("source").citations,
+                    citations: Array.from(
+                        { length: 9 },
+                        (_, index) =>
+                            occurrence(`source-${index}`).citations[0],
+                    ),
                     salience: 4,
                 },
                 new AbortController().signal,
@@ -832,12 +850,11 @@ test.each([-1, 0.5, 9, "8"])(
 test("curation checkpoints seed only unchanged policy and exact captured evidence", async () => {
     const frozen = await capture(input(55).topicInput!.occurrences);
     const checkpoints: TopicSnapshot[] = [];
-    let calls = 0;
     const generator = createConfiguredTopicGenerator({
         model: {
             completionSettings: {},
             complete: async (messages) => {
-                if (++calls === 5)
+                if (checkpoints.length)
                     throw new Error("Curation provider interrupted");
                 const payload = JSON.parse(promptText(messages, 1));
                 return {
@@ -902,7 +919,7 @@ test("partial summary checkpoints retain only audited prose and can seed exact-e
                         data: JSON.stringify({ parents: [], related: [] }),
                     };
                 const payload = JSON.parse(promptText(messages, 1));
-                if (instructions.includes("Check the ACTUAL")) {
+                if (instructions.includes("Audit the proposed output")) {
                     const sourceId = payload.evidence[0].sourceId;
                     if (sourceId === "source-0") await held.promise;
                     audited.add(sourceId);
@@ -976,7 +993,7 @@ test("checkpoint persistence failure drains workers and prevents organization", 
                 return {
                     success: true,
                     data: JSON.stringify(
-                        instructions.includes("Check the ACTUAL")
+                        instructions.includes("Audit the proposed output")
                             ? { safe: true, failures: [] }
                             : {
                                   summary: "Rollout remains blocked.",
@@ -1018,7 +1035,7 @@ test("large raw organization visits every topic without inventing same-label par
             return {
                 success: true,
                 data: JSON.stringify(
-                    instructions.includes("Check the ACTUAL")
+                    instructions.includes("Audit the proposed output")
                         ? { safe: true, failures: [] }
                         : {
                               summary: "Rollout remains blocked.",
@@ -1049,7 +1066,7 @@ test("summary schema permits only the exact numeric IDs in each request", async 
                     success: true,
                     data: JSON.stringify({ parents: [], related: [] }),
                 };
-            if (instructions.includes("Check the ACTUAL"))
+            if (instructions.includes("Audit the proposed output"))
                 return {
                     success: true,
                     data: JSON.stringify({ safe: true, failures: [] }),
@@ -1116,7 +1133,7 @@ function blockedModel() {
             const gate = deferred<Response>();
             const instructions = promptText(messages, 0);
             const payload: unknown = JSON.parse(promptText(messages, 1));
-            const kind = instructions.includes("Check the ACTUAL")
+            const kind = instructions.includes("Audit the proposed output")
                 ? "editorial"
                 : instructions.includes("Organize supplied topics")
                   ? "organization"
@@ -1225,6 +1242,8 @@ test("three worker slots bound overlapping summary/editorial calls and retain or
     )!;
     expect(summaryPrompt.instructions).toContain("1600 characters");
     expect(editorialPrompt.instructions).toContain("no rationale");
+    expect(editorialPrompt.instructions).not.toContain("JSON pointer");
+    expect(editorialPrompt.instructions).not.toContain("evidenceIds");
     expect(fake.calls.some((call) => call.instructions.includes("4000"))).toBe(
         false,
     );
@@ -1390,7 +1409,7 @@ test("reuse requires exact owned evidence AND complete same-source revision cont
         completionSettings: {},
         complete: async (messages) => {
             const prompt = promptText(messages, 0);
-            const response = prompt.includes("Check the ACTUAL")
+            const response = prompt.includes("Audit the proposed output")
                 ? { safe: true, failures: [] }
                 : prompt.includes("Organize supplied topics")
                   ? { parents: [], related: [] }
@@ -1468,7 +1487,7 @@ test("concurrent timing retains input ordinals and enabled/disabled equivalence"
         complete: async (messages) => ({
             success: true,
             data: JSON.stringify(
-                promptText(messages, 0).includes("Check the ACTUAL")
+                promptText(messages, 0).includes("Audit the proposed output")
                     ? { safe: true, failures: [] }
                     : promptText(messages, 0).includes(
                             "Organize supplied topics",
@@ -1543,7 +1562,7 @@ test("production model retries quota 429s in worker slots with one inherited agg
             const content = JSON.stringify(
                 summary
                     ? { summary: "Rollout remains blocked.", evidenceIds: [0] }
-                    : instructions.includes("Check the ACTUAL")
+                    : instructions.includes("Audit the proposed output")
                       ? { safe: true, failures: [] }
                       : { parents: [], related: [] },
             );

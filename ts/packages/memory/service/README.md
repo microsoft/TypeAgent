@@ -42,7 +42,7 @@ New informational publication requires proof bound to the exact input fingerprin
 artifact and support result. Existing retained history remains readable; old
 unproved artifacts are not relabeled as checked and require validation/rebuild
 before new publication or consolidation acceptance. Recipe v12 and configured
-synthesis v29 invalidate reuse under the prior policy. Rollback must preserve
+synthesis v30 invalidate reuse under the prior policy. Rollback must preserve
 factual rejection and citation protections, not disable checks.
 
 Informational `limits` may be empty when no material coverage gap exists. Empty
@@ -53,7 +53,9 @@ inventing severity ranks. Deterministic contract tests do not establish measured
 model quality; independently reviewed development and untouched confirmation
 comparisons remain required before a quality claim.
 
-Project construction requires `sectionCitationIds` with every project role.
+Project construction requires `citationIds.article` and `citationIds.<sectionRole>`
+with every project role. Legacy injected responses with separate `sectionCitationIds`
+must also bind every role explicitly; aggregate-only responses are rejected.
 Only those exact, aggregate-selected fragments become that section's evidence
 relationships; empty lists create no relationship. The host never expands the
 aggregate citation list into a section/source cross-product. Factual checking
@@ -86,6 +88,43 @@ factual repair. Repeated invalid reports, provider failures and cancellation
 remain explicit failures. Injected adapters still owe the full
 `informational-support-v1` report; no old approval fallback is accepted.
 
+Explicitly confirmed separation destinations also require their own final-output
+support proof before a child is staged or made visible. A factual repair repeats
+the editorial checks before acceptance; a parent article's proof cannot authorize
+a different child artifact.
+
+## Bounded Wiki decisions
+
+The configured synthesis adapter uses `GPT_6_LUNA` with strict **choice-only**
+answers for Wiki utility, admission/canonical selection, contribution coverage,
+editorial/consolidation verification, completeness and consolidation relation.
+Answers contain only `{ type: "choice", choice: "<offered value>" }` under their
+question IDs; probabilities, confidence, explanations and extra fields are rejected.
+
+Existing evidence preparation still produces purpose, exact prose witnesses and
+critical distinctions. Those fields pass the original host validators before the
+restricted decisions run. Utility receives original evidence without page context.
+Admission/coverage and consolidation must agree with the validated preparation;
+disagreement or uncertainty fails the operation explicitly, without manufacturing
+evidence, accepting the prepared verdict as fallback or resampling the decision.
+Editorial categories retain their existing safe/failures consistency checks.
+Informational Wiki checks also prepare detailed diagnostics bound by the host to
+the actual output values and original fragment quotes, including unsupported
+claims. Independent choice-only editorial verdicts must agree with those
+categories before diagnostics can drive the existing bounded factual repair.
+Repairs still use unchanged original evidence and recheck the actual repaired output.
+Completeness can change the article's status but never its prose or citations.
+
+This behavior is enabled by default for the configured Wiki adapter. It requires a
+configured Azure/OpenAI Luna endpoint; there is no fallback to another model.
+Prose generation, evidence-contract repair, project summaries, non-Wiki Views and
+topic curation retain their existing models and contracts. Additional decision
+calls use the existing scheduler, cancellation and provider request budgets.
+The combined `evidence-first-v30-wiki-luna-choice` adapter identity includes both
+the prose and Wiki decision model identities. Earlier `evidence-first-v25`
+results remain historical evidence, not validation of this combined policy.
+Rollback requires reverting this policy change, not changing the global prose model.
+
 ## Retained ingestion jobs
 
 Corpus status, paginated job lists, individual job reads, restart recovery and
@@ -94,6 +133,33 @@ job-file reads per service instance. Large retained histories must not open all
 job files at once. Filtering, ordering and pagination remain unchanged;
 unreadable or corrupt job files still fail explicitly rather than producing
 an apparently empty or complete result.
+
+## Recoverable Wiki construction planning
+
+Wiki and project construction planning validates the descriptors it uses or
+changes, target revisions, original source revisions and construction access.
+Retained admission and candidate-visit decisions also track every nominated
+coverage/canonical page and its separation relationships, including decisions
+that select no build. Inputs are checked again immediately before admission;
+the existing build and publication guards remain in force.
+
+Unrelated View additions or revisions do not discard prepared work. Concurrent
+unrelated descriptor changes are merged rather than overwritten and leave the
+family dirty for another bounded pass. Changed consulted dependencies defer the
+plan instead of recording a permanent technical rejection. Existing pages,
+proposals, unprocessed cursors and newly discovered candidate identities are
+retained; no stale proposal authorizes an overwrite or publication.
+A concurrent family pause remains authoritative and does not create recovery
+writes after the pause.
+
+Deferred planning is durable across restart and visible as pending/deferred
+maintenance. The existing 30-second reconciliation wave resumes it, without an
+immediate retry loop. Three consecutive dependency conflicts in one source-index
+generation stop automatic retries with an explicit-maintenance-required error.
+Explicit maintenance or a changed source-index generation resets the streak;
+successful planning clears it without clearing unrelated target failures.
+Configured automatic pass and candidate-read budgets still apply. This recovery
+does not change model selection, admission choices or editorial policies.
 
 ## Installed memory-view packs
 
@@ -917,9 +983,31 @@ have been removed. The `concurrency` and `frozenPreparation` programmatic settin
 `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` and
 `TYPEAGENT_MEMORY_TOPIC_FROZEN_PREPARATION` now fail explicitly.
 Remove these controls instead of selecting another scheduling mode.
-The `curated-lazy-v10:<hash>` recipe invalidates older-policy progress and receipts;
+The default recipe is
+`curated-lazy-v10:<hash>:generative-partition-v1:output-contract`.
+It invalidates original-policy progress and receipts;
 do not relabel saved artifacts. See the [topic curation guide](../../../tools/memory-maintenance-qualification/topic-curation-README.md)
 for remaining settings, checkpoint reuse and replay migration.
+
+Prepared-topic reconciliation now uses restricted-output generative decisions
+by default. The configured chat model (Luna by default) chooses admission,
+deferral and canonical group membership through typed `answers` with complete
+probability distributions and confidence. This is not a native Decision 1 call.
+Raw-only preparation, descriptive authoring, summaries, editorial validation
+and organization remain generative. Authoring must preserve the decided partition.
+Non-unit probabilities, inconsistent leaders, synthesis requests or changed
+authored membership produce a logged failure and explicit original-generative
+resolution; provider, admission and cancellation failures still propagate.
+Context-aware packing includes the decision schema, original fallback and a
+conservative bound on the authoring payload.
+
+To roll back, set
+`TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE=original`, or pass
+`topicCuration: { generativeDecisionStage: "original" }` to the service.
+`output-contract` is the default; `decomposed` retains a choice-only diagnostic
+control. All three are generative settings and conflict with native Decision
+activation. Switching stages changes the policy and packet identity, so start
+fresh work rather than relabeling receipts.
 
 The LLM decides semantic equivalence, compatible scope and whether a concept
 has a substantive, specific consumer purpose. Host rules validate supplied
@@ -970,7 +1058,7 @@ catalog synchronization is still full-catalog work, not an incremental operation
 Set `FileMemoryServiceOptions.decisionTopics: true`, or
 `TYPEAGENT_MEMORY_DECISION_TOPICS=true` in the native/MCP/CLI/benchmark host,
 to select the experimental `curated-decision-v2` pipeline. The default remains
-the generative `curated-lazy-v10:<hash>` policy. Decision curation requires curated
+the restricted-output generative policy described above. Decision curation requires curated
 topics and explicitly rejects a conflicting custom `generateTopics` adapter;
 ordinary custom-adapter receiver/cancellation behavior is unchanged.
 

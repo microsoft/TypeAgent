@@ -14,6 +14,17 @@ import {
     capturedRequestContains,
     validateRequestCapture,
 } from "./quality-request-capture.mjs";
+import {
+    taskMetrics,
+    taskScore,
+    validateTaskGold,
+    validateTaskLabels,
+    validateTaskContext,
+} from "./quality-view-campaign-tasks.mjs";
+import {
+    validateCampaignSplit,
+    validateReviewProtocol,
+} from "./quality-view-campaign-review.mjs";
 
 export const campaignContract = "informational-view-campaign-v1";
 export const campaignContractV2 = "informational-view-campaign-v2";
@@ -260,11 +271,12 @@ export function validateCampaign(campaign, packet) {
         );
     }
     if (campaign.thresholds !== null) validateThresholds(campaign.thresholds);
-    if (packet.dataset !== "original" && campaign.phase === "confirmation")
+    if (campaign.phase === "confirmation")
         check(
             campaign.thresholds !== null,
             "External confirmation thresholds must be preregistered",
         );
+    validateCampaignSplit(campaign);
     return identity(campaign);
 }
 
@@ -274,6 +286,8 @@ const scoreMetricNames = [
     "supportedClaims",
     "selectedQualification",
     "preservedQualification",
+    "selectedFact",
+    "preservedFact",
     "wikiFullReference",
     "wikiAccessibleReference",
     "briefQueryCoverage",
@@ -281,6 +295,7 @@ const scoreMetricNames = [
     "renderedDelivery",
     "attemptSuccess",
     "criticalErrors",
+    ...taskMetrics,
 ];
 
 function validateThresholds(thresholds) {
@@ -377,6 +392,11 @@ export function validateCampaignRun(run, campaign, packet) {
             Date.parse(campaign.thresholds.registeredAt) <= startedAt,
             "Thresholds registered after run started",
         );
+    if (
+        campaign.phase === "confirmation" ||
+        campaign.reviewProtocol !== undefined
+    )
+        validateReviewProtocol(campaign.reviewProtocol, campaign, run);
     return identity(run);
 }
 
@@ -927,6 +947,7 @@ function validateGold(gold, review, packet, mapping, schemaVersion) {
     for (const bundle of packet.bundles) {
         const entry = cases.get(bundle.id);
         check(entry, "Missing gold case");
+        validateTaskGold(entry.tasks, bundle, mapping, validateCampaignWitness);
         for (const expected of unique(
             entry.expectations,
             "id",
@@ -998,6 +1019,7 @@ function validateAnnotation(
     );
     boolean(annotation.savedConsistent, "savedConsistent");
     const claims = unique(annotation.claims, "id", "claims");
+    validateTaskLabels(expected.tasks, annotation.tasks, row);
     for (const claim of claims.values()) {
         choice(claim.artifact, ["saved", "rendered"], "claim artifact");
         check(
@@ -1104,7 +1126,9 @@ function validateAnnotation(
 
 function coverage(expected, annotation, metric, field, accessibleOnly = false) {
     const targets = expected.expectations.filter(
-        (e) => e.metric === metric && (!accessibleOnly || e.accessible),
+        (e) =>
+            (metric === null || e.metric === metric) &&
+            (!accessibleOnly || e.accessible),
     );
     return campaignRatio(
         targets.filter((e) => {
@@ -1254,6 +1278,7 @@ export function scoreCampaignArtifacts(
         const row = rows.get(slot.id);
         const bundle = packet.bundles.find((b) => b.id === slot.caseId);
         const expected = expectedCases.get(slot.caseId);
+        validateTaskContext(expected.tasks, row, rows);
         for (const evidence of row.selectedEvidence) {
             actualEvidence(evidence, bundle, retained, row.id);
             check(
@@ -1319,6 +1344,12 @@ export function scoreCampaignArtifacts(
                 !annotation.expectations.find((label) => label.id === e.id)
                     .correct,
         ).length;
+        const criticalTasks = (expected.tasks ?? []).filter(
+            (task) =>
+                task.critical &&
+                annotation?.tasks?.find((label) => label.id === task.id)
+                    ?.correct === false,
+        ).length;
         const successful = row.status === "ok";
         const preservation = successful ? annotation : null;
         return {
@@ -1330,7 +1361,7 @@ export function scoreCampaignArtifacts(
             targetDisposition: row.targetDisposition,
             hashes: row.hashes,
             diagnostics,
-            criticalErrors: criticalClaims + criticalFacts,
+            criticalErrors: criticalClaims + criticalFacts + criticalTasks,
             errors: Object.fromEntries(
                 errorKinds.map((key) => [
                     key,
@@ -1365,6 +1396,20 @@ export function scoreCampaignArtifacts(
                     "qualification",
                     "preserved",
                 ),
+                selectedFact: coverage(
+                    expected,
+                    annotation,
+                    null,
+                    "selected",
+                    true,
+                ),
+                preservedFact: coverage(
+                    expected,
+                    preservation,
+                    null,
+                    "preserved",
+                    true,
+                ),
                 wikiFullReference: coverage(
                     expected,
                     preservation,
@@ -1395,6 +1440,17 @@ export function scoreCampaignArtifacts(
                     1,
                 ),
                 attemptSuccess: campaignRatio(Number(successful), 1),
+                ...Object.fromEntries(
+                    taskMetrics.map((metric) => [
+                        metric,
+                        taskScore(
+                            expected.tasks,
+                            annotation?.tasks,
+                            metric,
+                            successful,
+                        ),
+                    ]),
+                ),
             },
         };
     });
