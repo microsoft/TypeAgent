@@ -44,3 +44,9 @@ Phase 1 decisions, agreed with the human. The design is `list.ts` and
   nothing in past, changes nothing" on `undoes` follows from its
   expression, since `last([])` is undefined and `unapply` leaves the
   items unchanged.
+- 2026-11-19: the first scenarios (`scenarios.ts`): allowed
+  `edit-then-undo`, `undo-to-empty` (over every list of texts),
+  `redo-after-undo`, `new-change-clears-redo` and `undo-nothing`;
+  forbidden `undo-wrong-order` and `redo-survives-change`, to be proved
+  in `proof/List.lean`. The reference that `typearc check` judges them on
+  is `listkit.ts`, built from the vocabulary's `apply` and `unapply`.

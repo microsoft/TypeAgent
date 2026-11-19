@@ -1,0 +1,6 @@
+{
+  "interfaces": ["list.ts"],
+  "ruleLanguage": "../rules.ts",
+  "scenarios": "scenarios.ts",
+  "references": { "List": { "file": "listkit.ts", "make": "makeList" } }
+}

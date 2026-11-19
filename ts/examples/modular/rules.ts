@@ -247,3 +247,51 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return ka.length === kb.length &&
     ka.every((k) => deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
+
+/**
+ * A scenario: a behavior of the design, defined by what it does to its
+ * instances. Allowed scenarios are histories the rules must accept, and
+ * forbidden ones histories they must reject. play's parameters are the
+ * instances, typed by the interface each is used as, and then any values
+ * the scenario holds for every choice of; where, if given, limits those
+ * values. play is written in the scenario subset: const and expression
+ * statements, arrow functions with expression bodies, and calls on the
+ * instances, the vocabulary and array built-ins.
+ */
+export interface Scenario {
+  readonly id: string;
+  readonly kind: "allowed" | "forbidden";
+  /** A gloss on the scenario. */
+  readonly headline: string;
+  readonly play: (...args: never) => void;
+  /** Which values the scenario is about, given the values after the instances. */
+  readonly where?: (...values: never) => boolean;
+}
+
+export function scenario<A extends unknown[]>(
+  id: string, kind: "allowed" | "forbidden", headline: string, play: (...args: A) => void, where?: (...values: never) => boolean,
+): Scenario {
+  return { id, kind, headline, play, where };
+}
+
+let expectations: ((holds: boolean) => void) | undefined;
+
+/** An expected effect of a scenario: holds is true when the scenario plays as written. */
+export function expect(holds: boolean): void {
+  if (!expectations) throw new Error("expect is called only while a scenario plays");
+  expectations(holds);
+}
+
+/**
+ * Plays a scenario's steps, giving each expectation to sink, and returns
+ * what play returned. Only scenario checking calls it.
+ */
+export function withExpectations<T>(sink: (holds: boolean) => void, play: () => T): T {
+  const outer = expectations;
+  expectations = sink;
+  try {
+    return play();
+  } finally {
+    expectations = outer;
+  }
+}

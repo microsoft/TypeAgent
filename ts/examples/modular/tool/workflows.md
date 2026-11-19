@@ -179,13 +179,14 @@ Status: Agreed 2026-11-19.
    results come back in seconds.
 
 **Scenarios are allowed or forbidden.** Rules judge a history of calls,
-so a consequence is a call history with its results: a scenario. An
-allowed scenario is one the rules must accept and implementations must
-play; a forbidden one is a history the rules must reject. Both are
-checked in seconds by evaluating the rule expressions on the history,
-with no implementation; allowed ones are also played against
-implementations later. This adds one field to the scenario's general
-form in `elements.md` and no new element.
+so a consequence is a call history with its expected effects: a
+scenario. An allowed scenario is one the rules must accept and
+implementations must play; a forbidden one is a history the rules must
+reject. Allowed scenarios are judged in seconds, with no implementation,
+by playing them on references with every rule checked; forbidden ones
+are proved, and a forbidden one the references play without breaking a
+rule is caught at once (`elements.md`, "How judging works"). Allowed
+ones are also played against implementations later.
 
 **Prose is checked too.** One fast check asks whether the rules entail
 the blueprint's prose: headlines, doc comments, and the sentences of the
@@ -561,3 +562,6 @@ slow; it is off the human's loop.
 - 2026-11-19: a fast check asks whether the rules entail the blueprint's
   prose. The detailed statuses are for the agents; the human sees
   consequences in a view of small surface area.
+- 2026-11-19: allowed scenarios are judged on references, and forbidden
+  ones proved; evaluation alone can't show a scenario is forbidden. This
+  corrects the earlier entry on scenarios.

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc -p platform && node task.ts lint && node ruleGen.ts --check && tsc -p .",
+    "typecheck": "node node_modules/typescript/bin/tsc -p platform && node task.ts lint && node ruleGen.ts --check && node node_modules/typescript/bin/tsc -p .",
     "adversaries": "node adversaries.ts",
     "bench": "node bench.ts",
     "catalog": "node catalog.ts",
@@ -14,6 +14,7 @@
   "devDependencies": {
     "@types/node": "24.19.1",
     "fast-check": "4.10.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "typescript-6": "npm:typescript@6.0.3"
   }
 }

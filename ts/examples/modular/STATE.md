@@ -162,12 +162,13 @@ first project (brief, `list.ts`, `list.vocab.ts`, `decisions.md`).
 
 The path to a design CLI (agreed 2026-11-19), vetted on the undo list,
 with the goal of then adding a feature to circles with the tool:
-1. **`typearc check` and `typearc init`** (in progress, `tool/cli/`, no
-   new dependencies): rule compilation and checking driven by the
-   project rather than circles' file lists; boundary and vocabulary
-   purity checks; allowed and forbidden scenarios judged by the rules
-   (undo's first ones to be proposed to the human); Lean if the project
-   has proofs.
+1. **`typearc check` and `typearc init`** (`node tool/cli/typearc.ts`;
+   working on `undo/`): rule format, boundary, vocabulary purity, rules
+   compiled and typechecked, the scenario subset (parsed with
+   `typescript-6`), scenarios judged on references, and Lean proofs if
+   the project has any. Circles' catalog, ruleGen and ruleCheck now use
+   the same code. Next here: `undo/proof/List.lean` (the laws, the two
+   forbidden scenarios, the brief's sentences).
 2. A generic contract driver: random calls that satisfy `@requires`,
    judged by the rules.
 3. `typearc design`: a Claude Code session whose permissions and hooks
@@ -196,7 +197,9 @@ These failures are expected because phase 2 hasn't produced the parts yet.
     `Rectangle.non-negative-size`, run on the carving results), and
     `RectangleOps.intersects.nonzero-area`, because emptiness is now
     computed (phase 3, task 11) and task 16 also makes that change.
-- **`npx tsc -p .`:** one TS2307 error (`rectDistributor.ts`) and one TS2739
+- **`node node_modules/typescript/bin/tsc -p .`** (not `npx tsc`, which
+  now runs TypeScript 6, installed as `typescript-6` for its parser API):
+  one TS2307 error (`rectDistributor.ts`) and one TS2739
   (`rectangleOps.ts` lacks the new members).
 
 Anything else failing is a real problem.

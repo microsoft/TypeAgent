@@ -209,10 +209,58 @@ steps, each one either:
 A scenario is **allowed** or **forbidden** (agreed 2026-11-19). An
 allowed scenario is a history the rules must accept and implementations
 must play; a forbidden one is a history the rules must reject, such as a
-model holding a shape no add made. Both are checked in seconds by
-evaluating the rule expressions on the history, with no implementation,
-which puts scenarios in the human's fast loop (`workflows.md`). The
-consequences the human agrees to are kept as scenarios of both kinds.
+model holding a shape no add made. The consequences the human agrees to
+are kept as scenarios of both kinds.
+
+**Written in a functional subset of TypeScript** (agreed 2026-11-19). A
+scenario is a function of its instances: `scenario(id, kind, headline,
+play, where?)`, where `play`'s parameters are the instances, typed by the
+interface each is used as. Its body is `const` declarations and
+expression statements; every other arrow function has an expression
+body. Expressions are names in scope, literals, property reads,
+arithmetic, comparisons, logical operators and `?:`, and calls on the
+instances, the vocabulary and the array built-ins (`map`, `forEach`,
+`every` and the like). No assignment, loops or `if`, so the only effects
+are calls on the instances. `expect(e)` states an expected effect. `check`
+enforces the subset with a parser. TypeScript rather than a pseudo-code
+because it typechecks against the interfaces and shares the rules'
+expression language; the same text is played on an implementation and
+judged without one. Views render it compactly for the human, such as one
+line of calls and an arrow to what is expected.
+
+**Parameterized scenarios** (agreed 2026-11-19). Parameters after the
+instances are values the scenario holds for every choice of, like a rule
+written as an arrow function; `where` limits them. Values are generated
+from their types. A scenario with no such parameters is the exact case.
+For example, the undo list's "every change can be undone, back to the
+empty list" is a scenario over every list of texts.
+
+**Judged or played** (agreed 2026-11-19). An expectation written in the
+vocabulary, about what the interfaces expose, can be **judged** without
+an implementation. One about pixels or timing, which is outside logic,
+can only be **played** against implementations, in a slow loop.
+
+**How judging works** (agreed 2026-11-19). Rules read state such as
+`old(this.past)`, which a scenario's expectations don't give in full, so
+judging needs a witness: a state at each step that meets the
+expectations. The witness is detail for the AI and belongs to the
+checking side, not the design. For a scenario over many values it has to
+be computed, so it comes from a reference, a small model written for
+checking. The scenario is played on the references with every rule
+checked on every call:
+- **Allowed:** if the references break no rule and every expectation
+  holds, their states are a witness that the rules allow the scenario.
+  This is sound, and it needs no phase 2 implementation. It rests on the
+  reference, which is itself checked against the rules as it plays.
+- **Forbidden:** one witness that breaks a rule proves nothing, since
+  another might not. Showing that no witness satisfies the rules is
+  entailment, so a forbidden scenario is proved (phase 1p) and until
+  then is reported as unproved. Evaluation still catches one fault
+  fast: if the references play a forbidden scenario without breaking a
+  rule, the rules allow it.
+- A scenario that breaks a `@requires` rule is outside the rules, and a
+  reference that breaks a rule is a fault of the reference; both are
+  reported.
 
 The method can then supply one driver for every project. For now
 everything is an interface: services reached by REST or RPC are
@@ -222,7 +270,11 @@ are left until a project needs them.
 
 **In the example.** `scenarios.ts` holds the circles app's scenarios as
 data: actions, network steps, and effects on the visible canvas.
-`driver.ts` and `scenariokit.ts` play them.
+`driver.ts` and `scenariokit.ts` play them. They become calls on the
+app's external interface, in the subset, once that interface is agreed;
+until then their expectations are about pixels, so they are played, not
+judged. `../undo/scenarios.ts` is written in the subset, and `typearc
+check` judges it on `../undo/listkit.ts`.
 
 ## Placeholder blueprints
 
@@ -506,6 +558,13 @@ fresh spec, run both ways.
 - 2026-11-19: scenarios are allowed or forbidden; both are checked by
   evaluating rules on their histories. The workflows add one concept,
   the proposed change (`workflows.md`).
+- 2026-11-19: scenarios are written in a functional subset of TypeScript,
+  enforced by a parser, and rendered compactly in views. They may have
+  parameters with a where condition. Expectations are judged or played.
+  Allowed scenarios are judged on references, as witnesses; forbidden
+  ones are proved, and are unproved until then. This corrects the
+  earlier entry: evaluation alone can't show that a scenario is
+  forbidden.
 - 2026-11-19: prose is checked against the rules by asking whether they
   entail it; each claim gets a status (entailed, gap, contradicted,
   ambiguous, unchecked) for the agents, and the human sees consequences.

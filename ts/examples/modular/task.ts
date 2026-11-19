@@ -461,7 +461,7 @@ function make(task: Task, testsRunnable = false, proseMinimal = false, second?: 
     type: "module",
     scripts: {
       test: `node .task/task.ts lint-here${testFiles ? ` && node --test ${testFiles}` : ""}`,
-      typecheck: "tsc -p tsconfig.impl.json && tsc -p tsconfig.json",
+      typecheck: "node node_modules/typescript/bin/tsc -p tsconfig.impl.json && node node_modules/typescript/bin/tsc -p tsconfig.json",
       check: "node .task/task.ts check-here",
       ...(commandsOf(task).includes("npm run bench") ? { bench: "node bench.ts" } : {}),
     },
@@ -528,7 +528,7 @@ function makeDistinguish(task: Task, second?: string): void {
   writeFileSync(join(dir, "package.json"), JSON.stringify({
     private: true,
     type: "module",
-    scripts: { typecheck: "tsc -p tsconfig.json", check: "node .task/task.ts check-here" },
+    scripts: { typecheck: "node node_modules/typescript/bin/tsc -p tsconfig.json", check: "node .task/task.ts check-here" },
   }, null, 2) + "\n");
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ ...tsconfigFor([], ["node"]), files: undefined, include: ["*.ts"] }, null, 2) + "\n");
   mkdirSync(join(dir, ".task"), { recursive: true });
@@ -737,7 +737,7 @@ function checkWorkspace(dir: string, m: Manifest, full: boolean): string[] {
   problems.push(...reportProblems(dir, m.subject !== undefined));
   if (!full || stopped || problems.length > 0) return problems;
   if (m.subject !== undefined) return distinguishProblems(runVariants(dir, m.subject));
-  for (const cmd of ["npx --no-install tsc -p tsconfig.impl.json", "npx --no-install tsc -p tsconfig.json", ...(m.tests.length ? [`node --test ${m.tests.join(" ")}`] : [])]) {
+  for (const cmd of ["node node_modules/typescript/bin/tsc -p tsconfig.impl.json", "node node_modules/typescript/bin/tsc -p tsconfig.json", ...(m.tests.length ? [`node --test ${m.tests.join(" ")}`] : [])]) {
     const r = run(cmd, dir);
     if (!r.ok) problems.push(`${cmd} failed:\n${r.output}`);
   }
@@ -771,7 +771,7 @@ function runVariants(dir: string, subject: string): Variants {
       // The workspace's own link: inside a workspace, repo is .task, which has none.
       symlinkSync(join(dir, "node_modules"), join(scratch, "node_modules"), "junction");
       const label = v === "ref" ? "the reference" : v.toUpperCase();
-      const compiled = run("npx --no-install tsc -p tsconfig.json", scratch);
+      const compiled = run("node node_modules/typescript/bin/tsc -p tsconfig.json", scratch);
       if (!compiled.ok) problems.push(`compiling against ${label}${v === "ref" ? " (the tests may use only the interfaces and the spec's exports)" : ""}:\n${compiled.output}`);
       const tap = run(`node --test --test-reporter=tap ${distinguishFile}`, scratch).output;
       for (const m of tap.matchAll(/^(not )?ok \d+ - (.*?)(?: # .*)?$/gm)) outcomes[v].set(m[2], !m[1]);
@@ -976,7 +976,7 @@ function lintRepo(): string[] {
   for (const [key, files] of groups) {
     const config = join(tmpdir(), `modular-lint-${process.pid}-${key || "none"}.json`);
     writeFileSync(config, JSON.stringify(tsconfigFor(files, key ? key.split(",") : [], [join(repo, "node_modules", "@types")]), null, 2));
-    const r = run(`npx --no-install tsc -p "${config}"`, repo);
+    const r = run(`node node_modules/typescript/bin/tsc -p "${config}"`, repo);
     rmSync(config);
     if (!r.ok) problems.push(`compiling ${files.map((f) => relative(repo, f)).join(", ")} with ${key || "no platform"} types:\n${r.output}`);
   }
