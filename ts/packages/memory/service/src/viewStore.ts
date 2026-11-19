@@ -310,6 +310,14 @@ function installTopicSnapshot(
     }
 }
 
+function retainedDraftQuality(
+    current: ViewVersion | undefined,
+): Pick<ViewVersion, "quality"> {
+    return current?.quality
+        ? { quality: structuredClone(current.quality) }
+        : {};
+}
+
 function preserveBuildSupport(
     result: ViewBuildTargetResult,
     current: ViewVersion | undefined,
@@ -1168,9 +1176,7 @@ export class TypedViewStore {
             createdAt: timestamp(),
             actor: this.actor,
             provenance: "human",
-            ...(current?.quality
-                ? { quality: structuredClone(current.quality) }
-                : {}),
+            ...retainedDraftQuality(current),
             ...(validation ? { validation } : {}),
             ...(current?.generation
                 ? { generation: structuredClone(current.generation) }
