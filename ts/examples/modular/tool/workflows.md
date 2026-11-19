@@ -187,6 +187,17 @@ with no implementation; allowed ones are also played against
 implementations later. This adds one field to the scenario's general
 form in `elements.md` and no new element.
 
+**Prose is checked too.** One fast check asks whether the rules entail
+the blueprint's prose: headlines, doc comments, and the sentences of the
+brief and the tasks (`elements.md`, "Checking prose against the rules").
+Each claim gets a status: entailed, gap, contradicted, ambiguous or
+unchecked. The statuses are for the agents, which use them to decide
+what to put in front of the human. The human sees a smaller surface,
+focused on consequences: a gap arrives as a counterexample scenario to
+judge, an ambiguity as alternative changes with the scenarios that tell
+them apart, an entailed claim as a law that holds. The count of
+unchecked claims is the ambiguity that remains, and it can be measured.
+
 ## Slow loops
 
 Status: Agreed 2026-11-19.
@@ -547,3 +558,6 @@ slow; it is off the human's loop.
 - 2026-11-19: proposed changes are patch files in a directory, for now,
   with no git dependency. The first project for the tool is a list with
   undo and redo, smaller than circles.
+- 2026-11-19: a fast check asks whether the rules entail the blueprint's
+  prose. The detailed statuses are for the agents; the human sees
+  consequences in a view of small surface area.

@@ -133,6 +133,21 @@ mechanically, and prose leaves room for readings that differ. Every
 statement in a blueprint is a declaration, a rule expression or a test,
 and prose only glosses one of them (`../method.md`, "The design").
 
+**Checking prose against the rules.** Prose in a blueprint makes claims:
+a rule's headline, a doc comment, a sentence in the brief or in a task.
+A prover can ask whether the rules entail each one. Stating the claim
+formally is where ambiguity shows: a sentence with two readings gets
+both, and each is tried. A claim then ends up entailed (a theorem, which
+needs no rule of its own), not entailed (a gap, with a counterexample),
+contradicted, ambiguous (the rules settle which reading the design
+means, and the prose is rewritten to say it), or unchecked (outside what
+the prover can state, such as timing or "one user in one process"). The
+prose isn't removed; it becomes checked prose with its formal statement
+beside it. Those statuses are bookkeeping for the agents. The human sees
+the consequences: an allowed or forbidden scenario, a counterexample to
+judge, a law that holds, in a view of small surface area
+(`workflows.md`, "The fast loop"). (Agreed 2026-11-19.)
+
 **In the example.** Tagged comments in the interface files; the format
 is in `../rules.ts`. Expressions are compiled (`../ruleGen.ts` writes
 `../rules.gen.ts`, for `dataModel.ts` and `shapeModel.ts` so far) and
@@ -491,3 +506,6 @@ fresh spec, run both ways.
 - 2026-11-19: scenarios are allowed or forbidden; both are checked by
   evaluating rules on their histories. The workflows add one concept,
   the proposed change (`workflows.md`).
+- 2026-11-19: prose is checked against the rules by asking whether they
+  entail it; each claim gets a status (entailed, gap, contradicted,
+  ambiguous, unchecked) for the agents, and the human sees consequences.

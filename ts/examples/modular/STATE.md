@@ -154,28 +154,36 @@ deferred.
 
 ## Next session
 
-The work has turned from the circles example to the method and its tool
-(2026-11-18, after feedback from experienced developers): `tool/elements.md`
-defines the elements, `method.md` has phase 1p (prove), and `proof/` has
-the Lean pilot.
+The work has turned from the circles example to the method and its tool,
+TypeArc (2026-11-18, after feedback from experienced developers).
+`tool/elements.md`, `tool/motivation.md` and `tool/workflows.md` define
+the elements, the motivation and the workflows; `undo/` is the tool's
+first project (brief, `list.ts`, `list.vocab.ts`, `decisions.md`).
 
-1. **The workflows document** (the priority): how a developer creates,
-   agrees, implements, reviews and changes blueprints and modules, and
-   how a change propagates. It will inform the items below.
-2. The `task.ts lint` rule that every "Decided behavior" item cites a
-   rule or moves to "Left to the implementer", and the circles
-   `Controller` placeholder blueprint (`tool/elements.md`).
-3. The app's external interface (members and rules to agree), which the
-   general scenario form depends on.
-4. The clear workloads and performance adversaries for
-   `ShapeMessageProcessor.log-amortized` (workload names to agree).
-5. Prose experiments, steps 3 and 4 (`experiments/prose-1/RESULT.md`).
-6. Next proofs: `converges`, and the refinement obligations.
-7. Tooling: step 0's `project.json`, module boundary checks, generated
-   Lean.
-8. Later: the docgent's phase 1 questions; extraction of an existing
-   repository; `shape.ts`'s rule expressions; errors and failure
-   (deferred).
+The path to a design CLI (agreed 2026-11-19), vetted on the undo list,
+with the goal of then adding a feature to circles with the tool:
+1. **`typearc check` and `typearc init`** (in progress, `tool/cli/`, no
+   new dependencies): rule compilation and checking driven by the
+   project rather than circles' file lists; boundary and vocabulary
+   purity checks; allowed and forbidden scenarios judged by the rules
+   (undo's first ones to be proposed to the human); Lean if the project
+   has proofs.
+2. A generic contract driver: random calls that satisfy `@requires`,
+   judged by the rules.
+3. `typearc design`: a Claude Code session whose permissions and hooks
+   enforce the design agent's role and run `check` after every edit;
+   proposed changes as patch files.
+4. `typearc run 2` (generate and review), then phase 3.
+5. Packaging; later the design loop on the Agent SDK (versions to
+   approve).
+
+Alongside: `undo/proof/List.lean` (the laws, and the brief's sentences
+checked against the rules).
+
+Still open from earlier: the `task.ts lint` rule for "Decided behavior";
+the circles `Controller` placeholder; the app's external interface;
+clear workloads for `log-amortized`; prose experiments 3 and 4; the
+`converges` proof; errors (deferred).
 
 ## Expected failures until phase 2 finishes
 
