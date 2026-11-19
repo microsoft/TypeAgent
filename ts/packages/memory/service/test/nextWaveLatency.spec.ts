@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -10,6 +11,7 @@ import { ViewBuildRunner } from "../src/viewBuilds.js";
 import { createLatencyWikiJob } from "../src/latencyQualificationFixture.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { hydrateProjectSummary } from "../src/informationalProject.js";
+import { projectSectionCitations } from "./informationalProjectTestModel.js";
 import { projectBriefRoles } from "../src/projectBrief.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
@@ -197,6 +199,7 @@ test("Wiki and project synthesis overlap frozen inputs while installation stays 
                         assignments: [],
                         milestoneItems: [],
                         decisionItems: [],
+                        sectionCitationIds: projectSectionCitations(),
                         riskItems: [],
                         openQuestions: [],
                     });
@@ -209,9 +212,8 @@ test("Wiki and project synthesis overlap frozen inputs while installation stays 
                     citationIds: ["f0"],
                 });
             },
-            validate: async () => {
-                throw new Error("Unexpected generic support path");
-            },
+            validate: async (_input, output) =>
+                controlledInformationalSupport(output),
         },
     });
     try {

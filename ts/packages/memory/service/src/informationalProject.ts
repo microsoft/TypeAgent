@@ -25,6 +25,10 @@ import type {
     ViewCitation,
 } from "./viewTypes.js";
 
+export const projectSummaryRules = `Every project role requires nonempty prose. When its information is absent, write "Unknown in supplied record." rather than an empty string or invented facts.
+Supply citationIds.article and citationIds.<sectionRole> for every role. Select only fragments that support that section, include them in citationIds.article, and use [] when the section makes no source-grounded claim.
+Empty citation lists do not permit empty role prose. Never copy every citation to every section.`;
+
 export function informationalProject(content: {
     kind: string;
     construction?: string;
@@ -84,16 +88,34 @@ export function projectSummarySchema(
 ): StructuredOutputJsonSchema {
     const common = informationalSchema(ids);
     const properties = {
-        title: { type: "string" },
-        summary: { type: "string" },
+        title: { type: "string", minLength: 1, pattern: "\\S" },
+        summary: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4000,
+            pattern: "\\S",
+        },
         completeness: {
             type: "string",
             enum: ["partial", "sufficient"],
         },
         ...Object.fromEntries(
-            projectBriefRoles.map((role) => [role, { type: "string" }]),
+            projectBriefRoles.map((role) => [
+                role,
+                { type: "string", minLength: 1, pattern: "\\S" },
+            ]),
         ),
-        limits: { anyOf: [{ type: "string" }, { type: "null" }] },
+        limits: {
+            anyOf: [
+                {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4000,
+                    pattern: "\\S",
+                },
+                { type: "null" },
+            ],
+        },
         citationIds: {
             type: "object",
             additionalProperties: false,
@@ -252,6 +274,7 @@ export function hydrateProjectSummary(
         ...requiredStringKeys,
         "limits",
         "citationIds",
+        "sectionCitationIds",
         "assignments",
         "milestoneItems",
         "decisionItems",
@@ -286,6 +309,18 @@ export function hydrateProjectSummary(
             ? citationBindings.article
             : raw.citationIds,
     });
+    const sectionCitationIds = citationBindings
+        ? undefined
+        : evidenceRecord(raw.sectionCitationIds);
+    if (
+        sectionCitationIds &&
+        (Object.keys(sectionCitationIds).length !== projectBriefRoles.length ||
+            Object.keys(sectionCitationIds).some(
+                (role) =>
+                    !projectBriefRoles.some((expected) => expected === role),
+            ))
+    )
+        throw new Error("Invalid project section citation inventory");
     const owners = parseProjectBriefDetails({
         kind: "owners",
         assignments: parseStructuredItems(raw.assignments),
@@ -346,7 +381,7 @@ export function hydrateProjectSummary(
     };
     const sectionCitations = bindProjectSectionCitations(
         input,
-        citationBindings,
+        citationBindings ?? { article: raw.citationIds, ...sectionCitationIds },
         base.content.citations,
     );
     return {
@@ -355,9 +390,7 @@ export function hydrateProjectSummary(
         missingEvidence: base.missingEvidence,
         relationships: content.sections.flatMap((section, position) =>
             base.relationships.flatMap((edge) => {
-                const selected = sectionCitations
-                    ? sectionCitations.get(section.role)
-                    : base.content.citations;
+                const selected = sectionCitations.get(section.role);
                 if (!selected)
                     throw new Error("Missing project section support binding");
                 const citations = edge.citations.filter((citation) =>
@@ -382,9 +415,7 @@ function bindProjectSectionCitations(
     input: ViewBuildSnapshot,
     value: unknown,
     selected: ViewCitation[],
-): Map<string, ViewCitation[]> | undefined {
-    // Older injected adapters predate per-section support selection.
-    if (value === undefined) return undefined;
+): Map<string, ViewCitation[]> {
     const bindings = evidenceRecord(value);
     if (
         Object.keys(bindings).length !== projectBriefRoles.length + 1 ||

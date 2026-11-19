@@ -10,7 +10,11 @@ import {
     separationChildInput,
     validateSeparationRequest,
     publicSeparation,
+    type ViewSeparationReceipt,
 } from "../src/viewSeparation.js";
+import { indexedLocator } from "../src/indexedFragments.js";
+import { publicationProof } from "../src/viewPublication.js";
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 import { pendingSemanticReview } from "../src/viewSemanticReview.js";
 import { viewHash } from "../src/viewMerge.js";
 import type {
@@ -20,11 +24,22 @@ import type {
 } from "../src/viewTypes.js";
 
 const corpusId = "separation-corpus";
+const excerpt = "Acquisition and publication have separate roles.";
 const citation = {
     sourceId: "evidence",
     revisionId: "original",
-    locator: "chars:0-45",
-    excerpt: "Acquisition and publication have separate roles.",
+    locator: indexedLocator(
+        {
+            sourceId: "evidence",
+            revisionId: "original",
+            blockOrdinal: 0,
+            text: excerpt,
+            score: 1,
+        },
+        0,
+        excerpt.length,
+    ),
+    excerpt,
 };
 const input: ViewBuildSnapshot = {
     corpusId,
@@ -71,6 +86,9 @@ const output: ViewSynthesisOutput = {
         kind: "wiki",
         construction: "informational-wiki-v1",
         title: "Acquisition and publication",
+        summary: excerpt,
+        status: "partial",
+        coverageNote: "Selected original evidence only.",
         index: [{ pageId: "old-anchor", title: "Roles", taxonomy: "concept" }],
         sections: [
             {
@@ -95,6 +113,25 @@ const output: ViewSynthesisOutput = {
 };
 let root: string;
 let store: TypedViewStore;
+
+function childOutput(receipt: ViewSeparationReceipt, index = 0) {
+    const candidate = structuredClone(output);
+    if (candidate.content.kind !== "wiki")
+        throw new Error("Expected wiki destination");
+    const viewId = receipt.destinations[index].viewId;
+    candidate.content.sections[0].id = viewId;
+    candidate.content.index[0].pageId = viewId;
+    return candidate;
+}
+
+function childProof(receipt: ViewSeparationReceipt, index = 0) {
+    const candidate = childOutput(receipt, index);
+    return publicationProof(
+        separationChildInput(receipt, index).fingerprint,
+        candidate,
+        controlledInformationalSupport(candidate),
+    );
+}
 
 beforeEach(async () => {
     root = path.resolve(".test-artifacts", `view-separation-${randomUUID()}`);
@@ -201,18 +238,41 @@ test("preview retains every anchor and human unit without changing the overview 
         separationProposal(view, review, receipt.input).confirmationToken,
     ).toBe(receipt.confirmationToken);
     await expect(
-        store.acceptSeparationChild(corpusId, receipt.receiptId, 0, output),
+        store.acceptSeparationChild(
+            corpusId,
+            receipt.receiptId,
+            0,
+            childOutput(receipt),
+            childProof(receipt),
+        ),
     ).rejects.toThrow("Separation is not confirmed or was cancelled");
 });
 
 test("restart resumes accepted destinations idempotently and activation requires every exact ready revision", async () => {
     const { receipt, view } = await fixture();
     await confirm(receipt.receiptId);
+    await expect(
+        store.acceptSeparationChild(
+            corpusId,
+            receipt.receiptId,
+            0,
+            childOutput(receipt),
+            {
+                ...childProof(receipt),
+                artifactFingerprint: "f".repeat(64),
+            },
+        ),
+    ).rejects.toThrow("no independent support proof");
+    expect(
+        (await store.listViewSeparations(corpusId))[0].destinations[0]
+            .acceptedRevisionId,
+    ).toBeUndefined();
     const first = await store.acceptSeparationChild(
         corpusId,
         receipt.receiptId,
         0,
-        output,
+        childOutput(receipt),
+        childProof(receipt),
     );
     store = new TypedViewStore(root, "owner");
     await store.recoverViewBuilds(corpusId);
@@ -226,7 +286,8 @@ test("restart resumes accepted destinations idempotently and activation requires
                 corpusId,
                 receipt.receiptId,
                 0,
-                output,
+                childOutput(receipt),
+                childProof(receipt),
             )
         ).revisionId,
     ).toBe(first.revisionId);
@@ -234,7 +295,8 @@ test("restart resumes accepted destinations idempotently and activation requires
         corpusId,
         receipt.receiptId,
         1,
-        output,
+        childOutput(receipt, 1),
+        childProof(receipt, 1),
     );
     await expect(
         store.activateViewSeparation(corpusId, receipt.receiptId),
@@ -267,7 +329,8 @@ test.each(["read-not-cited", "excluded"])(
             corpusId,
             receipt.receiptId,
             0,
-            output,
+            childOutput(receipt),
+            childProof(receipt),
         );
         await store.forgetSource(corpusId, sourceId);
         expect(await store.listViewSeparations(corpusId)).toEqual([]);
@@ -289,7 +352,13 @@ test("changed overview and cancellation prevent accepting further children", asy
         current.state = "cancelled";
     });
     await expect(
-        store.acceptSeparationChild(corpusId, receipt.receiptId, 0, output),
+        store.acceptSeparationChild(
+            corpusId,
+            receipt.receiptId,
+            0,
+            childOutput(receipt),
+            childProof(receipt),
+        ),
     ).rejects.toThrow("Separation is not confirmed or was cancelled");
     await confirm(receipt.receiptId);
     await store.saveViewDraft({
@@ -302,7 +371,13 @@ test("changed overview and cancellation prevent accepting further children", asy
         relationships: [],
     });
     await expect(
-        store.acceptSeparationChild(corpusId, receipt.receiptId, 0, output),
+        store.acceptSeparationChild(
+            corpusId,
+            receipt.receiptId,
+            0,
+            childOutput(receipt),
+            childProof(receipt),
+        ),
     ).rejects.toThrow(
         "Separation overview changed; request and confirm a new preview",
     );

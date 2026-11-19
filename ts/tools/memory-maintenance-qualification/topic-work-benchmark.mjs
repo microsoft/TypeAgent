@@ -258,7 +258,7 @@ async function arm(change, reuse) {
         indexGeneration: "generation-1",
     });
     const current = await generate(captured, new AbortController().signal);
-    assert.equal(calls, 6);
+    assert.equal(calls, 11);
     calls = completed = 0;
     const start = performance.now();
     const input = await captureTopicBuild({
@@ -283,7 +283,10 @@ async function arm(change, reuse) {
     const captureAndCurationMs = performance.now() - start;
     validateTopicSnapshot(generated);
     assert.notEqual(input.fingerprint, current.inputFingerprint);
-    assert.equal(calls, change === "append" ? (reuse ? 2 : 6) : reuse ? 0 : 6);
+    assert.equal(
+        calls,
+        change === "append" ? (reuse ? 5 : 11) : reuse ? 0 : 11,
+    );
     assert.equal(completed, calls);
     if (change !== "append") {
         assert.deepEqual(generated.nodes, current.nodes);
@@ -304,6 +307,7 @@ async function arm(change, reuse) {
     if (change === "append") assert.equal(replayed.length, reuse ? 1 : 0);
     return {
         reuse,
+        recipe: generated.recipe,
         captureMs,
         captureAndCurationMs,
         providerAttempts: calls,

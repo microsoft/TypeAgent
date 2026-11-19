@@ -22,6 +22,7 @@ export * from "./viewStore.js";
 export * from "./viewSynthesis.js";
 export * from "./wikiAmbiguity.js";
 export * from "./viewTypes.js";
+export type { InformationalSupport } from "./informationalSupport.js";
 export * from "./viewDetail.js";
 export * from "./viewExtensions.js";
 export * from "./viewPackages.js";

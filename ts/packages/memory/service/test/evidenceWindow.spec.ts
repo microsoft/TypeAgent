@@ -14,6 +14,7 @@ import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
 import { parseIndexedLocator } from "../src/indexedFragments.js";
 import { createMemoryServiceRpcFacade } from "../src/rpcFacade.js";
 import type { ViewVersion } from "../src/viewTypes.js";
+import type { SourceContent, SourceContentRequest } from "../src/types.js";
 
 test("DEFAULT real KnowPro/P0 capture and ARTICLE include the full current indexed governing qualification across original revisions", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "evidence-window-p0-"));
@@ -130,6 +131,51 @@ test("DEFAULT real KnowPro/P0 capture and ARTICLE include the full current index
                 }),
             );
             expect(parsed.content.sections[0].body).toContain(tail);
+            const citation = current!.content.citations[0];
+            const anchor = parseIndexedLocator(citation.locator);
+            const sourceRequest = {
+                corpusId,
+                sourceId: citation.sourceId,
+                revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
+            };
+            const ordinary = await service.getSourceContent(sourceRequest);
+            expect(ordinary.indexedBlock).toBeUndefined();
+            const sourceProtocol: {
+                sourceContentRequestSchema: {
+                    parse(value: unknown): SourceContentRequest;
+                };
+                sourceContentSchema: { parse(value: unknown): SourceContent };
+            } = await import(
+                new URL("../../../client/dist/protocol.js", import.meta.url)
+                    .href
+            );
+            const expanded = sourceProtocol.sourceContentSchema.parse(
+                await createMemoryServiceRpcFacade(service).getSourceContent(
+                    sourceProtocol.sourceContentRequestSchema.parse({
+                        ...sourceRequest,
+                        includeIndexedBlock: true,
+                    }),
+                ),
+            );
+            expect(expanded.content).toBe(citation.excerpt);
+            expect(expanded.indexedBlock!.slice(anchor.start, anchor.end)).toBe(
+                citation.excerpt,
+            );
+            expect(
+                await index.resolveIndexedBlock(
+                    citation.sourceId,
+                    citation.revisionId,
+                    citation.locator,
+                ),
+            ).toBe(expanded.indexedBlock);
+            await expect(
+                service.getSourceContent({
+                    corpusId,
+                    sourceId: citation.sourceId,
+                    includeIndexedBlock: true,
+                }),
+            ).rejects.toThrow("require an indexed locator");
             receipts.push({
                 stage,
                 corpusId,

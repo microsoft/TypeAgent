@@ -753,66 +753,97 @@ test.each([false, true])(
     },
 );
 
-test.each([8, 9])(
-    "lazy summaries bind the complete supplied packet and reject unsupplied ID %s",
-    async (evidenceId) => {
+test.each([1, 8, 9, 17])(
+    "lazy summaries resolve the final supplied citation (%i citations)",
+    async (count) => {
         const citations = Array.from(
-            { length: 9 },
+            { length: count },
             (_, index) => occurrence(`source-${index}`).citations[0],
         );
+        const concept = {
+            id: `concept:${"b".repeat(32)}`,
+            label: "Reference",
+            scope: "Synthetic evidence",
+            purpose: "Exercise the summary contract",
+            memberIds: ["topic:one"],
+            summary: "",
+            summaryState: "pending" as const,
+            citations,
+            salience: 4,
+        };
+        const before = structuredClone(concept);
         let calls = 0;
         const summarize = createConfiguredTopicConceptSummarizer(undefined, {
             completionSettings: {},
             complete: async (messages) => {
-                calls++;
-                if (calls === 1) {
-                    const packet = JSON.parse(promptText(messages, 1));
-                    expect(packet.evidence).toHaveLength(9);
-                    expect(packet.evidence[8]).toEqual({
-                        id: 8,
-                        ...citations[8],
+                if (typeof messages === "string")
+                    throw new Error("Expected role messages");
+                const content = messages.find(
+                    (message) => message.role === "user",
+                )!.content;
+                if (typeof content !== "string")
+                    throw new Error("Expected text payload");
+                const payload = JSON.parse(content);
+                expect(payload.evidence).toHaveLength(count);
+                if (calls === 0)
+                    expect(payload.evidence[count - 1]).toEqual({
+                        id: count - 1,
+                        ...citations[count - 1],
                     });
-                }
                 return {
                     success: true,
                     data: JSON.stringify(
-                        calls === 1
+                        calls++ === 0
                             ? {
-                                  summary:
-                                      "The ninth source retains the rollout blocker.",
-                                  evidenceIds: [evidenceId],
+                                  summary: "Grounded reference.",
+                                  evidenceIds: [count - 1],
                               }
                             : { safe: true, failures: [] },
                     ),
                 };
             },
         });
-        const concept = {
-            id: `concept:${"b".repeat(32)}`,
-            label: "Rollout",
-            scope: "Deployment",
-            purpose: "Understand the rollout blocker",
-            summary: "",
-            summaryState: "pending" as const,
-            memberIds: ["topic:one"],
-            citations,
-            salience: 7,
-        };
-        if (evidenceId === 8) {
-            const result = await summarize(
-                concept,
+        expect(await summarize(concept, new AbortController().signal)).toEqual({
+            summary: "Grounded reference.",
+            citations: [citations[count - 1]],
+        });
+        expect(calls).toBe(2);
+        expect(concept).toEqual(before);
+    },
+);
+
+test.each([-1, 0.5, 9, "8"])(
+    "lazy summaries reject unsupplied citation %p",
+    async (id) => {
+        const summarize = createConfiguredTopicConceptSummarizer(undefined, {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: JSON.stringify({
+                    summary: "Rejected.",
+                    evidenceIds: [id],
+                }),
+            }),
+        });
+        await expect(
+            summarize(
+                {
+                    id: `concept:${"b".repeat(32)}`,
+                    label: "Reference",
+                    scope: "Test",
+                    purpose: "Test",
+                    memberIds: ["topic:one"],
+                    summary: "",
+                    citations: Array.from(
+                        { length: 9 },
+                        (_, index) =>
+                            occurrence(`source-${index}`).citations[0],
+                    ),
+                    salience: 4,
+                },
                 new AbortController().signal,
-            );
-            expect(result.citations).toEqual([citations[8]]);
-            expect(calls).toBe(2);
-        } else {
-            await expect(
-                summarize(concept, new AbortController().signal),
-            ).rejects.toThrow("unsupplied evidence");
-            expect(calls).toBe(1);
-        }
-        expect(concept.citations).toEqual(citations);
-        expect(concept.summaryState).toBe("pending");
+            ),
+        ).rejects.toThrow("unsupplied evidence");
     },
 );
 

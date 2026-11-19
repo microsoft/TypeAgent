@@ -201,7 +201,17 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
                     enum: ["partial", "sufficient"],
                 },
                 prose: { type: "string" },
-                limits: { anyOf: [{ type: "string" }, { type: "null" }] },
+                limits: {
+                    anyOf: [
+                        {
+                            type: "string",
+                            minLength: 1,
+                            maxLength: 4000,
+                            pattern: "\\S",
+                        },
+                        { type: "null" },
+                    ],
+                },
                 citationIds: {
                     type: "array",
                     items: { type: "string", enum: ids },

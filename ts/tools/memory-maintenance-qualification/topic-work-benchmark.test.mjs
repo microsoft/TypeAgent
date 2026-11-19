@@ -27,8 +27,13 @@ test("append-only packet treatment measures against whole-input reuse and preser
     assert.equal(result.workloads.length, 1);
     assert.equal(result.workloads[0].change, "append");
     for (const { baseline, candidate } of result.workloads[0].pairs) {
-        assert.equal(baseline.providerAttempts, 6);
-        assert.equal(candidate.providerAttempts, 2);
+        assert.match(
+            baseline.recipe,
+            /generative-partition-v1:output-contract/,
+        );
+        assert.equal(candidate.recipe, baseline.recipe);
+        assert.equal(baseline.providerAttempts, 11);
+        assert.equal(candidate.providerAttempts, 5);
         assert.equal(candidate.replayedPackets, 1);
         assert.equal(candidate.replayedRawNodes, 48);
         assert.equal(candidate.accounting.deferred, 56);
@@ -54,7 +59,12 @@ test("offline paired work benchmark has exact disposition parity and never hides
             ],
         );
         for (const { baseline, candidate } of workload.pairs) {
-            assert.equal(baseline.providerAttempts, 6);
+            assert.match(
+                baseline.recipe,
+                /generative-partition-v1:output-contract/,
+            );
+            assert.equal(candidate.recipe, baseline.recipe);
+            assert.equal(baseline.providerAttempts, 11);
             assert.equal(candidate.providerAttempts, 0);
             assert.equal(candidate.reusedDecisions, 55);
             assert.equal(baseline.outputDigest, candidate.outputDigest);

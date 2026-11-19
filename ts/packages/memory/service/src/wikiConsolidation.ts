@@ -7,6 +7,7 @@ import type {
     ViewHistoryEntry,
     ViewSynthesisOutput,
     ViewVersion,
+    ViewPublicationProof,
     WikiContent,
 } from "./viewTypes.js";
 import type { ViewEditorialAssessment } from "./viewEditorial.js";
@@ -57,6 +58,7 @@ export interface WikiConsolidationReceipt {
     anchors: ViewRedirect["anchors"];
     assessment: WikiConsolidationScope;
     verification: ViewEditorialAssessment;
+    validation?: ViewPublicationProof;
     acceptedRevisionId?: string;
     redirectRevisionId?: string;
 }

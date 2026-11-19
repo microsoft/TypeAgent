@@ -982,6 +982,7 @@ export class TypedViewStore {
             throw new Error(
                 "Informational visibility requires the exact current page without an explicit draft-only build override",
             );
+        assertPublicationProof(current);
         const publication: ViewPublicationStatus = {
             viewId: version.viewId,
             latestBuiltRevisionId: version.revisionId,
@@ -1341,6 +1342,7 @@ export class TypedViewStore {
         receiptId: string,
         index: number,
         output: ViewSynthesisOutput,
+        validation: ViewPublicationProof,
     ): Promise<ViewVersion> {
         const { head, state } = await this.history(corpusId).read();
         const receipt = state.separations?.[receiptId];
@@ -1363,6 +1365,8 @@ export class TypedViewStore {
                 "Separation destination identity is already occupied",
             );
         const version = this.generatedVersion(input, undefined, output, output);
+        version.validation = validation;
+        assertPublicationProof(version);
         state.views[version.viewId] = [version];
         destination.acceptedRevisionId = version.revisionId;
         receipt.reasonForState =
@@ -2355,6 +2359,12 @@ export class TypedViewStore {
             receipt.output,
             receipt.output,
         );
+        if (!receipt.validation)
+            throw new Error(
+                "Consolidation requires informational support validation; rebuild the legacy receipt",
+            );
+        version.validation = receipt.validation;
+        assertPublicationProof(version);
         state.views[version.viewId].push(version);
         receipt.acceptedRevisionId = version.revisionId;
         receipt.stage = "accepted";
@@ -3346,8 +3356,7 @@ export class TypedViewStore {
             throw new Error(
                 "Resolve the pending merge conflict before publishing",
             );
-        if (!informationalView(current.content))
-            assertPublicationProof(current);
+        assertPublicationProof(current);
         state.publications ??= {};
         const prior = state.publications[request.viewId];
         if (prior?.publishedRevisionId === current.revisionId) return prior;

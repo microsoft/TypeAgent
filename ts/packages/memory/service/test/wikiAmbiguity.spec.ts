@@ -35,6 +35,10 @@ import type { IndexedFragmentRequest } from "../src/types.js";
 import { viewHash } from "../src/viewMerge.js";
 import { supportQuality } from "../src/viewSupport.js";
 import {
+    controlledInformationalSupport,
+    controlledInformationalValidation,
+} from "./informationalSupportTestModel.js";
+import {
     authoredRelationships,
     derivedDefinitionInput,
 } from "../src/viewRelationships.js";
@@ -126,6 +130,17 @@ function output(snapshot: ViewBuildSnapshot) {
     });
 }
 
+function controlledFieldAssessment(fields: Array<{ id: string }>): string {
+    return JSON.stringify({
+        policy: "informational-field-support-v2",
+        fields: fields.map((field) => ({
+            fieldId: field.id,
+            reason: "Controlled field assessment",
+            issues: [],
+        })),
+    });
+}
+
 test("Wiki review configuration is explicitly opt-in and strictly parsed", () => {
     expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty("wikiReview");
     for (const [raw, enabled] of [
@@ -162,6 +177,11 @@ test.each([
                 if (typeof messages === "string")
                     throw new Error("Expected choice-only messages");
                 const request = JSON.parse(String(messages[1].content));
+                if (Array.isArray(request.fields))
+                    return {
+                        success: true,
+                        data: controlledFieldAssessment(request.fields),
+                    };
                 const questions = request.questions as Record<string, unknown>;
                 return {
                     success: true,
@@ -200,7 +220,9 @@ test.each([
         );
         expect(report.quality?.status).toBe(status);
         expect(() =>
-            validateSupport(draft, report, { allowPartialDraft: true }),
+            validateSupport(draft, report, snapshot, {
+                allowPartialDraft: true,
+            }),
         ).toThrow("Unsupported evidence");
     },
 );
@@ -208,25 +230,13 @@ test.each([
 test("partial draft retention cannot bypass missing context, exact section coverage or inventory exclusion audits", () => {
     const draft = output(input("candidate"));
     const report = {
-        supported: false,
+        ...controlledInformationalSupport(draft),
         quality: supportQuality([
             { category: "newContentSupport", status: "partiallySupported" },
         ]),
-        sections: draft.content.sections.map((section) => ({
-            sectionId: section.id,
-            supported: false,
-            reason: "unverified portion",
-        })),
-        relationships: draft.relationships.map((edge) => ({
-            edgeId: edge.id,
-            supported: false,
-            reason: "unverified portion",
-        })),
-        missingContext: [] as string[],
-        reasons: [],
     };
     expect(() =>
-        validateSupport(draft, report, { allowPartialDraft: true }),
+        validateSupport(draft, report, undefined, { allowPartialDraft: true }),
     ).not.toThrow();
     expect(() =>
         validateSupport(
@@ -235,15 +245,14 @@ test("partial draft retention cannot bypass missing context, exact section cover
                 ...report,
                 missingContext: ["Original scope cannot be established"],
             },
+            undefined,
             { allowPartialDraft: true },
         ),
-    ).toThrow("Unsupported evidence");
+    ).toThrow("Informational rejection requires an unsupported field");
     expect(() =>
-        validateSupport(
-            draft,
-            { ...report, sections: [] },
-            { allowPartialDraft: true },
-        ),
+        validateSupport(draft, { ...report, sections: [] }, undefined, {
+            allowPartialDraft: true,
+        }),
     ).toThrow("every exact guide section");
     draft.inventory = {
         schemaVersion: 1,
@@ -289,9 +298,43 @@ test("partial draft retention cannot bypass missing context, exact section cover
                     },
                 ],
             },
+            undefined,
             { allowPartialDraft: true },
         ),
     ).toThrow("Unsupported inventory exclusion");
+});
+
+test("partial draft quality cannot bypass the final factual-field audit", () => {
+    const snapshot = input("candidate");
+    const draft = output(snapshot);
+    const report = controlledInformationalSupport(draft);
+    report.quality = supportQuality([
+        { category: "newContentSupport", status: "partiallySupported" },
+    ]);
+    expect(() =>
+        validateSupport(draft, report, snapshot, { allowPartialDraft: true }),
+    ).not.toThrow();
+    delete report.informational;
+    expect(() =>
+        validateSupport(draft, report, snapshot, { allowPartialDraft: true }),
+    ).toThrow("requires informational-support-v1 assessment");
+    const informational = controlledInformationalSupport(draft).informational!;
+    report.informational = informational;
+    report.supported = false;
+    informational.fields.find(
+        (field) => field.path === "/content/summary",
+    )!.supported = false;
+    informational.issues.push({
+        category: "unsupported",
+        path: "/content/summary",
+        quote: draft.content.summary!,
+        evidenceIds: [],
+        reason: "Unsupported factual claim",
+        correction: "Remove the unsupported claim",
+    });
+    expect(() =>
+        validateSupport(draft, report, snapshot, { allowPartialDraft: true }),
+    ).toThrow("Unsupported evidence");
 });
 
 test.each(["duplicate", "related", "distinct", "uncertain"] as const)(
@@ -872,21 +915,10 @@ test("public service retains lower-quality new drafts across restart without pub
                       ambiguousViewIds: [],
                   },
         resolveWikiAmbiguity: async (review) => separate(review.participants),
-        validate: async (_snapshot, draft) => ({
-            supported: false,
-            quality,
-            missingContext: [],
+        validate: async (snapshot, draft) => ({
+            ...controlledInformationalSupport(draft),
+            ...(snapshot.definition.viewId === "candidate" ? { quality } : {}),
             reasons: ["Useful grounded portion; no identified contradiction"],
-            sections: draft.content.sections.map((section) => ({
-                sectionId: section.id,
-                supported: false,
-                reason: "Partially supported",
-            })),
-            relationships: draft.relationships.map((edge) => ({
-                edgeId: edge.id,
-                supported: false,
-                reason: "Partially supported",
-            })),
         }),
     };
     const open = (wikiReview: boolean) =>
@@ -1098,6 +1130,23 @@ test("public service retains lower-quality new drafts across restart without pub
             relationships: authoredRelationships(draft),
         });
         expect(edited.version.quality).toEqual(quality);
+        expect(
+            (
+                await service.getViewPublication({
+                    corpusId,
+                    viewId: draft.viewId,
+                })
+            ).publishedRevisionId,
+        ).toBeUndefined();
+        expect(
+            (
+                await service.searchViews({
+                    corpusId,
+                    query: "product",
+                    freshness: "current",
+                })
+            ).some((match) => match.view.viewId === "candidate"),
+        ).toBe(false);
         await service.close();
         service = open(false);
         expect((await service.getCapabilities()).derivedViews).toMatchObject({
@@ -1456,21 +1505,7 @@ function arbitrationHarness(
     harness.viewAdapter = {
         identity: "offline",
         generate: async (snapshot) => output(snapshot),
-        validate: async (_snapshot, candidate) => ({
-            supported: true,
-            missingContext: [],
-            reasons: [],
-            sections: candidate.content.sections.map((section) => ({
-                sectionId: section.id,
-                supported: true,
-                reason: "original evidence",
-            })),
-            relationships: candidate.relationships.map((edge) => ({
-                edgeId: edge.id,
-                supported: true,
-                reason: "original evidence",
-            })),
-        }),
+        validate: controlledInformationalValidation,
         resolveWikiAmbiguity: async (record) => separate(record.participants),
     };
     return harness;
@@ -1571,6 +1606,11 @@ describe.each(["automatic", "human"] as const)("%s arbitration", (mode) => {
                         if (typeof messages === "string")
                             throw new Error("Expected choice-only messages");
                         const request = JSON.parse(String(messages[1].content));
+                        if (Array.isArray(request.fields))
+                            return {
+                                success: true,
+                                data: controlledFieldAssessment(request.fields),
+                            };
                         return {
                             success: true,
                             data: JSON.stringify({
@@ -1847,21 +1887,7 @@ test.each([
             harness.viewAdapter = {
                 identity: "offline",
                 generate: async (snapshot) => output(snapshot),
-                validate: async (_snapshot, candidate) => ({
-                    supported: true,
-                    missingContext: [],
-                    reasons: [],
-                    sections: candidate.content.sections.map((section) => ({
-                        sectionId: section.id,
-                        supported: true,
-                        reason: "original evidence",
-                    })),
-                    relationships: candidate.relationships.map((edge) => ({
-                        edgeId: edge.id,
-                        supported: true,
-                        reason: "original evidence",
-                    })),
-                }),
+                validate: controlledInformationalValidation,
                 checkEditorial: async (snapshot) => {
                     expect(snapshot.editorial?.targetRevisionId).toBeDefined();
                     return {

@@ -1140,6 +1140,20 @@ export class KnowProCorpusIndex implements CorpusIndex {
         revisionId: string,
         locator: string,
     ): Promise<string> {
+        const block = await this.resolveIndexedBlock(
+            sourceId,
+            revisionId,
+            locator,
+        );
+        const anchor = parseIndexedLocator(locator);
+        return block.slice(anchor.start, anchor.end);
+    }
+
+    public async resolveIndexedBlock(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ): Promise<string> {
         const anchor = parseIndexedLocator(locator);
         const memory = this.memory;
         if (memory)
@@ -1151,7 +1165,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     indexedTextHash(block.text) === anchor.hash &&
                     anchor.end <= block.text.length
                 )
-                    return block.text.slice(anchor.start, anchor.end);
+                    return block.text;
             }
         throw new Error(
             "Indexed-text anchor is unavailable in the current index",

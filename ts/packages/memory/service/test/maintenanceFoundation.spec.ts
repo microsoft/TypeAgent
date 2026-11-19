@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalValidation } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -120,11 +121,7 @@ test.each(["semantic", "transient", "derivative"] as const)(
                         "invented-revision";
                 return output;
             },
-            validate: async () => {
-                throw new Error(
-                    "Informational work must not use universal support checks",
-                );
-            },
+            validate: controlledInformationalValidation,
         };
         const open = () =>
             new FileMemoryService(root, {

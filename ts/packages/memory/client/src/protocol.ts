@@ -337,6 +337,7 @@ export const sourceContentRequestSchema = z.object({
         .string()
         .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
         .optional(),
+    includeIndexedBlock: z.boolean().optional(),
 });
 
 export const sourceContentSchema = z.object({
@@ -349,6 +350,7 @@ export const sourceContentSchema = z.object({
     totalChars: z.number().int().nonnegative(),
     truncated: z.boolean(),
     nextOffset: z.number().int().nonnegative().optional(),
+    indexedBlock: z.string().optional(),
 });
 
 export const sourceReplaceRequestSchema = z.object({

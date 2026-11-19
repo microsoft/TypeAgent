@@ -1,13 +1,258 @@
-# Informational-view campaign contract v1
+# Informational-view campaign contracts v1 and v2
 
 Local P3 contract/scorecard tooling for original, FreshWiki and QMSum Product
 construction packets. Quality evaluation matrices accept only `execution: "live"`
 arms. Offline injected outputs are excluded from memory-approach evaluation;
 deterministic tests remain regression checks, not quality evidence.
-This tooling does not execute ingestion, synthesis, acquisition,
-publication, maintenance or a model judge. It does not import or call the frozen
+The contract/scoring CLI never executes ingestion, synthesis, acquisition,
+publication, maintenance or a model judge. The separate authorized executor below
+uses the existing example runner; it is never invoked by validation/scoring.
+Neither path imports or calls the frozen
 fixture loader, alter the pilot, read evaluator assets implicitly or interpret
 keyword overlap as truth.
+
+## Isolated multi-arm execution (v2)
+
+V1 remains readable and scoreable unchanged. Its ingestion mapping supports one
+actual retained revision per case/source/version, so it must **not** be used to
+join independently owned arm/generation stores. Use these explicit versions:
+
+- Campaign: `schemaVersion: 2`, `contract: "informational-view-campaign-v2"`.
+- Run, outputs, gold and annotations: `schemaVersion: 2`.
+- Mapping: `schemaVersion: 2`, `contract: "informational-view-ingestion-v2"`.
+  Every mapping record additionally has `attemptId`, exactly the scheduled slot
+  ID. Actual evidence and reviewed output claims are scoped to that attempt.
+- Gold witnesses contain only `{sourceId, sourceVersion, quote}`. This allows
+  original-source gold to be reviewed before ingestion, without relabeling
+  memory revision IDs between arms. Annotation expectation witnesses must match
+  that gold exactly. Supported **output claims** still use actual corpus/source/
+  revision witnesses; construction selection is joined through the attempt mapping.
+
+Import `snapshotCampaignImplementation(productRoot)` and `executeCampaign(spec)`
+from `quality-campaign-execution.mjs`. `productRoot` is an absolute `ts` directory
+in a separately built, frozen checkout. The snapshot hashes source and compiled
+runner, memory, client, conversation, AI-client, configuration and KnowPro files,
+plus the source commit and tracked patch. Its `promptHash` and `schemaHash` define
+those arm fields. Freeze transitive runtime settings in the existing run fields.
+All arms must contain the compatible recorder/CLI integration; backporting that
+integration must not silently change a historical arm's generation behavior.
+
+From each configured checkout, the following performs **no inference** and emits
+only non-secret provider/model names and identity hashes:
+
+```powershell
+node examples\viewExamples\dist\cli.js --runtime-identity
+```
+
+For Azure chat endpoints without an explicit `modelName`, the model identity is
+the configured deployment label from the endpoint path. It is not independently
+verified underlying model identity. Endpoint hosts and credentials are not
+printed; the provider-settings hash still binds the complete endpoint setting.
+An endpoint with neither an explicit model name nor an Azure deployment label
+retains an unknown identity and cannot satisfy a frozen campaign declaration.
+
+Use its `nodeVersion`, `configurationIdentity`, `configurationHash` and
+`providerSettingsHash` in that arm. Each configured pool member must have the
+declared provider/model; unknown or mixed bindings fail rather than inheriting a
+label. The child checks the expected runtime **before dispatch**, and the
+coordinator checks the retained runtime and implementation again afterward.
+`arm.eligibleSourcesHash` is `identity(packet)`.
+
+The execution specification contains:
+
+| Field                       | Contract                                                                                                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`, `root`           | Project directory and existing project-relative owned campaign directory. The CLI uses its current directory as `project`.                                                              |
+| `packet`, `campaign`, `run` | Frozen construction-only packet and matching v2 campaign/run. No gold or reviewer labels enter the runner.                                                                              |
+| `bindings`                  | One `{id, productRoot, implementationHash: identity(snapshot), declaredArm}` per arm; `declaredArm` must exactly equal the frozen arm.                                                  |
+| `timeoutMs`                 | Positive integer per-child timeout.                                                                                                                                                     |
+| `requestBudget`             | Positive integer `inputTokens`, `outputTokens`, `safetyTokens`, `elapsedMs`, and `tokenizer: "utf8-bytes-v1"`. This is a conservative byte-based token reservation, not measured usage. |
+| `authorization`             | Explicit non-secret owner approval described below.                                                                                                                                     |
+
+Authorization is an attestation, not authentication. It contains `approved: true`,
+`identity`, `approvedAt`, `campaignHash`, exact `caseIds`, `armIds`, `generations`,
+`budget` (equal to `run.budget`), `bindingsHash`, `requestBudgetHash`, `timeoutMs`,
+and a positive owner-approved conservative `maxCostPerCall`.
+`run.permissionRecordHash` must equal `identity(authorization)`. Approval must
+precede `run.startedAt`; hashes/timestamps are declarations, not a trusted clock.
+The per-call monetary ceiling must be justified by the owner for the configured
+providers and maximum request sizes. It is **not** a billing estimate or a price
+verified by this tool.
+
+The root requires the ownership marker described below. Execution is explicit:
+
+```powershell
+node tools\memory-maintenance-qualification\quality-campaign-execution.mjs --spec <project-relative-owned-spec.json>
+```
+
+The executor persists the complete schedule before starting the first child.
+Every arm/case/generation gets a new example-local owned store. Calls, reserved
+tokens (including safety reservation), and conservative per-call cost reservations
+are bounded before dispatch and shared across successive children. Failure,
+unknown accounting or exhaustion stops new slots; failed and unattempted slots
+remain in the reconciled schedule. Partial artifacts survive.
+
+`execution.json`, `outputs.json`, and `mapping.json` are durable results;
+`partial-artifacts.json` preserves completed prefixes. Root files are never
+replaced by another execution. Existing runner receipts remain diagnostics, not
+quality evidence: the bridge additionally requires live non-injected execution,
+exact admitted requests, exact saved/rendered bytes, original indexed block and
+service citation-resolution receipts. Usage and billed cost remain unknown when
+not actually measured.
+
+Output rows can include `checkpointArtifacts`, contract
+`memory-view-checkpoint-artifacts-v1`: the exact schedule string and one record
+per checkpoint containing its scheduled fields plus exact `saved`, `rendered`,
+and `evidence` strings or null. `hashes.checkpointArtifactsHash` binds this entire
+object. Accepted prefixes are not reclassified if a later update/export fails.
+If a child stops with a checkpoint still `running`, the coordinator retains that
+original schedule and record unchanged. A hash-bound
+`memory-view-checkpoint-reconciliation-v1` entry records its terminal execution
+failure separately. Measurement reviews use that failed reconciliation status
+and stage; reconciliation cannot promote any checkpoint to accepted.
+
+## Reviewed measurements and release assessment
+
+These are extensions of this campaign tooling, not a model judge or a separate
+benchmark. Import `scoreCampaignMeasurements` and `scoreReviewedTopicSnapshot`
+from `quality-campaign-measurements.mjs`; import `assessCampaignRelease`,
+`scoreCampaignUsefulness`, and `validateSplitIsolation` from
+`quality-campaign-release.mjs`.
+
+The measurement rubric has `schemaVersion: 2`,
+`contract: "informational-view-measurements-v2"`, `constructionHash`, `goldHash`,
+and a complete `cases` inventory:
+
+- `facts`: every gold expectation exactly once, with `id`, positive reviewer
+  `importance`, `required`, and `answerable`. Only required answerable importance
+  enters weighted coverage. Selected coverage and correct rendered preservation
+  are separate; unavailable facts cannot be declared answerable.
+- `ordering`: reviewed `{id, before, after, witnesses}` constraints between
+  distinct gold fact IDs. Original-source witnesses justify the ordering.
+  Omitted edges mean incomparable/tied items, not an invented total priority.
+- `checkpoints`: every scheduled source-update sequence with `expectations`
+  containing `{id, kind, requirement, witnesses}`. Kinds are `newFactUptake`,
+  `staleFactRemoval`, `unaffectedFactPreservation`, and
+  `protectedEditPreservation`. Future sources cannot witness an earlier update.
+
+The matching measurement packet has the same version/contract, `outputsHash`,
+`rubricHash`, and one reviewed record per scheduled slot:
+
+- `hashes` equals the exact output artifact hashes.
+- `ordering` labels bind each constraint ID to `before`/`after` rendered spans
+  `{start, end, quote}`, or null for missing output. Exact offsets establish
+  delivery order, not semantic correspondence; reviewers own that judgment.
+- `allCaveatsReviewed: true` and `caveats` with `id`, exact `span`, `relevant`,
+  `redundant`, and `rationale`.
+- `checkpoints` bind exact captured `sequence`, terminal `status`, `stage`,
+  `saved`, `rendered`, and `hashes: {saved: identity(saved), rendered: identity(rendered)}`;
+  absent artifacts have null hashes. Every checkpoint needs
+  `allVerifiableClaimsReviewed: true`, `claims`, and every expectation's
+  `{id, satisfied, rationale, span}` verdict. Supported claims require original
+  actual-revision witnesses; preservation/uptake verdicts require rendered spans.
+  Stale removal remains an explicit reviewed semantic verdict, not a substring
+  test. The final accepted checkpoint must equal the delivered artifacts.
+
+Rubric review and each record's `review` use
+`{status: "approved-independent-human-review", artifactHash, author, reviewer,
+reviewedAt, adjudicated: true, adjudicationRecordHash}`. Author/reviewer must
+differ. `artifactHash` binds the rubric, or the whole record **excluding** its
+`review` property. Reviews are externally supplied human attestations; test
+fixtures and model-generated labels do not establish independent review.
+
+The scorecard first recomputes existing structural/citation/all-claim scoring.
+It then reports weighted coverage, ordering, caveat relevance/non-redundancy,
+maintenance metrics and every checkpoint's supported claims/critical errors.
+It also separates construction/repair attempts, provider failures, completion
+failures, first-pass checkpoints, terminal failures and unattempted checkpoints.
+Empty denominators and missing telemetry are unknown, never perfect/zero.
+
+Topic evaluation remains separate from summary usefulness: pass actual `nodes`,
+`curation.concepts/memberIds`, `curation.deferred/nodeId`, and a complete
+production `parents` edge inventory `{parentId, childId}` referencing topic nodes,
+not curated concepts. Existing adjudicated topic
+annotations supply admission/group labels; add a complete hierarchy verdict
+inventory in `annotations.hierarchy` with those exact node endpoints, `acceptable`
+and `rationale`. Review binds `{snapshot, annotations}`.
+The scorer reuses existing admission/pair scoring for membership, false merges/
+splits and separately reports hierarchy acceptability. It rejects duplicate or
+unknown membership, incomplete admission/deferral and selectively reviewed edges.
+
+Offline CLI additions use the existing owned-root and exclusive-output rules:
+
+- `score-measurements`: all `score` flags plus `--rubric`, `--rubric-review`,
+  `--measurements`.
+- `assess-release`: those flags plus `--registration`, `--registry`,
+  `--confirmation`, `--rollback`, `--blinded`, `--usefulness-review`.
+  Explicit JSON null files for unavailable latter evidence produce a
+  **not-qualified** assessment; they do not fabricate success.
+
+Release registration is `contract: "memory-view-release-v1"`,
+`status: "preregistered"`, `registeredAt`, `registeredBy`, `campaignHash`,
+`runHash`, `rubricHash`, `splitRegistryHash`, `baseline`, `candidate`,
+`maxCostPerCall`, `usefulnessMinimum`, `analysis`, and `metrics`.
+`analysis` freezes `clusterKind`, `minClusters` (at least two), integer `seed`,
+`resamples` (at least 100), and `confidence` between zero and one. Metrics contain
+`metric`, `direction` (`minimum`/`maximum`), `threshold` and
+`nonRegressionMargin`; supported-claim precision and both weighted coverage
+gates are mandatory. Whole-run identity freezes cases, generations, budgets and
+arms before execution. Provider/model/settings/index/evidence identities must
+match across the comparison; identical treatments do not establish improvement.
+
+The split registry, contract `memory-view-split-registry-v1`, contains
+`development` and `confirmation` inventories with `id`, source content
+`sourceHashes`, and all four cluster arrays. Source content, source-family,
+topic, project, meeting and case overlap across splits is rejected. The chosen
+analysis unit must partition cases without overlap through another cluster kind.
+Repeated generations are averaged within clusters before paired bootstrap
+intervals; unknown pairs and insufficient independent clusters cannot qualify.
+No protected contents are needed to maintain this metadata registry.
+
+Blinded usefulness, contract `memory-view-blinded-usefulness-v2`, binds
+`outputsHash`, `armsHiddenFromReviewers: true`, complete `assignments` and
+`judgments`. Pair IDs are `JSON.stringify([caseId, generation])`. Assignments
+contain `first`/`second` exact rendered-string hashes; judgments contain
+`verdict: "first" | "second" | "tie"` and a rationale. Identical artifacts must
+tie. Keep assignments/arm identities away from reviewers; blinding is a human
+custody responsibility and the separate independent review binds the packet.
+
+Confirmation needs `status: "custodian-approved-untouched-confirmation"`,
+`registrationHash`, `runHash`, and a custodian distinct from the registering
+owner. Rollback needs `status: "tested-compatible"`, `recipeHash`,
+`compatibilityTestRecordHash`, `qualificationRecordHash`, and true protections:
+`allSuppliedCitationIds`, `finalFactualRejection`, `publicationProof`,
+`legacyServing`, `acceptedRevisionSurvivesFailure`.
+
+Release assessment rejects missing evidence, failures/critical claims at any
+checkpoint, missing dispatch/reservation accounting, exceeded registered
+budgets, failed precision/coverage/usefulness/non-regression gates, confirmation
+leakage and rollback that disables factual protections. Original protocol
+fixtures cannot qualify production quality. A passing result means only
+**qualified for an owner rollout decision**; no publication, deployment,
+automatic rollback, credential provisioning or protected-data access occurs.
+
+## Exploratory AI review
+
+`quality-ai-review.mjs` provides a separate development-only review contract.
+Pass the service's canonical `informationalAuditFields` inventory, original
+sources, selected indexed evidence, and `citationFragments` copied from the exact
+captured synthesis request's `fragments` array (including IDs, source IDs,
+revision IDs and text). The v4 helper requires each captured fragment to match
+the indexed evidence and original source bytes. Never infer aliases from
+selected-evidence order: maintenance exports can accumulate historical duplicates
+that are absent from the actual synthesis request. Host metadata is excluded from
+source-claim scoring; factual typed states and authored relationships remain
+eligible. Production `f0`/`f1` aliases resolve through explicit source bindings,
+while rubric facts and prohibited inferences have separate ID namespaces.
+Required facts need exact original witnesses. A prohibited inference can simply
+be absent: no disclaimer is required. The validator rejects incomplete
+inventories, unknown authorities/references and empty fact rubrics.
+
+These are fallible AI opinions, not independently reviewed gold. Keep production
+failures, checker/report failures, rejected checkpoints and unattempted suffixes
+separate from review metrics. Compare factual results only over declared
+comparable artifacts; surviving-field totals are not paired quality scores.
+This helper cannot satisfy independent-review, confirmation or release gates.
 
 ## Integration APIs
 
@@ -35,6 +280,52 @@ use **identity of the exact string**, not a parsed/reformatted JSON object.
 Property order matters for object identity. Freeze and retain exact packets,
 campaign, run, mapping, gold, review, outputs and annotations; the scorecard
 records each identity. Missing artifacts and usage are explicit `null`.
+
+### Exact multi-call request capture
+
+Existing v1 rows remain supported. An output row may additionally carry:
+
+```js
+requestCapture: {
+  contract: "memory-request-capture-v1",
+  manifest: exactRequestCallsJsonFileString,
+  requests: [
+    { file: "calls/000001/request.json", body: exactAdmittedBodyString }
+  ],
+  // Required for any call declaring a completion result.
+  results: [
+    { file: "calls/000001/result.json", body: exactCompletionResultString }
+  ],
+}
+```
+
+The manifest must name the row's case, contract/schema version and
+`requestEvidenceKind: "admitted-dispatch-body"`. Every call has a unique ID and
+body file, checkpoint, operation, SHA-256 body hash, outcome and nullable measured
+usage. Every named body must be supplied exactly once and match its raw SHA-256.
+Bodies must be individual JSON objects without authentication headers.
+The output and annotation hashes additionally require
+`requestCaptureHash: identity(row.requestCapture)`, binding exact manifest and
+body strings. The legacy `serializedRequest` remains one actual admitted
+construction/repair body from this manifest, never concatenated requests.
+Calls may additionally declare `result: {file, hash}`. Every declared completion
+result must be supplied exactly once and match its raw SHA-256. A successful
+model completion remains untrusted output, not proof of artifact acceptance;
+the checkpoint and saved-revision receipts determine that separate outcome.
+Rows labeled `ok` cannot contain unfinished captured dispatches. Partial captures
+may describe failed/missing attempts but cannot be promoted to successful output.
+
+Selection checks use original fragments in allowlisted informational construction
+and contract-repair operations only, not audit prompts or rejected-output prose.
+Provider JSON escaping is decoded from Chat Completions messages or Responses
+input before matching original fragment text. Unknown construction envelopes fail
+explicitly rather than silently receiving selection credit.
+
+This extension supplies capture evidence, not an execution coordinator, semantic
+judge or complete token/cost ledger. Arm, generation, provider, prompt/schema and
+settings identities remain bound by the frozen campaign run. A returned dispatch
+can be an HTTP error; unavailable completion usage and failed-call cost remain
+unknown. Legacy indexed-build snapshots remain nonqualifying diagnostics.
 
 ### Construction packet (adapter boundary)
 
@@ -393,10 +684,12 @@ revision binding, full schedules/duplicates, critical errors, exact citations,
 unknown telemetry/denominators, selection/rendering failures, typed unions,
 threshold registration and owned-path protections.
 
-Deferred to integration owners: P1 service receipt capture, P2 licensed
-acquisition and independently reviewed dataset bridges, P4 lifecycle execution,
-P5 approved live campaigns/quality review. No external assets or holdouts were
-read and no quality results for unrun campaigns are claimed.
+The authorized v2 executor supplies service receipts and lifecycle accounting;
+the measurement/release extensions supply reviewed metric and decision contracts.
+Still required from integration/evaluation owners: licensed approved assets,
+independently reviewed gold/labels, protected confirmation custody, calibrated
+preregistration, explicit model budgets and actual approved live comparisons.
+Engineering tests do not supply those assets or establish prompt improvement.
 
 ## Independent review preparation
 

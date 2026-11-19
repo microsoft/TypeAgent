@@ -10,6 +10,89 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Informational factual support
+
+Wiki and project-brief construction audit the **final merged artifact**, including
+human edits, against original indexed fragments before accepting a new revision.
+The `informational-support-v1` assessment covers title, summary, section headings,
+bodies and typed details, wiki index labels, coverage assertions and every relationship. Each field must be
+assessed exactly once. Rejected claims require their exact field path, a contiguous
+quote, applicable original fragment IDs, category, reason and correction.
+Attribution, qualifications, quantities, chronology and distinct state dimensions
+remain factual requirements. Missing evidence is not a request to invent content.
+
+Host-injected `ViewSynthesisAdapter.validate` implementations must return both the
+existing exact section/relationship results and `report.informational`, using the
+exported `InformationalSupport` type. Informational artifacts do not require a
+legacy inventory. Missing, incomplete or malformed assessments fail explicitly;
+an unconditional legacy approval is insufficient.
+
+Generation may make one optional `repairInformational` call after a valid factual
+rejection. The repair returns a complete artifact, is structurally checked,
+remerged with protected edits, editorially checked and factually audited again.
+Checker failure, cancellation, budget failure, malformed diagnostics or a second
+rejection cannot save or publish the candidate. Direct human saves and conflict
+resolutions reject unsupported edits rather than silently rewriting them.
+Canonical contributions and consolidations use the same one-repair factual gate
+and require final factual proof. Repaired contributions repeat protected-edit
+merging and essential-distinction checks. Consolidation repair cannot change
+protected article structure/anchors and repeats its original-evidence check.
+
+New informational publication requires proof bound to the exact input fingerprint,
+artifact and support result. Existing retained history remains readable; old
+unproved artifacts are not relabeled as checked and require validation/rebuild
+before new publication or consolidation acceptance. Recipe v12 and configured
+synthesis v30 invalidate reuse under the prior policy. Rollback must preserve
+factual rejection and citation protections, not disable checks.
+
+Informational `limits` may be empty when no material coverage gap exists. Empty
+or whitespace-only limits produce no coverage note or missing-evidence entry.
+Required brief sections remain nonempty; real uncertainty stays beside its claim.
+Prompt guidance prioritizes source-supported consequential blockers without
+inventing severity ranks. Deterministic contract tests do not establish measured
+model quality; independently reviewed development and untouched confirmation
+comparisons remain required before a quality claim.
+
+Project construction requires `citationIds.article` and `citationIds.<sectionRole>`
+with every project role. Legacy injected responses with separate `sectionCitationIds`
+must also bind every role explicitly; aggregate-only responses are rejected.
+Only those exact, aggregate-selected fragments become that section's evidence
+relationships; empty lists create no relationship. The host never expands the
+aggregate citation list into a section/source cross-product. Factual checking
+still audits every section and every emitted relationship.
+The response schema requires nonblank role prose and bounds summary/limits to
+the same lengths enforced during hydration. Unspecified roles use a concise
+record-scoped unknown statement; empty citation lists do not permit empty prose.
+
+A recorded approval withdrawal uses an `observed` decision with a withdrawal
+identity and faithful prose, not an invented `blocked` state. Empty extracted
+collections do not assert that corresponding facts do not exist.
+Generic pending capacity review, without explicit owner review, remains
+`capacityState: unknown` with the known pending qualification in status prose.
+The typed value does not erase those prose facts or authorize inventing an
+owner-review stage. Proposed milestones do not establish nonoccurrence of
+confirmation or completion outside the supplied record.
+State distinctions are internal inference constraints, not extra source facts
+to repeat in an article. Generation, factual repair and checking preserve
+source-supported distinctions without adding negative status claims or generic
+comparisons solely because the instructions distinguish those states.
+
+The configured checker uses `informational-field-support-v2` on the model wire:
+the host supplies exact field/span IDs, resolves diagnostics to original bytes,
+and derives section, relationship and aggregate verdicts. Exact mirrored wiki
+indexes and empty-note page metadata are host-validated, not source claims;
+nonempty notes and all factual typed state remain audited. A malformed field
+inventory or diagnostic reference permits one logged checker-contract retry
+against the unchanged artifact/evidence. This is separate from the single
+factual repair. Repeated invalid reports, provider failures and cancellation
+remain explicit failures. Injected adapters still owe the full
+`informational-support-v1` report; no old approval fallback is accepted.
+
+Explicitly confirmed separation destinations also require their own final-output
+support proof before a child is staged or made visible. A factual repair repeats
+the editorial checks before acceptance; a parent article's proof cannot authorize
+a different child artifact.
+
 ## Bounded Wiki decisions
 
 The configured synthesis adapter uses `GPT_6_LUNA` with strict **choice-only**
@@ -37,7 +120,7 @@ configured Azure/OpenAI Luna endpoint; there is no fallback to another model.
 Prose generation, evidence-contract repair, project summaries, non-Wiki Views and
 topic curation retain their existing models and contracts. Additional decision
 calls use the existing scheduler, cancellation and provider request budgets.
-The combined `evidence-first-v26-wiki-luna-choice` adapter identity includes both
+The combined `evidence-first-v30-wiki-luna-choice` adapter identity includes both
 the prose and Wiki decision model identities. Earlier `evidence-first-v25`
 results remain historical evidence, not validation of this combined policy.
 Rollback requires reverting this policy change, not changing the global prose model.
@@ -70,6 +153,10 @@ quality is retained; partial or uncertain quality cannot publish, become index-r
 or authorize combining, redirects, deletion, execution or human-reviewed status.
 Exact citation rebinding, original sections, protected edits, supported prior claims,
 inventory exclusions and publication gates remain mandatory.
+Partial review quality never bypasses the final informational factual-field audit:
+unsupported claims, invalid diagnostics and missing field assessments still reject
+the draft. Configured Wiki validation retains both the factual audit and the
+separate choice-only review quality.
 
 Disabling review prevents new arbitration and all resolution application. Existing
 stored reviews remain readable subject to normal source authorization; revocation

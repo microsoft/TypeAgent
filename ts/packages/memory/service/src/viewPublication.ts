@@ -5,6 +5,7 @@ import { validateInventoryAudit } from "./viewInventory.js";
 import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import { viewHash } from "./viewMerge.js";
 import { authoredRelationships } from "./viewRelationships.js";
+import { informationalView } from "./informationalView.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import type {
     ViewEffectivePublicationPolicy,
@@ -65,12 +66,25 @@ export function publicationProof(
     };
 }
 
-export function assertPublicationProof(version: ViewVersion): void {
+export function assertPublicationProof(
+    version: ViewVersion,
+    options: {
+        allowLegacyInformational?: boolean;
+        allowPartialDraft?: boolean;
+    } = {},
+): void {
+    if (
+        options.allowLegacyInformational &&
+        informationalView(version.content) &&
+        !version.validation?.support.informational
+    )
+        return;
     const output = publicationArtifact(version);
     const input = version.generation!.input!;
     if (
         input.pipeline !== "schema-defined-v1" &&
         input.pipeline !== "extension-v1" &&
+        !informationalView(output.content) &&
         (!output.inventory || !output.inventoryAudit || !output.coverage)
     )
         throw new Error(
@@ -88,5 +102,9 @@ export function assertPublicationProof(version: ViewVersion): void {
         throw new Error(
             "This exact artifact has no independent support proof; validate it through Save draft or rebuild before publishing",
         );
-    validateSupport(output, proof.support);
+    validateSupport(output, proof.support, input, {
+        allowPartialDraft:
+            options.allowPartialDraft === true &&
+            version.quality?.status === "partiallySupported",
+    });
 }

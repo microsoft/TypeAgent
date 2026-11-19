@@ -4,6 +4,9 @@
 import { randomUUID } from "node:crypto";
 import {
     openai,
+    runWithRequestOperation,
+    recordDispatchedRequestUsage,
+    recordDispatchedRequestResult,
     type ChatModel,
     type CompleteUsageStatsCallback,
     type StructuredOutputJsonSchema,
@@ -453,15 +456,21 @@ export function createTopicCompletion(
                 scheduleMaintenanceModel(
                     modelScheduler,
                     () =>
-                        model.complete(
-                            prompt,
-                            (value) => {
-                                usage = value;
-                            },
-                            outputSchema,
-                            undefined,
-                            signal,
-                        ),
+                        runWithRequestOperation(stage, async () => {
+                            const result = await model.complete(
+                                prompt,
+                                (value) => {
+                                    usage = value;
+                                },
+                                outputSchema,
+                                undefined,
+                                signal,
+                            );
+                            if (usage)
+                                await recordDispatchedRequestUsage(usage);
+                            await recordDispatchedRequestResult(result);
+                            return result;
+                        }),
                     signal,
                 ),
             {

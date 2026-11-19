@@ -964,6 +964,7 @@ const snapshot = z
                 }),
                 protectedTargets: z.string().min(1).max(240).array().max(1000),
                 unlockedTargets: z.string().min(1).max(240).array().max(1000),
+                retiredSourceRevisions: source.array().max(32).optional(),
             })
             .optional(),
     })
