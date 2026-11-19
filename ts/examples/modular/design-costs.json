@@ -44,5 +44,12 @@
     "phase": "design session",
     "what": "reviews of 9.2 (2b) and 9.d (3b, rerun), the rule MessageProcessor.items-unchanged; human attention about 15 minutes",
     "humanHours": 0.25
+  },
+  {
+    "date": "2026-11-18",
+    "round": 5,
+    "phase": "experiment",
+    "what": "visibility-1: task 9.2 on Sonnet with tests runnable but not readable (make --tests runnable); checks pass; not collected, kept in experiments/visibility-1. 30 turns, 10.7 min",
+    "usd": 1.3
   }
 ]

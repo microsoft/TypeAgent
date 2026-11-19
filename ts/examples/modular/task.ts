@@ -141,6 +141,9 @@ function closure(root: string, starts: string[], exclude: Set<string>): string[]
 }
 
 /** What a task's agent reads: its imports' closure, its tests' closure, and rules.ts. */
+/** Files of the design: interfaces, their vocabularies, the rule language and the scenarios. A task's other reads are test infrastructure. */
+const isDesign = (f: string) => interfaceFiles.includes(f.replace(/\.vocab\.ts$/, ".ts")) || f === "rules.ts" || f === "scenarios.ts";
+
 function readsOf(task: Task): string[] {
   const outputs = new Set(task.outputs.map((o) => o.file));
   return closure(repo, [...task.imports, ...task.tests, "rules.ts"], outputs);
@@ -337,6 +340,8 @@ interface Manifest {
   /** Phase 3: the implementation file the test imports, and, in the copy kept outside only, which run is A and which B. */
   subject?: string;
   labels?: Labels;
+  /** Test infrastructure the agent may run but not read (make --tests runnable). */
+  unreadable?: string[];
 }
 
 const suffixes = { 1: "", 2: "-run-2", d: "-distinguish" };
@@ -348,7 +353,7 @@ const refOf = (file: string) => file.replace(/\.ts$/, ".ref.ts");
 const manifestOf = (task: Task) => `${workspaceOf(task)}.manifest.json`;
 const bodyHash = (src: string) => createHash("sha256").update(splitHeader(src)[1]).digest("hex");
 
-function taskText(task: Task, reads: string[]): string {
+function taskText(task: Task, reads: string[], unreadable: string[] = []): string {
   const specs = read(join(repo, "impl-specs.md"));
   const shared = /^## Rules for every implementation\n[\s\S]*?(?=^## )/m.exec(specs)?.[0].trimEnd() ?? "";
   const outputs = task.outputs.map((o) => `\`${o.file}\`${o.headerOnly ? " (its header comment only)" : ""}`).join(", ");
@@ -365,7 +370,11 @@ may read. The restrictions below are enforced, not only asked for.
 - **Commands:** ${commandsOf(task).map((c) => `\`${c}\``).join(", ")}. No others will run.
   \`npm test\` lints your outputs before running the tests; \`npm run check\`
   runs every check the collector will run.
-- **Read-only files here:** ${reads.map((f) => `\`${f}\``).join(", ")}.
+- **Read-only files here:** ${reads.filter((f) => !unreadable.includes(f)).map((f) => `\`${f}\``).join(", ")}.${unreadable.length ? `
+- **Run but not read:** the tests and their infrastructure (${unreadable.map((f) => `\`${f}\``).join(", ")}).
+  \`npm test\` runs them; you can't open them. A failing test is named
+  by the ID of the rule it checks (\`Interface.member.slug\`), and the
+  rule's statement, in the interface file, is what to meet.` : ""}
 
 **What you may decide.** Only what the spec leaves open: anything under
 "Left to the implementer", and details no rule or spec text addresses,
@@ -399,7 +408,7 @@ ${task.section}
 /** The hidden files a task would read. */
 const leaks = (task: Task) => readsOf(task).filter((f) => task.hidden.includes(f));
 
-function make(task: Task): void {
+function make(task: Task, testsRunnable = false): void {
   if (task.variant === "d") return makeDistinguish(task);
   const dir = workspaceOf(task);
   const key = keyOf(task);
@@ -414,6 +423,7 @@ function make(task: Task): void {
     if (task.outputs.length !== 1 || task.outputs[0].headerOnly) throw new Error(`task ${task.n} has no single implementation to run twice`);
   }
   const reads = readsOf(task);
+  const unreadable = testsRunnable ? reads.filter((f) => !isDesign(f)) : [];
   mkdirSync(dir, { recursive: true });
   const write = (f: string, text: string) => {
     mkdirSync(dirname(join(dir, f)), { recursive: true });
@@ -426,7 +436,7 @@ function make(task: Task): void {
   if (task.variant === 1) for (const o of task.outputs) if (existsSync(join(repo, o.file))) copyFileSync(join(repo, o.file), join(dir, o.file));
   const outputs = task.outputs.map((o) => o.file);
   const testFiles = task.tests.join(" ");
-  write("TASK.md", taskText(task, reads));
+  write("TASK.md", taskText(task, reads, unreadable));
   mkdirSync(join(dir, ".task"), { recursive: true });
   write("package.json", JSON.stringify({
     private: true,
@@ -442,7 +452,7 @@ function make(task: Task): void {
   write("tsconfig.json", JSON.stringify({ ...tsconfigFor([], ["node"]), files: undefined, include: ["*.ts"] }, null, 2) + "\n");
   const bodies: Record<string, string> = {};
   for (const o of task.outputs) if (o.headerOnly) bodies[o.file] = bodyHash(read(join(repo, o.file)));
-  seal(task, { task: task.n, outputs: task.outputs, allowed: task.imports, binds: task.binds, tests: task.tests, inputs: {}, bodies });
+  seal(task, { task: task.n, outputs: task.outputs, allowed: task.imports, binds: task.binds, tests: task.tests, inputs: {}, bodies, ...(unreadable.length ? { unreadable } : {}) });
   console.log(`made ${dir}\n  reads ${reads.length} files: ${reads.join(", ")}\n  writes ${outputs.join(", ")}, REPORT.md`);
   console.log(`run the agent with: node task.ts run ${keyOf(task)}`);
 }
@@ -464,7 +474,7 @@ function seal(task: Task, manifest: Manifest, kept: Partial<Manifest> = {}): voi
   // The kept copy, outside the workspace, is the one collect trusts.
   writeFileSync(manifestOf(task), JSON.stringify({ ...manifest, ...kept }, null, 2) + "\n");
   symlinkSync(join(repo, "node_modules"), join(dir, "node_modules"), "junction");
-  writePolicy(task);
+  writePolicy(task, manifest.unreadable);
 }
 
 /**
@@ -578,7 +588,7 @@ function walk(dir: string, sub = ""): string[] {
 const policyOf = (task: Task) => `${workspaceOf(task)}.policy.json`;
 const gateOf = (task: Task) => `${workspaceOf(task)}.gate.mjs`;
 
-function writePolicy(task: Task): void {
+function writePolicy(task: Task, unreadable: string[] = []): void {
   const writable = [...(task.variant === "d" ? [distinguishFile] : task.outputs.map((o) => o.file)), "REPORT.md"];
   const commands = commandsOf(task);
   writeFileSync(gateOf(task), `// Lets a task's agent run only these commands.
@@ -595,7 +605,7 @@ process.stdin.on("end", () => {
   writeFileSync(policyOf(task), JSON.stringify({
     permissions: {
       allow: [...writable.flatMap((f) => [`Edit(./${f})`, `Write(./${f})`]), ...commands.map((c) => `Bash(${c})`)],
-      deny: ["PowerShell", "WebFetch", "WebSearch", "NotebookEdit", "Agent", "mcp__*"],
+      deny: ["PowerShell", "WebFetch", "WebSearch", "NotebookEdit", "Agent", "mcp__*", ...unreadable.map((f) => `Read(./${f})`)],
       blockReadsOutsideWorkingDirectories: true,
     },
     hooks: {
@@ -1014,7 +1024,11 @@ function main(args: string[]): void {
   switch (command) {
     case "list": return list();
     case "costs": return costs();
-    case "make": return make(findTask(arg));
+    case "make": {
+      const tests = args.indexOf("--tests") >= 0 ? args[args.indexOf("--tests") + 1] : "readable";
+      if (tests !== "readable" && tests !== "runnable") throw new Error("--tests is readable (the default) or runnable");
+      return make(findTask(arg), tests === "runnable");
+    }
     case "run": {
       const model = args.indexOf("--model") >= 0 ? args[args.indexOf("--model") + 1] : undefined;
       return runAgent(findTask(arg), model);
@@ -1047,7 +1061,7 @@ function main(args: string[]): void {
     case "lint-here": return report(lintWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json")))), "outputs pass the lint");
     case "check-here": return report(checkWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json"))), true), "every check passes");
     default:
-      console.error("usage: node task.ts list | make <n> | run <n> [--model <m>] | check <n> | collect <n> | review-check <n> | review <n> | lint | costs\n  <n> is a task (8), its second run (8.2) or its phase 3 distinguishing (8.d)");
+      console.error("usage: node task.ts list | make <n> [--tests runnable] | run <n> [--model <m>] | check <n> | collect <n> | review-check <n> | review <n> | lint | costs\n  <n> is a task (8), its second run (8.2) or its phase 3 distinguishing (8.d)");
       process.exit(2);
   }
 }
