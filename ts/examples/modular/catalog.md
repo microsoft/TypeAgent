@@ -437,7 +437,7 @@ No rules of its own.
 | Rule | Tag | Headline | Status | Adversaries |
 |---|---|---|---|---|
 | `ShapeCollectionWriter.notifies` | ensures | A call that changes the shapes emits change once, when the shapes are already final; a call that changes nothing emits nothing. (A listener's queries then agree with the shapes by the queries' own rules.) | tested | 2 |
-| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, on each of the writer's workloads, growing at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
+| `ShapeCollectionWriter.log-amortized` | budget | add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, in every state; on each of the writer's workloads, measured time per operation grows at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
 | `ShapeCollectionWriter.add.new-id` | requires | id isn't present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.below-present` | requires | below, when given, is present. | caller's obligation |  |
 | `ShapeCollectionWriter.add.in-range` | requires | The shape's bounding box lies within ±1e300, right and bottom edges included. | caller's obligation |  |
@@ -478,7 +478,7 @@ No rules of its own.
 | `ShapeMessageProcessor.clear-known` | ensures | No shape whose add an applied clear knew is present. | tested | 2 |
 | `ShapeMessageProcessor.ack-keeps-z` | ensures | Applying an acknowledgment doesn't change the shapes or their z-order, or emit change. | tested | 2 |
 | `ShapeMessageProcessor.one-change` | ensures | Each operation that changes the shapes emits change once, when the shapes already show its whole effect, and before logOperations reports the operation; one that changes nothing emits nothing; and no change is emitted apart from an operation. | tested | 2 |
-| `ShapeMessageProcessor.log-amortized` | budget | process takes time per operation logarithmic in the number of shapes, on each of the processor's workloads (in none of which a clear removes shapes), growing at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
+| `ShapeMessageProcessor.log-amortized` | budget | process takes amortized time per operation logarithmic in the number of shapes, in every state (a clear's work for the shapes it removes is charged to their adds); on each of the processor's workloads, measured time per operation grows at most 16 times from 1,000 shapes to 100,000. | budget: measured by bench.ts |  |
 
 ## FrameHandler
 

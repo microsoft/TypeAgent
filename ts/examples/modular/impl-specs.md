@@ -4,7 +4,7 @@ Each implementation satisfies an interface in the interface files
 (`events.ts`, `geometry.ts`, `color.ts`, `shape.ts`, `dataModel.ts`,
 `shapeModel.ts`, `frames.ts`, `view.ts`, `shapeView.ts` and `layout.ts`),
 including
-every rule (`@requires`, `@ensures`, `@invariant`, `@valid`, `@abstract`,
+every rule (`@requires`, `@ensures`, `@invariant`, `@initially`, `@valid`, `@abstract`,
 `@budget`, `@deferred`) written there. `@budget` and `@deferred` rules bind
 the implementation like any other: a budget is measured instead of tested,
 and a deferred rule will be tested as its `how:` line says once its
@@ -258,15 +258,8 @@ budget for model updates, a circle, and a canvas view that draws circles.
     operation as `local.enqueue` returned it, a remote one as it was
     enqueued (`MessageProcessor.process.logs-each`, `local-order`,
     `remote-order`, `ShapeMessageProcessor.ack-keeps-z`, `one-change`).
-- **Decided behavior:**
-  - `newShapeId` returns `` `${clientId}#${n}` ``, with n counting from 0
-    on each processor. The counter follows the last `#`, so IDs from
-    different clientIds never collide, whatever characters they contain.
-  - `process` never schedules itself, and nothing else in the class does
-    (`MessageProcessor.passive`).
-  - `process` applies the local queue first, then the remote queue, and
-    repeats until both are empty. So a local operation is always applied
-    before its acknowledgment, which can only be enqueued after it.
+- **Decided behavior:** `process` never schedules itself, and nothing
+  else in the class does (`MessageProcessor.passive`).
 - **Costs** (`ShapeMessageProcessor.log-amortized`): `process` takes
   amortized logarithmic time per operation, plus time in proportion to
   the shapes a clear removes. That holds for every operation, removes
@@ -275,7 +268,9 @@ budget for model updates, a circle, and a canvas view that draws circles.
   them; `local.enqueue`, `remote.enqueue` and
   `newShapeId` take constant time, apart from copying the operation.
 - **Left to the implementer:** how pending operations and each shape's add
-  are kept.
+  are kept; the form of `newShapeId`'s IDs (`ShapeMessageProcessor.new-ids`
+  is the rule); and the order in which `process` takes the two queues
+  (`MessageProcessor.once` allows either).
 - **Contract:** `shapeModel.contract.ts` (`shapeMessageProcessorContract`,
   which also runs `messageProcessor.contract.ts`), wired in
   `shapeProcessor.test.ts` over `RefShapeWriter` (`shapewriterkit.ts`). The

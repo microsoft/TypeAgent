@@ -28,7 +28,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { dirname, join, posix, relative, resolve } from "node:path";
 import { createHash, randomInt } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 /** The blueprint's interface files, and platform subsets: imported with import type only. */
 export const interfaceFiles = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "dataModel.ts", "shapeModel.ts", "frames.ts", "view.ts", "shapeView.ts", "layout.ts", "canvas.ts", "dom.ts"];
@@ -87,6 +87,22 @@ const tsFiles = (text: string) => [...new Set([...text.matchAll(/`([\w.]+\.ts)`/
 
 function field(section: string, name: string): string | undefined {
   return new RegExp(`^- \\*\\*${name}:\\*\\*(.*(?:\\n  .*)*)`, "m").exec(section)?.[1];
+}
+
+/**
+ * A task's section with only its formal fields: the heading, Exports,
+ * Imports and Binds, and the IDs of the budget rules its Costs text names.
+ * For make --prose minimal, which tests how little prose an implementer
+ * needs beyond the interface files.
+ */
+function minimalSection(section: string): string {
+  const kept = ["Exports", "Imports", "Binds"].flatMap((name) => {
+    const value = field(section, name);
+    return value === undefined ? [] : [`- **${name}:**${value}`];
+  });
+  const budgets = /^- \*\*Costs\*\* \(([^)]*)\)/m.exec(section)?.[1];
+  if (budgets) kept.push(`- **Budgets:** ${budgets}`);
+  return [section.split("\n")[0], "", ...kept].join("\n");
 }
 
 function parseTasks(specs = read(join(repo, "impl-specs.md")), root = repo): Task[] {
@@ -340,8 +356,10 @@ interface Manifest {
   /** Phase 3: the implementation file the test imports, and, in the copy kept outside only, which run is A and which B. */
   subject?: string;
   labels?: Labels;
-  /** Test infrastructure the agent may run but not read (make --tests runnable). */
+  /** Test infrastructure and tooling the agent may run but not read (make --tests runnable). */
   unreadable?: string[];
+  /** make --prose minimal: TASK.md carried only the task's formal fields. */
+  prose?: "minimal";
 }
 
 const suffixes = { 1: "", 2: "-run-2", d: "-distinguish" };
@@ -353,7 +371,7 @@ const refOf = (file: string) => file.replace(/\.ts$/, ".ref.ts");
 const manifestOf = (task: Task) => `${workspaceOf(task)}.manifest.json`;
 const bodyHash = (src: string) => createHash("sha256").update(splitHeader(src)[1]).digest("hex");
 
-function taskText(task: Task, reads: string[], unreadable: string[] = []): string {
+function taskText(task: Task, reads: string[], unreadable: string[] = [], proseMinimal = false): string {
   const specs = read(join(repo, "impl-specs.md"));
   const shared = /^## Rules for every implementation\n[\s\S]*?(?=^## )/m.exec(specs)?.[0].trimEnd() ?? "";
   const outputs = task.outputs.map((o) => `\`${o.file}\`${o.headerOnly ? " (its header comment only)" : ""}`).join(", ");
@@ -401,15 +419,15 @@ settled, and write a stopped report.
 
 ${shared}
 
-${task.section}
+${proseMinimal ? minimalSection(task.section) : task.section}
 `;
 }
 
 /** The hidden files a task would read. */
 const leaks = (task: Task) => readsOf(task).filter((f) => task.hidden.includes(f));
 
-function make(task: Task, testsRunnable = false): void {
-  if (task.variant === "d") return makeDistinguish(task);
+function make(task: Task, testsRunnable = false, proseMinimal = false, second?: string): void {
+  if (task.variant === "d") return makeDistinguish(task, second);
   const dir = workspaceOf(task);
   const key = keyOf(task);
   if (task.held !== undefined) throw new Error(`task ${task.n} is held: ${task.held}`);
@@ -436,7 +454,7 @@ function make(task: Task, testsRunnable = false): void {
   if (task.variant === 1) for (const o of task.outputs) if (existsSync(join(repo, o.file))) copyFileSync(join(repo, o.file), join(dir, o.file));
   const outputs = task.outputs.map((o) => o.file);
   const testFiles = task.tests.join(" ");
-  write("TASK.md", taskText(task, reads, unreadable));
+  write("TASK.md", taskText(task, reads, unreadable, proseMinimal));
   mkdirSync(join(dir, ".task"), { recursive: true });
   write("package.json", JSON.stringify({
     private: true,
@@ -452,7 +470,7 @@ function make(task: Task, testsRunnable = false): void {
   write("tsconfig.json", JSON.stringify({ ...tsconfigFor([], ["node"]), files: undefined, include: ["*.ts"] }, null, 2) + "\n");
   const bodies: Record<string, string> = {};
   for (const o of task.outputs) if (o.headerOnly) bodies[o.file] = bodyHash(read(join(repo, o.file)));
-  seal(task, { task: task.n, outputs: task.outputs, allowed: task.imports, binds: task.binds, tests: task.tests, inputs: {}, bodies, ...(unreadable.length ? { unreadable } : {}) });
+  seal(task, { task: task.n, outputs: task.outputs, allowed: task.imports, binds: task.binds, tests: task.tests, inputs: {}, bodies, ...(unreadable.length ? { unreadable: [...unreadable, ".task/task.ts", ".task/manifest.json"] } : {}), ...(proseMinimal ? { prose: "minimal" as const } : {}) });
   console.log(`made ${dir}\n  reads ${reads.length} files: ${reads.join(", ")}\n  writes ${outputs.join(", ")}, REPORT.md`);
   console.log(`run the agent with: node task.ts run ${keyOf(task)}`);
 }
@@ -483,7 +501,7 @@ function seal(task: Task, manifest: Manifest, kept: Partial<Manifest> = {}): voi
  * outside, the reference as <file>, and what the task's agent
  * read. The agent writes distinguish.test.ts and REPORT.md.
  */
-function makeDistinguish(task: Task): void {
+function makeDistinguish(task: Task, second?: string): void {
   const state = loadState();
   const dir = workspaceOf(task);
   if (task.outputs.length !== 1 || task.outputs[0].headerOnly) throw new Error(`task ${task.n} has no single implementation to distinguish`);
@@ -492,8 +510,12 @@ function makeDistinguish(task: Task): void {
   if (!existsSync(join(repo, refOf(file)))) throw new Error(`write ${refOf(file)} first: the reference, with exactly the task's exports`);
   if (existsSync(dir)) throw new Error(`${dir} exists; delete it first, or collect it`);
   const reads = closure(repo, [...task.imports, ...task.tests, "rules.ts", refOf(file)], new Set([file])).filter((f) => f !== refOf(file));
-  const runs = randomInt(2) === 0 ? [file, alternateOf(file)] : [alternateOf(file), file];
-  const labels: Labels = { a: runs[0] === file ? "run 1" : "run 2", b: runs[1] === file ? "run 1" : "run 2" };
+  // An experiment's output may stand in for the second run (make <n>.d --second <file>).
+  const other = second ?? alternateOf(file);
+  if (!existsSync(join(repo, other))) throw new Error(`${other} doesn't exist`);
+  const runs = randomInt(2) === 0 ? [file, other] : [other, file];
+  const name = (f: string) => (f === file ? "run 1" : second ?? "run 2");
+  const labels: Labels = { a: name(runs[0]), b: name(runs[1]) };
   const copy = (from: string, to: string) => {
     mkdirSync(dirname(join(dir, to)), { recursive: true });
     copyFileSync(join(repo, from), join(dir, to));
@@ -614,6 +636,26 @@ process.stdin.on("end", () => {
   }, null, 2) + "\n");
 }
 
+/**
+ * Copies the agent's session transcript, which Claude Code keeps under
+ * ~/.claude/projects, to file: every tool call and result, so that what
+ * the agent read can be checked afterward.
+ */
+function saveTranscript(result: string, file: string): void {
+  let session: string | undefined;
+  try {
+    session = JSON.parse(result).session_id;
+  } catch {
+    return;
+  }
+  const projects = join(homedir(), ".claude", "projects");
+  if (!session || !existsSync(projects)) return;
+  for (const d of readdirSync(projects)) {
+    const f = join(projects, d, `${session}.jsonl`);
+    if (existsSync(f)) return copyFileSync(f, file);
+  }
+}
+
 /** Runs the task's agent, on model if given (a second run uses a different model from the first). */
 function runAgent(task: Task, model?: string): void {
   const dir = workspaceOf(task);
@@ -628,6 +670,7 @@ function runAgent(task: Task, model?: string): void {
   ];
   const r = spawnSync("claude", args, { cwd: dir, encoding: "utf8", env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: "0" }, maxBuffer: 1 << 28 });
   writeFileSync(`${dir}.run.json`, r.stdout ?? "");
+  saveTranscript(r.stdout ?? "", `${dir}.transcript.jsonl`);
   if (r.status !== 0) throw new Error(`agent exited with ${r.status}: ${r.stderr}`);
   console.log(`agent finished; its result is in ${dir}.run.json. Next: node task.ts check ${keyOf(task)}`);
 }
@@ -1027,7 +1070,10 @@ function main(args: string[]): void {
     case "make": {
       const tests = args.indexOf("--tests") >= 0 ? args[args.indexOf("--tests") + 1] : "readable";
       if (tests !== "readable" && tests !== "runnable") throw new Error("--tests is readable (the default) or runnable");
-      return make(findTask(arg), tests === "runnable");
+      const prose = args.indexOf("--prose") >= 0 ? args[args.indexOf("--prose") + 1] : "full";
+      if (prose !== "full" && prose !== "minimal") throw new Error("--prose is full (the default) or minimal");
+      const second = args.indexOf("--second") >= 0 ? args[args.indexOf("--second") + 1] : undefined;
+      return make(findTask(arg), tests === "runnable", prose === "minimal", second);
     }
     case "run": {
       const model = args.indexOf("--model") >= 0 ? args[args.indexOf("--model") + 1] : undefined;
@@ -1061,7 +1107,7 @@ function main(args: string[]): void {
     case "lint-here": return report(lintWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json")))), "outputs pass the lint");
     case "check-here": return report(checkWorkspace(here, JSON.parse(read(join(here, ".task/manifest.json"))), true), "every check passes");
     default:
-      console.error("usage: node task.ts list | make <n> [--tests runnable] | run <n> [--model <m>] | check <n> | collect <n> | review-check <n> | review <n> | lint | costs\n  <n> is a task (8), its second run (8.2) or its phase 3 distinguishing (8.d)");
+      console.error("usage: node task.ts list | make <n> [--tests runnable] [--prose minimal] [--second <file>, for <n>.d] | run <n> [--model <m>] | check <n> | collect <n> | review-check <n> | review <n> | lint | costs\n  <n> is a task (8), its second run (8.2) or its phase 3 distinguishing (8.d)");
       process.exit(2);
   }
 }

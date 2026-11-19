@@ -73,7 +73,7 @@ needs.
 - **Formatting.** LF line endings. The human's files (`geometry.ts`,
   `shape.ts`, `color.ts`) use 4-space indentation; the rest use 2. Match
   the file you're editing.
-- **Rules.** `@requires`, `@ensures`, `@invariant`, `@valid`, `@abstract`,
+- **Rules.** `@requires`, `@ensures`, `@invariant`, `@initially`, `@valid`, `@abstract`,
   `@budget` or `@deferred`, each with a slug and a headline. `rules.ts`
   says what each tag means; there is no tag for an untested rule. A
   rule's ID is `Interface.member.slug`, and the test that checks it

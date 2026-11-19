@@ -26,6 +26,10 @@
  * - @ensures: the implementation's, on return from a call. A rule in an
  *   interface's doc holds for calls of that interface's members, its own
  *   and those it inherits.
+ * - @initially: whoever makes the object: true of every instance before its
+ *   first call (when its history is empty), however it was made: by a
+ *   constructor, a factory or a caller that supplies its parts. How
+ *   instances are made is not part of the design.
  * - @invariant: the implementation's, for one object: true once it is made,
  *   after every call, and whenever the object emits an event, so that a
  *   listener sees an object whose invariants hold.
@@ -177,9 +181,11 @@ export function disjoint<T>(a: readonly T[], b: readonly T[]): boolean {
 export type Complexity = "constant" | "logarithmic" | "linear";
 
 /**
- * A budget: each workload's operations take time per operation in the
- * class c, and the time per operation at 100,000 against 1,000 is at most
- * limit. Measured by a bench script; never called.
+ * A budget: every call, in every state, takes time per operation in the
+ * class c, whether or not a workload exercises it. The workloads are where
+ * it is measured: on each, the time per operation at 100,000 against 1,000
+ * is at most limit. Passing them with an algorithm outside c still breaks
+ * the budget. Measured by a bench script; never called.
  */
 export declare function within(c: Complexity, limit: number, workloads: readonly string[]): boolean;
 

@@ -51,5 +51,12 @@
     "phase": "experiment",
     "what": "visibility-1: task 9.2 on Sonnet with tests runnable but not readable (make --tests runnable); checks pass; not collected, kept in experiments/visibility-1. 30 turns, 10.7 min",
     "usd": 1.3
+  },
+  {
+    "date": "2026-11-18",
+    "round": 5,
+    "phase": "experiment",
+    "what": "prose-1: task 9.2 on Sonnet, tests runnable not readable, TASK.md task section cut to Exports, Imports and budget IDs (make --prose minimal); checks pass first time; a clear that knows shapes scans all present shapes (budget read literally). Not collected; experiments/prose-1. 25 turns, 12.5 min",
+    "usd": 1.31
   }
 ]

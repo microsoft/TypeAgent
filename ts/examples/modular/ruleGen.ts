@@ -157,7 +157,7 @@ async function generate(): Promise<string> {
     const vocab = existsSync(vocabFile) ? new Set(Object.keys(await import(`./${vocabFile}`))) : new Set<string>();
     use(typeImports, i.file, i.name);
     for (const r of i.rules) {
-      if (!r.expression || !["requires", "ensures", "invariant"].includes(r.tag)) continue;
+      if (!r.expression || !["requires", "ensures", "invariant", "initially"].includes(r.tag)) continue;
       const parts = r.id.split(".");
       const member = parts.length === 3 ? parts[1] : null;
       const signature = member ? i.members.find((m) => m.name === member)?.signature : undefined;
@@ -198,7 +198,7 @@ function at${k}${typeParams}(this: ${thisType}, ...args: ${args}) {
 function post${k}${typeParams}(this: ${thisType}, __old: ReturnType<typeof pre${k}${typeArgs}>, __at: readonly ReturnType<typeof at${k}${typeArgs}>[], result: ${resultType}, ...args: ${args}) {
   ${destructure(body)}return ${body};
 }`);
-      const when = r.tag === "requires" && !/\bnested\(/.test(r.expression) ? "entry" : r.tag === "invariant" ? "invariant" : "return";
+      const when = r.tag === "requires" && !/\bnested\(/.test(r.expression) ? "entry" : r.tag === "invariant" ? "invariant" : r.tag === "initially" ? "initially" : "return";
       entries.push(`  { id: "${r.id}", tag: "${r.tag}", iface: "${i.name}", member: ${member ? `"${member}"` : "null"}, when: "${when}", pre: pre${k}, at: at${k}, post: post${k} },`);
     }
   }
@@ -213,13 +213,13 @@ function post${k}${typeParams}(this: ${thisType}, __old: ReturnType<typeof pre${
 
 ${importLines.join("\n")}
 
-/** When a rule is checked: on entry to a call, on return from it, or (an invariant) whenever the object is checked or emits an event. */
-export type When = "entry" | "return" | "invariant";
+/** When a rule is checked: on entry to a call, on return from it, (an invariant) whenever the object is checked or emits an event, or (initially) before the object's first call. */
+export type When = "entry" | "return" | "invariant" | "initially";
 
 /** A compiled rule. Its functions take the object as this. */
 export interface CompiledRule {
   readonly id: string;
-  readonly tag: "requires" | "ensures" | "invariant";
+  readonly tag: "requires" | "ensures" | "invariant" | "initially";
   readonly iface: string;
   /** The member whose doc has the rule, or null for one in the interface's doc. */
   readonly member: string | null;

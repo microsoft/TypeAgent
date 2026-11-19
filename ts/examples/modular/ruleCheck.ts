@@ -15,7 +15,7 @@
 // and the rules in the interface's doc when m is one of its members, its
 // own or inherited.
 
-import { recordCall, type Call, type Emitted } from "./rules.ts";
+import { history, recordCall, type Call, type Emitted } from "./rules.ts";
 import { compiledRules, interfaceShapes, type CompiledRule } from "./rules.gen.ts";
 
 export type Violation = (rule: string, detail: string) => void;
@@ -64,7 +64,7 @@ const members = (iface: string) => membersCache.get(iface) ?? membersCache.set(i
 export function rulesFor(as: string, member: string): CompiledRule[] {
   const head = member.split(".")[0];
   const lineage = new Set(ancestors(as));
-  return compiledRules.filter((r) => lineage.has(r.iface) && r.when !== "invariant" &&
+  return compiledRules.filter((r) => lineage.has(r.iface) && r.when !== "invariant" && r.when !== "initially" &&
     (r.member === null ? members(r.iface).has(head) : r.member === member));
 }
 
@@ -99,9 +99,19 @@ export function checkInvariants(target: object, options: ObserveOptions, when = 
   }
 }
 
-/** A proxy for target that records each call made through it and checks the rules that apply. */
+/**
+ * A proxy for target that records each call made through it and checks the
+ * rules that apply. Observe an object before its first call: its @initially
+ * rules are checked here, while its history is empty.
+ */
 export function observe<T extends object>(target: T, options: ObserveOptions): T {
   const stack: Frame[] = [];
+  if (history(target).length === 0) {
+    const lineage = new Set(ancestors(options.as));
+    for (const r of compiledRules) {
+      if (r.when === "initially" && lineage.has(r.iface)) report(r, r.post.call(target, [], [], undefined), options, "before its first call");
+    }
+  }
 
   for (const [from, events] of Object.entries(options.events ?? {})) {
     const emitter = (from === "" ? target : (target as Record<string, unknown>)[from]) as Emitter;

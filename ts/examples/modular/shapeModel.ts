@@ -63,7 +63,7 @@ export interface ShapeCollection<S extends Shape = Shape> extends DataModelReade
  * @ensures notifies  A call that changes the shapes emits change once, when the shapes are already final; a call that changes nothing emits nothing. (A listener's queries then agree with the shapes by the queries' own rules.)
  *   deepEqual(entries(this), old(entries(this))) ? emitted(this).length === 0
  *     : deepEqual(emitted(this), ["change"]) && deepEqual(atEvent(0, entries(this)), entries(this))
- * @budget log-amortized  add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, on each of the writer's workloads, growing at most 16 times from 1,000 shapes to 100,000.
+ * @budget log-amortized  add, remove (per ID listed) and compareZ take time logarithmic in the number of shapes, in every state; on each of the writer's workloads, measured time per operation grows at most 16 times from 1,000 shapes to 100,000.
  *   within("logarithmic", 16, writerWorkloads)
  */
 export interface ShapeCollectionWriter<S extends Shape = Shape> extends ShapeCollection<S>, DataModel {
@@ -127,10 +127,10 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  * the shapes of acknowledged adds are always a contiguous bottom part of
  * the z-order, in seq order, with the pending ones above them.
  *
- * Order of the queues. A processor that applies remote operations before
- * a local operation whose acknowledgment has arrived must apply that
- * local operation when its acknowledgment comes, as acknowledged;
- * otherwise a remote remove or clear sequenced after it would miss it.
+ * Order of the queues (a gloss on MessageProcessor.once and ack-keeps-z):
+ * the order in which process takes the two queues is the implementation's
+ * choice. An acknowledgment may come before its local operation is
+ * applied; the operation is then applied once, as acknowledged.
  *
  * Knowing. An operation's client knew an add when the add's seq is
  * assigned and at most the operation's refSeq, or when the add is the same
@@ -164,7 +164,7 @@ export type ShapeOp = AddShape | RemoveShapes | ClearShapes;
  *     (deepEqual(atEvent(s.at, entries(this.model)), s.from < 0 ? old(entries(this.model)) : atEvent(s.from, entries(this.model))) ? 0 : 1) &&
  *     s.changes.every((i) => deepEqual(atEvent(i, entries(this.model)), atEvent(s.at, entries(this.model))))) &&
  *   emitted(this).filter((e) => e.startsWith("model.")).length === steps(this).reduce((n, s) => n + s.changes.length, 0)
- * @budget log-amortized  process takes time per operation logarithmic in the number of shapes, on each of the processor's workloads (in none of which a clear removes shapes), growing at most 16 times from 1,000 shapes to 100,000.
+ * @budget log-amortized  process takes amortized time per operation logarithmic in the number of shapes, in every state (a clear's work for the shapes it removes is charged to their adds); on each of the processor's workloads, measured time per operation grows at most 16 times from 1,000 shapes to 100,000.
  *   within("logarithmic", 16, processorWorkloads)
  * @refines MessageProcessor.once  ack-keeps-z
  * @refines MessageProcessor.atomic  one-change

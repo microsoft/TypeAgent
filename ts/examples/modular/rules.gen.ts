@@ -8,13 +8,13 @@ import type { AddShape, ClearShapes, RemoveShapes, ShapeCollection, ShapeCollect
 import { deepEqual, history, isStrictlySorted, logged, queuedSince, sameOps } from "./dataModel.vocab.ts";
 import { addOf, applied, collectionMembers, compareOrder, disjoint, emitted, entries, ids, implies, inRange, isAckOf, isAdd, isClear, isRemove, knew, localAdds, nested, newIds, onlyMembers, removedBy, steps, unique } from "./shapeModel.vocab.ts";
 
-/** When a rule is checked: on entry to a call, on return from it, or (an invariant) whenever the object is checked or emits an event. */
-export type When = "entry" | "return" | "invariant";
+/** When a rule is checked: on entry to a call, on return from it, (an invariant) whenever the object is checked or emits an event, or (initially) before the object's first call. */
+export type When = "entry" | "return" | "invariant" | "initially";
 
 /** A compiled rule. Its functions take the object as this. */
 export interface CompiledRule {
   readonly id: string;
-  readonly tag: "requires" | "ensures" | "invariant";
+  readonly tag: "requires" | "ensures" | "invariant" | "initially";
   readonly iface: string;
   /** The member whose doc has the rule, or null for one in the interface's doc. */
   readonly member: string | null;

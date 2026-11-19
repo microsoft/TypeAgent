@@ -20,7 +20,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const sources = ["events.ts", "geometry.ts", "color.ts", "shape.ts", "dataModel.ts", "shapeModel.ts", "frames.ts", "view.ts", "shapeView.ts", "layout.ts"];
-const tags = ["requires", "ensures", "invariant", "valid", "abstract", "budget", "deferred"] as const;
+const tags = ["requires", "ensures", "invariant", "initially", "valid", "abstract", "budget", "deferred"] as const;
 type Tag = (typeof tags)[number];
 /** The scripts that measure @budget rules, each labeling a measurement with the rule's ID. */
 const benches = ["bench.ts"];

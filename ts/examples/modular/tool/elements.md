@@ -92,6 +92,8 @@ that says whose obligation it is and when it holds:
 - `@requires`: the caller's;
 - `@ensures`: the implementation's, on return;
 - `@invariant`: the implementation's, for one object, at all times;
+- `@initially`: whoever makes the object's, true of every instance
+  before its first call;
 - `@valid`: which values of a type are legal;
 - `@abstract`: stated once, made testable by each interface that
   refines it;
@@ -103,6 +105,26 @@ that says whose obligation it is and when it holds:
 Each rule has a slug, a one-line headline and, when it can be written, a
 TypeScript boolean expression. The expression is the rule; the headline
 is a gloss on it. A rule's ID is `Interface.member.slug`.
+
+**Instances, not creation.** Rules speak of all instances of an
+interface, never of how one is made. A rule written as an arrow function
+holds for every instance of its parameter's type: `new-ids` is a rule
+about every pair of processors. `@initially` says what holds of every
+instance before its first call, whether a constructor, a factory or a
+caller that supplies its parts made it. How instances are made belongs to
+the [library](#library) and to a module's wiring, not to the design:
+each implementation in the library says how it is made, which is an
+agreement between the library and the test infrastructure. A meaningful
+creation parameter is exposed as a member; a relation to a supplied part
+is a member or a scenario; limits on how many instances may exist are
+rules over pairs of instances. (Agreed 2026-11-18.)
+
+Creation becomes part of the design only when a module is made from
+outside the project, as a published package is, or for the outermost
+module's entry point. Then the external blueprint includes a maker
+interface (`make(...)` returning the external interface), with rules like
+any other member; obtaining the first maker is one binding per program,
+done by the host outside the design.
 
 **Why formal.** A design whose statements are all formal can be checked
 mechanically, and prose leaves room for readings that differ. Every
@@ -134,7 +156,9 @@ calls made on `o`; `atEvent(i, e)`, the value of `e` when the call
 emitted its `i`-th event.
 
 **Why.** Terms let a rule read at the level the design is agreed at, and
-each term is itself formal, so nothing is lost.
+each term is itself formal, so nothing is lost. A module's vocabulary is
+part of what it offers: other modules' rules are written in it, rather
+than each module reinventing its terms (agreed 2026-11-18).
 
 **In the example.** One `<name>.vocab.ts` per interface file, such as
 `shapeModel.vocab.ts`.
@@ -156,6 +180,20 @@ rules:
 |---|---|---|
 | Rule | its expression, in its vocabulary | a contract, which makes calls for the expression to judge |
 | Scenario | its test case, as data | a driver, which plays the case |
+
+**The general form** (agreed 2026-11-18). A scenario is a sequence of
+steps, each one either:
+- a call on the external interface of a named instance (scenarios may
+  use several, such as two clients), with its expected result and events
+  written as expressions in the vocabulary; or
+- a step on a double of one of the module's imports: the environment,
+  such as a network that holds or releases messages.
+
+The method can then supply one driver for every project. For now
+everything is an interface: services reached by REST or RPC are
+interfaces too, and the message passing is an encoding of the calls.
+Steps of other kinds, for projects that aren't built from interfaces,
+are left until a project needs them.
 
 **In the example.** `scenarios.ts` holds the circles app's scenarios as
 data: actions, network steps, and effects on the visible canvas.
@@ -248,8 +286,32 @@ hidden inside it. The module's rules belong to its external blueprint:
   scenarios define the module as a black box and are run against that
   wiring.
 
-Both are to be checked mechanically, as design imports are checked
-today.
+**How a module is declared.** In plain TypeScript, with no new syntax
+and no runtime values:
+- **A module is a directory,** as it is in ECMAScript and Node.
+  Subdirectories are nested modules. The project's root directory is the
+  outermost module.
+- **Its `index.ts` is its external blueprint:** type-only exports of one
+  interface and of every type its members' signatures reach,
+  transitively, and nothing else. Those defined in the module are part
+  of its external blueprint, rules included: `ShapeMessageProcessor`'s
+  `model` is a `ShapeCollection`, so the collection's rules are visible
+  outside too. Those defined elsewhere come from the modules it imports.
+  It also exports the vocabulary its rules are written in: those exports
+  are values, the only values an index may export, because they are
+  part of the design and other modules' rules build on them.
+
+  ```ts
+  // shapes/index.ts
+  export type { ShapeMessageProcessor, ShapeOp, ShapeId } from "./shapeModel.ts";
+  ```
+- **Everything else in the directory is internal.** A design file outside
+  the directory may import only its `index.ts`, as a package's `exports`
+  map restricts what Node lets others import.
+
+Both rules (an index holds only type-only exports; imports from outside
+go through the index) are to be checked mechanically, as design imports
+are checked today. TypeScript namespaces are not used.
 
 **Why.** Information hiding: a module's insides can change, or be
 reimplemented, without changing anything outside it. And a large system
@@ -295,8 +357,8 @@ fresh spec, run both ways.
 ## Not yet decided
 
 - [Visibility to the implementer](#visibility-to-the-implementer).
-- How modules are declared and checked: the [module](#module) section
-  says what is agreed.
+- The checks for modules aren't built, and the circles files aren't yet
+  divided into modules.
 - Proof for some rules, as an alternative to testing (see [Rules](#rules)).
 - The workflows: how a developer creates, agrees, implements, reviews
   and changes these elements. That is the next document.
@@ -314,6 +376,26 @@ fresh spec, run both ways.
   own: one external blueprint and a set of internal blueprints. The
   method's elements are then blueprints and modules.
 - 2026-11-18: the project is the outermost module.
+- 2026-11-18: a module is a directory whose `index.ts` exports, type-only,
+  one interface and the types its signatures need; subdirectories nest.
+  No module syntax, namespaces or runtime values.
+- 2026-11-18: a module's external blueprint is one interface plus every
+  type its signatures reach, transitively, rules included; and the
+  outermost module, the app, gets an external interface of its own
+  (its members and rules to be agreed).
+- 2026-11-18: a module's index exports its vocabulary as values, the only
+  values it may export; rule functions are part of a module's value.
+- 2026-11-18: creation stays out of the design, except for modules made
+  from outside the project, whose external blueprint then has a maker
+  interface.
+- 2026-11-18: a scenario's steps are calls on named instances' external
+  interfaces, and steps on the doubles of the module's imports;
+  interfaces only, for now.
+- 2026-11-18: a budget's complexity class holds for every call in every
+  state; its workloads only measure it (`within` in `rules.ts`).
+- 2026-11-18: rules speak of instances, not creation: arrow-function
+  rules quantify over all instances, and `@initially` (new) says what
+  holds before an instance's first call. No factory types in the design.
 - 2026-11-18: the developer workflow and its tools come before more work
   on the circles example, following feedback from experienced developers
   who want to try the method.

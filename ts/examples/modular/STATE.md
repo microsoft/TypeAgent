@@ -62,7 +62,7 @@ deferred.
   platform subsets are discussed. When it runs, it
   challenges the blueprint only; `canvas.ts` and `dom.ts` are out of
   scope.
-- **Rule tags:** `@requires`, `@ensures`, `@invariant` (state only),
+- **Rule tags:** `@requires`, `@ensures`, `@invariant` (state only), `@initially`,
   `@valid`, `@abstract` with `@refines`, `@budget`, and `@deferred` with
   `when:` and `how:`. The catalog refuses unknown tags and any rule that
   isn't accounted for.
