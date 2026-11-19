@@ -2,6 +2,15 @@
 // Licensed under the MIT License.
 import { randomUUID } from "node:crypto";
 import {
+    viewSeparationRequestSchema,
+    viewSeparationResultSchema,
+    viewSeparationToolName,
+} from "./viewSeparationProtocol.js";
+import type {
+    ViewSeparationRequest,
+    ViewSeparationResult,
+} from "@typeagent/memory-service";
+import {
     frameQueryRequestSchema,
     frameCorpusRequestSchema,
     frameQueryResultSchema,
@@ -622,6 +631,15 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.planViewMaintenance?.(request) ??
             unsupportedCapability("view maintenance planning")
+        );
+    }
+    public separateView(
+        request: ViewSeparationRequest,
+    ): Promise<ViewSeparationResult> {
+        viewSeparationRequestSchema.parse(request);
+        return (
+            this.service.separateView?.(request) ??
+            unsupportedCapability("confirmed view separation")
         );
     }
     public maintainViews(request: ViewMaintenanceRequest) {
@@ -1340,6 +1358,16 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewToolNames.planViewMaintenance,
             request,
             viewMaintenancePlanSchema,
+        );
+    }
+    public separateView(
+        request: ViewSeparationRequest,
+    ): Promise<ViewSeparationResult> {
+        viewSeparationRequestSchema.parse(request);
+        return this.invoke(
+            viewSeparationToolName,
+            request,
+            viewSeparationResultSchema,
         );
     }
     public maintainViews(

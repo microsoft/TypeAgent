@@ -517,6 +517,77 @@ describe("MessagesWireApiProvider", () => {
 describe("ResponsesWireApiProvider", () => {
     const adapter = adapterFor("responses");
 
+    test.each(["max_output_tokens", "content_filter"])(
+        "preserves incomplete response reason %s without accepting partial output",
+        (reason) => {
+            const response = {
+                status: "incomplete",
+                incomplete_details: { reason },
+                output_text: "partial",
+            };
+            const message = `Model response is incomplete (reason: ${reason})`;
+            expect(adapter.parseResponse(response, makeRequest())).toEqual({
+                success: false,
+                message,
+            });
+            const decoder = adapter.createStreamDecoder!(makeRequest());
+            expect(() =>
+                decoder.push(
+                    JSON.stringify({
+                        type: "response.incomplete",
+                        response,
+                    }),
+                ),
+            ).toThrow(message);
+        },
+    );
+
+    test.each([
+        undefined,
+        null,
+        {},
+        { reason: "" },
+        { reason: "   " },
+        { reason: null },
+        { reason: 123 },
+        { reason: {} },
+    ])(
+        "keeps incomplete responses rejected with absent or malformed details %p",
+        (details) => {
+            const response = {
+                status: "incomplete",
+                incomplete_details: details,
+                output: [
+                    {
+                        type: "message",
+                        content: [{ type: "output_text", text: "partial" }],
+                    },
+                ],
+            };
+            const message = "Model response is incomplete";
+            expect(adapter.parseResponse(response, makeRequest())).toEqual({
+                success: false,
+                message,
+            });
+            const decoder = adapter.createStreamDecoder!(makeRequest());
+            expect(() =>
+                decoder.push(
+                    JSON.stringify({
+                        type: "response.incomplete",
+                        response,
+                    }),
+                ),
+            ).toThrow(message);
+        },
+    );
+
+    test("rejects incomplete stream events without a response envelope", () => {
+        const decoder = adapter.createStreamDecoder!(makeRequest());
+        expect(() =>
+            decoder.push(JSON.stringify({ type: "response.incomplete" })),
+        ).toThrow("Model response is incomplete");
+    });
+
     test("preserves reader JSON schemas through Responses text.format", () => {
         const jsonSchema = {
             name: "memory_answer",

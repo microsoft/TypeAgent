@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
+import type {
+    TopicConcept,
+    TopicCuration,
+    TopicNode,
+    TopicSnapshot,
+} from "./topicTypes.js";
 import type { ViewCitation } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
 
@@ -14,6 +19,34 @@ export const topicSourceKey = (value: {
 const terms = (text: string) =>
     new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 const labelKey = (text: string) => text.trim().toLowerCase();
+
+export function nominateDeferredTopics(
+    snapshot: TopicSnapshot,
+    current: TopicCuration,
+    incoming: ReadonlyArray<{ label: string }>,
+): TopicNode[] {
+    const labels = new Set(incoming.map((node) => labelKey(node.label)));
+    const incomingTerms = terms(incoming.map((node) => node.label).join(" "));
+    const deferred = new Set(current.deferred.map((entry) => entry.nodeId));
+    return snapshot.nodes
+        .filter((node) => deferred.has(node.id))
+        .map((node) => ({
+            node,
+            exact: labels.has(labelKey(node.label)),
+            score: [...terms(node.label)].filter((term) =>
+                incomingTerms.has(term),
+            ).length,
+        }))
+        .filter((entry) => entry.exact || entry.score > 0)
+        .sort(
+            (left, right) =>
+                Number(right.exact) - Number(left.exact) ||
+                right.score - left.score ||
+                left.node.id.localeCompare(right.node.id),
+        )
+        .slice(0, 24)
+        .map((entry) => entry.node);
+}
 const contextLimit =
     "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.";
 

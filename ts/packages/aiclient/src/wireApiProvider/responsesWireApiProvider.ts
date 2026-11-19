@@ -37,10 +37,18 @@ type ResponsesError = { message?: string };
 type ResponsesResult = {
     status?: string;
     error?: ResponsesError | null;
+    incomplete_details?: { reason?: string };
     output_text?: string;
     output?: ResponsesOutputItem[];
     usage?: ResponsesUsage;
 };
+
+function incompleteResponseMessage(result: ResponsesResult): string {
+    const reason = result.incomplete_details?.reason;
+    return typeof reason === "string" && reason.trim().length > 0
+        ? `${incompleteOutputMessage} (reason: ${reason})`
+        : incompleteOutputMessage;
+}
 
 export class ResponsesWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "responses";
@@ -103,7 +111,7 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
     parseResponse(data: unknown, _request: ModelRequest): Result<string> {
         const res = data as ResponsesResult;
         if (res.status === "incomplete") {
-            return error(incompleteOutputMessage);
+            return error(incompleteResponseMessage(res));
         }
         if (res.status === "failed" || res.status === "cancelled") {
             return error(res.error?.message || `Response ${res.status}`);
@@ -139,17 +147,16 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     delta?: string;
                     message?: string;
                     error?: ResponsesError | null;
-                    response?: {
-                        error?: ResponsesError | null;
-                        usage?: ResponsesUsage;
-                    };
+                    response?: ResponsesResult;
                 } | null;
                 const piece: StreamPiece = {};
                 if (typeof evt !== "object" || evt === null) {
                     return piece;
                 }
                 if (evt.type === "response.incomplete") {
-                    throw new Error(incompleteOutputMessage);
+                    throw new Error(
+                        incompleteResponseMessage(evt.response ?? {}),
+                    );
                 }
                 if (evt.type === "error") {
                     piece.error = new Error(

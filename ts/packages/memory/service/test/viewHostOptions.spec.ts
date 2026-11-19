@@ -110,6 +110,27 @@ test("unchanged topic curation reuse is opt-in for both generation engines", () 
     ).toThrow("TYPEAGENT_MEMORY_TOPIC_CURATION_REUSE");
 });
 
+test("restricted topic decisions have an explicit validated host rollback", () => {
+    for (const stage of ["original", "decomposed", "output-contract"] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: stage,
+            }).topicCuration,
+        ).toEqual({ generativeDecisionStage: stage });
+    for (const stage of ["", "native", "false"])
+        expect(() =>
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: stage,
+            }),
+        ).toThrow("Invalid TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+            TYPEAGENT_MEMORY_TOPIC_GENERATIVE_DECISION_STAGE: "output-contract",
+        }),
+    ).toThrow("cannot configure Decision topics");
+});
+
 test("default frozen topic preparation is compatible with ordered watermarks", () => {
     const options = getConfiguredMemoryViewOptions({
         TYPEAGENT_MEMORY_TOPIC_PRIOR_DELTAS: "true",

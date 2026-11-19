@@ -57,7 +57,8 @@ export function sourceFollowingHost(
         const supported =
             fragments.length > 0 &&
             fragments.every((item) => body.includes(item.excerpt)) &&
-            (input.definition.wiki?.query !== "overlap review" ||
+            (!input.editorial ||
+                input.definition.wiki?.query !== "overlap review" ||
                 (original.includes("bare overlap label") &&
                     original.includes("Preserve navigable context")));
         return {

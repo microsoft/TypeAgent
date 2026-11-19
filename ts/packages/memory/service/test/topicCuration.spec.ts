@@ -294,7 +294,7 @@ test("frozen curation prepares raw evidence once across changing prior concepts"
     );
     validateTopicSnapshot({ ...value, curation });
     expect(prepared).toBe(55);
-    expect(calls).toBe(5);
+    expect(calls).toBe(7);
     expect(curation.concepts[0].memberIds).toHaveLength(55);
 });
 

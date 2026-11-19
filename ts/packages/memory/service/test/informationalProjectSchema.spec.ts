@@ -33,7 +33,13 @@ test("project summary schema has indexed citations and typed states without inve
     ]);
     expect(Object.keys(properties).length).toBeLessThanOrEqual(20);
     expect(
-        evidenceRecord(evidenceRecord(properties.citationIds).items).enum,
+        evidenceRecord(
+            evidenceRecord(
+                evidenceRecord(
+                    evidenceRecord(properties.citationIds).properties,
+                ).article,
+            ).items,
+        ).enum,
     ).toEqual(["f0"]);
     expect(JSON.stringify(schema)).not.toMatch(
         /inventory|witness|sourceDecisions/,

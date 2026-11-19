@@ -883,6 +883,7 @@ async function rehearsal(
     let forgetting: Promise<unknown> | undefined;
     const adapter = {
         identity: "offline-contribution",
+        checkEditorial: async () => ({ safe: true, failures: [] }),
         assessWikiSubject: async (
             input: ViewBuildSnapshot,
             pages: ReturnType<typeof nominateWikiPages>,
@@ -1305,6 +1306,7 @@ test.each([
         });
         const adapter = {
             identity: "offline-grouped-contribution",
+            checkEditorial: async () => ({ safe: true, failures: [] }),
             assessWikiSubject: async (
                 input: ViewBuildSnapshot,
                 pages: ReturnType<typeof nominateWikiPages>,
