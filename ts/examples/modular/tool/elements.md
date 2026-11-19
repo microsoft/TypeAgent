@@ -28,6 +28,8 @@ an answer that says otherwise is wrong.
   blueprints that only the module can see. Modules nest: a nested
   module's external blueprint is one of its parent's internal
   blueprints.
+- A module defines an [archetype](#archetype): the design that every
+  implementation of it shares.
 - [Platform interfaces](#platform-interfaces) are imports whose
   implementation is outside the project.
 
@@ -189,6 +191,14 @@ steps, each one either:
 - a step on a double of one of the module's imports: the environment,
   such as a network that holds or releases messages.
 
+A scenario is **allowed** or **forbidden** (agreed 2026-11-19). An
+allowed scenario is a history the rules must accept and implementations
+must play; a forbidden one is a history the rules must reject, such as a
+model holding a shape no add made. Both are checked in seconds by
+evaluating the rule expressions on the history, with no implementation,
+which puts scenarios in the human's fast loop (`workflows.md`). The
+consequences the human agrees to are kept as scenarios of both kinds.
+
 The method can then supply one driver for every project. For now
 everything is an interface: services reached by REST or RPC are
 interfaces too, and the message passing is an encoding of the calls.
@@ -211,6 +221,23 @@ interface and gives its rules, and may leave its members open.
 `MessageProcessor` rules `formed-now` and `infrastructure-only` speak of
 a controller, which has no interface. A placeholder makes that part, and
 what it owes the rest, explicit, instead of leaving it to prose.
+
+**Like a type parameter, but more.** A module with a placeholder is
+generic in it, the way `Box<T extends Bound>` is generic in `T`. Each
+implementation fills the hole with its own design, as an instantiation
+supplies a type, and the placeholder's rules are the bound that every
+filling must meet. A bound on a type parameter can only be a type,
+though, and it sits in one place. A placeholder's obligations are rules
+and scenarios, they can relate the hole to other blueprints in the
+module (`formed-now` relates the controller to the processor), and the
+hole can be a whole part whose members the implementer designs.
+
+**Why holes can have more structure here.** Type parameters stay simple
+partly because people have to keep track of every place a parameter is
+used and what each use requires. A richer hole has more of these
+correspondences: every rule and scenario that mentions it. AI helps the
+human team keep track of them, and the checks confirm that each filling
+meets them.
 
 **In the example.** The first is to be a `Controller` placeholder in
 circles, for the part that turns a user's input into operations.
@@ -342,6 +369,38 @@ yet marks or checks that boundary.
 blueprint belongs to some module. For the circles app, the app's
 scenarios belong to the project's external blueprint.
 
+## Archetype
+
+Status: agreed 2026-11-19. A concept, not a separate element.
+
+**What it is.** The design a [module](#module) defines: its external
+blueprint and the internal blueprints it composes, with their rules and
+scenarios, which every implementation of the module shares. Humans and
+agents agree on the archetype, and the checks confirm that each
+implementation is a faithful instance of it. As in Campbell's *The Hero
+with a Thousand Faces*, there is one story and many tellings: the module
+is the story, its internal blueprints are the roles in it, its scenarios
+are the plot, and each implementation is one telling.
+
+**What belongs to it.** The internal structure does. A module's
+implementation is its internal blueprints' implementations wired
+together, so every instance has the same parts. Where the design leaves
+structure to the implementer, it says so with a
+[placeholder blueprint](#placeholder-blueprints), a part the archetype
+requires but doesn't specify. Nested modules are archetypes within the
+archetype; the project, the outermost module, is the whole.
+
+**Why the term.** It names what the method is for: a shared
+understanding, among the humans and agents on a team, of a design that
+holds whichever implementation is used. It also says where things
+belong. Proofs in phase 1p are about the archetype, since they need only
+the rules and the vocabulary; phase 3 compares two instances of it, and
+the freedoms it finds are where the archetype lets instances differ.
+
+**Not (yet).** An archetype is not a file or a template. Reusing one
+archetype across projects, as a catalog of designs, isn't part of the
+method today.
+
 ## Visibility to the implementer
 
 Status: Open. One experiment run (2026-11-18); see below.
@@ -423,3 +482,12 @@ fresh spec, run both ways.
 - 2026-11-18: the developer workflow and its tools come before more work
   on the circles example, following feedback from experienced developers
   who want to try the method.
+- 2026-11-19: a module defines an archetype, the design every
+  implementation of it shares, internal structure included. A concept,
+  not an element; a blueprint is not an archetype. Placeholder
+  blueprints are like type parameters, with rules and scenarios as their
+  bounds; holes can have more structure because AI helps the team track
+  the correspondences.
+- 2026-11-19: scenarios are allowed or forbidden; both are checked by
+  evaluating rules on their histories. The workflows add one concept,
+  the proposed change (`workflows.md`).

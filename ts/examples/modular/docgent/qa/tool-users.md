@@ -132,3 +132,19 @@ written, by someone other than whoever writes the docgent's instructions.
 - **Key points:** one interface; files group several; an example.
 - **Must not claim:** one blueprint per file.
 - **Sources:** `tool/elements.md` (Blueprint).
+
+## el-10: What is an archetype?
+
+- **Kind:** fact
+- **Gold answer:** The design a module defines: its external blueprint
+  and the internal blueprints it composes, with their rules and
+  scenarios, which every implementation of the module shares. Each
+  implementation is an instance of it. Parts the design leaves open are
+  placeholder blueprints, which work like type parameters whose bounds
+  are rules and scenarios.
+- **Key points:** a module, not a blueprint; internal structure
+  included; implementations are instances; placeholders.
+- **Must not claim:** that a blueprint is an archetype; that archetypes
+  are files or reusable templates; that the method has a catalog of
+  archetypes.
+- **Sources:** `tool/elements.md` (Archetype, Placeholder blueprints).
