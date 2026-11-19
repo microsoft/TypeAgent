@@ -65,3 +65,10 @@ Phase 1 decisions, agreed with the human. The design is `list.ts` and
   hand: dropping "future is emptied" from add's `records` makes
   `determined` and `redo_survives_change` fail, as it should, but a
   translation that drifted from list.ts would not be noticed.
+- 2026-11-19: seven adversaries (`adversaries/`), each a real fault:
+  add appends; add keeps future; remove forgets its text; undo of a
+  replace keeps the new text; redo from the end of future; a stale
+  canUndo; get off by one. The history generator catches all seven on
+  seeds 1 to 3. Redo from the end needs two undone changes before a
+  redo, which short histories rarely reach; full-length histories and
+  methods weighted above reads fixed that, with no undo-specific code.

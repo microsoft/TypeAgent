@@ -171,8 +171,14 @@ with the goal of then adding a feature to circles with the tool:
    forbidden scenarios and the brief's sentences; a forbidden scenario
    is proved by a theorem with its name. Open: generating the Lean from
    the rule expressions, since the translation is by hand.
-2. A generic contract driver: random calls that satisfy `@requires`,
-   judged by the rules.
+2. **The generic history generator** (done, `tool/cli/histories.ts`):
+   random calls that keep `@requires`, judged by the rules, shrunk to
+   the shortest failing history; it fails a check if a rule is never
+   evaluated. `check` runs it on the references and adversaries (undo's
+   seven are caught on seeds 1 to 3, in about 2 seconds); `typearc
+   test` runs it, and the scenarios, on the library. Parameter types
+   beyond strings, numbers, booleans and arrays, and asynchronous
+   members, aren't generated yet: circles needs both.
 3. `typearc design`: a Claude Code session whose permissions and hooks
    enforce the design agent's role and run `check` after every edit;
    proposed changes as patch files.

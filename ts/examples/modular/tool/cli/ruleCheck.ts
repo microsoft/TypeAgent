@@ -63,6 +63,8 @@ export interface ObserveOptions {
   readonly samples?: (id: string) => readonly (readonly unknown[])[];
   /** Check the @invariant rules after every call made from outside the object, as well as at events. */
   readonly invariantsAfterCalls?: boolean;
+  /** Told the ID of each rule as it is evaluated, for coverage. */
+  readonly evaluated?: (rule: string) => void;
 }
 
 interface Frame {
@@ -106,6 +108,7 @@ export function ruleChecker({ compiledRules, interfaceShapes }: RuleSet) {
   }
 
   function report(r: CompiledRule, value: unknown, options: ObserveOptions, detail: string): void {
+    options.evaluated?.(r.id);
     if (typeof value === "function") {
       const samples = options.samples?.(r.id);
       if (!samples) throw new Error(`${r.id} is written for every value of its parameters: give observe samples for it`);
@@ -164,6 +167,7 @@ export function ruleChecker({ compiledRules, interfaceShapes }: RuleSet) {
         if (r.when === "entry") return;
         const value = r.post.call(target, pres[i], frame.at.map((a) => a[i]), result, ...frame.args);
         if (r.tag === "requires") {
+          options.evaluated?.(r.id);
           if (!value) throw new Error(`the test broke ${r.id}, calling ${call.member}`);
           return;
         }
@@ -180,9 +184,9 @@ export function ruleChecker({ compiledRules, interfaceShapes }: RuleSet) {
     const invoke = (member: string, run: (...args: unknown[]) => unknown, args: unknown[]): unknown => {
       const rules = rulesFor(options.as, member);
       for (const r of rules) {
-        if (r.when === "entry" && !r.post.call(target, [], [], undefined, ...args)) {
-          throw new Error(`the test broke ${r.id}, calling ${member}`);
-        }
+        if (r.when !== "entry") continue;
+        options.evaluated?.(r.id);
+        if (!r.post.call(target, [], [], undefined, ...args)) throw new Error(`the test broke ${r.id}, calling ${member}`);
       }
       const pres = rules.map((r) => r.pre.call(target, ...args));
       const frame: Frame = { call: { member, args: args.map(copy), given: args, result: undefined, emitted: [], nested: [] }, rules, args, at: [] };
@@ -226,5 +230,10 @@ export function ruleChecker({ compiledRules, interfaceShapes }: RuleSet) {
     });
   }
 
-  return { rulesFor, checkInvariants, observe };
+  /** Whether calling member with args on target, used as as, keeps the @requires rules checked on entry. */
+  function requiresHold(target: object, as: string, member: string, args: readonly unknown[]): boolean {
+    return rulesFor(as, member).every((r) => r.when !== "entry" || Boolean(r.post.call(target, [], [], undefined, ...args)));
+  }
+
+  return { rulesFor, checkInvariants, observe, requiresHold };
 }

@@ -3,21 +3,25 @@
  *
  *   node tool/cli/typearc.ts init <dir>    make a project in dir
  *   node tool/cli/typearc.ts check [dir]   run the fast checks (dir defaults to .)
+ *   node tool/cli/typearc.ts test [dir]    check the library's implementations
  *
  * A project is a directory with typearc.json:
  *   {
  *     "interfaces": ["list.ts"],
  *     "ruleLanguage": "../rules.ts",
  *     "scenarios": "scenarios.ts",
- *     "references": { "List": { "file": "listkit.ts", "make": "makeList" } }
+ *     "references": { "List": { "file": "listkit.ts", "make": "makeList" } },
+ *     "library": { "List": [{ "file": "impl/list.ts", "make": "makeList" }] }
  *   }
  * interfaces are its interface files; each may have a vocabulary file
  * beside it (list.vocab.ts). ruleLanguage is the path of the rule
  * language (rules.ts), which the vocabularies re-export. scenarios, if
- * given, is the design's scenarios file, and references say how the
- * scenario judge makes an instance of each interface (references are test
- * infrastructure, not design). Paths are relative to the project and
- * written with "/".
+ * given, is the design's scenarios file. references say how to make an
+ * instance of each interface for checking (references are test
+ * infrastructure, not design), and library lists each interface's
+ * implementations. Adversaries are adversaries/<RuleID>--<variant>.adversary.ts,
+ * each exporting make. Paths are relative to the project and written with
+ * "/".
  *
  * check runs the checks that need no implementation, and exits nonzero if
  * any fails:
@@ -33,10 +37,17 @@
  * - scenario subset: the scenarios file is written in the subset
  *   (scenarios.ts here);
  * - scenarios: each is judged on the references (scenarios.ts here);
+ * - references follow the rules: the history generator (histories.ts)
+ *   finds no rule a reference breaks, and every rule is evaluated;
+ * - adversaries caught: for each adversary, the history generator finds a
+ *   history that breaks the rule it is named for;
  * - proofs: each .lean file under proof/ is checked, if Lean is installed,
  *   and a forbidden scenario counts as proved by a theorem with its name.
- * Imports: design.ts, ruleGen.ts, ruleCheck.ts, scenarios.ts,
- * node:child_process, node:fs, node:os, node:path, node:url
+ *
+ * test runs the history generator and plays the scenarios on each
+ * implementation in the library.
+ * Imports: design.ts, histories.ts, ruleGen.ts, ruleCheck.ts,
+ * scenarios.ts, node:child_process, node:fs, node:os, node:path, node:url
  */
 
 import { spawnSync } from "node:child_process";
@@ -45,6 +56,7 @@ import { homedir } from "node:os";
 import { dirname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { boundaryProblems, parseDesign, planProblems, refinementProblems, tagProblems } from "./design.ts";
+import { generateHistories, memberShapes, type Generated } from "./histories.ts";
 import type { RuleSet } from "./ruleCheck.ts";
 import { generateRules } from "./ruleGen.ts";
 import { judgeScenarios, parseScenarios, type References } from "./scenarios.ts";
@@ -59,7 +71,25 @@ interface Project {
   readonly ruleLanguage: string;
   readonly scenarios?: string;
   readonly references: References;
+  readonly library: Readonly<Record<string, readonly Maker[]>>;
 }
+
+/** How to make an instance: a file and the function it exports. */
+interface Maker {
+  readonly file: string;
+  readonly make: string;
+}
+
+const isMaker = (m: unknown): m is Maker =>
+  typeof m === "object" && m !== null && typeof (m as Maker).file === "string" && typeof (m as Maker).make === "string";
+
+/** The adversary files, relative to the project. */
+const adversaryFiles = (p: Project) => {
+  const dir = join(p.dir, "adversaries");
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".adversary.ts")).map((f) => `adversaries/${f}`) : [];
+};
+
+const libraryFiles = (p: Project) => [...new Set(Object.values(p.library).flatMap((ms) => ms.map((m) => m.file)))];
 
 /** The interface files' vocabulary files that exist. */
 const vocabFiles = (p: Project) => p.interfaces.map((f) => f.replace(/\.ts$/, ".vocab.ts")).filter((f) => existsSync(join(p.dir, f)));
@@ -71,18 +101,25 @@ const referenceFiles = (p: Project) => [...new Set(Object.values(p.references).m
 function loadProject(dir: string): Project {
   const path = join(dir, projectFile);
   if (!existsSync(path)) throw new Error(`${dir} has no ${projectFile}; make one with: typearc init ${dir}`);
-  const raw = JSON.parse(readFileSync(path, "utf8")) as { interfaces?: unknown; ruleLanguage?: unknown; scenarios?: unknown; references?: unknown };
+  const raw = JSON.parse(readFileSync(path, "utf8")) as { interfaces?: unknown; ruleLanguage?: unknown; scenarios?: unknown; references?: unknown; library?: unknown };
   const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
   if (!strings(raw.interfaces) || typeof raw.ruleLanguage !== "string") {
     throw new Error(`${path} needs "interfaces" (a list of files) and "ruleLanguage" (a path)`);
   }
   if (raw.scenarios !== undefined && typeof raw.scenarios !== "string") throw new Error(`${path}: "scenarios" is a path`);
-  const references = (raw.references ?? {}) as Record<string, { file?: unknown; make?: unknown }>;
+  const references = (raw.references ?? {}) as Record<string, unknown>;
   for (const [iface, r] of Object.entries(references)) {
-    if (typeof r?.file !== "string" || typeof r.make !== "string") throw new Error(`${path}: the reference for ${iface} needs "file" and "make"`);
+    if (!isMaker(r)) throw new Error(`${path}: the reference for ${iface} needs "file" and "make"`);
   }
-  const project: Project = { dir, interfaces: raw.interfaces, ruleLanguage: raw.ruleLanguage, scenarios: raw.scenarios, references: references as References };
-  for (const f of [...raw.interfaces, raw.ruleLanguage, ...(project.scenarios ? [project.scenarios] : []), ...referenceFiles(project)]) {
+  const library = (raw.library ?? {}) as Record<string, unknown>;
+  for (const [iface, ms] of Object.entries(library)) {
+    if (!Array.isArray(ms) || !ms.every(isMaker)) throw new Error(`${path}: the library for ${iface} is a list of { "file", "make" }`);
+  }
+  const project: Project = {
+    dir, interfaces: raw.interfaces, ruleLanguage: raw.ruleLanguage, scenarios: raw.scenarios,
+    references: references as References, library: library as Record<string, Maker[]>,
+  };
+  for (const f of [...raw.interfaces, raw.ruleLanguage, ...(project.scenarios ? [project.scenarios] : []), ...referenceFiles(project), ...libraryFiles(project)]) {
     if (!existsSync(join(dir, f))) throw new Error(`${path} names ${f}, which doesn't exist`);
   }
   return project;
@@ -170,7 +207,8 @@ async function rulesCompile(p: Project): Promise<Outcome> {
     }
     return undefined;
   };
-  const problems = tsc(p.dir, [...p.interfaces, ...vocabFiles(p), generated, ...(p.scenarios ? [p.scenarios] : []), ...referenceFiles(p)]).map((e) => {
+  const checked = [...p.interfaces, ...vocabFiles(p), generated, ...(p.scenarios ? [p.scenarios] : []), ...referenceFiles(p), ...adversaryFiles(p), ...libraryFiles(p)];
+  const problems = tsc(p.dir, checked).map((e) => {
     const line = new RegExp(`^${generated.replace(".", "\\.")}\\((\\d+),`).exec(e)?.[1];
     const id = line ? ruleAt(Number(line)) : undefined;
     return id ? `${id}: ${e.replace(/^[^:]*: /, "")}` : e;
@@ -230,18 +268,70 @@ async function scenarioChecks(p: Project, compiled: Outcome, proved: ReadonlySet
   return [subset, { name: "scenarios", problems: j.problems, note }];
 }
 
-async function check(dir: string): Promise<boolean> {
-  const p = loadProject(dir);
-  const compiled = await rulesCompile(p);
-  const proof = proofs(p);
-  const outcomes: Outcome[] = [
-    ruleFormat(p),
-    { name: "boundary", problems: boundaryProblems(p.dir, designFiles(p)) },
-    vocabularyPurity(p),
-    compiled,
-    ...(await scenarioChecks(p, compiled, proof.proved)),
-    proof,
-  ];
+/** The function a maker names, imported from its file. */
+async function load(p: Project, m: Maker): Promise<() => object> {
+  const exported = ((await import(pathToFileURL(join(p.dir, m.file)).href)) as Record<string, unknown>)[m.make];
+  if (typeof exported !== "function") throw new Error(`${m.file} doesn't export a function ${m.make}`);
+  return exported as () => object;
+}
+
+const loadRules = async (p: Project) => (await import(pathToFileURL(join(p.dir, generated)).href)) as RuleSet;
+
+/** A failing history, one call per line. */
+const historyLines = (g: Generated): string[] => {
+  if (g.problem) return [g.problem];
+  if (g.threw) return [`threw ${g.threw.error}; the history:`, ...g.threw.history.map((h) => `  ${h}`)];
+  if (g.failure) return [`breaks ${g.failure.rule} ${g.failure.detail}; the history:`, ...g.failure.history.map((h) => `  ${h}`)];
+  return [];
+};
+
+/** Runs the history generator on each instance maker, as an interface; every rule must be evaluated. An empty label leaves lines unlabeled. */
+async function followRules(p: Project, rules: RuleSet, makers: readonly [string, string, Maker][]): Promise<string[]> {
+  const members = memberShapes(p.dir, p.interfaces);
+  const problems: string[] = [];
+  for (const [label, as, maker] of makers) {
+    const g = generateHistories({ rules, members, as, make: await load(p, maker) });
+    const at = label ? `${label}: ` : "";
+    problems.push(...historyLines(g).map((l, i) => (i === 0 ? `${at}${l}` : l)));
+    if (g.unevaluated.length) problems.push(`${at}no history evaluated ${g.unevaluated.join(", ")}`);
+  }
+  return problems;
+}
+
+/** The references follow the rules, and each adversary is caught by the rule it is named for. */
+async function historyChecks(p: Project, compiled: Outcome): Promise<Outcome[]> {
+  const names = ["references follow the rules", "adversaries caught"];
+  if (compiled.problems.length) return names.map((name) => ({ name, problems: [], skipped: "the rules have problems" }));
+  const rules = await loadRules(p);
+  const refs = Object.entries(p.references).map(([as, m]): [string, string, Maker] => [`${as} (${m.file})`, as, m]);
+  const references: Outcome = refs.length
+    ? { name: names[0], problems: await followRules(p, rules, refs), note: `${refs.length} ${refs.length === 1 ? "reference" : "references"}` }
+    : { name: names[0], problems: [], skipped: "no references" };
+
+  const files = adversaryFiles(p);
+  if (files.length === 0) return [references, { name: names[1], problems: [], skipped: "no adversaries" }];
+  const members = memberShapes(p.dir, p.interfaces);
+  const problems: string[] = [];
+  for (const file of files) {
+    const rule = /^adversaries\/(.+?)--/.exec(file)?.[1];
+    const iface = rule?.split(".")[0];
+    // The adversary implements the referenced interface whose ancestors hold its rule.
+    const as = Object.keys(p.references).find((r) => iface && rules.interfaceShapes[r]?.ancestors.includes(iface));
+    if (!rule || !as) {
+      problems.push(`${file}: no reference's interface has the rule it is named for`);
+      continue;
+    }
+    const g = generateHistories({ rules, members, as, make: await load(p, { file, make: "make" }), target: rule });
+    if (g.problem) problems.push(`${file}: ${g.problem}`);
+    else if (g.threw) problems.push(`${file}: threw ${g.threw.error} before breaking ${rule}`);
+    else if (!g.failure) {
+      problems.push(`${file}: escaped${g.others.size ? `; it broke ${[...g.others].join(", ")} instead` : ""}`);
+    }
+  }
+  return [references, { name: names[1], problems, note: `${files.length - problems.length} of ${files.length}` }];
+}
+
+function print(outcomes: readonly Outcome[]): boolean {
   for (const o of outcomes) {
     const status = o.skipped ? "skip" : o.problems.length ? "FAIL" : "ok";
     const note = o.skipped ?? o.note;
@@ -249,6 +339,47 @@ async function check(dir: string): Promise<boolean> {
     for (const line of o.problems) console.log(`      ${line}`);
   }
   return outcomes.every((o) => o.problems.length === 0);
+}
+
+async function check(dir: string): Promise<boolean> {
+  const p = loadProject(dir);
+  const compiled = await rulesCompile(p);
+  const proof = proofs(p);
+  return print([
+    ruleFormat(p),
+    { name: "boundary", problems: boundaryProblems(p.dir, designFiles(p)) },
+    vocabularyPurity(p),
+    compiled,
+    ...(await scenarioChecks(p, compiled, proof.proved)),
+    ...(await historyChecks(p, compiled)),
+    proof,
+  ]);
+}
+
+/** Each implementation in the library: the history generator, and the scenarios played on it. */
+async function test(dir: string): Promise<boolean> {
+  const p = loadProject(dir);
+  const compiled = await rulesCompile(p);
+  if (compiled.problems.length) return print([compiled]);
+  const rules = await loadRules(p);
+  const outcomes: Outcome[] = [];
+  const interfaces = new Set(parseDesign(p.dir, p.interfaces).filter((i) => !i.module).map((i) => i.name));
+  const syntax = p.scenarios ? parseScenarios(p.dir, p.scenarios, interfaces) : undefined;
+  for (const [as, makers] of Object.entries(p.library)) {
+    for (const m of makers) {
+      const label = `${as} (${m.file})`;
+      const problems = await followRules(p, rules, [["", as, m]]);
+      if (p.scenarios && syntax) {
+        const j = await judgeScenarios({
+          dir: p.dir, scenariosFile: p.scenarios, ruleLanguage: p.ruleLanguage, rules, references: { [as]: m }, syntax, subject: "the implementation",
+        });
+        problems.push(...j.problems.filter((x) => !/no reference for/.test(x)));
+      }
+      outcomes.push({ name: label, problems });
+    }
+  }
+  if (outcomes.length === 0) return print([{ name: "library", problems: [], skipped: "no implementations in the library yet" }]);
+  return print(outcomes);
 }
 
 function init(dir: string): void {
@@ -271,8 +402,9 @@ if (import.meta.main) {
   try {
     if (command === "init" && process.argv[3]) init(dir);
     else if (command === "check") process.exitCode = (await check(dir)) ? 0 : 1;
+    else if (command === "test") process.exitCode = (await test(dir)) ? 0 : 1;
     else {
-      console.error("usage: typearc init <dir> | typearc check [dir]");
+      console.error("usage: typearc init <dir> | typearc check [dir] | typearc test [dir]");
       process.exitCode = 2;
     }
   } catch (e) {

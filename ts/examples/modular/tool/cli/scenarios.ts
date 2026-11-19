@@ -37,7 +37,7 @@ import { ruleChecker, type RuleSet } from "./ruleCheck.ts";
 const builtins = new Set(["map", "forEach", "every", "some", "filter", "reduce", "slice", "includes", "indexOf", "concat", "join", "flatMap", "at"]);
 
 /** The type of a value a scenario is played for, as far as values can be generated for it. */
-type ValueType =
+export type ValueType =
   | { kind: "string" | "number" | "boolean" }
   | { kind: "array"; of: ValueType }
   | { kind: "unsupported"; text: string };
@@ -55,7 +55,7 @@ export interface ScenarioSyntax {
   readonly params: Map<string, Param[]>;
 }
 
-function valueType(t: ts.TypeNode | undefined, sf: ts.SourceFile): ValueType {
+export function valueType(t: ts.TypeNode | undefined, sf: ts.SourceFile): ValueType {
   if (!t) return { kind: "unsupported", text: "no type" };
   if (t.kind === ts.SyntaxKind.StringKeyword) return { kind: "string" };
   if (t.kind === ts.SyntaxKind.NumberKeyword) return { kind: "number" };
@@ -223,9 +223,10 @@ interface Play {
   readonly failed: number[];
 }
 
-const arbitrary = (t: ValueType): fc.Arbitrary<unknown> | undefined => {
+export const arbitrary = (t: ValueType): fc.Arbitrary<unknown> | undefined => {
   if (t.kind === "string") return fc.string({ maxLength: 8 });
-  if (t.kind === "number") return fc.integer({ min: -1000, max: 1000 });
+  // Mostly small numbers, so that indexes and counts often land in range and on its edges.
+  if (t.kind === "number") return fc.oneof({ weight: 4, arbitrary: fc.integer({ min: -1, max: 12 }) }, { weight: 1, arbitrary: fc.integer({ min: -1000, max: 1000 }) });
   if (t.kind === "boolean") return fc.boolean();
   if (t.kind === "array") {
     const of = arbitrary(t.of);
@@ -248,8 +249,11 @@ export async function judgeScenarios(options: {
   rules: RuleSet;
   references: References;
   syntax: ScenarioSyntax;
+  /** What the scenarios are played on, for messages: "the reference" unless given. */
+  subject?: string;
 }): Promise<Judgement> {
   const { dir, rules, references, syntax } = options;
+  const on = options.subject ?? "the reference";
   const url = (f: string) => pathToFileURL(join(dir, f)).href;
   const language = (await import(url(options.ruleLanguage))) as {
     withExpectations: <T>(sink: (holds: boolean) => void, play: () => T) => T;
@@ -335,11 +339,11 @@ export async function judgeScenarios(options: {
       const broke = /the test broke ([^,\s]+)/.exec(p.error)?.[1];
       problems.push(broke ? `${s.id}: the scenario breaks ${broke}${at}, so it is outside the rules` : `${s.id}: threw ${p.error}${at}`);
     } else if (p.violations.length) {
-      problems.push(`${s.id}: the reference breaks ${p.violations[0]}${at}`);
+      problems.push(`${s.id}: ${on} breaks ${p.violations[0]}${at}`);
     } else if (s.kind === "allowed") {
-      problems.push(`${s.id}: expectation ${p.failed[0] + 1} fails on the reference${at}, so it isn't shown to be allowed`);
+      problems.push(`${s.id}: expectation ${p.failed[0] + 1} fails on ${on}${at}, so it isn't shown to be allowed`);
     } else {
-      problems.push(`${s.id}: the rules allow it: the reference plays it without breaking a rule${at}`);
+      problems.push(`${s.id}: the rules allow it: ${on} plays it without breaking a rule${at}`);
     }
   }
   return { problems, judged, unproved };

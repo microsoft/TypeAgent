@@ -339,8 +339,14 @@ files, under their old name, "contracts", which was dropped because it
 reads as design by contract (whose contracts are our rules). They also
 judge and, for rules with only a headline, define rules; that is the
 legacy case, and it ends as those rules get expressions. `typearc
-check` requires an expression for every rule it evaluates. References and
-doubles are `*kit.ts`; adversaries are in `adversaries/`; `testkit.ts`
+check` requires an expression for every rule it evaluates. The tool's
+generic history generator is `cli/histories.ts`: it needs no
+hand-written file. It reads the members and their parameter types,
+keeps only calls whose `@requires` holds (searching small numbers for
+arguments that keep it), and fails a check if some rule is never
+evaluated. `typearc check` runs it on the references and on each
+adversary; `typearc test` on the library. References and doubles are
+`*kit.ts`; adversaries are in `adversaries/`; `testkit.ts`
 and `ruleCheck.ts` are shared.
 
 ## Adversaries
