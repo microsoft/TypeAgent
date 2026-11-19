@@ -403,7 +403,7 @@ export function tagProblems(dir: string, files: readonly string[]): string[] {
 }
 
 /** Harness words a design file must not use: the harness checks the design, and the design doesn't know it. */
-const harnessWords = /\b(fixtures?|kits?|\w+kit\.ts|[\w.]+\.contract\.ts|contracts?|drivers?|adversar\w*|test doubles?|doubles|reference parts?|sequencer|helpers\.check\.ts)\b/i;
+const harnessWords = /\b(fixtures?|kits?|\w+kit\.ts|[\w.]+\.contract\.ts|contracts?|history generators?|drivers?|adversar\w*|test doubles?|doubles|reference parts?|sequencer|helpers\.check\.ts)\b/i;
 
 /**
  * Where the design reaches into the harness: a design file that imports a

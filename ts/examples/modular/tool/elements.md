@@ -20,7 +20,8 @@ an answer that says otherwise is wrong.
 - A rule is a formal expression written in its [vocabulary](#vocabulary).
   A scenario is defined by its test case.
 - The [test infrastructure](#test-infrastructure) checks the blueprint:
-  contracts check rules, drivers play scenarios, and
+  history generators drive calls for the rules to judge, drivers play
+  scenarios, and
   [adversaries](#adversaries) check the tests.
 - A blueprint's [library](#library) holds its implementations, each
   passing the checks.
@@ -195,7 +196,7 @@ rules:
 
 | | The formal statement (design) | What runs it (test infrastructure) |
 |---|---|---|
-| Rule | its expression, in its vocabulary | a contract, which makes calls for the expression to judge |
+| Rule | its expression, in its vocabulary | a history generator, which makes calls for the expression to judge |
 | Scenario | its test case, as data | a driver, which plays the case |
 
 **The general form** (agreed 2026-11-18). A scenario is a sequence of
@@ -316,8 +317,13 @@ circles, for the part that turns a user's input into operations.
 Status: agreed 2026-11-18.
 
 **What it is.** Everything that checks blueprints:
-- **contracts**: tests that drive an implementation through calls, so
-  that the rule expressions can judge each call;
+- **history generators**: make histories of calls on an implementation,
+  each call satisfying its `@requires` rules, so that the rule
+  expressions can judge every call. A failing history is shrunk to the
+  shortest one that breaks the rule, which reads as a scenario. A
+  generator never defines or judges a rule: the expressions do. Where
+  random calls rarely reach a boundary, hand-written code may bias the
+  calls toward it;
 - **drivers**: play scenarios against an implementation;
 - **doubles**: stand-ins for a blueprint's imports, so one blueprint is
   tested alone;
@@ -328,7 +334,12 @@ Status: agreed 2026-11-18.
 
 A test's name is the ID of the rule or scenario it checks.
 
-**In the example.** Contracts are `<name>.contract.ts`; references and
+**In the example.** History generators are the `<name>.contract.ts`
+files, under their old name, "contracts", which was dropped because it
+reads as design by contract (whose contracts are our rules). They also
+judge and, for rules with only a headline, define rules; that is the
+legacy case, and it ends as those rules get expressions. `typearc
+check` requires an expression for every rule it evaluates. References and
 doubles are `*kit.ts`; adversaries are in `adversaries/`; `testkit.ts`
 and `ruleCheck.ts` are shared.
 
@@ -478,7 +489,7 @@ Status: Open. One experiment run (2026-11-18); see below.
 agent should see.
 
 **Today.** An implementing agent reads the interfaces, rules,
-vocabulary, scenarios and the contracts, and runs the tests. It can't
+vocabulary, scenarios and the history generators, and runs the tests. It can't
 read the adversaries or its own reference, and it can write only its
 outputs.
 
@@ -570,3 +581,7 @@ fresh spec, run both ways.
 - 2026-11-19: prose is checked against the rules by asking whether they
   entail it; each claim gets a status (entailed, gap, contradicted,
   ambiguous, unchecked) for the agents, and the human sees consequences.
+- 2026-11-19: "contract" is renamed "history generator": test
+  infrastructure that makes histories of calls satisfying `@requires`,
+  for the rules to judge. It never defines or judges a rule. The circles
+  `.contract.ts` files keep their name until circles moves onto the tool.

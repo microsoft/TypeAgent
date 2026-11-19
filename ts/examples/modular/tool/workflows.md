@@ -94,7 +94,7 @@ human.
 |---|---|---|
 | Human designer | Brings intent and experience; proposes changes; agrees or rejects every change; starts each slow loop | Write implementations |
 | Design agent | Proposes changes; formalizes discussion; attaches consequences; runs fast checks; turns slow-loop reports into proposed changes | Write implementations or (beyond the split line) test infrastructure |
-| Checking agent | Writes the test infrastructure for the agreed blueprint: contracts, doubles, references, adversaries; reports where it read a rule or scenario differently | Change the design |
+| Checking agent | Writes the test infrastructure for the agreed blueprint: history generators, doubles, references, adversaries; reports where it read a rule or scenario differently | Change the design |
 | Challenge agent (1b) | Is fresh; attacks a draft design: contradictions, gaps, undecided choices | Write implementations |
 | Prover (1p) | Proves properties of the rules in Lean; may be the design agent | Change the design |
 | Implementation agent (2) | Is fresh; implements blueprints from the design | Change the design or the checks |
@@ -103,7 +103,7 @@ human.
 
 **The split line** (Agreed). Which kinds of test infrastructure the
 design agent may also write is a project setting. Early or small
-projects may let the design agent write contracts; later, all of it goes
+projects may let the design agent write history generators; later, all of it goes
 to the checking agent. The enforcement follows the setting, so moving
 the line changes no workflow. The line is chosen to keep design
 throughput up (see [Measurements](#measurements)).
@@ -314,7 +314,8 @@ doesn't buy robustness.
 | Granularity | fine-grained blueprints | fewer, larger modules, with less overhead per task | coarser parts to review and replace |
 
 - **The floor.** Every profile keeps what hypothesis 2 says produces
-  robustness: blueprints with formal rules and scenarios, contracts, at
+  robustness: blueprints with formal rules and scenarios, history
+  generators, at
   least one adversary per rule, and the fast checks. Without these the
   workflow is vibe coding with extra steps.
 - **Adaptive.** A profile starts light and turns on the heavier loops
@@ -370,7 +371,7 @@ it, including through the [vibe-coding workflow](#auxiliary-workflow-vibe-coding
 
 **One check comes for free** (Agreed 2026-11-19). The existing code is the first
 implementation in each extracted blueprint's library. The blueprint's
-rules and scenarios must hold for it, and its contracts must pass on it,
+rules and scenarios must hold for it, and its history generators must pass on it,
 which tests mechanically whether the extraction describes the code. The
 code's existing tests are candidates for scenarios. Where the code
 breaks a rule the designers want, the rule stays and the failure
@@ -482,7 +483,7 @@ Status: Agreed 2026-11-19.
 
 - Human hours per session (`../design-costs.json`).
 - Time from a proposed change to its first fast-check result.
-- Time from agreement to a contract with its adversaries caught.
+- Time from agreement to a history generator with its adversaries caught.
 
 If the first grows, the [split line](#roles) moves. The second may be
 slow; it is off the human's loop.
@@ -538,7 +539,7 @@ slow; it is off the human's loop.
   existing code base) is an auxiliary workflow that leads into the main
   one and then into vibe coding. How to do it is a major task to
   investigate together. The existing code is the first implementation
-  in each extracted blueprint's library, so its contracts must pass on
+  in each extracted blueprint's library, so its history generators must pass on
   it; existing tests are candidates for scenarios; where the code breaks
   a rule the designers want, the rule stays and the failure becomes a
   proposed change to the implementation.

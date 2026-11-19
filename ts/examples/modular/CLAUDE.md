@@ -3,7 +3,7 @@
 This directory is an experiment in an interface-first way of building
 software with agents. A human and a design agent agree on interfaces whose
 rules are exact enough to test. Fresh agents then implement them, and the
-contracts, scenarios and adversaries check the result. The circles app is
+history generators, scenarios and adversaries check the result. The circles app is
 the worked example: shapes, a view, layout and event distribution, and the
 app's behavior as scenarios.
 
@@ -14,7 +14,7 @@ Where things stand now, and what has been deferred, is in `STATE.md`.
 - **Shared understanding.** The human and the agents agree on the
   architecture through interfaces whose rules are exact enough to test.
 - **Interchangeable parts.** Each interface can have several
-  implementations, each passing the same contracts.
+  implementations, each passing the same checks.
 - **A general tool.** The procedure and its tooling (`task.ts`,
   `adversaries.ts`, `catalog.ts`) should work for projects other than this
   one.
@@ -54,7 +54,7 @@ needs.
   without the human's go-ahead. Phase 1 decisions are made with the human,
   not by the design agent alone.
 - **Design agents don't write implementations.** In phase 1 the design
-  agent writes interfaces, rules, vocabulary, contracts, doubles,
+  agent writes interfaces, rules, vocabulary, history generators, doubles,
   references, scenarios and adversaries. Implementations come from
   fresh phase 2 agents.
 - **Every adversary is a real fault.** If an adversary escapes, decide
@@ -80,8 +80,10 @@ needs.
   rule's ID is `Interface.member.slug`, and the test that checks it
   has that ID as its name. Rule expressions are compiled
   (`node ruleGen.ts` writes `rules.gen.ts`; only `shapeModel.ts` so far)
-  and evaluated by `ruleCheck.ts` on the calls a contract makes, so
-  contracts drive calls and the design's expressions judge them. The
+  and evaluated by `ruleCheck.ts` on the calls a history generator
+  makes, so generators drive calls and the design's expressions judge
+  them. ("Contract" is the old name; the circles `.contract.ts` files
+  are history generators.) The
   pilot and its open proposal are in `pilot-shapeModel.md`.
 - **Two vocabularies.** The design is the interface files, their
   vocabularies, `scenarios.ts` and the platform subsets; `rules.ts` is
@@ -90,7 +92,7 @@ needs.
   rules and scenarios the human's decisions with terms derived from them,
   observability is design) are in `method.md` under "The
   design". The
-  test harness is everything that checks it: contracts, references,
+  test harness is everything that checks it: history generators, references,
   doubles, drivers and adversaries. Design files import only design files
   and never use harness words (a `@deferred` rule's `how:` line aside);
   `npm run catalog` refuses to write when one does. The glossaries are in

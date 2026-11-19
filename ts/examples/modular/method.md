@@ -7,13 +7,14 @@ The full procedure, with its reasons, is in `moduleTooling.md`.
 
 The design is what the human and the agents agree on: the interface
 files, their vocabularies, `scenarios.ts` and the platform subsets.
-Everything that checks it (contracts, references, doubles, drivers,
+Everything that checks it (history generators, references, doubles, drivers,
 adversaries) is the test harness. These principles govern phase 1.
 
 1. **Every design statement is formal.** A statement is one of:
    - a TypeScript declaration (interfaces, types, vocabulary functions,
      platform subsets), checked by the compiler;
-   - a rule's expression, evaluated on the calls a contract makes;
+   - a rule's expression, evaluated on the calls a history generator
+     makes;
    - a test, where an expression isn't practical. A test is an
      unambiguous statement of what must happen, so it is a formal
      statement.
@@ -66,8 +67,8 @@ Outside the design:
 - **Rules are compiled.** For each interface file in `ruleGen.ts`'s list
   (`dataModel.ts` and `shapeModel.ts` so far), `node ruleGen.ts` compiles
   every rule expression into `rules.gen.ts`, so tsc checks it, and
-  `ruleCheck.ts` evaluates the rules that apply to each call a contract
-  makes through it. The only state a rule may use beyond what the
+  `ruleCheck.ts` evaluates the rules that apply to each call a history
+  generator (in circles, a `.contract.ts` file) makes through it. The only state a rule may use beyond what the
   interfaces expose is the object's history (`history` in `rules.ts`): the
   calls made on it and the events emitted during them. Vocabulary defines
   everything else a rule needs from that history.
@@ -361,7 +362,7 @@ bullet per test and a Notes section, as in 2b:
 |---|---|---|
 | **freedom** | The difference is in something the spec leaves open | Nothing; it should match a choice 2b marked open in one of the two reports, and if neither report listed it, that report was incomplete |
 | **spec gap** | The difference is in behavior the spec meant to decide | Phase 1: a rule or decided behavior, a contract test, and an adversary from the implementation that loses; the loser goes back for another attempt |
-| **contract gap** | One implementation breaks an existing rule no contract caught | Phase 1: a stronger contract and an adversary; that implementation goes back for another attempt |
+| **generator gap** | One implementation breaks an existing rule no history generator caught | Phase 1: a stronger history generator and an adversary; that implementation goes back for another attempt |
 
-Spec gaps and contract gaps per task, against the task's rule count, are
+Spec gaps and generator gaps per task, against the task's rule count, are
 the measure. Freedoms show how much the spec leaves to the implementer.
