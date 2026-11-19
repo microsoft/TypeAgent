@@ -10,6 +10,7 @@ import {
     RequestBudget,
     runWithRequestBudget,
     runWithRequestAttemptObserver,
+    runWithRequestDispatchCapture,
     outputReservation,
 } from "../src/requestBudget.js";
 
@@ -64,6 +65,42 @@ describe("endpoint output capacity adaptation", () => {
     const originalFetch = globalThis.fetch;
     afterEach(() => {
         globalThis.fetch = originalFetch;
+    });
+
+    test("admitted capture matches post-redaction bodies and adaptive-capacity retry bytes", async () => {
+        const captured: string[] = [];
+        const sent: string[] = [];
+        const synthetic = "ghp_" + "a".repeat(36);
+        globalThis.fetch = async (_url, options) => {
+            sent.push(String(options?.body));
+            expect(captured.at(-1)).toBe(sent.at(-1));
+            expect(sent.at(-1)).not.toContain(synthetic);
+            return sent.length === 1
+                ? response(400, {
+                      code: "invalid_request_error",
+                      param: "max_completion_tokens",
+                      message:
+                          "This model supports at most 48,000 completion tokens.",
+                  })
+                : response();
+        };
+        const result = await runWithRequestDispatchCapture(
+            {
+                reserve: async (event) => {
+                    captured.push(event.serializedRequest);
+                    return String(captured.length);
+                },
+                finish: async () => {},
+            },
+            () => call(makePool(), `Synthetic example token=${synthetic}`),
+        );
+        expect(result.success).toBe(true);
+        expect(captured).toEqual(sent);
+        expect(captured).toHaveLength(2);
+        expect(JSON.parse(captured[0])).not.toHaveProperty(
+            "max_completion_tokens",
+        );
+        expect(JSON.parse(captured[1]).max_completion_tokens).toBe(48000);
     });
 
     test.each([1, 2])(

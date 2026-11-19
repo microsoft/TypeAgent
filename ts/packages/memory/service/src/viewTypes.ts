@@ -683,9 +683,16 @@ export interface ViewSupportReport {
     missingContext: string[];
     reasons: string[];
     exclusions?: Array<{ itemId: string; supported: boolean; reason: string }>;
+    informational?: import("./informationalSupport.js").InformationalSupport;
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    repairInformationalSupport?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        report: ViewSupportReport,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     reviewInformational?(
         input: ViewBuildSnapshot,
         accepted: ViewVersion,

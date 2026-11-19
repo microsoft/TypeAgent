@@ -178,6 +178,14 @@ replayed packets/nodes with exact latest-output parity. It measures host
 capture/curation work only, not continuous-ingestion drain, model latency,
 foreground p95 or semantic quality.
 
+The synthetic work fixture uses the default `output-contract` policy with
+intentionally original-shape deferred responses, exercising restricted-output
+fallback and its bounded deferral rechecks. Exact regression expectations are 11 attempts for
+the full 55-node input, five for an appended tail with packet replay, and zero
+for unchanged whole-input reuse. Each arm records its actual recipe. These
+protocol counts replace the original-policy six/two expectations; they are not
+model latency or semantic-quality measurements.
+
 Run measurement commands sequentially without competing builds or tests. Outputs
 are exclusive new files. Batch `--members` accepts 1-512 and splits imports into
 requests of at most 50 members; `--group-size` uses the existing product commit

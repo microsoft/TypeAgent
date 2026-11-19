@@ -28,6 +28,7 @@ import { validateAdmission, workerArguments } from "./watchdog.mjs";
 import { verifyTailArticle } from "./p6-preflight.mjs";
 import { viewHash } from "../../packages/memory/service/dist/viewMerge.js";
 import { editorialProtection } from "../../packages/memory/service/dist/viewEditorial.js";
+import { savePublicDraftAtCurrentHead } from "./public-roundtrip.mjs";
 
 const fixtureRoot = fileURLToPath(
     new URL(
@@ -35,6 +36,62 @@ const fixtureRoot = fileURLToPath(
         import.meta.url,
     ),
 );
+
+test("public roundtrip retries only a head race using a fresh head and unchanged guarded content", async () => {
+    const request = {
+        corpusId: "corpus",
+        expectedVersion: 7,
+        content: { title: "Original" },
+    };
+    const calls = [];
+    let reads = 0;
+    const saved = { version: { revisionId: "accepted" } };
+    const result = await savePublicDraftAtCurrentHead(
+        {
+            listViews: async () => ({ head: `head-${++reads}` }),
+            saveViewDraft: async (actual) => {
+                calls.push(actual);
+                if (calls.length === 1)
+                    throw new Error("View history head conflict");
+                return saved;
+            },
+        },
+        request,
+    );
+    assert.equal(result.saved, saved);
+    assert.deepEqual(calls, [
+        { ...request, expectedHead: "head-1" },
+        { ...request, expectedHead: "head-2" },
+    ]);
+    assert.equal(result.diagnostics.length, 1);
+    assert.equal(result.successfulReturns.length, 1);
+    assert.equal(result.successfulReturns[0].handledDiagnosticCount, 1);
+});
+
+test("public roundtrip does not retry version, authorization or other write failures", async () => {
+    for (const message of [
+        "View version conflict",
+        "Access denied",
+        "Unexpected failure",
+    ]) {
+        let writes = 0;
+        const failure = new Error(message);
+        await assert.rejects(
+            savePublicDraftAtCurrentHead(
+                {
+                    listViews: async () => ({ head: "current" }),
+                    saveViewDraft: async () => {
+                        writes++;
+                        throw failure;
+                    },
+                },
+                { corpusId: "corpus" },
+            ),
+            (error) => error === failure,
+        );
+        assert.equal(writes, 1);
+    }
+});
 
 test("offline synopsis uses supplied evidence identities and preserves composed qualifications", async () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -1203,7 +1260,9 @@ test("C1 full-tail citation selection requires the named current original even w
     const view = {
         revisionId: "article",
         content: {
-            sections: [{ body: `${tail}\nCoverage limits: control` }],
+            coverageNote:
+                "Offline selected-evidence copy, not model qualification",
+            sections: [{ body: tail }],
             citations: [wrong, named],
         },
     };

@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -205,9 +206,8 @@ describe("conservative indexed grouping", () => {
                         .map((_, position) => `f${position}`),
                 });
             },
-            validate: async () => {
-                throw new Error("Legacy validation must not run");
-            },
+            validate: async (_input, output) =>
+                controlledInformationalSupport(output),
         };
         const open = () =>
             new FileMemoryService(root, {

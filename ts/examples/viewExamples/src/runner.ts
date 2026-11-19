@@ -14,6 +14,8 @@ import {
     type ViewVersion,
 } from "@typeagent/memory-service";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
+import { runWithRequestDispatchCapture } from "@typeagent/aiclient";
+import { createRequestCapture } from "./requestCapture.js";
 import { offlineOptions } from "./offline.js";
 import {
     digest,
@@ -33,6 +35,19 @@ export interface RunnerOptions {
     signal?: AbortSignal;
     liveAuthorization?: { approved: true; identity: string };
     serviceOptions?: FileMemoryServiceOptions;
+    captureRequests?: boolean;
+    captureLimits?: {
+        calls: number;
+        reservedTokens: number;
+        cost: number;
+        maxCostPerCall: number;
+    };
+    runtimeIdentity?: {
+        configurationHash: string;
+        providerSettingsHash: string;
+        providers: (string | null)[];
+        models: (string | null)[];
+    };
 }
 
 export interface ProjectRevision {
@@ -351,6 +366,7 @@ async function saveProjectRevision(
     sequence: number,
     mapping: Awaited<ReturnType<typeof ingestBundle>>,
     built: Awaited<ReturnType<typeof buildBundle>>,
+    evidence?: Awaited<ReturnType<typeof captureEvidence>>,
 ): Promise<ProjectRevision> {
     const revisionRoot = path.join(
         root,
@@ -373,12 +389,98 @@ async function saveProjectRevision(
         "rendered.txt": viewContentToText(built.view.content) + "\n",
         "revision.json": JSON.stringify(revision, null, 2) + "\n",
         "source-mapping.json": JSON.stringify(mapping, null, 2) + "\n",
+        ...(evidence
+            ? { "evidence.json": JSON.stringify(evidence, null, 2) + "\n" }
+            : {}),
     }))
         await writeFile(path.join(revisionRoot, name), data, { flag: "wx" });
     return revision;
 }
 
+async function captureEvidence(
+    service: FileMemoryService,
+    view: ViewVersion,
+    requests: ViewBuildSnapshot[],
+) {
+    const resolve = async (
+        passage: ViewVersion["content"]["citations"][number],
+    ) => {
+        const receipt = await service.getSourceContent({
+            corpusId: view.corpusId,
+            sourceId: passage.sourceId,
+            revisionId: passage.revisionId,
+            indexedLocator: passage.locator,
+            includeIndexedBlock: true,
+        });
+        if (
+            receipt.content !== passage.excerpt ||
+            receipt.indexedBlock === undefined
+        )
+            throw new Error("Exact indexed evidence receipt is unavailable");
+        return {
+            corpusId: view.corpusId,
+            sourceId: passage.sourceId,
+            revisionId: passage.revisionId,
+            locator: passage.locator,
+            excerpt: passage.excerpt,
+            blockText: receipt.indexedBlock,
+            resolvedText: receipt.content,
+        };
+    };
+    const selected = requests.flatMap((request) =>
+        request.inputs.flatMap((input) => input.passages ?? []),
+    );
+    return {
+        selectedEvidence: await Promise.all(selected.map(resolve)),
+        citationResolutions: await Promise.all(
+            view.content.citations.map(resolve),
+        ),
+    };
+}
+
 export async function runInformational(options: RunnerOptions) {
+    if (options.captureRequests && options.mode !== "live")
+        throw new Error(
+            "Admitted request capture requires authorized live mode",
+        );
+    const capture = options.captureRequests
+        ? createRequestCapture(
+              options.root,
+              options.caseId,
+              options.captureLimits,
+          )
+        : undefined;
+    return capture
+        ? runWithRequestDispatchCapture(capture.capture, () =>
+              runInformationalCore(options, capture),
+          )
+        : runInformationalCore(options);
+}
+
+function recordBuildRequests(
+    hostOptions: FileMemoryServiceOptions,
+    requests: ViewBuildSnapshot[],
+    root: string,
+) {
+    const adapter = hostOptions.viewSynthesisAdapter;
+    if (adapter)
+        hostOptions.viewSynthesisAdapter = {
+            ...adapter,
+            async generate(input, signal, inventory) {
+                requests.push(structuredClone(input));
+                await writeFile(
+                    path.join(root, "request-evidence.json"),
+                    JSON.stringify(requests, null, 2) + "\n",
+                );
+                return adapter.generate(input, signal, inventory);
+            },
+        };
+}
+
+async function runInformationalCore(
+    options: RunnerOptions,
+    capture?: ReturnType<typeof createRequestCapture>,
+) {
     const { packet, bundle, timeoutMs, fixture, hostOptions } =
         await prepareRunner(options);
     const requests: ViewBuildSnapshot[] = [];
@@ -390,23 +492,71 @@ export async function runInformational(options: RunnerOptions) {
         () => control.abort(new Error("Informational run timed out")),
         timeoutMs,
     );
-    const adapter = hostOptions.viewSynthesisAdapter;
-    if (adapter)
-        hostOptions.viewSynthesisAdapter = {
-            ...adapter,
-            async generate(input, signal, inventory) {
-                requests.push(structuredClone(input));
-                return adapter.generate(input, signal, inventory);
-            },
-        };
+    recordBuildRequests(hostOptions, requests, options.root);
     let service: FileMemoryService | undefined;
     let stage = "ownership";
     let owned = false;
     const started = Date.now();
+    const batches = bundle.project
+        ? bundle.sources.map((source) => [source])
+        : [bundle.sources];
+    const checkpoints = batches.map((batch, index) => ({
+        sequence: index + 1,
+        sourceIds: batch.map((source) => source.id),
+        status: "not-attempted" as
+            | "not-attempted"
+            | "running"
+            | "accepted"
+            | "failed",
+        stage: "scheduled",
+        reason: "",
+        revisionId: null as string | null,
+    }));
+    let activeCheckpoint: (typeof checkpoints)[number] | undefined;
+    const saveCheckpoints = () =>
+        writeFile(
+            path.join(options.root, "checkpoints.json"),
+            JSON.stringify(
+                {
+                    schemaVersion: 1,
+                    contract: "memory-view-checkpoints-v1",
+                    caseId: bundle.id,
+                    checkpoints,
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+    const saveFailure = async (error: unknown) => {
+        if (!owned) return;
+        const reason = error instanceof Error ? error.message : String(error);
+        if (activeCheckpoint?.status === "running") {
+            activeCheckpoint.status = "failed";
+            activeCheckpoint.stage = stage;
+            activeCheckpoint.reason = reason;
+        }
+        await saveCheckpoints();
+        await writeFile(
+            path.join(options.root, "failure.json"),
+            JSON.stringify(
+                {
+                    status: "failed",
+                    component: "wiki-views",
+                    stage,
+                    reason,
+                    latencyMs: Date.now() - started,
+                },
+                null,
+                2,
+            ) + "\n",
+            { flag: "wx" },
+        );
+    };
     try {
         control.signal.throwIfAborted();
         await claimRunRoot(options.root);
         owned = true;
+        await saveCheckpoints();
         await writeFile(
             path.join(options.root, "construction.json"),
             JSON.stringify(packet, null, 2) + "\n",
@@ -432,13 +582,17 @@ export async function runInformational(options: RunnerOptions) {
         );
         await pauseFamilies(service, corpusId);
         const mapping: Awaited<ReturnType<typeof ingestBundle>> = [];
-        const batches = bundle.project
-            ? bundle.sources.map((source) => [source])
-            : [bundle.sources];
         const revisions: ProjectRevision[] = [];
         let built: Awaited<ReturnType<typeof buildBundle>> | undefined;
         for (const batch of batches) {
+            activeCheckpoint = checkpoints.find(
+                (entry) => entry.status === "not-attempted",
+            )!;
+            activeCheckpoint.status = "running";
+            capture?.setCheckpoint(activeCheckpoint.sequence);
             stage = "ingestion";
+            activeCheckpoint.stage = stage;
+            await saveCheckpoints();
             mapping.push(
                 ...(await ingestBundle(
                     service,
@@ -448,7 +602,13 @@ export async function runInformational(options: RunnerOptions) {
                     control.signal,
                 )),
             );
+            await writeFile(
+                path.join(options.root, "source-mapping.json"),
+                JSON.stringify(mapping, null, 2) + "\n",
+            );
             stage = "construction";
+            activeCheckpoint.stage = stage;
+            await saveCheckpoints();
             built = await buildBundle(
                 service,
                 corpusId,
@@ -456,21 +616,33 @@ export async function runInformational(options: RunnerOptions) {
                 mapping,
                 control.signal,
             );
-            if (bundle.project)
-                revisions.push(
-                    await saveProjectRevision(
-                        options.root,
-                        revisions.length + 1,
-                        mapping,
-                        built,
-                    ),
+            activeCheckpoint.status = "accepted";
+            activeCheckpoint.stage = "complete";
+            activeCheckpoint.revisionId = built.view.revisionId;
+            await saveCheckpoints();
+            stage = "export";
+            const evidence = options.captureRequests
+                ? await captureEvidence(service, built.view, requests)
+                : undefined;
+            revisions.push(
+                await saveProjectRevision(
+                    options.root,
+                    revisions.length + 1,
+                    mapping,
+                    built,
+                    evidence,
+                ),
+            );
+            if (evidence)
+                await writeFile(
+                    path.join(options.root, "evidence.json"),
+                    JSON.stringify(evidence, null, 2) + "\n",
                 );
         }
         if (!built) throw new Error("Construction run saved no revision");
         await writeFile(
             path.join(options.root, "source-mapping.json"),
             JSON.stringify(mapping, null, 2) + "\n",
-            { flag: "wx" },
         );
         const { job, view } = built;
         const saved = JSON.stringify(view, null, 2) + "\n";
@@ -485,6 +657,7 @@ export async function runInformational(options: RunnerOptions) {
             qualityBaseline: false,
             requestEvidenceKind: "indexed-build-snapshot",
             runtime: {
+                ...options.runtimeIdentity,
                 nodeVersion: process.version,
                 synthesisIdentity: hostOptions.viewSynthesisAdapter?.identity,
             },
@@ -517,29 +690,11 @@ export async function runInformational(options: RunnerOptions) {
             "receipt.json": JSON.stringify(receipt, null, 2) + "\n",
         }))
             await writeFile(path.join(options.root, name), data, {
-                flag: "wx",
+                ...(name === "request-evidence.json" ? {} : { flag: "wx" }),
             });
         return { receipt, view, mapping, requests };
     } catch (error) {
-        if (owned)
-            await writeFile(
-                path.join(options.root, "failure.json"),
-                JSON.stringify(
-                    {
-                        status: "failed",
-                        component: "wiki-views",
-                        stage,
-                        reason:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                        latencyMs: Date.now() - started,
-                    },
-                    null,
-                    2,
-                ) + "\n",
-                { flag: "wx" },
-            );
+        await saveFailure(error);
         throw error;
     } finally {
         clearTimeout(timer);

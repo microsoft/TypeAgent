@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalValidation } from "./informationalSupportTestModel.js";
 
 import { withWikiChoiceResponses } from "./wikiChoiceTestModel.js";
 import {
@@ -1152,9 +1153,7 @@ test("one informational target timeout does not cancel independent peers", async
                     citationIds: ["f0"],
                 });
             },
-            validate: async () => {
-                throw new Error("No universal informational check");
-            },
+            validate: controlledInformationalValidation,
             checkEditorial: async () => ({ safe: true, failures: [] }),
         },
         {
@@ -1250,7 +1249,7 @@ test("forgetting read-but-not-cited nominated evidence cancels a late distinct r
             },
             generate,
             validate: async () => {
-                throw new Error("No universal informational check");
+                throw new Error("Cancelled target validation must not run");
             },
         },
         {
@@ -1349,7 +1348,7 @@ test("sequential admission skips covered or low-value first pages and blocks inv
                     throw new Error("Redundant synthesis must not run");
                 },
                 validate: async () => {
-                    throw new Error("Legacy validation must not run");
+                    throw new Error("Skipped target validation must not run");
                 },
             },
             {
@@ -1530,9 +1529,7 @@ test("automatic family compares earlier same-job page, persists skip and replays
                 citationIds: ["f0"],
             });
         },
-        validate: async () => {
-            throw new Error("Legacy validation must not run");
-        },
+        validate: controlledInformationalValidation,
     };
     const open = () =>
         new FileMemoryService(root, {
@@ -1676,9 +1673,7 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
                     citationIds: ["f0"],
                 });
             },
-            validate: async () => {
-                throw new Error("Legacy validation must not run");
-            },
+            validate: controlledInformationalValidation,
         };
         const open = () =>
             new FileMemoryService(root, {

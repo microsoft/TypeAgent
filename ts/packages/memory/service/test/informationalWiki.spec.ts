@@ -14,6 +14,7 @@ import { ViewHistory } from "../src/viewHistory.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { hydrateProjectSummary } from "../src/informationalProject.js";
+import { projectSectionCitations } from "./informationalProjectTestModel.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -37,6 +38,8 @@ import { reserveSerializedRequest, type ChatModel } from "@typeagent/aiclient";
 import { TypedViewStore } from "../src/viewStore.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
 import { parseTemporalValue } from "@typeagent/knowpro";
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
+import { viewContentToText } from "../src/viewText.js";
 import {
     parseSemanticAssessment,
     semanticReviewFacets,
@@ -92,6 +95,7 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         assignments: [],
         milestoneItems: [],
         decisionItems: [],
+        sectionCitationIds: projectSectionCitations(),
         openQuestions: [],
         riskItems: [],
         goalsScope: value.prose,
@@ -131,6 +135,25 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
         expect(brief.content.status).toBe("partial");
+        const wikiWithoutGaps = hydrateInformational(input, {
+            ...value,
+            limits: null,
+        });
+        const projectWithoutGaps = hydrateProjectSummary(input, {
+            ...project,
+            limits: null,
+        });
+        expect(wikiWithoutGaps.content.coverageNote).toBe("");
+        expect(wikiWithoutGaps.missingEvidence).toEqual([]);
+        expect(projectWithoutGaps.content.coverageNote).toBe("");
+        expect(projectWithoutGaps.missingEvidence).toEqual([]);
+        expect(viewContentToText(wikiWithoutGaps.content)).not.toContain(
+            "Coverage limits:",
+        );
+        expect(viewContentToText(projectWithoutGaps.content)).not.toContain(
+            "Coverage limits:",
+        );
+        expect(projectWithoutGaps.content.sections).toHaveLength(7);
         expect(() =>
             hydrateProjectSummary(input, {
                 ...project,
@@ -309,6 +332,11 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     assignments: [],
                     milestoneItems: [],
                     decisionItems: [],
+                    sectionCitationIds: projectSectionCitations(
+                        input.inputs
+                            .flatMap((source) => source.passages ?? [])
+                            .map((_, i) => `f${i}`),
+                    ),
                     openQuestions: [],
                     riskItems: [],
                     title:
@@ -346,8 +374,23 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                     .map((_, i) => `f${i}`),
             });
         },
-        validate: async () => {
-            throw new Error("Legacy support audit must not run");
+        validate: async (_input, output) => {
+            const report = controlledInformationalSupport(output);
+            if (output.content.summary === "Injected unsupported summary") {
+                report.supported = false;
+                report.informational!.fields.find(
+                    (field) => field.path === "/content/summary",
+                )!.supported = false;
+                report.informational!.issues.push({
+                    category: "unsupported",
+                    path: "/content/summary",
+                    quote: output.content.summary,
+                    evidenceIds: [],
+                    reason: "Injected factual rejection",
+                    correction: "Use the supplied original evidence.",
+                });
+            }
+            return report;
         },
     };
     const open = () =>
@@ -1158,82 +1201,153 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
-    test("public draft summary authorship is protected against a substantive new generated proposal", async () => {
-        const { corpusId } = await service.createCorpus("Human summary");
+    test("an unsupported human summary cannot save or replace the accepted informational revision", async () => {
+        const { corpusId } = await service.createCorpus("Rejected edit");
         await update(corpusId, "pause");
-        await add(
-            corpusId,
-            "original",
-            "acquisition owner approval withheld; production cutover is not authorized.",
-        );
+        await add(corpusId, "original", "acquisition owner approval withheld.");
         await update(corpusId, "resume");
         await update(corpusId, "pause");
-        const current = (await service.listViews(corpusId)).views[0];
-        const content = structuredClone(current.content);
-        content.summary =
-            "Limited summary: selected indexed fragments only; Human review requires two independent approvals. Updated human note: 2026-10-12.";
-        const definition = derivedDefinitionInput(current);
-        const edited = await service.saveViewDraft({
-            corpusId,
-            viewId: current.viewId,
-            definition,
-            content,
-            relationships: authoredRelationships(current),
-            expectedHead: (await service.listViews(corpusId)).head,
-            expectedVersion: current.version,
-        });
-        const humanEdit = edited.version.edits!.find(
-            (edit) => edit.target === "summary",
-        )!;
-        expect(humanEdit.actor).toBe(edited.version.actor);
-        expect(humanEdit.protection).toEqual(["summary"]);
-        expect(humanEdit.newValue).toBe(content.summary);
-        summaryLimits =
-            "Owner approval withheld; production cutover is not authorized";
-        generatedSummary =
-            "Acquisition production cutover is not authorized pending owner review.";
-        await add(
-            corpusId,
-            "qualification",
-            "acquisition owner approval withheld; production cutover remains unauthorized pending review.",
-        );
-        const qualification = (await service.getSource(
-            corpusId,
-            "qualification",
-        ))!;
-        if (definition.selector.kind !== "sources")
-            throw new Error("Expected exact original scope");
-        definition.selector.sources.push({
-            sourceId: qualification.sourceId,
-            revisionId: qualification.activeRevisionId!,
-        });
-        const job = await waitForViewBuild(
-            service,
-            await admitFreshBuild({
+        const snapshot = await service.listViews(corpusId);
+        const current = snapshot.views[0];
+        const publication = await service.getViewPublication(current);
+        await expect(
+            service.saveViewDraft({
                 corpusId,
-                expectedHead: (await service.listViews(corpusId)).head,
-                targets: [
-                    { definition, expectedVersion: edited.version.version },
-                ],
+                viewId: current.viewId,
+                definition: derivedDefinitionInput(current),
+                content: {
+                    ...current.content,
+                    summary: "Injected unsupported summary",
+                },
+                relationships: authoredRelationships(current),
+                expectedHead: snapshot.head,
+                expectedVersion: current.version,
             }),
-        );
-        expect(job.state).toBe("failed");
-        const result = job.results[0];
-        expect(result.state).toBe("conflicted");
-        const conflict = (await service.getViewConflict({
-            corpusId,
-            conflictId: result.conflictId!,
-        }))!;
-        expect(conflict.targets).toContain("summary");
-        expect(conflict.human.content.summary).toBe(content.summary);
+        ).rejects.toThrow("Unsupported evidence");
         expect(
-            conflict.human.edits!.find((edit) => edit.id === humanEdit.id)
-                ?.actor,
-        ).toBe(humanEdit.actor);
-        expect(conflict.candidate.content.summary).toContain(
-            "production cutover is not authorized",
-        );
+            (await service.getView({ corpusId, viewId: current.viewId }))!
+                .revisionId,
+        ).toBe(current.revisionId);
+        expect(await service.getViewPublication(current)).toEqual(publication);
     });
+
+    test.each([false, true])(
+        "public draft summary authorship survives a new proposal and rejected resolution (unsupported=%s)",
+        async (rejectCandidate) => {
+            const { corpusId } = await service.createCorpus("Human summary");
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "original",
+                "acquisition owner approval withheld; production cutover is not authorized.",
+            );
+            await update(corpusId, "resume");
+            await update(corpusId, "pause");
+            const current = (await service.listViews(corpusId)).views[0];
+            const content = structuredClone(current.content);
+            content.summary =
+                "Limited summary: selected indexed fragments only; Human review requires two independent approvals. Updated human note: 2026-10-12.";
+            const definition = derivedDefinitionInput(current);
+            const edited = await service.saveViewDraft({
+                corpusId,
+                viewId: current.viewId,
+                definition,
+                content,
+                relationships: authoredRelationships(current),
+                expectedHead: (await service.listViews(corpusId)).head,
+                expectedVersion: current.version,
+            });
+            const humanEdit = edited.version.edits!.find(
+                (edit) => edit.target === "summary",
+            )!;
+            expect(humanEdit.actor).toBe(edited.version.actor);
+            expect(humanEdit.protection).toEqual(["summary"]);
+            expect(humanEdit.newValue).toBe(content.summary);
+            summaryLimits =
+                "Owner approval withheld; production cutover is not authorized";
+            generatedSummary = rejectCandidate
+                ? "Injected unsupported summary"
+                : "Acquisition production cutover is not authorized pending owner review.";
+            await add(
+                corpusId,
+                "qualification",
+                "acquisition owner approval withheld; production cutover remains unauthorized pending review.",
+            );
+            const qualification = (await service.getSource(
+                corpusId,
+                "qualification",
+            ))!;
+            if (definition.selector.kind !== "sources")
+                throw new Error("Expected exact original scope");
+            definition.selector.sources.push({
+                sourceId: qualification.sourceId,
+                revisionId: qualification.activeRevisionId!,
+            });
+            const job = await waitForViewBuild(
+                service,
+                await admitFreshBuild({
+                    corpusId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    targets: [
+                        { definition, expectedVersion: edited.version.version },
+                    ],
+                }),
+            );
+            expect(job.state).toBe("failed");
+            const result = job.results[0];
+            expect(result.state).toBe("conflicted");
+            const conflict = (await service.getViewConflict({
+                corpusId,
+                conflictId: result.conflictId!,
+            }))!;
+            expect(conflict.targets).toContain("summary");
+            expect(conflict.human.content.summary).toBe(content.summary);
+            expect(
+                conflict.human.edits!.find((edit) => edit.id === humanEdit.id)
+                    ?.actor,
+            ).toBe(humanEdit.actor);
+            expect(conflict.candidate.content.summary).toContain(
+                rejectCandidate
+                    ? "Injected unsupported summary"
+                    : "production cutover is not authorized",
+            );
+            if (rejectCandidate) {
+                const publication = await service.getViewPublication({
+                    corpusId,
+                    viewId: current.viewId,
+                });
+                await expect(
+                    service.resolveViewConflict({
+                        corpusId,
+                        conflictId: conflict.conflictId,
+                        expectedHead: (await service.listViews(corpusId)).head!,
+                        expectedVersion: edited.version.version,
+                        expectedRevisionId: edited.version.revisionId,
+                        inputFingerprint: conflict.input.fingerprint,
+                        choice: "generated",
+                    }),
+                ).rejects.toThrow("Unsupported evidence");
+                expect(
+                    (await service.getView({
+                        corpusId,
+                        viewId: current.viewId,
+                    }))!.revisionId,
+                ).toBe(edited.version.revisionId);
+                expect(
+                    (await service.getViewConflict({
+                        corpusId,
+                        conflictId: conflict.conflictId,
+                    }))!.state,
+                ).not.toBe("resolved");
+                expect(
+                    await service.getViewPublication({
+                        corpusId,
+                        viewId: current.viewId,
+                    }),
+                ).toEqual(publication);
+            }
+        },
+    );
 
     async function admitFreshBuild(request: ViewBuildRequest) {
         for (let attempt = 0; attempt < 10; attempt++) {
@@ -1615,8 +1729,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const admitted = await admitFreshBuild(request);
             expect(admitted.results[0].snapshot.model).toBe(
                 family === "wiki"
-                    ? "mock-informational:wiki-source-contribution-v6:editorial-v1:indexed-evidence-v2"
-                    : "mock-informational:project-attribution-v6:editorial-v1:indexed-evidence-v2",
+                    ? "mock-informational:wiki-source-contribution-v12:informational-support-v1:editorial-v1:indexed-evidence-v2"
+                    : "mock-informational:project-attribution-v12:informational-support-v1:editorial-v1:indexed-evidence-v2",
             );
             expect((await service.buildViews(request)).jobId).toBe(
                 admitted.jobId,

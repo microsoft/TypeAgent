@@ -11,6 +11,7 @@ import {
     sourceDispositions,
 } from "./viewInventory.js";
 import type { ViewKind } from "./viewTypes.js";
+import { informationalIssueCategories } from "./informationalSupport.js";
 
 const text: JsonSchemaType = { type: "string" };
 const boolean: JsonSchemaType = { type: "boolean" };
@@ -218,8 +219,9 @@ export function createInventorySupportSchema(
     sectionIds: string[],
     edgeIds: string[],
     exclusionIds: string[],
+    informational?: { paths: string[]; evidenceIds: string[] },
 ): StructuredOutputJsonSchema {
-    return schema("memory_inventory_artifact_support", {
+    const properties: Record<string, JsonSchemaType> = {
         supported: boolean,
         sections: array(
             object({
@@ -244,5 +246,64 @@ export function createInventorySupportSchema(
         ),
         missingContext: array(text),
         reasons: array(text),
+    };
+    if (informational) {
+        properties.informational = object({
+            policy: choice(["informational-support-v1"]),
+            fields: array(
+                object({
+                    path: reference(informational.paths),
+                    supported: boolean,
+                    reason: text,
+                }),
+            ),
+            issues: {
+                ...array(
+                    object({
+                        category: choice(informationalIssueCategories),
+                        path: reference(informational.paths),
+                        quote: text,
+                        evidenceIds: array(
+                            reference(informational.evidenceIds),
+                        ),
+                        reason: text,
+                        correction: text,
+                    }),
+                ),
+                maxItems: 128,
+            },
+        });
+    }
+
+    return schema(
+        informational
+            ? "memory_informational_support"
+            : "memory_inventory_artifact_support",
+        properties,
+    );
+}
+
+export function createInformationalSupportSchema(
+    fieldIds: string[],
+    spanIds: string[],
+    evidenceIds: string[],
+): StructuredOutputJsonSchema {
+    return schema("memory_informational_field_support", {
+        policy: choice(["informational-field-support-v2"]),
+        fields: array(
+            object({
+                fieldId: reference(fieldIds),
+                reason: text,
+                issues: array(
+                    object({
+                        spanId: reference(spanIds),
+                        category: choice(informationalIssueCategories),
+                        evidenceIds: array(reference(evidenceIds)),
+                        reason: text,
+                        correction: text,
+                    }),
+                ),
+            }),
+        ),
     });
 }

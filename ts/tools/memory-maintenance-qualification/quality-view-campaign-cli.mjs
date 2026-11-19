@@ -10,6 +10,8 @@ import {
     scoreCampaignArtifacts,
     validateExampleRunArtifacts,
 } from "./quality-view-campaign.mjs";
+import { scoreCampaignMeasurements } from "./quality-campaign-measurements.mjs";
+import { assessCampaignRelease } from "./quality-campaign-release.mjs";
 
 export const ownershipMarker = ".quality-view-campaign-owner.json";
 export const help = `Offline informational-view campaign tools (no network, models or credentials)
@@ -19,6 +21,11 @@ node quality-view-campaign-cli.mjs validate --root <project-relative-owned-root>
   --mapping <file> --out <new-file>
 node quality-view-campaign-cli.mjs score <same flags>
   --gold <file> --review <file> --annotations <file>
+node quality-view-campaign-cli.mjs score-measurements <score flags>
+  --rubric <file> --rubric-review <file> --measurements <file>
+node quality-view-campaign-cli.mjs assess-release <score-measurements flags>
+  --registration <file> --registry <file> --confirmation <file> --rollback <file>
+  --blinded <file> --usefulness-review <file>
 node quality-view-campaign-cli.mjs validate-example --root <owned-example-run>
   --construction <project-relative-file> --receipt receipt.json --saved saved.json
   --rendered rendered.txt --source-mapping source-mapping.json
@@ -31,6 +38,7 @@ Symlinks, paths outside the project, frozen fixtures, holdout paths and
 credential filenames are refused. --out is created exclusively, never replaced.
 Gold is explicit evaluator-custodied input; no frozen loader is used.
 --help does not read files. No acquisition or execution commands exist.
+These commands are offline; authorized execution has a separate explicit CLI.
 validate-example accepts the runner's .wiki-views-owned.json marker and exact
 ViewVersion/snapshot files. It never produces production quality scores or
 fabricates wire requests, usage, or citation resolution receipts.
@@ -47,6 +55,15 @@ const baseFlags = [
     "out",
 ];
 const reviewFlags = ["gold", "review", "annotations"];
+const measurementFlags = ["rubric", "rubric-review", "measurements"];
+const releaseFlags = [
+    "registration",
+    "registry",
+    "confirmation",
+    "rollback",
+    "blinded",
+    "usefulness-review",
+];
 const exampleFlags = [
     "root",
     "construction",
@@ -61,7 +78,18 @@ const exampleFlags = [
 function commandFlags(command) {
     return command === "validate-example"
         ? exampleFlags
-        : [...baseFlags, ...(command === "score" ? reviewFlags : [])];
+        : [
+              ...baseFlags,
+              ...(["score", "score-measurements", "assess-release"].includes(
+                  command,
+              )
+                  ? reviewFlags
+                  : []),
+              ...(["score-measurements", "assess-release"].includes(command)
+                  ? measurementFlags
+                  : []),
+              ...(command === "assess-release" ? releaseFlags : []),
+          ];
 }
 const forbidden =
     /^(?:quality-fixtures|holdout|heldout|\.typeagent|\.npmrc|\.env(?:\..*)?|config(?:\.local|\.sample)?\.ya?ml|credentials(?:\..*)?|secrets(?:\..*)?)$/i;
@@ -92,7 +120,7 @@ function relativeName(value) {
     return pieces;
 }
 
-async function confined(base, name, absentLeaf = false) {
+export async function confined(base, name, absentLeaf = false) {
     const pieces = relativeName(name);
     let current = base;
     for (let index = 0; index < pieces.length; index++) {
@@ -120,8 +148,14 @@ async function confined(base, name, absentLeaf = false) {
 function parse(args) {
     const command = args[0];
     check(
-        ["validate", "score", "validate-example"].includes(command),
-        "Expected validate, score or validate-example; use --help",
+        [
+            "validate",
+            "score",
+            "validate-example",
+            "score-measurements",
+            "assess-release",
+        ].includes(command),
+        "Expected validate, score, validate-example, score-measurements or assess-release; use --help",
     );
     const allowed = commandFlags(command);
     const flags = {};
@@ -141,6 +175,80 @@ function parse(args) {
     }
     for (const key of allowed) check(flags[key], `Missing --${key}`);
     return { command, flags };
+}
+
+function evaluateInputs(command, inputs) {
+    const {
+        construction,
+        campaign,
+        run,
+        outputs,
+        mapping,
+        annotations,
+        gold,
+        review,
+    } = inputs;
+    if (command === "validate-example")
+        return validateExampleRunArtifacts(construction, {
+            receipt: inputs.receipt,
+            saved: inputs.saved,
+            rendered: inputs.rendered,
+            sourceMapping: inputs["source-mapping"],
+            requestEvidence: inputs["request-evidence"],
+        });
+    if (command === "validate")
+        return {
+            schemaVersion: run.schemaVersion,
+            status: "validated-identities-and-schedule-only",
+            runHash: validateCampaignOutputs(
+                construction,
+                campaign,
+                run,
+                outputs,
+                mapping,
+            ),
+            semanticQualityEvaluated: false,
+        };
+    const input = {
+        packet: construction,
+        campaign,
+        run,
+        outputs,
+        mapping,
+        annotations,
+        gold,
+        review,
+    };
+    if (command === "score-measurements")
+        return scoreCampaignMeasurements(
+            input,
+            inputs.rubric,
+            inputs["rubric-review"],
+            inputs.measurements,
+        );
+    if (command === "assess-release")
+        return assessCampaignRelease({
+            input,
+            rubric: inputs.rubric,
+            rubricReview: inputs["rubric-review"],
+            measurements: inputs.measurements,
+            registration: inputs.registration,
+            registry: inputs.registry,
+            confirmation: inputs.confirmation,
+            rollback: inputs.rollback,
+            blinded: inputs.blinded,
+            usefulnessReview: inputs["usefulness-review"],
+        });
+    return scoreCampaignArtifacts(
+        construction,
+        campaign,
+        run,
+        outputs,
+        annotations,
+        gold,
+        review,
+        mapping,
+    );
 }
 
 export async function main(
@@ -209,48 +317,7 @@ export async function main(
                 ]),
             ),
         );
-        const {
-            construction,
-            campaign,
-            run,
-            outputs,
-            mapping,
-            annotations,
-            gold,
-            review,
-        } = inputs;
-        const result =
-            command === "validate-example"
-                ? validateExampleRunArtifacts(construction, {
-                      receipt: inputs.receipt,
-                      saved: inputs.saved,
-                      rendered: inputs.rendered,
-                      sourceMapping: inputs["source-mapping"],
-                      requestEvidence: inputs["request-evidence"],
-                  })
-                : command === "validate"
-                  ? {
-                        schemaVersion: 1,
-                        status: "validated-identities-and-schedule-only",
-                        runHash: validateCampaignOutputs(
-                            construction,
-                            campaign,
-                            run,
-                            outputs,
-                            mapping,
-                        ),
-                        semanticQualityEvaluated: false,
-                    }
-                  : scoreCampaignArtifacts(
-                        construction,
-                        campaign,
-                        run,
-                        outputs,
-                        annotations,
-                        gold,
-                        review,
-                        mapping,
-                    );
+        const result = evaluateInputs(command, inputs);
         await writeFile(out, `${JSON.stringify(result, null, 2)}\n`, {
             flag: "wx",
         });

@@ -563,10 +563,10 @@ export async function verifyTailArticle(
         indexedLocator: citation.locator,
     });
     assert.equal(resolved.content, citation.excerpt);
-    assert.ok(
-        view.content.sections.some((section) =>
-            section.body.includes("Coverage limits:"),
-        ),
+    assert.equal(
+        view.content.coverageNote,
+        "Offline selected-evidence copy, not model qualification",
+        "The actual coverage note must survive without an appended body disclaimer",
     );
     return {
         viewId,

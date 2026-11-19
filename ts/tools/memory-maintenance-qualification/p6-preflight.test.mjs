@@ -961,7 +961,11 @@ test(
                 } finally {
                     historyReader.read = originalRead;
                 }
-                assert.equal(postUnlockHydrations, 1);
+                assert.equal(
+                    postUnlockHydrations,
+                    0,
+                    "Committed inventory projections must resolve lineage without hydrating full history",
+                );
                 assert.equal(
                     postUnlock.wikiFamily.pending,
                     true,

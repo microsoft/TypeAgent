@@ -474,6 +474,7 @@ import {
     readConsolidationScope,
     type WikiConsolidationReceipt,
     ConsolidationTargetChanged,
+    applyConsolidationRepair,
 } from "./wikiConsolidation.js";
 import { viewSourceKey } from "./viewContent.js";
 import type {
@@ -481,6 +482,7 @@ import type {
     WikiSubjectAssessment,
     WikiContributionCandidate,
     ViewBuildTargetResult,
+    ViewSupportReport,
 } from "./viewTypes.js";
 import {
     discoverInformationalDescriptors,
@@ -495,6 +497,7 @@ import {
     verifyOrRepairWikiConsolidation,
     validateConstructedGuide,
     validateSupport,
+    validateOrRepairInformationalOutput,
 } from "./viewSynthesis.js";
 import { viewContentToText } from "./viewText.js";
 import type {
@@ -4294,6 +4297,10 @@ export class FileMemoryService
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         validateIdentifier("source ID", request.sourceId);
+        if (request.includeIndexedBlock && request.indexedLocator === undefined)
+            throw new Error(
+                "Indexed block receipts require an indexed locator",
+            );
         const runtime = await this.getCorpusRuntime(request.corpusId);
         if (request.indexedLocator !== undefined)
             return this.enqueueDocumentRead(
@@ -4329,6 +4336,18 @@ export class FileMemoryService
                         revisionId,
                         request.indexedLocator!,
                     );
+                    let indexedBlock: string | undefined;
+                    if (request.includeIndexedBlock) {
+                        if (!runtime.index.resolveIndexedBlock)
+                            throw new Error(
+                                "Host does not support indexed block receipts",
+                            );
+                        indexedBlock = await runtime.index.resolveIndexedBlock(
+                            request.sourceId,
+                            revisionId,
+                            request.indexedLocator!,
+                        );
+                    }
                     if (!(await this.sourceAllowed(source, revision, "expand")))
                         throw new Error(
                             "Source expansion authorization changed",
@@ -4342,6 +4361,7 @@ export class FileMemoryService
                         content,
                         totalChars: content.length,
                         truncated: false,
+                        ...(indexedBlock !== undefined ? { indexedBlock } : {}),
                     };
                 },
             );
@@ -8135,13 +8155,12 @@ export class FileMemoryService
                 ? { ...frozen, definition: request.definition }
                 : frozen;
         validateConstructedGuide(validationInput, output);
-        if (informationalWiki(output.content)) return undefined;
         const support = await this.viewAdapter.validate(
             validationInput,
             output,
             this.maintenance.signal,
         );
-        validateSupport(output, support);
+        validateSupport(output, support, validationInput);
         if (
             viewHash(validationInput.definition) !== viewHash(frozen.definition)
         )
@@ -8334,8 +8353,7 @@ export class FileMemoryService
             throw new Error(
                 "Archived or stale view cannot be published or searched",
             );
-        if (!informationalWiki(version.content))
-            assertPublicationProof(version);
+        assertPublicationProof(version, { allowLegacyInformational: true });
         const runtime = await this.getCorpusRuntime(version.corpusId);
         if (version.content.kind === "extension") {
             if (!this.extensionBuilds || !version.generation?.input)
@@ -8457,6 +8475,7 @@ export class FileMemoryService
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
         await this.assertViewPublicationFresh(view);
+        assertPublicationProof(view);
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
@@ -9711,6 +9730,27 @@ export class FileMemoryService
         };
     }
 
+    private async checkSeparationOutput(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<{ output: ViewSynthesisOutput }> {
+        validateConstructedGuide(input, output);
+        if (!this.viewAdapter.checkEditorial)
+            throw new Error(
+                "Separation requires the actual-output factual checker",
+            );
+        const assessment = parseSeparationEditorialAssessment(
+            await abortable(
+                this.viewAdapter.checkEditorial(input, output, signal),
+                signal,
+            ),
+        );
+        assertSeparationEditorialDiagnostics(assessment, input, output);
+        assertSeparationEditorialAssessment(assessment);
+        return { output };
+    }
+
     private async executeSeparation(
         receipt: ViewSeparationReceipt,
         signal: AbortSignal,
@@ -9734,15 +9774,22 @@ export class FileMemoryService
                     this.viewAdapter.generate(input, signal),
                     signal,
                 );
-                validateConstructedGuide(input, output);
-                const assessment = parseSeparationEditorialAssessment(
-                    await abortable(
-                        this.viewAdapter.checkEditorial(input, output, signal),
+                const initial = await this.checkSeparationOutput(
+                    input,
+                    output,
+                    signal,
+                );
+                const { prepared, support } = await abortable(
+                    validateOrRepairInformationalOutput(
+                        this.viewAdapter,
+                        input,
+                        initial,
+                        (repaired) =>
+                            this.checkSeparationOutput(input, repaired, signal),
                         signal,
                     ),
+                    signal,
                 );
-                assertSeparationEditorialDiagnostics(assessment, input, output);
-                assertSeparationEditorialAssessment(assessment);
                 child = await this.enqueueWrite(receipt.corpusId, async () => {
                     signal.throwIfAborted();
                     await this.recheckSeparation(receipt);
@@ -9750,7 +9797,12 @@ export class FileMemoryService
                         receipt.corpusId,
                         receipt.receiptId,
                         index,
-                        output,
+                        prepared.output,
+                        publicationProof(
+                            input.fingerprint,
+                            prepared.output,
+                            support,
+                        ),
                     );
                 });
                 destination.acceptedRevisionId = child.revisionId;
@@ -10243,7 +10295,7 @@ export class FileMemoryService
             survivor,
             retiring,
         );
-        const { output, verification } = await abortable(
+        const initial = await abortable(
             verifyOrRepairWikiConsolidation(
                 this.viewAdapter,
                 input,
@@ -10253,8 +10305,39 @@ export class FileMemoryService
             ),
             signal,
         );
+        const { prepared, support } = await abortable(
+            validateOrRepairInformationalOutput(
+                this.viewAdapter,
+                input,
+                initial,
+                async (repaired) => {
+                    const bounded = applyConsolidationRepair(original, {
+                        summary: repaired.content.summary,
+                        sections: repaired.content.sections.map(
+                            ({ id, body }) => ({ id, body }),
+                        ),
+                    });
+                    if (viewHash(bounded) !== viewHash(repaired))
+                        throw new Error(
+                            "Factual consolidation repair changed protected article structure",
+                        );
+                    return verifyOrRepairWikiConsolidation(
+                        this.viewAdapter,
+                        input,
+                        original,
+                        assessment,
+                        signal,
+                        repaired,
+                    );
+                },
+                signal,
+            ),
+            signal,
+        );
+        const { output, verification } = prepared;
         signal.throwIfAborted();
         const receipt: WikiConsolidationReceipt = {
+            validation: publicationProof(input.fingerprint, output, support),
             identity: viewHash({
                 survivor: survivor.revisionId,
                 retiring: retiring.revisionId,
@@ -10524,7 +10607,7 @@ export class FileMemoryService
         );
         signal.throwIfAborted();
         validateConstructedGuide(input, candidate);
-        const prepared = await abortable(
+        let prepared = await abortable(
             prepareWikiContribution(
                 this.viewAdapter,
                 input,
@@ -10535,6 +10618,39 @@ export class FileMemoryService
             ),
             signal,
         );
+        let support: ViewSupportReport | undefined;
+        if (!prepared.conflicts.length) {
+            const factual = await abortable(
+                validateOrRepairInformationalOutput(
+                    this.viewAdapter,
+                    input,
+                    prepared,
+                    async (repaired) => {
+                        const checked = await prepareWikiContribution(
+                            this.viewAdapter,
+                            input,
+                            repaired,
+                            (value) =>
+                                mergeEditorialView(
+                                    current,
+                                    value,
+                                    input.inputs,
+                                ),
+                            signal,
+                        );
+                        if (checked.conflicts.length)
+                            throw new Error(
+                                "Factual contribution repair introduced protected-edit conflicts",
+                            );
+                        return checked;
+                    },
+                    signal,
+                ),
+                signal,
+            );
+            prepared = factual.prepared;
+            support = factual.support;
+        }
         candidate = prepared.candidate;
         const { output, conflicts } = prepared;
         const verification = conflicts.length
@@ -10555,7 +10671,9 @@ export class FileMemoryService
                 candidate,
                 output,
                 conflicts,
-                undefined,
+                support
+                    ? publicationProof(input.fingerprint, output, support)
+                    : undefined,
                 { input, verification },
             );
             if (conflicts.length) return;
@@ -13891,29 +14009,21 @@ export class FileMemoryService
             ...inventoryEvidence(conflict.candidate),
         };
         validateConstructedGuide(conflict.input, output);
-        if (informationalWiki(output.content))
-            return this.enqueueWrite(request.corpusId, async () => {
-                await this.recheckViewInput(conflict.input);
-                const saved = await this.viewStore.resolveViewConflict(
-                    request,
-                    output,
-                );
-                await this.acceptInformationalVersion(saved.version);
-                return saved;
-            });
         const support = await this.viewAdapter.validate(
             conflict.input,
             output,
             this.maintenance.signal,
         );
-        validateSupport(output, support);
+        validateSupport(output, support, conflict.input);
         return this.enqueueWrite(request.corpusId, async () => {
             await this.recheckViewInput(conflict.input);
-            return this.viewStore.resolveViewConflict(
+            const saved = await this.viewStore.resolveViewConflict(
                 request,
                 output,
                 publicationProof(conflict.input.fingerprint, output, support),
             );
+            await this.acceptInformationalVersion(saved.version);
+            return saved;
         });
     }
 

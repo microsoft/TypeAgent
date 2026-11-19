@@ -31,6 +31,12 @@ const mode = spec.probeMode;
 assert.ok(["crash", "recover", "repeat", "timing"].includes(mode));
 const product = path.resolve(import.meta.dirname, "..", "..");
 assert.equal(path.resolve(spec.productRoot), product);
+assert.ok(path.isAbsolute(spec.fixtureRoot), "Absolute fixture root required");
+const contentRoot = path.join(
+    spec.fixtureRoot,
+    "memory-import-second-brain-maintenance",
+    "content-only",
+);
 const compiledHashes = await snapshotCompiledCheckpoint(product);
 if (mode !== "timing" || spec.expectedCheckpoint)
     assertCheckpoint(compiledHashes, spec.expectedCheckpoint);
@@ -239,16 +245,7 @@ try {
                 expectedHead: (await service.listViews(corpusId)).head,
             });
         const text = await readFile(
-            path.resolve(
-                product,
-                "..",
-                "..",
-                "memoryDemo",
-                "memory-import-second-brain-maintenance",
-                "content-only",
-                "initial",
-                "document-020.md",
-            ),
+            path.join(contentRoot, "initial", "document-020.md"),
             "utf8",
         );
         const admitted = await service.ingestDocument({
@@ -366,16 +363,7 @@ try {
                 });
             const ingest = async (stage, previous) => {
                 const text = await readFile(
-                    path.resolve(
-                        product,
-                        "..",
-                        "..",
-                        "memoryDemo",
-                        "memory-import-second-brain-maintenance",
-                        "content-only",
-                        stage,
-                        "document-021.md",
-                    ),
+                    path.join(contentRoot, stage, "document-021.md"),
                     "utf8",
                 );
                 const source = {

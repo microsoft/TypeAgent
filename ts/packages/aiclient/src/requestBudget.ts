@@ -3,6 +3,8 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
+import type { CompletionUsageStats } from "./apiTypes.js";
+import type { Result } from "typechat";
 
 export interface RequestBudgetLimits {
     contextTokens?: number | undefined;
@@ -49,12 +51,30 @@ export interface RequestAttemptObserver {
     finish(id: string, outcome: RequestAttemptOutcome): Promise<void>;
 }
 
+export interface RequestDispatchCapture {
+    reserve(
+        event: RequestAttemptReservation & {
+            serializedRequest: string;
+            operation: string;
+        },
+    ): Promise<string>;
+    finish(id: string, outcome: RequestAttemptOutcome): Promise<void>;
+    usage?(id: string, usage: CompletionUsageStats): Promise<void>;
+    result?(id: string, result: Result<string>): Promise<void>;
+}
+
 export interface RequestBudgetResume {
     receipts: readonly RequestBudgetReceipt[];
     elapsedMs: number;
 }
 
-export class RequestAdmissionError extends Error {}
+export class RequestAdmissionError extends Error {
+    public readonly cause: unknown;
+    public constructor(message?: string, options?: { cause: unknown }) {
+        super(message);
+        this.cause = options?.cause;
+    }
+}
 
 function validateResumedReceipt(
     receipt: RequestBudgetReceipt,
@@ -307,11 +327,52 @@ export function isChatWireRequest(body: object): boolean {
 
 const budgets = new AsyncLocalStorage<readonly RequestBudget[] | undefined>();
 const observers = new AsyncLocalStorage<RequestAttemptObserver | undefined>();
+const captures = new AsyncLocalStorage<RequestDispatchCapture | undefined>();
+const operations = new AsyncLocalStorage<
+    { name: string; capturedIds: string[] } | undefined
+>();
+
+export function runWithRequestDispatchCapture<T>(
+    capture: RequestDispatchCapture,
+    work: () => T,
+): T {
+    return captures.run(capture, work);
+}
+
+export function runWithRequestOperation<T>(
+    operation: string,
+    work: () => T,
+): T {
+    return operations.run({ name: operation, capturedIds: [] }, work);
+}
+
+export async function recordDispatchedRequestUsage(
+    usage: CompletionUsageStats,
+): Promise<void> {
+    const capture = captures.getStore();
+    const id = operations.getStore()?.capturedIds.at(-1);
+    if (capture?.usage && id !== undefined) await capture.usage(id, usage);
+}
+
+export async function recordDispatchedRequestResult(
+    result: Result<string>,
+): Promise<void> {
+    const capture = captures.getStore();
+    const id = operations.getStore()?.capturedIds.at(-1);
+    if (capture?.result && id !== undefined) await capture.result(id, result);
+}
 
 export function bindRequestBudgetScope<T>(work: () => T): () => T {
     const active = budgets.getStore();
     const observer = observers.getStore();
-    return () => observers.run(observer, () => budgets.run(active, work));
+    const capture = captures.getStore();
+    const operation = operations.getStore();
+    return () =>
+        captures.run(capture, () =>
+            operations.run(operation, () =>
+                observers.run(observer, () => budgets.run(active, work)),
+            ),
+        );
 }
 
 export function runWithRequestAttemptObserver<T>(
@@ -327,29 +388,64 @@ export async function reserveSerializedRequestForDispatch(
 ): Promise<((outcome: RequestAttemptOutcome) => Promise<void>) | undefined> {
     reserveSerializedRequest(options, defaultOutputTokens);
     const observer = observers.getStore();
-    if (!observer) return undefined;
+    const capture = captures.getStore();
+    if (!observer && !capture) return undefined;
     const reservations = (budgets.getStore() ?? []).map(
         (budget) => budget.receipts.at(-1)!,
     );
-    if (!reservations.length || typeof options?.body !== "string")
+    if ((observer && !reservations.length) || typeof options?.body !== "string")
         throw new RequestAdmissionError(
             "Durable inference recording requires an admitted serialized request",
         );
-    let id: string;
+    const event = {
+        requestFingerprint: createHash("sha256")
+            .update(options.body)
+            .digest("hex"),
+        at: new Date().toISOString(),
+        reservations,
+    };
+    let capturedId: string | undefined;
     try {
-        id = await observer.reserve({
-            requestFingerprint: createHash("sha256")
-                .update(options.body)
-                .digest("hex"),
-            at: new Date().toISOString(),
-            reservations,
+        capturedId = await capture?.reserve({
+            ...event,
+            serializedRequest: options.body,
+            operation: operations.getStore()?.name ?? "unclassified",
         });
+    } catch (error) {
+        throw new RequestAdmissionError(
+            "Dispatch capture failed; request not sent",
+            { cause: error },
+        );
+    }
+    if (capturedId !== undefined)
+        operations.getStore()?.capturedIds.push(capturedId);
+    let id: string | undefined;
+    try {
+        id = await observer?.reserve(event);
     } catch {
+        if (capture && capturedId !== undefined)
+            await capture.finish(capturedId, {
+                state: "failed",
+                at: new Date().toISOString(),
+                elapsedMs: 0,
+            });
         throw new RequestAdmissionError(
             "Durable inference reservation failed; dispatch blocked",
         );
     }
-    return (outcome) => observer.finish(id, outcome);
+    return async (outcome) => {
+        if (capture && capturedId !== undefined) {
+            try {
+                await capture.finish(capturedId, outcome);
+            } catch (error) {
+                throw new RequestAdmissionError(
+                    "Dispatch outcome capture failed",
+                    { cause: error },
+                );
+            }
+        }
+        if (observer && id !== undefined) await observer.finish(id, outcome);
+    };
 }
 
 export function runWithRequestBudget<T>(

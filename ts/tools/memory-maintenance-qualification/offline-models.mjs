@@ -16,6 +16,9 @@ export async function createOfflineOptions(load, counters, controls = {}) {
     const { hydrateProjectSummary } = await load(
         "packages\\memory\\service\\dist\\informationalProject.js",
     );
+    const { informationalFields } = await load(
+        "packages\\memory\\service\\dist\\informationalSupport.js",
+    );
     const { createTopicSnapshot } = await load(
         "packages\\memory\\service\\dist\\topicGeneration.js",
     );
@@ -238,6 +241,15 @@ export async function createOfflineOptions(load, counters, controls = {}) {
                     incidentState: "unknown",
                     capacityState: "notApplicable",
                     citationIds,
+                    sectionCitationIds: {
+                        goalsScope: citationIds,
+                        owners: [],
+                        status: citationIds,
+                        milestones: [],
+                        decisions: citationIds,
+                        risks: citationIds,
+                        context: [],
+                    },
                 });
             return hydrateInformational(input, {
                 title,
@@ -271,7 +283,40 @@ export async function createOfflineOptions(load, counters, controls = {}) {
             counters.editorial++;
             return { safe: true, failures: [] };
         },
-        validate: async () => {
+        validate: async (input, output) => {
+            if (
+                [
+                    "informational-wiki-v1",
+                    "informational-project-summary-v1",
+                ].includes(input.pipeline)
+            ) {
+                return {
+                    supported: true,
+                    sections: output.content.sections.map(({ id }) => ({
+                        sectionId: id,
+                        supported: true,
+                        reason: "Injected offline assessment",
+                    })),
+                    relationships: output.relationships.map(({ id }) => ({
+                        edgeId: id,
+                        supported: true,
+                        reason: "Injected offline assessment",
+                    })),
+                    missingContext: [],
+                    reasons: [],
+                    informational: {
+                        policy: "informational-support-v1",
+                        fields: [...informationalFields(output).keys()].map(
+                            (path) => ({
+                                path,
+                                supported: true,
+                                reason: "Injected offline assessment",
+                            }),
+                        ),
+                        issues: [],
+                    },
+                };
+            }
             counters.unexpectedValidation++;
             throw new Error(
                 "Informational build must not invoke universal support",

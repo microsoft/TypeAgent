@@ -112,7 +112,22 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                             failures: [],
                             diagnostics: [],
                         };
-                    else if (schema.name === "informational_semantic_review") {
+                    else if (
+                        schema.name === "memory_informational_field_support"
+                    ) {
+                        const { fields }: { fields: Array<{ id: string }> } =
+                            JSON.parse(user.content);
+                        answer = {
+                            policy: "informational-field-support-v2",
+                            fields: fields.map(({ id }) => ({
+                                fieldId: id,
+                                reason: "Controlled source-only assessment",
+                                issues: [],
+                            })),
+                        };
+                    } else if (
+                        schema.name === "informational_semantic_review"
+                    ) {
                         const { requiredFacets } = JSON.parse(user.content) as {
                             requiredFacets: string[];
                         };
@@ -299,6 +314,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                     ? [
                           "informational_project_summary",
                           "editorial_consequences",
+                          "memory_informational_field_support",
                           "informational_semantic_review",
                       ]
                     : [
@@ -419,7 +435,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                 expectedHead: latest.head!,
             });
             expect(retry.intent).toEqual(publication.intent);
-            expect(stages).toHaveLength(kind === "projectBrief" ? 3 : 5);
+            expect(stages).toHaveLength(kind === "projectBrief" ? 4 : 5);
             if (kind === "timeline") {
                 const canonical = (
                     await client.appendEvent({

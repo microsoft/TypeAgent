@@ -7,6 +7,11 @@ import {
     reserveSerializedRequest,
     RequestAdmissionError,
     runWithRequestAttemptObserver,
+    runWithRequestDispatchCapture,
+    runWithRequestOperation,
+    recordDispatchedRequestUsage,
+    recordDispatchedRequestResult,
+    type RequestDispatchCapture,
 } from "../src/requestBudget.js";
 import { callApi, fetchWithRetry } from "../src/restClient.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
@@ -31,6 +36,154 @@ function budget(chatAttempts = 2) {
 }
 
 describe("serialized inference budget (mock transport)", () => {
+    test("opt-in capture receives every exact dispatched body and measured final usage, never headers", async () => {
+        const original = globalThis.fetch;
+        const events: Array<Parameters<RequestDispatchCapture["reserve"]>[0]> =
+            [];
+        const outcomes: string[] = [];
+        const usageIds: string[] = [];
+        const resultIds: string[] = [];
+        let sent = 0;
+        const capture: RequestDispatchCapture = {
+            async reserve(event) {
+                events.push(event);
+                return String(events.length);
+            },
+            async finish(id, outcome) {
+                outcomes.push(`${id}:${outcome.state}`);
+            },
+            async usage(id) {
+                usageIds.push(id);
+            },
+            async result(id, result) {
+                expect(result).toEqual({
+                    success: true,
+                    data: "untrusted candidate",
+                });
+                resultIds.push(id);
+            },
+        };
+        try {
+            globalThis.fetch = async (_url, options) => {
+                expect(events.at(-1)!.serializedRequest).toBe(options!.body);
+                expect(events.at(-1)).not.toHaveProperty("headers");
+                sent++;
+                return new Response("{}", { status: sent === 1 ? 503 : 200 });
+            };
+            await runWithRequestDispatchCapture(capture, () =>
+                runWithRequestOperation("controlled:normal", async () => {
+                    await fetchWithRetry(
+                        "https://synthetic.invalid/captured",
+                        {
+                            method: "POST",
+                            headers: { authorization: "synthetic-only" },
+                            body: JSON.stringify({
+                                messages: [],
+                                max_tokens: 4000,
+                            }),
+                        },
+                        2,
+                        1,
+                    );
+                    await recordDispatchedRequestUsage({
+                        prompt_tokens: 2,
+                        completion_tokens: 3,
+                        total_tokens: 5,
+                    });
+                    await recordDispatchedRequestResult({
+                        success: true,
+                        data: "untrusted candidate",
+                    });
+                }),
+            );
+            expect(events).toHaveLength(2);
+            expect(
+                events.every(
+                    (event) => event.operation === "controlled:normal",
+                ),
+            ).toBe(true);
+            expect(outcomes).toEqual(["1:returned", "2:returned"]);
+            expect(usageIds).toEqual(["2"]);
+            expect(resultIds).toEqual(["2"]);
+            await fetchWithRetry(
+                "https://synthetic.invalid/uncaptured",
+                { method: "POST", body: "{}" },
+                1,
+                1,
+            );
+            expect(events).toHaveLength(2);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
+
+    test("capture persistence failure prevents dispatch and retry without requiring a budget observer", async () => {
+        const original = globalThis.fetch;
+        let sent = 0;
+        globalThis.fetch = async () => {
+            sent++;
+            return new Response("{}");
+        };
+        try {
+            await expect(
+                runWithRequestDispatchCapture(
+                    {
+                        reserve: async () => {
+                            throw new Error("Injected disk failure");
+                        },
+                        finish: async () => {},
+                    },
+                    () =>
+                        fetchWithRetry(
+                            "https://synthetic.invalid/not-sent",
+                            { method: "POST", body: "{}" },
+                            3,
+                            1,
+                        ),
+                ),
+            ).rejects.toThrow("request not sent");
+            expect(sent).toBe(0);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
+
+    test("an outcome capture failure is reported once and cannot cause an additional transport attempt", async () => {
+        const original = globalThis.fetch;
+        let sent = 0,
+            finished = 0;
+        globalThis.fetch = async () => {
+            sent++;
+            return new Response("{}");
+        };
+        try {
+            await expect(
+                runWithRequestDispatchCapture(
+                    {
+                        reserve: async () => "attempt",
+                        finish: async () => {
+                            finished++;
+                            throw new Error(
+                                "Injected outcome persistence failure",
+                            );
+                        },
+                    },
+                    () =>
+                        fetchWithRetry(
+                            "https://synthetic.invalid/outcome",
+                            { method: "POST", body: "{}" },
+                            3,
+                            1,
+                        ),
+                ),
+            ).rejects.toThrow("Dispatch outcome capture failed");
+            expect(sent).toBe(1);
+            expect(finished).toBe(1);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
+
     test("durably reserves every physical retry before fetch and resumes without resetting capacity", async () => {
         const original = globalThis.fetch;
         const events: string[] = [];

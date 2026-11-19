@@ -27,6 +27,7 @@ import type {
     ViewMaintenanceResult,
 } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 class PlanningIndex extends FakeSemanticCorpusIndex {
     public async listSubjects() {
@@ -117,9 +118,8 @@ describe("dependency-scoped Wiki planning recovery", () => {
                             .flatMap((source) => source.passages ?? [])
                             .map((_, index) => `f${index}`),
                     }),
-                validate: async () => {
-                    throw new Error("Legacy validation must not run");
-                },
+                validate: async (_input, output) =>
+                    controlledInformationalSupport(output),
             },
         });
 

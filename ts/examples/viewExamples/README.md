@@ -58,6 +58,9 @@ after ingestion; they are not assumed to be memory revision IDs.
 - `saved.json`: exact stored version, content and relationships.
 - `rendered.txt`: product `viewContentToText` output, not an alternate schema.
 - `request-evidence.json`: original indexed construction snapshots.
+- `checkpoints.json`: the scheduled source batches, current stage and
+  not-attempted/running/accepted/failed disposition. A failed incremental build
+  retains earlier accepted revisions and leaves the later suffix unattempted.
 - `receipt.json`: terminal build results, exact artifact hashes, mode,
   injected behavior, authorization identity and publication/index state.
 - `failure.json`: explicit component, stage and reason after a store was opened.
@@ -111,6 +114,53 @@ no substantive project description; a live model must not invent missing goals
 or deliverables. Use sufficiently descriptive approved sources for a useful
 project-understanding evaluation. Live execution alone does not make the original
 development fixtures reviewed quality gold.
+
+### Opt-in admitted-request capture
+
+Add `--capture-requests` to an already authorized live command to retain exact
+post-redaction request bodies after admission and adaptive output-capacity
+changes. Offline mode refuses this flag. Capture is scoped to the run; normal
+execution does not write these files:
+
+- `calls/<attempt-id>/request.json`: the exact JSON body sent for one physical
+  attempt, not concatenated calls, inspection output or a reconstructed prompt.
+- `request-calls.json`: contract `memory-request-capture-v1`, case/checkpoint,
+  operation, SHA-256 body hash, reservations, dispatch outcome and measured usage
+  when the completion integration supplies it. Unknown usage is `null`, not zero.
+- `calls/<attempt-id>/result.json`: the model completion result when forwarded
+  by informational/topic integration, with its separate manifest hash. These
+  are untrusted candidates/checker results, **not** accepted revisions or raw
+  HTTP response envelopes; they survive later validation rejection.
+
+Retries receive distinct attempt IDs. Construction, contract repair and audit
+operations are distinct; auditor-only evidence cannot establish construction
+selection recall. Manifest/body persistence failures stop dispatch explicitly.
+Source text remains sensitive even after normal secret filtering: keep capture
+files private and local, and never commit or publish them.
+
+This capture does not authorize inference or turn a runner receipt into a quality
+baseline. Arm/generation/provider identities still belong to the separately frozen
+campaign run. Ingestion, embeddings, failed responses and integrations without
+usage forwarding can have unknown usage; reservations are estimates, not measured
+tokens or billed cost. Capture supplies neither independent semantic judgments nor
+automatic cost estimates.
+
+Captured runs also retain `evidence.json` with the actual original indexed block
+and service-resolution receipt for each selected/cited locator. Each accepted
+wiki/project checkpoint exports its exact saved/rendered revision beneath
+`revisions/`; the cumulative mapping and construction snapshots survive a later
+failure. `getSourceContent({indexedLocator, includeIndexedBlock: true, ...})`
+provides this opt-in receipt under the same source authorization and revision
+checks; ordinary source expansion is unchanged.
+
+For approved isolated multi-arm execution, use the existing
+[campaign tooling](../../tools/memory-maintenance-qualification/quality-view-campaign-README.md).
+The CLI supports `--request-budget <file>` with `--capture-requests` and
+`--expected-runtime <frozen-arm.json>` to reject runtime drift before inference.
+`--runtime-identity` alone reads configured settings and emits only non-secret
+names/hashes without inference; it is separate from credential-free help/list.
+Campaign budgets bound attempts, conservative token reservations and an
+owner-approved maximum per-call cost reservation, not measured billing.
 
 ## Dataset and evaluation tooling
 

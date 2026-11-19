@@ -1,6 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+const { projectBriefRoles }: typeof import("../src/projectBrief.js") =
+    await import(new URL("../../dist/projectBrief.js", import.meta.url).href);
+
+export function projectSectionCitations(ids = ["f0"]) {
+    return Object.fromEntries(
+        projectBriefRoles.map((role) => [role, [...ids]]),
+    );
+}
+
 export function projectSummaryTestResponse(fragments: Array<{ text: string }>) {
     return {
         title: "Payments reliability",
@@ -15,7 +24,12 @@ export function projectSummaryTestResponse(fragments: Array<{ text: string }>) {
         risks: "Headroom remains an open question.",
         context: "Project knowledge as-of unknown.",
         limits: "Only selected indexed fragments were retrieved.",
-        citationIds: fragments.map((_, position) => `f${position}`),
+        citationIds: {
+            article: fragments.map((_, position) => `f${position}`),
+            ...projectSectionCitations(
+                fragments.map((_, position) => `f${position}`),
+            ),
+        },
         projectState: "active",
         incidentState: "closed",
         capacityState: "pendingOwnerReview",

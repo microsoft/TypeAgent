@@ -26,12 +26,20 @@ test("confirmed separation survives partial generation and restart, checks real 
     delete adapter.checkWikiConsolidation;
     let fail = true;
     let childrenGenerated = 0;
+    let failingDestination: string | undefined;
+    let rejectChild = true;
     let authorized = true;
+    const validate = adapter.validate;
+    adapter.validate = async (...args) => {
+        if (rejectChild && args[0].definition.viewId.startsWith("split-"))
+            throw new Error("Injected factual checker failure");
+        return validate(...args);
+    };
     const generate = adapter.generate;
     adapter.generate = async (...args) => {
         if (args[0].definition.viewId.startsWith("split-")) {
             childrenGenerated++;
-            if (fail && childrenGenerated === 2)
+            if (fail && args[0].definition.viewId === failingDestination)
                 throw new Error("Injected second destination failure");
         }
         return generate(...args);
@@ -135,6 +143,7 @@ test("confirmed separation survives partial generation and restart, checks real 
             revisionId: overview.revisionId,
         });
         const proposal = preview.proposal!;
+        failingDestination = proposal.destinations[1].viewId;
         expect(childrenGenerated).toBe(0);
         await expect(
             service.separateView({
@@ -153,6 +162,26 @@ test("confirmed separation survives partial generation and restart, checks real 
                 corpusId,
                 receiptId: proposal.receiptId,
                 expectedHead: preview.head,
+                confirmationToken: proposal.confirmationToken,
+            }),
+        ).rejects.toThrow("Injected factual checker failure");
+        const rejected = await service.separateView({
+            operation: "read",
+            corpusId,
+            viewId: overview.viewId,
+        });
+        expect(
+            rejected.proposal?.destinations.every(
+                (destination) => !destination.acceptedRevisionId,
+            ),
+        ).toBe(true);
+        rejectChild = false;
+        await expect(
+            service.separateView({
+                operation: "confirm",
+                corpusId,
+                receiptId: proposal.receiptId,
+                expectedHead: rejected.head,
                 confirmationToken: proposal.confirmationToken,
             }),
         ).rejects.toThrow("Injected second destination failure");
@@ -225,7 +254,7 @@ test("confirmed separation survives partial generation and restart, checks real 
             confirmationToken: proposal.confirmationToken,
         });
         expect(active.proposal?.state).toBe("active");
-        expect(childrenGenerated).toBe(3);
+        expect(childrenGenerated).toBe(4);
         authorized = false;
         await expect(
             service.separateView({

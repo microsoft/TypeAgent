@@ -34,6 +34,7 @@ import {
     prepareWikiContribution,
     validateSupport,
     ViewSupportRejection,
+    validateOrRepairInformationalOutput,
 } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
@@ -714,24 +715,16 @@ export class ViewBuildRunner {
                 );
                 candidate = verified.candidate;
                 output = verified.output;
-                const support = informational
-                    ? undefined
-                    : await abortable(
-                          this.adapter.validate(
-                              result.snapshot,
-                              output,
-                              signal,
-                          ),
-                          signal,
-                      );
-                if (support) {
-                    validateSupport(output, support);
-                    proof = publicationProof(
-                        result.snapshot.fingerprint,
-                        output,
-                        support,
-                    );
-                }
+                const factual = await this.verifyFactualOutput(
+                    result.snapshot,
+                    candidate,
+                    output,
+                    current,
+                    signal,
+                );
+                candidate = factual.candidate;
+                output = factual.output;
+                proof = factual.proof;
             }
             validation = false;
             signal.throwIfAborted();
@@ -933,6 +926,56 @@ export class ViewBuildRunner {
             ),
         );
         return true;
+    }
+
+    private async verifyFactualOutput(
+        input: ViewBuildSnapshot,
+        candidate: ViewSynthesisOutput,
+        output: ViewSynthesisOutput,
+        current: Parameters<typeof mergeEditorialView>[0],
+        signal: AbortSignal,
+    ) {
+        const { prepared, support } = await abortable(
+            validateOrRepairInformationalOutput(
+                this.adapter,
+                input,
+                { candidate, output },
+                async (candidate) => {
+                    const repaired = await prepareWikiContribution(
+                        this.adapter,
+                        input,
+                        candidate,
+                        (value) =>
+                            mergeEditorialView(current, value, input.inputs),
+                        signal,
+                    );
+                    if (repaired.conflicts.length)
+                        throw new Error(
+                            "Informational repair introduced protected-edit conflicts",
+                        );
+                    validateConstructedGuide(input, repaired.output);
+                    await this.verifyEditorialUpdate(
+                        input,
+                        repaired.output,
+                        signal,
+                    );
+                    return {
+                        candidate: repaired.candidate,
+                        output: repaired.output,
+                    };
+                },
+                signal,
+            ),
+            signal,
+        );
+        return {
+            ...prepared,
+            proof: publicationProof(
+                input.fingerprint,
+                prepared.output,
+                support,
+            ),
+        };
     }
 
     private async validateOrRepairAnswers(

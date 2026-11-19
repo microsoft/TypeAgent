@@ -330,12 +330,6 @@ async function callFetch(
                         ? undefined
                         : Math.max(1, timeout - (performance.now() - started));
                 response = await fetchWithTimeout(url, current, remaining);
-                await finish?.({
-                    state: "returned",
-                    status: response?.status,
-                    at: new Date().toISOString(),
-                    elapsedMs: performance.now() - attemptStarted,
-                });
             } catch (error) {
                 await finish?.({
                     state: "failed",
@@ -344,6 +338,12 @@ async function callFetch(
                 });
                 throw error;
             }
+            await finish?.({
+                state: "returned",
+                status: response?.status,
+                at: new Date().toISOString(),
+                elapsedMs: performance.now() - attemptStarted,
+            });
             if (!response || !capacity || !current || attempt > 0)
                 return response;
             const reduced = await capacity.reduce(response, current);
