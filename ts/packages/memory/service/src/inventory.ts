@@ -89,6 +89,10 @@ export function buildSummary(
             current: !latest || latest.get(result.viewId) === job.jobId,
             ...(result.revisionId ? { revisionId: result.revisionId } : {}),
             ...(result.conflictId ? { conflictId: result.conflictId } : {}),
+            ...(result.quality ? { quality: result.quality } : {}),
+            ...(result.wikiAmbiguityReviewId
+                ? { wikiAmbiguityReviewId: result.wikiAmbiguityReviewId }
+                : {}),
             ...(result.semanticReview
                 ? {
                       semanticReview: {

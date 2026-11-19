@@ -3,7 +3,12 @@
 
 import { z } from "zod";
 import type { ViewPayloadSchema } from "@typeagent/memory-service";
-import { viewDocumentSectionRoles } from "@typeagent/memory-service/view-types";
+import {
+    viewDocumentSectionRoles,
+    supportCategories,
+    supportStatuses,
+    parseSupportQuality,
+} from "@typeagent/memory-service/view-types";
 import { topicBuildInputSchema } from "./topicProtocol.js";
 import {
     schemaViewDefinitionSchema,
@@ -21,6 +26,39 @@ const text = z.string().min(1).max(120000);
 const head = z.string().regex(/^[0-9a-f]{40}$/);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 const source = z.strictObject({ sourceId: id, revisionId: id });
+export const viewSupportDecisionSchema = z.strictObject({
+    category: z.enum(supportCategories),
+    status: z.enum(supportStatuses),
+    choiceConfidence: z.number().finite().min(0).max(1).optional(),
+});
+export const viewSupportQualitySchema = z
+    .strictObject({
+        status: z.enum([
+            "supported",
+            "partiallySupported",
+            "unsupported",
+            "uncertain",
+        ]),
+        confidence: z.number().finite().min(0).max(1),
+        unresolvedCategories: z
+            .enum(supportCategories)
+            .array()
+            .max(supportCategories.length),
+        decisions: viewSupportDecisionSchema
+            .array()
+            .min(1)
+            .max(supportCategories.length),
+    })
+    .superRefine((value, context) => {
+        try {
+            parseSupportQuality(value);
+        } catch {
+            context.addIssue({
+                code: "custom",
+                message: "Invalid support quality policy metadata",
+            });
+        }
+    });
 type JsonValue =
     | null
     | boolean
@@ -695,6 +733,7 @@ const requestContent = z.union([
     }),
 ]);
 export const viewSynthesisSchema = z.strictObject({
+    quality: viewSupportQualitySchema.optional(),
     content: requestContent,
     relationships: requestEdge.array().max(1000),
     outcome: z.enum([
@@ -925,6 +964,7 @@ const snapshot = z
                 }),
                 protectedTargets: z.string().min(1).max(240).array().max(1000),
                 unlockedTargets: z.string().min(1).max(240).array().max(1000),
+                retiredSourceRevisions: source.array().max(32).optional(),
             })
             .optional(),
     })
@@ -1032,7 +1072,14 @@ export const viewSemanticReviewSchema = z.object({
 });
 const consolidationReceipt = z.object({
     identity: hash,
-    stage: z.enum(["prepared", "accepted", "redirected", "ready", "stale"]),
+    stage: z.enum([
+        "prepared",
+        "needsReview",
+        "accepted",
+        "redirected",
+        "ready",
+        "stale",
+    ]),
     survivorViewId: id,
     retiringViewId: id,
     retiringRevisionId: id,
@@ -1063,6 +1110,8 @@ const consolidationReceipt = z.object({
     }),
     verification: z.strictObject({
         safe: z.boolean(),
+        quality: viewSupportQualitySchema.optional(),
+        decisions: viewSupportDecisionSchema.array().max(9).optional(),
         failures: z
             .enum([
                 "quantity",
@@ -1070,9 +1119,10 @@ const consolidationReceipt = z.object({
                 "command-lease",
                 "scope-state",
                 "correction-withdrawal",
+                "coverage",
             ])
             .array()
-            .max(5),
+            .max(6),
     }),
     acceptedRevisionId: id.optional(),
     redirectRevisionId: id.optional(),
@@ -1098,6 +1148,8 @@ export const viewBuildJobSchema = z.object({
     maintenancePlan: viewMaintenancePlanSchema.optional(),
     results: z
         .object({
+            wikiAmbiguityReviewId: z.string().optional(),
+            quality: viewSupportQualitySchema.optional(),
             eligibility: z
                 .strictObject({
                     schemaVersion: z.literal(1),
@@ -1262,6 +1314,7 @@ const systemEdge = z.object({
     ]),
 });
 export const viewVersionSchema = z.object({
+    quality: viewSupportQualitySchema.optional(),
     redirect: z
         .strictObject({
             viewId: id,
@@ -1363,6 +1416,7 @@ export const viewVersionSchema = z.object({
     ]),
     generation: z
         .object({
+            quality: viewSupportQualitySchema.optional(),
             candidateId: id,
             content: z.unknown(),
             fingerprint: hash,

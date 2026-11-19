@@ -15,6 +15,7 @@ import {
     viewArchiveRequestSchema,
     viewBuildRequestSchema,
     viewBuildJobRequestSchema,
+    wikiAmbiguityReviewActionSchema,
     viewBuildContinuationRequestSchema,
     viewConflictReadSchema,
     viewResolutionSchema,
@@ -169,6 +170,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetViewMaintenance: protocolInput(viewMaintenanceReadSchema),
     memoryGetViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryListViewBuilds: z.strictObject(corpus),
+    memoryListWikiAmbiguityReviews: z.strictObject(corpus),
+    memoryResolveWikiAmbiguityReview: protocolInput(
+        wikiAmbiguityReviewActionSchema,
+    ),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryContinueViewBuild: protocolInput(viewBuildContinuationRequestSchema),

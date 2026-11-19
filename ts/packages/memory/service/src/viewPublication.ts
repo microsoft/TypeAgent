@@ -68,7 +68,10 @@ export function publicationProof(
 
 export function assertPublicationProof(
     version: ViewVersion,
-    options: { allowLegacyInformational?: boolean } = {},
+    options: {
+        allowLegacyInformational?: boolean;
+        allowPartialDraft?: boolean;
+    } = {},
 ): void {
     if (
         options.allowLegacyInformational &&
@@ -99,5 +102,9 @@ export function assertPublicationProof(
         throw new Error(
             "This exact artifact has no independent support proof; validate it through Save draft or rebuild before publishing",
         );
-    validateSupport(output, proof.support, input);
+    validateSupport(output, proof.support, input, {
+        allowPartialDraft:
+            options.allowPartialDraft === true &&
+            version.quality?.status === "partiallySupported",
+    });
 }

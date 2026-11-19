@@ -19,6 +19,8 @@ import {
     knowledgeCheckpointRequestSchema,
     knowledgeCheckpointReadSchema,
     knowledgeCheckpointWaitSchema,
+    wikiAmbiguityListRequestSchema,
+    wikiAmbiguityReviewActionSchema,
 } from "@typeagent/memory-client";
 import {
     acquisitionProgress,
@@ -67,6 +69,8 @@ type ViewMethods = Pick<
     | "memoryGetViewMaintenance"
     | "memoryGetViewBuild"
     | "memoryListViewBuilds"
+    | "memoryListWikiAmbiguityReviews"
+    | "memoryResolveWikiAmbiguityReview"
     | "memoryCancelViewBuild"
     | "memoryRetryViewBuild"
     | "memoryContinueViewBuild"
@@ -222,6 +226,18 @@ export function createMemoryViewFunctions(
         memoryGetViewBuild: (request) => views().getViewBuild(request),
         memoryListViewBuilds: ({ corpusId }) =>
             views().listViewBuilds(corpusId),
+        memoryListWikiAmbiguityReviews: (request) =>
+            views().listWikiAmbiguityReviews(
+                wikiAmbiguityListRequestSchema.parse(request).corpusId,
+            ),
+        memoryResolveWikiAmbiguityReview: (request) => {
+            const { resolution, ...parsed } =
+                wikiAmbiguityReviewActionSchema.parse(request);
+            return views().resolveWikiAmbiguityReview({
+                ...parsed,
+                ...(resolution ? { resolution } : {}),
+            });
+        },
         memoryCancelViewBuild: (request) => views().cancelViewBuild(request),
         memoryRetryViewBuild: (request) => views().retryViewBuild(request),
         memoryContinueViewBuild: (request) =>

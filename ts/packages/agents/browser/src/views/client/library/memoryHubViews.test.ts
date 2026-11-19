@@ -1229,6 +1229,47 @@ describe("Memory Center preview-first views", () => {
         },
     );
 
+    test("partial support reader shows unresolved categories without conflating choice confidence or approval", async () => {
+        const original = invoke.getMockImplementation()!;
+        const wiki = {
+            ...view,
+            content: { ...content, kind: "wiki", status: "partial" },
+            definition: { ...definition, kind: "wiki" },
+            quality: {
+                status: "partiallySupported",
+                confidence: 0.5,
+                unresolvedCategories: ["newContentSupport"],
+                decisions: [
+                    {
+                        category: "newContentSupport",
+                        status: "partiallySupported",
+                        choiceConfidence: 0.99,
+                    },
+                ],
+            },
+        };
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListViews"
+                    ? Promise.resolve({ ...snapshot, views: [wiki] })
+                    : original(method, params),
+            ),
+        );
+        await panel.refresh();
+        click(host, "Guide");
+        await settle();
+        const article = host.querySelector(".hub-view-document")!;
+        expect(article.textContent).toContain(
+            "Support: partiallySupported (policy score 0.5)",
+        );
+        expect(article.textContent).toContain(
+            "Needs further evidence or review: newContentSupport",
+        );
+        expect(article.textContent).toContain("not a calibrated probability");
+        expect(article.textContent).not.toContain("policy score 0.99");
+        expect(errors).toEqual([]);
+    });
+
     test("reader icon toolbar opens an icon-and-text menu and restores keyboard and dialog focus", async () => {
         await panel.refresh();
         click(host, "Guide");

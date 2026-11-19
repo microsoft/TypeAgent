@@ -9,6 +9,9 @@ import {
 
 import {
     openai,
+    RequestBudget,
+    runWithRequestBudget,
+    runWithRequestAttemptObserver,
     runWithRequestOperation,
     recordDispatchedRequestUsage,
     recordDispatchedRequestResult,
@@ -17,6 +20,14 @@ import {
     type RequestConstraintReceipt,
     type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
+import { createHash } from "node:crypto";
+import { wikiAmbiguityRules, wikiAmbiguitySchema } from "./wikiAmbiguity.js";
+import {
+    incompletePreservation,
+    parseSupportQuality,
+    supportQuality,
+    type ViewSupportDecision,
+} from "./viewSupport.js";
 import { runWithSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type {
     ViewBuildSnapshot,
@@ -80,6 +91,8 @@ import {
 } from "./informationalSupport.js";
 import {
     wikiPurposeRules,
+    wikiPageRelationCriteria,
+    wikiPageRelationRules,
     wikiAssessmentSchema,
     parseWikiAssessment,
     wikiProseWitnesses,
@@ -98,6 +111,15 @@ import {
     bindEditorialAssessment,
     type ViewEditorialAssessment,
     parseEditorialAssessment,
+    wikiPreservationRules,
+    wikiPreservationCriteria,
+    wikiSupportRules,
+    wikiSupportCriteria,
+    wikiAssertionSupportCriteria,
+    wikiCategorySupportCriteria,
+    wikiAssertionSupportRules,
+    wikiCategorySupportRules,
+    wikiCoverageNoteRules,
 } from "./viewEditorial.js";
 import {
     assertWikiDecisionMatch,
@@ -219,11 +241,20 @@ function assertDeclaredSchemaRequestBounds(
         );
 }
 
+interface WikiSubjectDecisionInput {
+    query: string | undefined;
+    aliases: string[] | undefined;
+    fragments: unknown[];
+    pages: Array<{ viewId: string }>;
+}
+
 export function createConfiguredViewSynthesisAdapter(
     endpoint?: string,
     informationalOutputTokens = 4000,
     injectedModel?: ChatModel,
     modelScheduler?: MaintenanceModelScheduler,
+    wikiReview = false,
+    injectedAmbiguityModel?: ChatModel,
 ): ViewSynthesisAdapter {
     const identityFor = (alias?: string) =>
         injectedModel
@@ -246,6 +277,7 @@ export function createConfiguredViewSynthesisAdapter(
     let model = injectedModel;
     let informationalModel = injectedModel;
     let wikiDecisionModel = injectedModel;
+    let ambiguityModel: ChatModel | undefined;
     function configuredModel(): ChatModel {
         model ??= openai.createChatModel(
             endpoint,
@@ -271,7 +303,7 @@ export function createConfiguredViewSynthesisAdapter(
         completionModel: ChatModel,
         messages: Parameters<ChatModel["complete"]>[0],
         schema: StructuredOutputJsonSchema,
-    ): void {
+    ) {
         if (!completionModel.inspectRequest)
             throw new Error(
                 "Schema synthesis requires complete configured model request inspection",
@@ -297,6 +329,7 @@ export function createConfiguredViewSynthesisAdapter(
                 "Schema synthesis requires configured complete-request constraints and output/safety accounting",
             );
         assertDeclaredSchemaRequestBounds(receipt);
+        return inspection;
     }
     function modelCompletion(
         completionModel: ChatModel,
@@ -423,18 +456,89 @@ export function createConfiguredViewSynthesisAdapter(
         signal.throwIfAborted();
         return parseWikiChoices(result.data, bounded);
     }
+    async function reviewWikiRelationships(
+        assessment: WikiSubjectAssessment,
+        payload: WikiSubjectDecisionInput,
+        signal: AbortSignal,
+    ): Promise<WikiSubjectAssessment | undefined> {
+        let relationshipAssessment: WikiSubjectAssessment | undefined;
+        if (payload.pages.length) {
+            const questions: WikiChoiceQuestions = Object.fromEntries(
+                payload.pages.map((page, index) => [
+                    `p${index}`,
+                    {
+                        instructions: `Classify the candidate's relationship to supplied page ${JSON.stringify(page.viewId)} using its COMPLETE prose and ORIGINAL evidence. Shared infrastructure, vocabulary or sources alone never establish duplicate scoped purpose.`,
+                        criteria: wikiPageRelationCriteria,
+                    },
+                ]),
+            );
+            const relations = await wikiDecide(
+                `${evidenceRules}\n${wikiPurposeRules}\n${wikiPageRelationRules}`,
+                payload,
+                questions,
+                signal,
+            );
+            const duplicateIds = payload.pages
+                .filter((_, index) => relations[`p${index}`] === "duplicate")
+                .map((page) => page.viewId);
+            const uncertainIds = payload.pages
+                .filter((_, index) => relations[`p${index}`] === "uncertain")
+                .map((page) => page.viewId);
+            if (
+                uncertainIds.length ||
+                duplicateIds.length > 1 ||
+                (duplicateIds.length === 1 &&
+                    (!["covered", "contribute"].includes(
+                        assessment.disposition,
+                    ) ||
+                        assessment.canonicalViewId !== duplicateIds[0]))
+            )
+                relationshipAssessment = {
+                    disposition: "ambiguous",
+                    ambiguityBasis:
+                        uncertainIds.length || duplicateIds.length < 2
+                            ? "uncertain"
+                            : "multiple-duplicates",
+                    purpose: assessment.purpose,
+                    reason: "Four-way original-evidence relationship decision requires review",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [
+                        ...new Set([...duplicateIds, ...uncertainIds]),
+                    ],
+                };
+            if (
+                !relationshipAssessment &&
+                !duplicateIds.length &&
+                ["covered", "contribute", "ambiguous"].includes(
+                    assessment.disposition,
+                )
+            )
+                relationshipAssessment = {
+                    disposition: "distinct",
+                    purpose: assessment.purpose,
+                    reason: "Related or distinct subjects retain independent scoped pages; no duplicate identity established",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
+        }
+        return relationshipAssessment;
+    }
+
     async function confirmWikiSubject(
         assessment: WikiSubjectAssessment,
-        payload: {
-            query: string | undefined;
-            aliases: string[] | undefined;
-            fragments: unknown[];
-            pages: Array<{ viewId: string }>;
-        },
+        payload: WikiSubjectDecisionInput,
         instructions: string,
         contribution: boolean,
         signal: AbortSignal,
     ): Promise<WikiSubjectAssessment> {
+        const relationshipAssessment =
+            wikiReview && !contribution
+                ? await reviewWikiRelationships(assessment, payload, signal)
+                : undefined;
         if (!contribution) {
             const utility = await wikiDecide(
                 `${evidenceRules}\n${wikiPurposeRules}`,
@@ -457,6 +561,28 @@ export function createConfiguredViewSynthesisAdapter(
                 },
                 signal,
             );
+            if (wikiReview && utility.utility === "defer")
+                return {
+                    disposition: "defer",
+                    deferBasis: "evidence",
+                    purpose: assessment.purpose,
+                    reason: "Original-evidence utility decision deferred standalone admission",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
+            if (wikiReview && utility.utility === "uncertain")
+                return {
+                    disposition: "ambiguous",
+                    ambiguityBasis: "uncertain",
+                    purpose: assessment.purpose,
+                    reason: "Original-evidence utility decision requires review",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: payload.pages.map((page) => page.viewId),
+                };
             assertWikiDecisionMatch("utility", utility, {
                 utility:
                     assessment.disposition === "defer" &&
@@ -465,6 +591,7 @@ export function createConfiguredViewSynthesisAdapter(
                         : "useful",
             });
         }
+        if (relationshipAssessment) return relationshipAssessment;
         const questions: WikiChoiceQuestions = {
             disposition: {
                 instructions: contribution
@@ -519,6 +646,17 @@ export function createConfiguredViewSynthesisAdapter(
             questions,
             signal,
         );
+        if (wikiReview && !contribution && choices.disposition === "uncertain")
+            return {
+                disposition: "ambiguous",
+                ambiguityBasis: "uncertain",
+                purpose: assessment.purpose,
+                reason: "Original-evidence admission decision requires review",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: payload.pages.map((page) => page.viewId),
+            };
         assertWikiDecisionMatch(
             contribution ? "coverage" : "admission",
             choices,
@@ -531,6 +669,68 @@ export function createConfiguredViewSynthesisAdapter(
         payload: unknown,
         signal: AbortSignal,
     ) {
+        if (wikiReview) {
+            const questions: WikiChoiceQuestions = {
+                newContentSupport: {
+                    instructions: wikiSupportRules,
+                    criteria: wikiSupportCriteria,
+                },
+                coverageNoteSupport: {
+                    instructions: `${wikiCoverageNoteRules}\n${wikiAssertionSupportRules}`,
+                    criteria: {
+                        ...wikiAssertionSupportCriteria,
+                        not_asserted: "No coverage-note assertions are made.",
+                    },
+                },
+                preservation: {
+                    instructions: wikiPreservationRules,
+                    criteria: {
+                        ...wikiPreservationCriteria,
+                        not_asserted:
+                            "No previous article, originalContent or mandatory prior distinctions are supplied.",
+                    },
+                },
+            };
+            for (const category of [
+                "quantity",
+                "statistic-cohort",
+                "command-lease",
+                "scope-state",
+                "correction-withdrawal",
+                "coverage",
+            ] as const)
+                questions[category] = {
+                    instructions: `${wikiCategorySupportRules}\nEvaluate only category ${category}.`,
+                    criteria: wikiCategorySupportCriteria,
+                };
+            const choices = await wikiDecide(
+                `${instructions}\n${wikiSupportRules}\n${wikiPreservationRules}`,
+                payload,
+                questions,
+                signal,
+            );
+            const decisions = Object.entries(choices).map(
+                ([category, status]) => ({ category, status }),
+            ) as ViewSupportDecision[];
+            const quality = supportQuality(decisions);
+            const failures =
+                quality.status === "unsupported"
+                    ? consequenceKinds.filter((kind) =>
+                          kind === "unsupported-claim"
+                              ? choices.newContentSupport === "unsupported" ||
+                                choices.coverageNoteSupport === "unsupported"
+                              : choices[kind] === "unsupported" ||
+                                (kind === "scope-state" &&
+                                    choices.preservation === "unsupported"),
+                      )
+                    : [];
+            return parseEditorialAssessment({
+                safe: quality.status !== "unsupported",
+                failures,
+                decisions,
+                quality,
+            });
+        }
         const questions: WikiChoiceQuestions = {
             safety: {
                 instructions:
@@ -678,8 +878,47 @@ export function createConfiguredViewSynthesisAdapter(
                   signal,
               );
     }
+    async function wikiSupport(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<ViewSupportReport> {
+        const assessment = await wikiEditorial(
+            evidenceRules,
+            {
+                input: labelViewInput(input, retainedPassages(input)),
+                content: output.content,
+                relationships: output.relationships,
+                ...(input.editorial
+                    ? { previousContent: input.editorial.generatedBase.content }
+                    : {}),
+                ...(input.wikiContribution
+                    ? { contribution: input.wikiContribution }
+                    : {}),
+            },
+            signal,
+        );
+        const quality = assessment.quality!;
+        const supported = quality.status === "supported";
+        return {
+            supported,
+            quality,
+            sections: output.content.sections.map((section) => ({
+                sectionId: section.id,
+                supported,
+                reason: "Original-evidence support decisions",
+            })),
+            relationships: output.relationships.map((edge) => ({
+                edgeId: edge.id,
+                supported,
+                reason: "Original-evidence support decisions",
+            })),
+            missingContext: [],
+            reasons: [`Support: ${quality.status}`],
+        };
+    }
     return {
-        identity: `configured:${endpoint ?? "default"}:evidence-first-v30-wiki-luna-choice:${modelIdentity}:${wikiDecisionIdentity}`,
+        identity: `configured:${endpoint ?? "default"}:evidence-first-v30-wiki-luna-choice:${modelIdentity}:${wikiDecisionIdentity}${wikiReview ? ":shared-wiki-review-v1" : ""}`,
         repairInformational,
         async reviewInformational(input, accepted, signal) {
             const fragments = input.inputs.flatMap(
@@ -712,6 +951,126 @@ export function createConfiguredViewSynthesisAdapter(
                 input,
                 accepted,
             );
+        },
+        async resolveWikiAmbiguity(review, signal, checkpoint) {
+            if (!wikiReview)
+                throw new Error("Wiki review workflow is disabled");
+            if (
+                !injectedAmbiguityModel &&
+                !openai.hasChatModelEndpoint("GPT_6_1_SOL")
+            )
+                throw new Error(
+                    "GPT_6_1_SOL is unavailable; no writer-model fallback",
+                );
+            ambiguityModel ??=
+                injectedAmbiguityModel ??
+                openai.createChatModel(
+                    "GPT_6_1_SOL",
+                    {
+                        temperature: 0,
+                        response_format: { type: "json_object" },
+                    },
+                    undefined,
+                    ["memory-wiki-ambiguity"],
+                );
+            const messages = completionMessages(wikiAmbiguityRules, {
+                assessment: review.assessment,
+                candidateId: review.candidateId,
+                participants: review.participants.map((participant) => ({
+                    ...participant,
+                    originalPassages: retainedPassages(participant.input),
+                })),
+            });
+            const inspection = inspectSchemaRequest(
+                ambiguityModel,
+                messages,
+                wikiAmbiguitySchema,
+            );
+            review.request.budget = inspection.constraints;
+            review.request.requestFingerprint = createHash("sha256")
+                .update(inspection.serializedRequest!)
+                .digest("hex");
+            const constraints = inspection.constraints!;
+            const budget = new RequestBudget({
+                inputTokens: Math.max(1, constraints.inputTokens),
+                outputTokens: constraints.outputTokens,
+                safetyTokens: Math.max(1, constraints.safetyTokens),
+                chatAttempts: 4,
+                embeddingAttempts: 1,
+                reservedTokens:
+                    4 *
+                    (constraints.inputTokens +
+                        constraints.outputTokens +
+                        Math.max(1, constraints.safetyTokens)),
+                elapsedMs: 300000,
+                tokenizer: "utf8-byte-upper-bound",
+                countTokens: (serialized) =>
+                    Buffer.byteLength(serialized, "utf8"),
+            });
+            review.request.budget = {
+                constraints,
+                transportAttemptLimit: 4,
+                elapsedLimitMs: 300000,
+            };
+            review.request.transportAttempts = [];
+            await checkpoint?.();
+            const arbitrationSignal = AbortSignal.any([
+                signal,
+                AbortSignal.timeout(300000),
+            ]);
+            const result = await runWithRequestBudget(budget, () =>
+                runWithRequestAttemptObserver(
+                    {
+                        async reserve(event) {
+                            const id = `sol-transport-${review.request.transportAttempts!.length + 1}`;
+                            review.request.transportAttempts!.push({
+                                ...event,
+                                id,
+                                state: "started",
+                            });
+                            review.request.transportRetries = Math.max(
+                                0,
+                                review.request.transportAttempts!.length - 1,
+                            );
+                            await checkpoint?.();
+                            return id;
+                        },
+                        async finish(id, outcome) {
+                            const attempt =
+                                review.request.transportAttempts!.find(
+                                    (entry) => entry.id === id,
+                                )!;
+                            attempt.state = outcome.state;
+                            attempt.finishedAt = outcome.at;
+                            attempt.elapsedMs = outcome.elapsedMs;
+                            if (outcome.status !== undefined)
+                                attempt.status = outcome.status;
+                            await checkpoint?.();
+                        },
+                    },
+                    () =>
+                        modelCompletion(
+                            ambiguityModel!,
+                            messages,
+                            arbitrationSignal,
+                            wikiAmbiguitySchema,
+                            "normal",
+                            true,
+                        ),
+                ),
+            );
+            review.request.transportRetries = Math.max(
+                0,
+                review.request.transportAttempts.length - 1,
+            );
+            if (!result.success) throw new Error(result.message);
+            return {
+                output: result.data,
+                budget: review.request.budget,
+                requestFingerprint: createHash("sha256")
+                    .update(inspection.serializedRequest!)
+                    .digest("hex"),
+            };
         },
         schemaRequestAdmission: {
             kind: "configured-complete-request-v1",
@@ -1026,7 +1385,15 @@ Another factual rejection is final.`,
                 })),
                 content: output.content,
                 relationships: output.relationships,
+                ...(input.editorial
+                    ? { previousContent: input.editorial.generatedBase.content }
+                    : {}),
+                ...(input.wikiContribution
+                    ? { contribution: input.wikiContribution }
+                    : {}),
             };
+            if (wikiReview && output.content.kind === "wiki")
+                return wikiEditorial(instructions, payload, signal);
             if (input.definition.kind === "wiki" && !informational)
                 return wikiEditorial(instructions, payload, signal);
             const raw = await complete(
@@ -1486,7 +1853,16 @@ Return the same answers contract.`,
                         attempt === 0 ? "validation" : "contract-repair",
                     );
                     try {
-                        return readInformationalAssessment(output, input, raw);
+                        const report = readInformationalAssessment(
+                            output,
+                            input,
+                            raw,
+                        );
+                        if (wikiReview && output.content.kind === "wiki")
+                            report.quality = (
+                                await wikiSupport(input, output, signal)
+                            ).quality!;
+                        return report;
                     } catch (error) {
                         if (
                             !(error instanceof InformationalAssessmentError) ||
@@ -1500,6 +1876,13 @@ Return the same answers contract.`,
                     }
                 }
                 throw new Error("Informational checker retry exhausted");
+            }
+            if (
+                wikiReview &&
+                output.content.kind === "wiki" &&
+                !output.inventory
+            ) {
+                return wikiSupport(input, output, signal);
             }
             if (
                 input.pipeline === "schema-defined-v1" &&
@@ -1644,6 +2027,7 @@ export function assertSynthesisOutput(
                     "inventory",
                     "inventoryAudit",
                     "coverage",
+                    "quality",
                 ].includes(key),
         )
     )
@@ -1652,6 +2036,7 @@ export function assertSynthesisOutput(
         throw new Error(
             `Invalid troubleshooting synthesis output: ${errors.join("; ")}`,
         );
+    if (value.quality !== undefined) parseSupportQuality(value.quality);
 }
 function assessments(value: unknown, identity: string): boolean {
     return (
@@ -1679,6 +2064,7 @@ export function assertSupportReport(
             !assessments(value.exclusions, "itemId"))
     )
         throw new Error("Invalid evidence/context validation report");
+    if (value.quality !== undefined) parseSupportQuality(value.quality);
 }
 export function draftRequest(
     input: ViewBuildSnapshot,
@@ -1736,7 +2122,6 @@ export async function prepareWikiContribution(
                 content: merged.output.content,
             },
             undefined,
-            false,
         );
         const assessment = await adapter.assessWikiSubject(
             input,
@@ -1751,6 +2136,16 @@ export async function prepareWikiContribution(
         );
     };
     let verification = await verify();
+    if (verification.quality) {
+        merged.output.quality = verification.quality;
+        if (incompletePreservation(verification.quality))
+            return {
+                ...merged,
+                candidate: { ...candidate, quality: verification.quality },
+                conflicts: ["editorial:preservation"],
+                verification,
+            };
+    }
     if (
         verification.disposition !== "covered" &&
         adapter.repairWikiContribution
@@ -1769,6 +2164,16 @@ export async function prepareWikiContribution(
         merged = merge(candidate);
         if (merged.conflicts.length) return { ...merged, candidate };
         verification = await verify();
+        if (verification.quality) {
+            merged.output.quality = verification.quality;
+            if (incompletePreservation(verification.quality))
+                return {
+                    ...merged,
+                    candidate: { ...candidate, quality: verification.quality },
+                    conflicts: ["editorial:preservation"],
+                    verification,
+                };
+        }
     }
     if (verification.disposition !== "covered")
         throw new Error(
@@ -2040,10 +2445,15 @@ export function validateSupport(
     output: ViewSynthesisOutput,
     report: ViewSupportReport,
     input?: ViewBuildSnapshot,
+    { allowPartialDraft = false }: { allowPartialDraft?: boolean } = {},
 ): void {
     assertSupportReport(report);
     if (informationalView(output.content))
         assertInformationalSupport(output, report, input);
+    const retainPartial =
+        allowPartialDraft &&
+        output.content.kind === "wiki" &&
+        report.quality?.status === "partiallySupported";
     exactEvidenceCoverage(
         report.sections,
         output.content.sections.map((section) => section.id),
@@ -2071,12 +2481,16 @@ export function validateSupport(
             throw new Error("Unsupported inventory exclusion");
     }
     if (
-        !report.supported ||
+        (report.quality &&
+            report.quality.status !== "supported" &&
+            !retainPartial) ||
         report.informational?.fields.some((field) => !field.supported) ||
         report.informational?.issues.length ||
         report.missingContext.length ||
-        report.sections.some((section) => !section.supported) ||
-        report.relationships.some((edge) => !edge.supported)
+        (!retainPartial &&
+            (!report.supported ||
+                report.sections.some((section) => !section.supported) ||
+                report.relationships.some((edge) => !edge.supported)))
     )
         throw new ViewSupportRejection(
             `Unsupported evidence or missing context: ${[...report.reasons, ...report.missingContext, ...report.sections.filter((section) => !section.supported).map((section) => `${section.sectionId}: ${section.reason}`), ...report.relationships.filter((edge) => !edge.supported).map((edge) => `${edge.edgeId}: ${edge.reason}`), ...(report.informational?.issues.map((issue) => `${issue.category} at ${issue.path}`) ?? [])].join("; ")}`,

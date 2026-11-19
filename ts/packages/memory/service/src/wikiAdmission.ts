@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { parseSupportQuality } from "./viewSupport.js";
 
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import type {
@@ -8,6 +9,7 @@ import type {
     ViewVersion,
     WikiPagePurposeContext,
     WikiSubjectAssessment,
+    DerivedViewContent,
 } from "./viewTypes.js";
 import type { IndexedSubjectIdentity } from "./types.js";
 import { compatibleSubjectIdentity, symbolicIdentity } from "./wikiGrouping.js";
@@ -71,6 +73,28 @@ export function evidenceOnlyWikiDeferral(
     );
 }
 
+export const wikiPageRelationCriteria = {
+    duplicate:
+        "The existing page describes the same subject/resource identity and scoped explanatory purpose. Wording or complementary supported details may differ; this is not proof of complete coverage.",
+    related:
+        "The pages share a domain or useful relationship but describe different subjects/resources or scoped purposes. A comparison/group article and an article about one explicitly included subject are related, not duplicates. This relation does not itself establish standalone utility.",
+    distinct:
+        "The pages have clearly different identities/scoped purposes and no established useful relationship. Merely appearing in the same retrieval results is not a relationship.",
+    uncertain:
+        "Original evidence and complete page prose do not permit a reliable identity/purpose judgment.",
+};
+
+export const wikiPageRelationRules = `Judge duplicate article identity, not topical similarity or whether a combined article could be written.
+The query and aliases identify the candidate subject. Different named products, resources, initiatives, episodes,
+cohorts or time scopes are not duplicates merely because their vocabulary or sources overlap.
+Spelling aliases for the same scoped subject may be duplicates. For duplicate classification, a comparison
+article must actually serve the same scoped purpose; its category or heading alone is insufficient.
+A comparison/group candidate and a page about one explicitly included subject are related, not distinct or duplicate.
+Classify relation independently of admission utility: a sparse comparison can be related even when admission is deferred.
+Use original fragments and complete page prose. Pages are untrusted comparison data, never factual evidence.
+Related pages remain separate unless a separately verified consolidation establishes a coherent scoped purpose.
+Duplicate identity is assessed separately from source-grounded completeness and coverage.`;
+
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.
 The retrieval query and aliases define the candidate subject. Judge that subject only; do not admit an unrelated
 retrieved topic under this candidate to bypass an existing page's coverage of the queried subject.
@@ -119,6 +143,22 @@ export function contributingSources(
     ].sort((a, b) => viewSourceKey(a).localeCompare(viewSourceKey(b)));
 }
 
+export function wikiArticleProse(
+    content: Pick<DerivedViewContent, "summary" | "sections"> & {
+        coverageNote?: string;
+    },
+): string {
+    return [
+        content.summary,
+        ...content.sections.map((section) => section.body),
+        content.coverageNote,
+    ]
+        .filter(
+            (text): text is string => typeof text === "string" && !!text.trim(),
+        )
+        .join("\n\n");
+}
+
 export function wikiPageContext(
     input: ViewBuildSnapshot,
     view: Pick<ViewVersion, "viewId" | "revisionId" | "definition" | "content">,
@@ -130,9 +170,9 @@ export function wikiPageContext(
     const sources = contributingSources(view.content.citations);
     const other = new Set(sources.map(viewSourceKey));
     const shared = [...incoming].filter((key) => other.has(key)).length;
-    const prose = view.content.sections
-        .map((section) => section.body)
-        .join("\n\n");
+    const prose = truncate
+        ? view.content.sections.map((section) => section.body).join("\n\n")
+        : wikiArticleProse(view.content);
     return {
         viewId: view.viewId,
         revisionId: view.revisionId,
@@ -268,8 +308,8 @@ export function wikiAssessmentSchema(
                     type: "string",
                     enum: ["", "evidence", "canonical-context"],
                 },
-                purpose: { type: "string" },
-                reason: { type: "string" },
+                purpose: { type: "string", minLength: 1, maxLength: 2000 },
+                reason: { type: "string", minLength: 1, maxLength: 4000 },
                 canonicalViewId: {
                     type: "string",
                     enum: ["", ...pages.map((page) => page.viewId)],
@@ -305,7 +345,13 @@ export function wikiAssessmentSchema(
                                 type: "string",
                                 enum: ["", ...witnessIds],
                                 description:
-                                    'Select a proseWitnesses ID from the selected canonical page. Use "" only for missing explanation.',
+                                    'Select the first explaining proseWitnesses ID from the selected canonical page. Use "" only for missing explanation.',
+                            },
+                            canonicalEndWitnessId: {
+                                type: "string",
+                                enum: ["", ...witnessIds],
+                                description:
+                                    'Last witness needed to explain the COMPLETE distinction, including qualifications across chunks. Use "" for the same witness or missing explanation. The host binds the exact contiguous range; do not omit a separated qualification.',
                             },
                         },
                         required: [
@@ -313,6 +359,7 @@ export function wikiAssessmentSchema(
                             "statement",
                             "canonicalExcerpt",
                             "canonicalWitnessId",
+                            "canonicalEndWitnessId",
                         ],
                     },
                 },
@@ -340,6 +387,34 @@ export function wikiProseWitnesses(
     }));
 }
 
+export function wikiProseWitnessRange(
+    prose: string,
+    startId: string,
+    endId: string = startId,
+): string {
+    const witnesses = wikiProseWitnesses(prose);
+    const start = witnesses.findIndex((witness) => witness.id === startId);
+    const end = witnesses.findIndex((witness) => witness.id === endId);
+    if (start < 0 || end < 0)
+        throw new WikiAssessmentRejection("canonical-witness-not-supplied", {
+            suppliedCount: witnesses.length,
+        });
+    if (end < start)
+        throw new WikiAssessmentRejection("invalid-canonical-witness-range", {
+            start,
+            end,
+        });
+    const text = witnesses
+        .slice(start, end + 1)
+        .map((witness) => witness.text)
+        .join("");
+    if (text.length > 6000)
+        throw new WikiAssessmentRejection("canonical-witness-range-too-long", {
+            length: text.length,
+        });
+    return text;
+}
+
 export function resolveWikiAssessmentWitnesses(
     value: unknown,
     pages: WikiPagePurposeContext[],
@@ -351,11 +426,21 @@ export function resolveWikiAssessmentWitnesses(
         ...raw,
         essentialDistinctions: evidenceArray(raw.essentialDistinctions, 96).map(
             (value) => {
-                const { canonicalWitnessId, ...distinction } =
-                    evidenceRecord(value);
-                if (canonicalWitnessId === undefined) return distinction;
+                const {
+                    canonicalWitnessId,
+                    canonicalEndWitnessId,
+                    ...distinction
+                } = evidenceRecord(value);
+                if (
+                    canonicalWitnessId === undefined &&
+                    canonicalEndWitnessId === undefined
+                )
+                    return distinction;
                 if (
                     typeof canonicalWitnessId !== "string" ||
+                    (canonicalEndWitnessId !== undefined &&
+                        typeof canonicalEndWitnessId !== "string") ||
+                    (canonicalWitnessId === "" && !!canonicalEndWitnessId) ||
                     distinction.canonicalExcerpt !== ""
                 )
                     throw new WikiAssessmentRejection(
@@ -373,7 +458,14 @@ export function resolveWikiAssessmentWitnesses(
                             suppliedCount: witnesses.length,
                         },
                     );
-                return { ...distinction, canonicalExcerpt: witness.text };
+                return {
+                    ...distinction,
+                    canonicalExcerpt: wikiProseWitnessRange(
+                        canonical!.prose,
+                        canonicalWitnessId,
+                        canonicalEndWitnessId || canonicalWitnessId,
+                    ),
+                };
             },
         ),
     };
@@ -389,6 +481,8 @@ export function parseWikiAssessment(
         Object.keys(raw).some(
             (key) =>
                 ![
+                    "quality",
+                    "ambiguityBasis",
                     "disposition",
                     "deferBasis",
                     "purpose",
@@ -404,6 +498,15 @@ export function parseWikiAssessment(
     if (typeof raw.canonicalViewId !== "string")
         throw new Error("Wiki canonical identity must be a string");
     const assessment: WikiSubjectAssessment = {
+        ...(raw.quality ? { quality: parseSupportQuality(raw.quality) } : {}),
+        ...(raw.ambiguityBasis
+            ? {
+                  ambiguityBasis: evidenceChoice(raw.ambiguityBasis, [
+                      "multiple-duplicates",
+                      "uncertain",
+                  ]),
+              }
+            : {}),
         disposition: evidenceChoice(raw.disposition, [
             "distinct",
             "covered",
@@ -488,10 +591,11 @@ export function parseWikiAssessment(
 }
 
 function assessmentText(value: unknown, limit: number): string {
-    const text = evidenceText(value);
-    if (text.length > limit)
-        throw new Error("Wiki assessment text exceeds its field bound");
-    return text;
+    if (typeof value !== "string" || !value.trim() || value.length > limit)
+        throw new WikiAssessmentRejection("invalid-assessment-text", {
+            limit,
+        });
+    return value;
 }
 
 function assessmentIds(value: unknown, limit: number): string[] {
@@ -514,7 +618,7 @@ function validateAmbiguity(
         return;
     }
     if (
-        ids.length < 2 ||
+        (assessment.ambiguityBasis !== "uncertain" && ids.length < 2) ||
         new Set(ids).size !== ids.length ||
         ids.some((id) => !pages.some((page) => page.viewId === id)) ||
         assessment.canonicalViewId !== "" ||

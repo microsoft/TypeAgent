@@ -499,6 +499,8 @@ export const viewMethods = [
     "memoryGetViewMaintenance",
     "memoryGetViewBuild",
     "memoryListViewBuilds",
+    "memoryListWikiAmbiguityReviews",
+    "memoryResolveWikiAmbiguityReview",
     "memoryCancelViewBuild",
     "memoryRetryViewBuild",
     "memoryContinueViewBuild",

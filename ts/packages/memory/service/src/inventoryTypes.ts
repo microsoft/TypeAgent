@@ -41,6 +41,7 @@ export interface ViewSummary
     content: Pick<ViewVersion["content"], "kind" | "title">;
     maintained: boolean;
     publication: ViewPublicationStatus;
+    quality?: import("./viewSupport.js").ViewSupportQuality;
 }
 export interface ViewSummaryPage
     extends MemoryPage<ViewSummary>,
@@ -70,7 +71,13 @@ export interface QuestionSummaryPage
 export interface ViewBuildResultSummary
     extends Pick<
         ViewBuildTargetResult,
-        "viewId" | "state" | "reason" | "revisionId" | "conflictId"
+        | "viewId"
+        | "state"
+        | "reason"
+        | "revisionId"
+        | "conflictId"
+        | "wikiAmbiguityReviewId"
+        | "quality"
     > {
     semanticReview?: Pick<
         NonNullable<ViewBuildTargetResult["semanticReview"]>,

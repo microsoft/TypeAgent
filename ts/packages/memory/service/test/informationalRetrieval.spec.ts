@@ -206,16 +206,29 @@ describe("fresh informational recapture preserves the original retrieval request
                 const source = runtime.manifest.sources.find(
                     (source) => source.sourceId === sourceId,
                 )!;
-                const retained = await service.getSourceContent({
-                    corpusId,
-                    sourceId,
-                });
+                let offset = 0;
+                let truncated: boolean;
+                const parts: string[] = [];
+                do {
+                    const retained = await service.getSourceContent({
+                        corpusId,
+                        sourceId,
+                        revisionId: source.activeRevisionId,
+                        offset,
+                    });
+                    parts.push(retained.content);
+                    offset += retained.content.length;
+                    truncated = retained.truncated;
+                    if (truncated)
+                        expect(retained.content.length).toBeGreaterThan(0);
+                } while (truncated);
+                const content = parts.join("");
                 return {
                     sourceId,
                     revisionId: source.activeRevisionId,
                     title: sourceId,
-                    content: String(retained.content),
-                    contentHash: viewHash(retained.content),
+                    content,
+                    contentHash: viewHash(content),
                 };
             }),
         );
