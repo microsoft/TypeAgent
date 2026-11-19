@@ -65,5 +65,12 @@
     "phase": "method design",
     "what": "the method itself, not the circles example: elements (blueprints, modules), visibility and prose experiments, @initially, budget meaning, Lean proofs and phase 1p; human time about 1.5 hours",
     "humanHours": 1.5
+  },
+  {
+    "date": "2026-11-19",
+    "round": 5,
+    "phase": "method design",
+    "what": "archetypes and placeholders as type parameters, motivation.md (shared design, the inner loop), first draft of workflows.md (roles, enforcement, fast and slow loops, the proposed change), allowed and forbidden scenarios; human time about 1 hour",
+    "humanHours": 1
   }
 ]

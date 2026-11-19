@@ -36,7 +36,8 @@ usage limit:
   minutes of attention (reviews of 9.2 and 9.d, one rule decided); on
   2026-11-18, about 1.5 hours, almost all on designing the method itself,
   recorded under the phase "method design" so it can be counted apart
-  from building the example.
+  from building the example; on 2026-11-19, about 1 hour of method
+  design (archetypes, motivation, the workflows draft).
 
 Two thresholds frame the numbers:
 - **Independent developers** ($100 to $200 a month): success means rarely
