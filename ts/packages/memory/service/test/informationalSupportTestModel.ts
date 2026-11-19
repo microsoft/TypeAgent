@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { informationalFields } from "../src/informationalSupport.js";
+const { informationalFields }: typeof import("../src/informationalSupport.js") =
+    await import(
+        new URL("../../dist/informationalSupport.js", import.meta.url).href
+    );
 import type {
     ViewBuildSnapshot,
     ViewSupportReport,

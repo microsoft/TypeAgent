@@ -21,6 +21,7 @@ import { createMemoryHubExploreFunctions } from "../dist/agent/memoryHubExplore.
 import { projectSources } from "../../../memory/service/dist/test/projectTestSources.js";
 import { inventoryTestAnswer } from "../../../memory/service/dist/test/viewInventoryTestModel.js";
 import { projectSummaryTestResponse } from "../../../memory/service/dist/test/informationalProjectTestModel.js";
+import { controlledInformationalValidation } from "../../../memory/service/dist/test/informationalSupportTestModel.js";
 import { FakeIndexedCorpusIndex } from "../../../memory/service/dist/test/fakeIndexedCorpusIndex.js";
 import { hydrateProjectSummary } from "../../../memory/service/dist/informationalProject.js";
 import { hydrateInformational } from "../../../memory/service/dist/informationalWiki.js";
@@ -233,22 +234,29 @@ for (const kind of [
                         missingEvidence: ["No confirmed recovery"],
                     };
                 },
-                validate: async (_input, output) => ({
-                    supported: true,
-                    missingContext: [],
-                    reasons: [],
-                    exclusions: [],
-                    sections: output.content.sections.map((section) => ({
-                        sectionId: section.id,
-                        supported: true,
-                        reason: "Offline assessment",
-                    })),
-                    relationships: output.relationships.map((edge) => ({
-                        edgeId: edge.id,
-                        supported: true,
-                        reason: "Offline assessment",
-                    })),
-                }),
+                validate: async (input, output) =>
+                    kind === "wiki" || kind === "projectBrief"
+                        ? controlledInformationalValidation(input, output)
+                        : {
+                              supported: true,
+                              missingContext: [],
+                              reasons: [],
+                              exclusions: [],
+                              sections: output.content.sections.map(
+                                  (section) => ({
+                                      sectionId: section.id,
+                                      supported: true,
+                                      reason: "Offline assessment",
+                                  }),
+                              ),
+                              relationships: output.relationships.map(
+                                  (edge) => ({
+                                      edgeId: edge.id,
+                                      supported: true,
+                                      reason: "Offline assessment",
+                                  }),
+                              ),
+                          },
             },
         });
         const child = fork(

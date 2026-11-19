@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { projectBriefRoles } from "../src/projectBrief.js";
+const { projectBriefRoles }: typeof import("../src/projectBrief.js") =
+    await import(new URL("../../dist/projectBrief.js", import.meta.url).href);
 
 export function projectSectionCitations(ids = ["f0"]) {
     return Object.fromEntries(
