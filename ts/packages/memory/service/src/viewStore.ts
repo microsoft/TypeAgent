@@ -909,6 +909,7 @@ export class TypedViewStore {
             throw new Error(
                 "Informational visibility requires the exact current page without an explicit draft-only build override",
             );
+        assertPublicationProof(current);
         const publication: ViewPublicationStatus = {
             viewId: version.viewId,
             latestBuiltRevisionId: version.revisionId,
@@ -1785,6 +1786,12 @@ export class TypedViewStore {
             receipt.output,
             receipt.output,
         );
+        if (!receipt.validation)
+            throw new Error(
+                "Consolidation requires informational support validation; rebuild the legacy receipt",
+            );
+        version.validation = receipt.validation;
+        assertPublicationProof(version);
         state.views[version.viewId].push(version);
         receipt.acceptedRevisionId = version.revisionId;
         receipt.stage = "accepted";
@@ -2685,8 +2692,7 @@ export class TypedViewStore {
             throw new Error(
                 "Resolve the pending merge conflict before publishing",
             );
-        if (!informationalView(current.content))
-            assertPublicationProof(current);
+        assertPublicationProof(current);
         state.publications ??= {};
         const prior = state.publications[request.viewId];
         if (prior?.publishedRevisionId === current.revisionId) return prior;

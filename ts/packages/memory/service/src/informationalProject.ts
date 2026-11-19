@@ -24,6 +24,10 @@ import type {
     ViewDefinitionInput,
 } from "./viewTypes.js";
 
+export const projectSummaryRules = `Every project role requires nonempty prose. When its information is absent, write "Unknown in supplied record." rather than an empty string or invented facts.
+Supply sectionCitationIds for every role. Select only fragments that support that section, include them in aggregate citationIds, and use [] when the section makes no source-grounded claim.
+Empty citation lists do not permit empty role prose. Never copy every citation to every section.`;
+
 export function informationalProject(content: {
     kind: string;
     construction?: string;
@@ -83,17 +87,36 @@ export function projectSummarySchema(
 ): StructuredOutputJsonSchema {
     const common = informationalSchema(ids);
     const properties = {
-        title: { type: "string" },
-        summary: { type: "string" },
+        title: { type: "string", minLength: 1, pattern: "\\S" },
+        summary: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4000,
+            pattern: "\\S",
+        },
         completeness: {
             type: "string",
             enum: ["partial", "sufficient"],
         },
         ...Object.fromEntries(
-            projectBriefRoles.map((role) => [role, { type: "string" }]),
+            projectBriefRoles.map((role) => [
+                role,
+                { type: "string", minLength: 1, pattern: "\\S" },
+            ]),
         ),
-        limits: { type: "string" },
+        limits: { type: "string", maxLength: 4000 },
         citationIds: { type: "array", items: { type: "string", enum: ids } },
+        sectionCitationIds: {
+            type: "object",
+            additionalProperties: false,
+            properties: Object.fromEntries(
+                projectBriefRoles.map((role) => [
+                    role,
+                    { type: "array", items: { type: "string", enum: ids } },
+                ]),
+            ),
+            required: [...projectBriefRoles],
+        },
         projectState: {
             type: "string",
             enum: ["unknown", "active", "blocked", "complete"],
@@ -235,6 +258,7 @@ export function hydrateProjectSummary(
     const allowedKeys = [
         ...requiredStringKeys,
         "citationIds",
+        "sectionCitationIds",
         "assignments",
         "milestoneItems",
         "decisionItems",
@@ -245,7 +269,9 @@ export function hydrateProjectSummary(
         Object.keys(raw).some((key) => !allowedKeys.includes(key)) ||
         requiredStringKeys.some((key) => {
             const field = raw[key];
-            return typeof field !== "string" || !field.trim();
+            return (
+                typeof field !== "string" || (key !== "limits" && !field.trim())
+            );
         }) ||
         (raw.summary !== undefined &&
             (typeof raw.summary !== "string" ||
@@ -264,6 +290,26 @@ export function hydrateProjectSummary(
         limits: raw.limits,
         citationIds: raw.citationIds,
     });
+    const sectionCitationIds = evidenceRecord(raw.sectionCitationIds);
+    if (
+        Object.keys(sectionCitationIds).length !== projectBriefRoles.length ||
+        Object.keys(sectionCitationIds).some(
+            (role) => !projectBriefRoles.some((expected) => expected === role),
+        )
+    )
+        throw new Error("Invalid project section citation inventory");
+    const selectedIds = new Set(evidenceArray(raw.citationIds));
+    const fragments = input.inputs.flatMap((source) => source.passages ?? []);
+    const sectionCitations = new Map(
+        projectBriefRoles.map((role) => [
+            role,
+            evidenceArray(sectionCitationIds[role]).map((id) => {
+                if (typeof id !== "string" || !selectedIds.has(id))
+                    throw new Error("Unknown project section citation ID");
+                return fragments[Number(id.slice(1))];
+            }),
+        ]),
+    );
     const owners = parseProjectBriefDetails({
         kind: "owners",
         assignments: parseStructuredItems(raw.assignments),
@@ -327,11 +373,27 @@ export function hydrateProjectSummary(
         outcome: "projectSummary",
         missingEvidence: base.missingEvidence,
         relationships: content.sections.flatMap((section, position) =>
-            base.relationships.map((edge) => ({
-                ...edge,
-                id: `section:${position}:${edge.id}`,
-                from: { ...edge.from, sectionId: section.id },
-            })),
+            base.relationships.flatMap((edge) => {
+                const citations = sectionCitations
+                    .get(section.role)!
+                    .filter((citation) =>
+                        edge.citations.some(
+                            (original) =>
+                                viewSourceKey(original) ===
+                                viewSourceKey(citation),
+                        ),
+                    );
+                return citations.length
+                    ? [
+                          {
+                              ...edge,
+                              id: `section:${position}:${edge.id}`,
+                              from: { ...edge.from, sectionId: section.id },
+                              citations,
+                          },
+                      ]
+                    : [];
+            }),
         ),
     };
 }

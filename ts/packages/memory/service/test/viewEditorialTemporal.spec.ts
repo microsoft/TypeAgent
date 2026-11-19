@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalValidation } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -7,6 +8,7 @@ import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { hydrateProjectSummary } from "../src/informationalProject.js";
+import { projectSectionCitations } from "./informationalProjectTestModel.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -361,6 +363,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
                     assignments: [],
                     milestoneItems: [],
                     decisionItems: [],
+                    sectionCitationIds: projectSectionCitations(citationIds),
                     openQuestions: [],
                     riskItems: [],
                     title,
@@ -414,11 +417,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
                 };
             return { safe: true, failures: [] };
         },
-        validate: async () => {
-            throw new Error(
-                "Editorial informational updates must not call universal inventory support",
-            );
-        },
+        validate: controlledInformationalValidation,
     };
     const open = () =>
         new FileMemoryService(root, {

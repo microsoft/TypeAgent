@@ -117,7 +117,9 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
             text: block.text,
         })),
     });
-    expect(instructions).toContain("blocked/unvalidated");
+    expect(instructions).toContain(
+        "Nonapproval, unvalidated capacity and blocked decisions",
+    );
     expect(instructions).toContain("pendingOwnerReview");
     expect(instructions).toContain(
         "review owner from an accountable service owner",
@@ -133,8 +135,13 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
     );
     expect(instructions).toContain("median is not p95");
     expect(instructions).toContain(
-        "Unknown is not blocked; prepared is not executed; local success is not rollout",
+        "Do not infer blocked decisions from unknown states, execution from preparation, or rollout from local success",
     );
+    expect(instructions).toContain(
+        "internal inference limits, not additional source facts",
+    );
+    expect(instructions).toContain("retain source-supported distinctions");
+    expect(instructions).not.toContain("Unknown is not blocked;");
     expect(instructions).toContain("older bounded successes");
     expect(instructions).toContain(
         "approximately 4000 tokens in the final JSON only, excluding reasoning",
@@ -224,6 +231,14 @@ test("wiki prompt keeps retrieval identity independent of labels and separates p
     expect(instructions).toContain("retrieval coverage limits only in limits");
     expect(instructions).toContain("corrections, counterexamples");
     expect(instructions).toContain("Standalone admission is already complete");
+    expect(instructions).toContain(
+        "internal inference limits, not additional source facts",
+    );
+    expect(instructions).toContain(
+        "Do not add a negative status assertion or generic contrast",
+    );
+    expect(instructions).toContain("retain source-supported distinctions");
+    expect(instructions).not.toContain("Unknown is not blocked;");
     expect(instructions).toContain("do not return a purpose assessment");
     expect(instructions).not.toContain(
         "independently useful explanatory purpose",

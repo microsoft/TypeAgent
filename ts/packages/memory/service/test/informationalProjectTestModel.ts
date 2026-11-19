@@ -1,6 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { projectBriefRoles } from "../src/projectBrief.js";
+
+export function projectSectionCitations(ids = ["f0"]) {
+    return Object.fromEntries(
+        projectBriefRoles.map((role) => [role, [...ids]]),
+    );
+}
+
 export function projectSummaryTestResponse(fragments: Array<{ text: string }>) {
     return {
         title: "Payments reliability",
@@ -16,6 +24,9 @@ export function projectSummaryTestResponse(fragments: Array<{ text: string }>) {
         context: "Project knowledge as-of unknown.",
         limits: "Only selected indexed fragments were retrieved.",
         citationIds: fragments.map((_, position) => `f${position}`),
+        sectionCitationIds: projectSectionCitations(
+            fragments.map((_, position) => `f${position}`),
+        ),
         projectState: "active",
         incidentState: "closed",
         capacityState: "pendingOwnerReview",

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import { jest } from "@jest/globals";
 import { readFile, rm, mkdir, symlink } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -14,6 +15,12 @@ import { main } from "../src/cli.js";
 import { originalFixtures } from "../src/fixtures.js";
 import { offlineOptions } from "../src/offline.js";
 import { digest, parseConstructionPacket } from "../src/packets.js";
+import { createRequestCapture } from "../src/requestCapture.js";
+import {
+    assertCampaignRuntime,
+    configuredModelIdentity,
+    parseCampaignBudget,
+} from "../src/campaignBudget.js";
 import {
     assertOriginalCitations,
     buildBundle,
@@ -24,6 +31,27 @@ import {
 } from "../src/runner.js";
 
 const roots: string[] = [];
+
+test("campaign identity uses explicit model names or Azure deployment labels without exposing endpoints", () => {
+    const azure = {
+        provider: "azure",
+        endpoint:
+            "https://example.invalid/openai/deployments/test-deployment/chat/completions",
+    };
+    expect(configuredModelIdentity(azure)).toBe("test-deployment");
+    expect(
+        configuredModelIdentity({ ...azure, modelName: "explicit-model" }),
+    ).toBe("explicit-model");
+    expect(
+        configuredModelIdentity({
+            ...azure,
+            endpoint: "https://example.invalid/openai/v1/responses",
+        }),
+    ).toBeNull();
+    expect(
+        configuredModelIdentity({ ...azure, provider: "openai" }),
+    ).toBeNull();
+});
 const newRoot = () => {
     const root = path.join(packageRoot, ".test-runs", randomUUID());
     roots.push(root);
@@ -46,6 +74,65 @@ test("packets validate hashes, custody, identifiers, timestamps and query bounds
     copy.bundles[0].sources[0].sha256 = digest(copy.bundles[0].sources[0].text);
     copy.bundles[0].query = "a".repeat(201);
     expect(() => parseConstructionPacket(copy)).toThrow("bounds");
+});
+
+test("capture persists concurrent exact request bodies with unique attempts and null unknown usage", async () => {
+    const root = newRoot();
+    await claimRunRoot(root);
+    const capture = createRequestCapture(root, "case");
+    capture.setCheckpoint(2);
+    const ids = await Promise.all(
+        ["one", "two"].map((text) => {
+            const body = JSON.stringify({
+                messages: [{ role: "user", content: text }],
+            });
+            return capture.capture.reserve({
+                serializedRequest: body,
+                requestFingerprint: digest(body),
+                at: "test",
+                operation: "informational_wiki:normal",
+                reservations: [],
+            });
+        }),
+    );
+    await Promise.all(
+        ids.map((id) =>
+            capture.capture.finish(id, {
+                state: "returned",
+                at: "test",
+                elapsedMs: 1,
+            }),
+        ),
+    );
+    await capture.capture.result!(ids[0], {
+        success: true,
+        data: "Untrusted candidate, not an accepted artifact",
+    });
+    const manifest = JSON.parse(
+        await readFile(path.join(root, "request-calls.json"), "utf8"),
+    );
+    expect(manifest.contract).toBe("memory-request-capture-v1");
+    expect(
+        new Set(manifest.calls.map((call: { id: string }) => call.id)).size,
+    ).toBe(2);
+    for (const call of manifest.calls) {
+        expect(call.checkpoint).toBe(2);
+        expect(call.usage).toBeNull();
+        const body = await readFile(
+            path.join(root, ...call.requestFile.split("/")),
+            "utf8",
+        );
+        expect(digest(body)).toBe(call.requestHash);
+        expect(call.outcome.state).toBe("returned");
+    }
+    const result = manifest.calls.find(
+        (call: { id: string }) => call.id === ids[0],
+    ).result;
+    expect(
+        digest(
+            await readFile(path.join(root, ...result.file.split("/")), "utf8"),
+        ),
+    ).toBe(result.hash);
 });
 
 test("canonical packet identity requires one project brief with exactly its ordered meeting sources", () => {
@@ -76,6 +163,103 @@ test("canonical packet identity requires one project brief with exactly its orde
     );
 });
 
+test("campaign budgets require explicit positive limits and a named estimator", () => {
+    const input = {
+        calls: 2,
+        reservedTokens: 10000,
+        cost: 2,
+        maxCostPerCall: 1,
+        inputTokens: 1000,
+        outputTokens: 100,
+        safetyTokens: 10,
+        elapsedMs: 10000,
+        tokenizer: "utf8-bytes-v1",
+    };
+    expect(parseCampaignBudget(input).captureLimits.calls).toBe(2);
+    expect(() =>
+        parseCampaignBudget({ ...input, tokenizer: "unknown" }),
+    ).toThrow("estimator");
+    expect(() => parseCampaignBudget({ ...input, calls: 0 })).toThrow(
+        "positive integer",
+    );
+    expect(() => parseCampaignBudget({ ...input, cost: 0 })).toThrow(
+        "cost reservation",
+    );
+});
+
+test("campaign runtime drift is rejected before inference, without exposing settings", () => {
+    const actual = {
+        configurationIdentity: "synthetic",
+        configurationHash: digest("configuration"),
+        providerSettingsHash: digest("provider"),
+        nodeVersion: process.version,
+        providers: ["synthetic-provider"],
+        models: ["synthetic-model"],
+    };
+    const expected = {
+        ...actual,
+        provider: "synthetic-provider",
+        model: "synthetic-model",
+    };
+    expect(() => assertCampaignRuntime(actual, expected)).not.toThrow();
+    expect(() =>
+        assertCampaignRuntime(actual, { ...expected, model: "changed" }),
+    ).toThrow("no dispatch authorized");
+    expect(() =>
+        assertCampaignRuntime(actual, {
+            ...expected,
+            providerSettingsHash: digest("changed"),
+        }),
+    ).toThrow("no dispatch authorized");
+});
+
+test("campaign capture refuses overspend before recording another dispatch", async () => {
+    const root = newRoot();
+    await claimRunRoot(root);
+    const capture = createRequestCapture(root, "case", {
+        calls: 1,
+        reservedTokens: 30,
+        cost: 1,
+        maxCostPerCall: 1,
+    });
+    const body = JSON.stringify({ model: "fixture", messages: [] });
+    const event = {
+        serializedRequest: body,
+        requestFingerprint: digest(body),
+        at: "synthetic",
+        operation: "informational_wiki:normal",
+        reservations: [
+            {
+                attempt: 1,
+                kind: "chat" as const,
+                inputTokens: 10,
+                outputTokens: 10,
+                safetyTokens: 1,
+                tokenAccounting: "estimate" as const,
+                serializedChars: body.length,
+                elapsedMs: 0,
+            },
+        ],
+    };
+    await capture.capture.reserve(event);
+    await expect(capture.capture.reserve(event)).rejects.toThrow(
+        "exceeds approved",
+    );
+    const manifest = JSON.parse(
+        await readFile(path.join(root, "request-calls.json"), "utf8"),
+    );
+    expect(manifest.calls).toHaveLength(1);
+    const noReservation = createRequestCapture(root, "case", {
+        calls: 1,
+        reservedTokens: 30,
+        cost: 1,
+        maxCostPerCall: 1,
+    });
+    await expect(
+        noReservation.capture.reserve({ ...event, reservations: [] }),
+    ).rejects.toThrow("requires a token reservation");
+});
+
 test("canonical projects append meetings to one view with cumulative evidence and retained revision history", async () => {
     const packet = originalFixtures();
     const bundle = packet.bundles.find(
@@ -94,6 +278,14 @@ test("canonical projects append meetings to one view with cumulative evidence an
         mode: "offline",
     });
     expect(result.requests).toHaveLength(3);
+    const checkpoints = JSON.parse(
+        await readFile(path.join(root, "checkpoints.json"), "utf8"),
+    );
+    expect(
+        checkpoints.checkpoints.map(
+            (entry: { status: string }) => entry.status,
+        ),
+    ).toEqual(["accepted", "accepted", "accepted"]);
     const revisions = result.receipt.revisions;
     if (!revisions)
         throw new Error("Canonical project revision history missing");
@@ -142,6 +334,68 @@ test("canonical projects append meetings to one view with cumulative evidence an
             expect(retained?.revisionId).toBe(revision.revisionId);
             await assertOriginalCitations(service, retained!);
         }
+    } finally {
+        await service.close();
+    }
+});
+
+test("failed incremental construction retains its accepted prefix and unattempted suffix", async () => {
+    const packet = originalFixtures();
+    const bundle = packet.bundles.find(
+        (entry) => entry.kind === "projectBrief",
+    )!;
+    bundle.project = {
+        id: bundle.id,
+        meetingIds: bundle.sources.map((source) => source.id),
+    };
+    packet.bundles = [bundle];
+    const root = newRoot();
+    const build = FileMemoryService.prototype.buildViews;
+    let attempts = 0;
+    const spy = jest
+        .spyOn(FileMemoryService.prototype, "buildViews")
+        .mockImplementation(async function (this: FileMemoryService, ...args) {
+            if (++attempts === 2)
+                throw new Error(
+                    "Injected second-checkpoint construction failure",
+                );
+            return build.apply(this, args);
+        });
+    try {
+        await expect(
+            runInformational({
+                packet,
+                caseId: bundle.id,
+                root,
+                mode: "offline",
+            }),
+        ).rejects.toThrow("second-checkpoint construction failure");
+    } finally {
+        spy.mockRestore();
+    }
+    const { checkpoints } = JSON.parse(
+        await readFile(path.join(root, "checkpoints.json"), "utf8"),
+    );
+    expect(
+        checkpoints.map((entry: { status: string }) => entry.status),
+    ).toEqual(["accepted", "failed", "not-attempted"]);
+    expect(checkpoints[1].stage).toBe("construction");
+    expect(checkpoints[2].revisionId).toBeNull();
+    const saved: ViewVersion = JSON.parse(
+        await readFile(
+            path.join(root, "revisions", "0001", "saved.json"),
+            "utf8",
+        ),
+    );
+    expect(saved.revisionId).toBe(checkpoints[0].revisionId);
+    const { service } = await reopen(root);
+    try {
+        expect(
+            (await service.getView({
+                corpusId: saved.corpusId,
+                viewId: saved.viewId,
+            }))!.revisionId,
+        ).toBe(saved.revisionId);
     } finally {
         await service.close();
     }

@@ -4,6 +4,9 @@
 import { randomUUID } from "node:crypto";
 import {
     openai,
+    runWithRequestOperation,
+    recordDispatchedRequestUsage,
+    recordDispatchedRequestResult,
     type ChatModel,
     type CompleteUsageStatsCallback,
     type StructuredOutputJsonSchema,
@@ -239,8 +242,7 @@ function readNodeSummary(
         throw new Error(
             "Topic summary requires bounded text and exact supplied evidence IDs",
         );
-    const citationCount = node.citations.length;
-    const supplied = node.citations.slice(0, 8);
+    const supplied = node.citations;
     const citations = raw.evidenceIds.map((id: unknown) => {
         if (!Number.isInteger(id) || typeof id !== "number" || !supplied[id])
             throw new Error("Topic summary references unsupplied evidence");
@@ -249,10 +251,6 @@ function readNodeSummary(
     node.summary = raw.summary;
     node.summaryState = "ready";
     node.citations = citations;
-    if (supplied.length < citationCount)
-        node.limits.push(
-            "Summary uses a bounded sample; complete incidence remains in the snapshot.",
-        );
 }
 
 class TopicOrganizationContractError extends Error {}
@@ -457,15 +455,21 @@ export function createTopicCompletion(
                 scheduleMaintenanceModel(
                     modelScheduler,
                     () =>
-                        model.complete(
-                            prompt,
-                            (value) => {
-                                usage = value;
-                            },
-                            outputSchema,
-                            undefined,
-                            signal,
-                        ),
+                        runWithRequestOperation(stage, async () => {
+                            const result = await model.complete(
+                                prompt,
+                                (value) => {
+                                    usage = value;
+                                },
+                                outputSchema,
+                                undefined,
+                                signal,
+                            );
+                            if (usage)
+                                await recordDispatchedRequestUsage(usage);
+                            await recordDispatchedRequestResult(result);
+                            return result;
+                        }),
                     signal,
                 ),
             {

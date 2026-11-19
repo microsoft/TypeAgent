@@ -4,7 +4,10 @@
 import { projectSummarySchema } from "../src/informationalProject.js";
 import { createInventoryConstructionSchema } from "../src/viewSynthesisSchemas.js";
 import { evidenceRecord } from "../src/viewSynthesisEvidence.js";
-import { parseProjectBriefDetails } from "../src/projectBrief.js";
+import {
+    parseProjectBriefDetails,
+    projectBriefRoles,
+} from "../src/projectBrief.js";
 
 test("project summary schema has indexed citations and typed states without inventory contracts", () => {
     const schema = evidenceRecord(projectSummarySchema(["f0"]).schema);
@@ -22,6 +25,7 @@ test("project summary schema has indexed citations and typed states without inve
         "context",
         "limits",
         "citationIds",
+        "sectionCitationIds",
         "projectState",
         "incidentState",
         "capacityState",
@@ -31,10 +35,23 @@ test("project summary schema has indexed citations and typed states without inve
         "openQuestions",
         "riskItems",
     ]);
-    expect(Object.keys(properties).length).toBeLessThanOrEqual(20);
+    expect(Object.keys(properties).length).toBeLessThanOrEqual(21);
     expect(
         evidenceRecord(evidenceRecord(properties.citationIds).items).enum,
     ).toEqual(["f0"]);
+    for (const role of ["title", "summary", ...projectBriefRoles])
+        expect(properties[role]).toMatchObject({
+            minLength: 1,
+            pattern: "\\S",
+        });
+    expect(properties.summary).toMatchObject({ maxLength: 4000 });
+    expect(properties.limits).toMatchObject({ maxLength: 4000 });
+    expect(evidenceRecord(properties.capacityState).enum).toEqual([
+        "unknown",
+        "pendingOwnerReview",
+        "validated",
+        "notApplicable",
+    ]);
     expect(JSON.stringify(schema)).not.toMatch(
         /inventory|witness|sourceDecisions/,
     );

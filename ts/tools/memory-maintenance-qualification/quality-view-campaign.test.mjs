@@ -3,9 +3,15 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { identity, sha256 } from "./quality-contract.mjs";
 import {
     campaignContract,
+    campaignContractV2,
     campaignSchedule,
     validateConstructionPacket,
     validateCampaign,
@@ -15,9 +21,38 @@ import {
     scoreCampaignArtifacts,
     validateExampleRunArtifacts,
 } from "./quality-view-campaign.mjs";
+import {
+    measurementContract,
+    scoreCampaignMeasurements,
+    scoreReviewedTopicSnapshot,
+} from "./quality-campaign-measurements.mjs";
+import {
+    assessCampaignRelease,
+    scoreCampaignUsefulness,
+    validateSplitIsolation,
+} from "./quality-campaign-release.mjs";
+import {
+    executeCampaign,
+    snapshotCampaignImplementation,
+} from "./quality-campaign-execution.mjs";
+import { main as campaignMain } from "./quality-view-campaign-cli.mjs";
 
 const quote = "The accountable owner is unassigned.";
 const h = sha256("");
+
+test("execution CLI runs its entry point without dispatching from help or invalid arguments", async () => {
+    const execute = promisify(execFile);
+    const entry = fileURLToPath(
+        new URL("./quality-campaign-execution.mjs", import.meta.url),
+    );
+    const help = await execute(process.execPath, [entry, "--help"]);
+    assert.match(help.stdout, /Authorized execution only/);
+    await assert.rejects(execute(process.execPath, [entry]), (error) => {
+        assert.match(error.stderr, /Expected --spec/);
+        assert.equal(error.code, 1);
+        return true;
+    });
+});
 
 test("campaign construction accepts canonical projects but rejects mismatched project/source order", () => {
     const f = fixture();
@@ -317,6 +352,12 @@ function rebind(f) {
                 row[key] === null ? null : identity(row[key]),
             ]),
         );
+        if (row.requestCapture !== undefined)
+            row.hashes.requestCaptureHash = identity(row.requestCapture);
+        if (row.checkpointArtifacts !== undefined)
+            row.hashes.checkpointArtifactsHash = identity(
+                row.checkpointArtifacts,
+            );
         const label = f.annotations.records.find(
             (entry) => entry.id === row.id,
         );
@@ -339,6 +380,862 @@ const score = (f) =>
         f.review,
         f.mapping,
     );
+
+function reviewed(value) {
+    return {
+        status: "approved-independent-human-review",
+        artifactHash: identity(value),
+        author: "synthetic-protocol-author",
+        reviewer: "synthetic-independent-reviewer",
+        adjudicated: true,
+        adjudicationRecordHash: h,
+        reviewedAt: "2026-11-07T13:00:00Z",
+    };
+}
+
+function measurementFixture() {
+    const input = fixture();
+    const row = input.outputs.records[0];
+    const checkpoint = {
+        sequence: 1,
+        status: "accepted",
+        stage: "complete",
+        reason: "",
+        revisionId: "revision-1",
+    };
+    row.checkpointArtifacts = {
+        contract: "memory-view-checkpoint-artifacts-v1",
+        schedule: JSON.stringify({ checkpoints: [checkpoint] }),
+        records: [
+            {
+                ...checkpoint,
+                saved: row.saved,
+                rendered: row.rendered,
+                evidence: null,
+            },
+        ],
+    };
+    rebind(input);
+    const rubric = {
+        schemaVersion: 2,
+        contract: measurementContract,
+        constructionHash: identity(input.packet),
+        goldHash: identity(input.gold),
+        cases: [
+            {
+                id: row.caseId,
+                facts: input.gold.cases[0].expectations.map((entry, index) => ({
+                    id: entry.id,
+                    importance: index ? 1 : 3,
+                    required: true,
+                    answerable: true,
+                })),
+                ordering: [],
+                checkpoints: [
+                    {
+                        sequence: 1,
+                        expectations: [
+                            {
+                                id: "uptake",
+                                kind: "newFactUptake",
+                                requirement: "Preserve the owner qualification",
+                                witnesses:
+                                    input.gold.cases[0].expectations[0]
+                                        .witnesses,
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+    const span = {
+        start: row.rendered.indexOf(quote),
+        end: row.rendered.indexOf(quote) + quote.length,
+        quote,
+    };
+    const measurement = {
+        id: row.id,
+        hashes: row.hashes,
+        ordering: [],
+        caveats: [],
+        allCaveatsReviewed: true,
+        checkpoints: [
+            {
+                ...checkpoint,
+                saved: row.saved,
+                rendered: row.rendered,
+                hashes: {
+                    saved: identity(row.saved),
+                    rendered: identity(row.rendered),
+                },
+                allVerifiableClaimsReviewed: true,
+                claims: [
+                    {
+                        id: "claim",
+                        artifact: "rendered",
+                        span,
+                        supported: true,
+                        critical: true,
+                        rationale: "Synthetic exact support",
+                        witnesses:
+                            input.gold.cases[0].expectations[0].witnesses,
+                    },
+                ],
+                expectations: [
+                    {
+                        id: "uptake",
+                        satisfied: true,
+                        span,
+                        rationale: "Synthetic preservation",
+                    },
+                ],
+            },
+        ],
+    };
+    const measurements = {
+        schemaVersion: 2,
+        contract: measurementContract,
+        rubricHash: identity(rubric),
+        outputsHash: identity(input.outputs),
+        records: [{ ...measurement, review: reviewed(measurement) }],
+    };
+    return { input, rubric, rubricReview: reviewed(rubric), measurements };
+}
+
+function bindMeasurements(f) {
+    rebind(f.input);
+    f.rubric.constructionHash = identity(f.input.packet);
+    f.rubric.goldHash = identity(f.input.gold);
+    f.rubricReview = reviewed(f.rubric);
+    f.measurements.outputsHash = identity(f.input.outputs);
+    f.measurements.rubricHash = identity(f.rubric);
+    for (const record of f.measurements.records) {
+        record.hashes = f.input.outputs.records.find(
+            (row) => row.id === record.id,
+        ).hashes;
+        for (const checkpoint of record.checkpoints)
+            checkpoint.hashes = {
+                saved:
+                    checkpoint.saved === null
+                        ? null
+                        : identity(checkpoint.saved),
+                rendered:
+                    checkpoint.rendered === null
+                        ? null
+                        : identity(checkpoint.rendered),
+            };
+        const { review, ...judgment } = record;
+        record.review = reviewed(judgment);
+    }
+}
+
+const measure = (f) =>
+    scoreCampaignMeasurements(
+        f.input,
+        f.rubric,
+        f.rubricReview,
+        f.measurements,
+    );
+
+test("v2 weights required answerable facts and separates selection from correct preservation", () => {
+    const f = measurementFixture();
+    f.input.annotations.records[0].expectations[0].preserved = false;
+    f.input.annotations.records[0].expectations[0].correct = false;
+    bindMeasurements(f);
+    const result = measure(f);
+    assert.equal(result.qualityQualified, false);
+    assert.equal(result.details[0].metrics.selectedWeightedCoverage.value, 1);
+    assert.equal(
+        result.details[0].metrics.preservedWeightedCoverage.value,
+        0.25,
+    );
+    f.rubric.cases[0].facts[0].answerable = false;
+    bindMeasurements(f);
+    assert.equal(
+        measure(f).details[0].metrics.preservedWeightedCoverage.value,
+        1,
+    );
+});
+
+test("v2 exposes empty caveat/order denominators rather than perfect scores", () => {
+    const result = measure(measurementFixture());
+    assert.equal(result.details[0].metrics.issueOrdering.value, null);
+    assert.equal(result.details[0].metrics.caveatRelevance.value, null);
+    assert.equal(result.details[0].metrics.newFactUptake.value, 1);
+});
+
+for (const [name, mutate, pattern] of [
+    [
+        "importance",
+        (f) => {
+            f.rubric.cases[0].facts[0].importance = 0;
+        },
+        /importance/,
+    ],
+    [
+        "complete facts",
+        (f) => {
+            f.rubric.cases[0].facts.pop();
+        },
+        /complete inventory/,
+    ],
+    [
+        "original witnesses",
+        (f) => {
+            f.rubric.cases[0].checkpoints[0].expectations[0].witnesses[0].quote =
+                "Invented";
+        },
+        /quote|witness/i,
+    ],
+    [
+        "every checkpoint",
+        (f) => {
+            f.measurements.records[0].checkpoints = [];
+        },
+        /Every scheduled checkpoint/,
+    ],
+    [
+        "artifact binding",
+        (f) => {
+            f.measurements.records[0].checkpoints[0].rendered += "invented";
+        },
+        /captured execution/,
+    ],
+    [
+        "complete claims",
+        (f) => {
+            f.measurements.records[0].checkpoints[0].allVerifiableClaimsReviewed = false;
+        },
+        /Complete checkpoint claim/,
+    ],
+    [
+        "complete caveats",
+        (f) => {
+            f.measurements.records[0].allCaveatsReviewed = false;
+        },
+        /Complete caveat/,
+    ],
+]) {
+    test(`v2 rejects invalid ${name}`, () => {
+        const f = measurementFixture();
+        mutate(f);
+        bindMeasurements(f);
+        assert.throws(() => measure(f), pattern);
+    });
+}
+
+test("v2 rejects self-review and tampered review bindings", () => {
+    const f = measurementFixture();
+    f.rubricReview.reviewer = f.rubricReview.author;
+    assert.throws(() => measure(f), /independent/);
+    f.rubricReview = reviewed(f.rubric);
+    f.measurements.records[0].allCaveatsReviewed = false;
+    assert.throws(() => measure(f), /artifact binding/);
+});
+
+test("v2 scores exact reviewed issue spans, allowing ties/incomparability through absent constraints", () => {
+    const f = measurementFixture();
+    f.rubric.cases[0].ordering = [
+        {
+            id: "owner-first",
+            before: "owner-qualification",
+            after: "ownership-reference",
+            witnesses: f.input.gold.cases[0].expectations[0].witnesses,
+        },
+    ];
+    f.measurements.records[0].ordering = [
+        {
+            id: "owner-first",
+            before: { quote: "Ownership", start: 0, end: 9 },
+            after: { quote, start: 10, end: 10 + quote.length },
+        },
+    ];
+    bindMeasurements(f);
+    assert.equal(measure(f).details[0].metrics.issueOrdering.value, 1);
+    const verdict = f.measurements.records[0].ordering[0];
+    [verdict.before, verdict.after] = [verdict.after, verdict.before];
+    bindMeasurements(f);
+    assert.equal(measure(f).details[0].metrics.issueOrdering.value, 0);
+});
+
+test("v2 caveat relevance and redundancy remain independent reviewed metrics", () => {
+    const f = measurementFixture();
+    f.measurements.records[0].caveats = [
+        {
+            id: "caveat",
+            span: { quote, start: 10, end: 10 + quote.length },
+            relevant: true,
+            redundant: true,
+            rationale: "Protocol test, not real reviewed gold",
+        },
+    ];
+    bindMeasurements(f);
+    const metrics = measure(f).details[0].metrics;
+    assert.equal(metrics.caveatRelevance.value, 1);
+    assert.equal(metrics.caveatNonRedundancy.value, 0);
+});
+
+test("topic measurements reuse admission/merge/split scoring with complete hierarchy review", () => {
+    const snapshot = {
+        nodes: [{ id: "a" }, { id: "b" }, { id: "c" }],
+        curation: {
+            concepts: [
+                { id: "one", memberIds: ["a"] },
+                { id: "two", memberIds: ["b"] },
+            ],
+            deferred: [{ nodeId: "c" }],
+        },
+        hierarchy: [{ id: "edge", child: "one", parent: "two" }],
+    };
+    const annotations = {
+        splitId: "synthetic-development",
+        reviewerIds: ["one", "two"],
+        adjudicated: true,
+        items: [
+            { nodeId: "a", admission: "admit", group: "same" },
+            { nodeId: "b", admission: "admit", group: "same" },
+            { nodeId: "c", admission: "defer" },
+        ],
+        hierarchy: [
+            {
+                ...snapshot.hierarchy[0],
+                acceptable: true,
+                rationale: "Synthetic reviewed edge",
+            },
+        ],
+    };
+    const result = scoreReviewedTopicSnapshot(
+        snapshot,
+        annotations,
+        reviewed({ snapshot, annotations }),
+    );
+    assert.equal(result.falseSplits, 1);
+    assert.equal(result.falseMerges, 0);
+    assert.equal(result.annotationMetrics.admission.recall, 1);
+    assert.equal(result.hierarchyAcceptability.value, 1);
+    snapshot.curation.concepts[0].memberIds.push("b");
+    assert.throws(
+        () =>
+            scoreReviewedTopicSnapshot(
+                snapshot,
+                annotations,
+                reviewed({ snapshot, annotations }),
+            ),
+        /multiply assigned/,
+    );
+});
+
+function releaseFixture() {
+    const f = measurementFixture();
+    const second = JSON.parse(
+        JSON.stringify(measurementFixture())
+            .replaceAll("case-1", "case-2")
+            .replaceAll("dataset-source", "dataset-source-2")
+            .replaceAll("actual-source", "actual-source-2")
+            .replaceAll("ownership", "ownership-2")
+            .replaceAll("initiative", "initiative-2"),
+    );
+    second.input.packet.bundles[0].sources[0].text +=
+        "\nSynthetic independent document.";
+    const source = second.input.packet.bundles[0].sources[0];
+    source.sha256 = sha256(source.text);
+    second.input.mapping.records[0].retainedText = source.text;
+    second.input.mapping.records[0].contentHash = source.sha256;
+    for (const key of [
+        "packet",
+        "campaign",
+        "mapping",
+        "gold",
+        "outputs",
+        "annotations",
+    ]) {
+        const field = {
+            packet: "bundles",
+            campaign: "inventory",
+            mapping: "records",
+            gold: "cases",
+            outputs: "records",
+            annotations: "records",
+        }[key];
+        f.input[key][field].push(...second.input[key][field]);
+    }
+    f.rubric.cases.push(...second.rubric.cases);
+    f.measurements.records.push(...second.measurements.records);
+    const { input } = f;
+    input.packet.dataset = "freshwiki";
+    input.campaign.dataset = "freshwiki";
+    input.campaign.phase = "confirmation";
+    input.campaign.thresholds = {
+        status: "preregistered",
+        registeredBy: "synthetic-owner",
+        registeredAt: "2026-11-07T10:00:00Z",
+        rubricHash: h,
+        calibrationRecordHash: h,
+        metrics: [
+            {
+                metric: "supportedClaims",
+                direction: "minimum",
+                value: 1,
+                nonRegressionMargin: 0,
+            },
+        ],
+    };
+    input.run.caseIds.push("case-2");
+    const candidate = {
+        ...input.run.arms[0],
+        id: "candidate",
+        promptHash: sha256("synthetic-treatment"),
+    };
+    input.run.arms.push(candidate);
+    input.run.budget = { calls: 100, tokens: 10000, cost: 100 };
+    for (const row of [...input.outputs.records]) {
+        const label = input.annotations.records.find(
+            (label) => label.id === row.id,
+        );
+        const measurement = f.measurements.records.find(
+            (record) => record.id === row.id,
+        );
+        const next = structuredClone(row);
+        next.arm = "candidate";
+        next.id = JSON.stringify([next.arm, next.caseId, next.generation]);
+        next.rendered += "\nCandidate";
+        next.checkpointArtifacts.records[0].rendered = next.rendered;
+        input.outputs.records.push(next);
+        input.annotations.records.push({
+            ...structuredClone(label),
+            id: next.id,
+        });
+        const nextMeasurement = {
+            ...structuredClone(measurement),
+            id: next.id,
+        };
+        nextMeasurement.checkpoints[0].rendered = next.rendered;
+        nextMeasurement.checkpoints[0].hashes.rendered = identity(
+            next.rendered,
+        );
+        f.measurements.records.push(nextMeasurement);
+    }
+    for (const row of input.outputs.records) {
+        const body = JSON.stringify({
+            messages: [
+                {
+                    role: "user",
+                    content: JSON.stringify({ fragments: [{ text: quote }] }),
+                },
+            ],
+        });
+        row.serializedRequest = body;
+        row.requestCapture = {
+            contract: "memory-request-capture-v1",
+            manifest: JSON.stringify({
+                schemaVersion: 1,
+                contract: "memory-request-capture-v1",
+                caseId: row.caseId,
+                requestEvidenceKind: "admitted-dispatch-body",
+                calls: [
+                    {
+                        id: "one",
+                        checkpoint: 1,
+                        operation: "informational_wiki:normal",
+                        requestFile: "calls/one/request.json",
+                        requestHash: sha256(body),
+                        outcome: { state: "returned", elapsedMs: 1 },
+                        usage: null,
+                        reservations: [
+                            {
+                                inputTokens: 10,
+                                outputTokens: 10,
+                                safetyTokens: 1,
+                            },
+                        ],
+                    },
+                ],
+            }),
+            requests: [{ file: "calls/one/request.json", body }],
+        };
+    }
+    upgradeCampaignV2(f);
+    bindMeasurements(f);
+    const registry = {
+        contract: "memory-view-split-registry-v1",
+        development: [
+            {
+                id: "unopened-development-metadata",
+                sourceHashes: [sha256("different development document")],
+                clusters: {
+                    source: ["dev-source"],
+                    topic: ["dev-topic"],
+                    project: ["dev-project"],
+                    meeting: [],
+                },
+            },
+        ],
+        confirmation: input.packet.bundles.map((bundle) => ({
+            id: bundle.id,
+            sourceHashes: bundle.sources.map((source) => source.sha256),
+            clusters: input.campaign.inventory.find(
+                (entry) => entry.id === bundle.id,
+            ).clusters,
+        })),
+    };
+    const registration = {
+        contract: "memory-view-release-v1",
+        status: "preregistered",
+        runHash: identity(input.run),
+        maxCostPerCall: 1,
+        campaignHash: identity(input.campaign),
+        rubricHash: identity(f.rubric),
+        splitRegistryHash: identity(registry),
+        registeredAt: "2026-11-07T10:00:00Z",
+        registeredBy: "synthetic-owner",
+        baseline: "baseline",
+        candidate: "candidate",
+        usefulnessMinimum: 0.5,
+        analysis: {
+            clusterKind: "project",
+            minClusters: 2,
+            seed: 1,
+            resamples: 100,
+            confidence: 0.95,
+        },
+        metrics: [
+            "supportedClaims",
+            "selectedWeightedCoverage",
+            "preservedWeightedCoverage",
+        ].map((metric) => ({
+            metric,
+            direction: "minimum",
+            threshold: 1,
+            nonRegressionMargin: 0,
+        })),
+    };
+    const blinded = {
+        contract: "memory-view-blinded-usefulness-v2",
+        outputsHash: identity(input.outputs),
+        armsHiddenFromReviewers: true,
+        assignments: input.run.caseIds.map((caseId) => ({
+            id: JSON.stringify([caseId, 1]),
+            first: input.outputs.records.find(
+                (row) => row.caseId === caseId && row.arm === "baseline",
+            ).hashes.renderedHash,
+            second: input.outputs.records.find(
+                (row) => row.caseId === caseId && row.arm === "candidate",
+            ).hashes.renderedHash,
+        })),
+        judgments: input.run.caseIds.map((caseId) => ({
+            id: JSON.stringify([caseId, 1]),
+            verdict: "second",
+            rationale: "Synthetic protocol judgment only",
+        })),
+    };
+    return {
+        ...f,
+        registration,
+        registry,
+        blinded,
+        usefulnessReview: reviewed(blinded),
+        confirmation: {
+            status: "custodian-approved-untouched-confirmation",
+            custodian: "synthetic-custodian",
+            registrationHash: identity(registration),
+            runHash: identity(input.run),
+        },
+        rollback: {
+            status: "tested-compatible",
+            recipeHash: h,
+            compatibilityTestRecordHash: h,
+            qualificationRecordHash: h,
+            protections: Object.fromEntries(
+                [
+                    "allSuppliedCitationIds",
+                    "finalFactualRejection",
+                    "publicationProof",
+                    "legacyServing",
+                    "acceptedRevisionSurvivesFailure",
+                ].map((key) => [key, true]),
+            ),
+        },
+    };
+}
+
+test("release protocol requires actual comparison, review, protected confirmation and compatible rollback evidence", () => {
+    const f = releaseFixture();
+    const result = assessCampaignRelease(f);
+    assert.equal(result.qualityQualified, true, JSON.stringify(result.reasons));
+    assert.equal(result.publicationPerformed, false);
+    assert.deepEqual(result.comparisons[0].estimate.interval, [0, 0]);
+    delete f.confirmation;
+    delete f.rollback;
+    delete f.blinded;
+    const missing = assessCampaignRelease(f);
+    assert.equal(missing.qualityQualified, false);
+    assert.equal(missing.reasons.length, 3);
+});
+
+for (const [name, mutate, pattern] of [
+    [
+        "split overlap",
+        (f) => {
+            f.registry.development[0].clusters.source =
+                f.registry.confirmation[0].clusters.source;
+        },
+        /Cross-split leakage/,
+    ],
+    [
+        "post-hoc registration",
+        (f) => {
+            f.registration.registeredAt = "2026-11-08T12:00:00Z";
+        },
+        /before execution/,
+    ],
+    [
+        "identical controls",
+        (f) => {
+            f.input.run.arms[1].promptHash = f.input.run.arms[0].promptHash;
+            bindMeasurements(f);
+        },
+        /Identical treatment/,
+    ],
+    [
+        "provider confounding",
+        (f) => {
+            f.input.run.arms[1].model = "another-model";
+            bindMeasurements(f);
+        },
+        /changed model/,
+    ],
+    [
+        "overlapping analysis clusters",
+        (f) => {
+            f.input.campaign.inventory[1].clusters.topic =
+                f.input.campaign.inventory[0].clusters.topic;
+            bindMeasurements(f);
+            f.registration.campaignHash = identity(f.input.campaign);
+            f.registration.splitRegistryHash = identity(f.registry);
+        },
+        /not independent/,
+    ],
+]) {
+    test(`release protocol rejects ${name}`, () => {
+        const f = releaseFixture();
+        mutate(f);
+        if (
+            [
+                "identical controls",
+                "provider confounding",
+                "overlapping analysis clusters",
+            ].includes(name)
+        )
+            f.registration.runHash = identity(f.input.run);
+        if (name === "split overlap")
+            assert.throws(() => validateSplitIsolation(f.registry), pattern);
+        else assert.throws(() => assessCampaignRelease(f), pattern);
+    });
+}
+
+test("release protocol never qualifies too few independent clusters or unsafe rollback", () => {
+    const f = releaseFixture();
+    f.registration.analysis.minClusters = 3;
+    f.confirmation.registrationHash = identity(f.registration);
+    f.rollback.protections.finalFactualRejection = false;
+    const result = assessCampaignRelease(f);
+    assert.equal(result.qualityQualified, false);
+    assert(result.reasons.some((reason) => reason.includes("Rollback")));
+    assert(result.reasons.some((reason) => reason.includes("cluster")));
+});
+
+test("blinded usefulness binds exact artifacts and requires full scheduled-pair review", () => {
+    const f = releaseFixture();
+    f.blinded.assignments[0].first = h;
+    assert.throws(
+        () =>
+            scoreCampaignUsefulness(
+                f.input,
+                "baseline",
+                "candidate",
+                f.blinded,
+                reviewed(f.blinded),
+            ),
+        /exact rendered/,
+    );
+    f.blinded.judgments.pop();
+    assert.throws(
+        () =>
+            scoreCampaignUsefulness(
+                f.input,
+                "baseline",
+                "candidate",
+                f.blinded,
+                reviewed(f.blinded),
+            ),
+        /Every scheduled pair/,
+    );
+});
+
+test("v2 original gold is independent of ingestion, while actual witnesses remain attempt-scoped", () => {
+    const f = releaseFixture();
+    assert.deepEqual(
+        Object.keys(f.input.gold.cases[0].expectations[0].witnesses[0]),
+        ["sourceId", "sourceVersion", "quote"],
+    );
+    assert.equal(f.input.mapping.records.length, 4);
+    f.input.mapping.records[0].attemptId = "unknown-attempt";
+    bindMeasurements(f);
+    assert.throws(() => measure(f), /unknown attempt/);
+});
+
+test("v2 cannot silently accept a v1 mapping or actual-revision gold witness", () => {
+    const f = releaseFixture();
+    f.input.mapping.schemaVersion = 1;
+    bindMeasurements(f);
+    assert.throws(() => measure(f), /Duplicate ingestion mapping|run\/mapping/);
+    const original = releaseFixture();
+    original.input.gold.cases[0].expectations[0].witnesses[0].corpusId =
+        "invented";
+    bindMeasurements(original);
+    assert.throws(() => measure(original), /construction witness/);
+});
+
+test("offline CLI wires measurement and release assessment to their reviewed exact artifacts", async (t) => {
+    const f = releaseFixture();
+    const project = fileURLToPath(new URL("../../", import.meta.url));
+    const parent = path.join(project, "examples", "viewExamples", ".test-runs");
+    await mkdir(parent, { recursive: true });
+    const root = await mkdtemp(path.join(parent, "measurement-cli-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await writeFile(
+        path.join(root, ".quality-view-campaign-owner.json"),
+        JSON.stringify({
+            schemaVersion: 1,
+            purpose: "quality-view-campaign",
+            ownerId: "synthetic",
+        }),
+    );
+    const files = {
+        construction: f.input.packet,
+        campaign: f.input.campaign,
+        run: f.input.run,
+        outputs: f.input.outputs,
+        mapping: f.input.mapping,
+        annotations: f.input.annotations,
+        gold: f.input.gold,
+        review: f.input.review,
+        rubric: f.rubric,
+        "rubric-review": f.rubricReview,
+        measurements: f.measurements,
+        registration: f.registration,
+        registry: f.registry,
+        confirmation: f.confirmation,
+        rollback: f.rollback,
+        blinded: f.blinded,
+        "usefulness-review": f.usefulnessReview,
+    };
+    for (const [key, value] of Object.entries(files))
+        await writeFile(path.join(root, `${key}.json`), JSON.stringify(value));
+    for (const command of ["score-measurements", "assess-release"]) {
+        const keys = Object.keys(files).filter(
+            (key) =>
+                command === "assess-release" ||
+                ![
+                    "registration",
+                    "registry",
+                    "confirmation",
+                    "rollback",
+                    "blinded",
+                    "usefulness-review",
+                ].includes(key),
+        );
+        let error = "";
+        const code = await campaignMain(
+            [
+                command,
+                "--root",
+                path.relative(project, root),
+                "--out",
+                `${command}.json`,
+                ...keys.flatMap((key) => [`--${key}`, `${key}.json`]),
+            ],
+            {
+                cwd: project,
+                stdout: { write: () => {} },
+                stderr: {
+                    write: (text) => {
+                        error += text;
+                    },
+                },
+            },
+        );
+        assert.equal(code, 0, error);
+        const result = JSON.parse(
+            await readFile(path.join(root, `${command}.json`), "utf8"),
+        );
+        assert.equal(result.qualityQualified, command === "assess-release");
+    }
+});
+
+test("campaign binds exact admitted requests and annotations, excluding auditor-only selection", () => {
+    const f = fixture();
+    const row = f.outputs.records[0];
+    const request = (text) =>
+        JSON.stringify({
+            messages: [
+                {
+                    role: "user",
+                    content: JSON.stringify({ fragments: [{ text }] }),
+                },
+            ],
+        });
+    const bodies = [request(quote), request("Auditor-only evidence")];
+    const manifest = {
+        schemaVersion: 1,
+        contract: "memory-request-capture-v1",
+        caseId: row.caseId,
+        requestEvidenceKind: "admitted-dispatch-body",
+        calls: bodies.map((body, index) => ({
+            id: String(index),
+            checkpoint: 1,
+            requestFile: `calls/${index}/request.json`,
+            requestHash: sha256(body),
+            operation:
+                index === 0
+                    ? "informational_wiki:normal"
+                    : "memory_informational_support:validation",
+            outcome: { state: "returned", elapsedMs: 1 },
+            usage: null,
+        })),
+    };
+    row.serializedRequest = bodies[0];
+    row.requestCapture = {
+        contract: manifest.contract,
+        manifest: JSON.stringify(manifest),
+        requests: manifest.calls.map((call, index) => ({
+            file: call.requestFile,
+            body: bodies[index],
+        })),
+    };
+    rebind(f);
+    assert.doesNotThrow(() => score(f));
+    const pending = structuredClone(row.requestCapture);
+    const pendingManifest = JSON.parse(pending.manifest);
+    pendingManifest.calls[1].outcome = null;
+    pending.manifest = JSON.stringify(pendingManifest);
+    const complete = row.requestCapture;
+    row.requestCapture = pending;
+    rebind(f);
+    assert.throws(() => score(f), /unfinished captured dispatch/);
+    row.requestCapture = complete;
+    rebind(f);
+    f.annotations.records[0].hashes = { ...row.hashes, requestCaptureHash: h };
+    assert.throws(
+        () => score(f),
+        /Annotation output\/request identity mismatch/,
+    );
+    rebind(f);
+    row.serializedRequest = bodies[1];
+    rebind(f);
+    assert.throws(() => score(f), /construction/i);
+});
 
 test("versioned variable inventory, exact artifacts and independently reviewed scorecard", () => {
     const f = fixture();
@@ -435,6 +1332,347 @@ function exampleArtifacts(f) {
         receipt: `${JSON.stringify(receipt)}\n`,
     };
 }
+
+async function executionFixture(t, calls = 4) {
+    const project = fileURLToPath(new URL("../../", import.meta.url));
+    const parent = path.join(project, "examples", "viewExamples", ".test-runs");
+    await mkdir(parent, { recursive: true });
+    const root = await mkdtemp(path.join(parent, "campaign-protocol-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const f = fixture();
+    f.outputs.records[0].targetViewId = "case-1";
+    const content = JSON.parse(f.outputs.records[0].saved);
+    content.sections[0].id = "case-1";
+    content.index[0].pageId = "case-1";
+    f.outputs.records[0].saved = JSON.stringify(content);
+    const artifacts = exampleArtifacts(f);
+    const receipt = JSON.parse(artifacts.receipt);
+    receipt.mode = "live";
+    receipt.injectedBehavior = null;
+    receipt.runtime = {
+        nodeVersion: process.version,
+        synthesisIdentity: "synthetic-child-protocol",
+        configurationHash: h,
+        providerSettingsHash: h,
+        providers: ["test-provider"],
+        models: ["test-model"],
+    };
+    artifacts.receipt = JSON.stringify(receipt);
+    const body = JSON.stringify({
+        messages: [
+            {
+                role: "user",
+                content: JSON.stringify({ fragments: [{ text: quote }] }),
+            },
+        ],
+    });
+    const manifest = {
+        schemaVersion: 1,
+        contract: "memory-request-capture-v1",
+        caseId: "case-1",
+        requestEvidenceKind: "admitted-dispatch-body",
+        calls: [
+            {
+                id: "one",
+                checkpoint: 1,
+                requestFile: "calls/one/request.json",
+                requestHash: sha256(body),
+                operation: "informational_wiki:normal",
+                outcome: { state: "returned", elapsedMs: 1 },
+                reservations: [
+                    { inputTokens: 10, outputTokens: 10, safetyTokens: 1 },
+                ],
+                usage: null,
+            },
+        ],
+    };
+    const files = {
+        "receipt.json": artifacts.receipt,
+        "saved.json": artifacts.saved,
+        "rendered.txt": artifacts.rendered,
+        "source-mapping.json": artifacts.sourceMapping,
+        "request-evidence.json": artifacts.requestEvidence,
+        "evidence.json": JSON.stringify({
+            selectedEvidence: f.outputs.records[0].selectedEvidence,
+            citationResolutions: f.outputs.records[0].citationResolutions,
+        }),
+        "request-calls.json": JSON.stringify(manifest),
+        "calls/one/request.json": body,
+        "checkpoints.json": JSON.stringify({
+            checkpoints: [
+                {
+                    sequence: 1,
+                    status: "accepted",
+                    stage: "complete",
+                    revisionId: receipt.revisionId,
+                },
+            ],
+        }),
+        "revisions/0001/saved.json": artifacts.saved,
+        "revisions/0001/rendered.txt": artifacts.rendered,
+        "revisions/0001/evidence.json": "{}",
+    };
+    const childScript = `
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { createHash } from "node:crypto";
+const args = process.argv.slice(2);
+const root = args[args.indexOf("--root") + 1];
+const authorization = args[args.indexOf("--authorization") + 1];
+const execution = JSON.parse(await readFile(path.join(path.dirname(authorization), "execution.json"), "utf8"));
+if (execution.schedule.filter(row => row.status === "running").length !== 1)
+    throw new Error("Schedule must be persisted before the child starts");
+const corpus = createHash("sha256").update(root).digest("hex").slice(0, 20);
+const files = JSON.parse((await readFile(new URL("./protocol.json", import.meta.url), "utf8")).replaceAll("owned-corpus", corpus));
+const receipt = JSON.parse(files["receipt.json"]);
+for (const [field, file] of [["savedHash", "saved.json"], ["renderedHash", "rendered.txt"], ["requestHash", "request-evidence.json"]])
+    receipt[field] = createHash("sha256").update(files[file]).digest("hex");
+files["receipt.json"] = JSON.stringify(receipt);
+for (const [name, data] of Object.entries(files)) {
+    const file = path.join(root, ...name.split("/"));
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, data, { flag: "wx" });
+}
+`;
+    const bindings = [];
+    const arms = [];
+    for (const id of ["baseline", "candidate"]) {
+        const productRoot = path.join(root, id);
+        for (const base of [
+            "examples/viewExamples",
+            "packages/memory/service",
+            "packages/memory/client",
+            "packages/memory/conversation",
+            "packages/aiclient",
+            "packages/config",
+            "packages/knowPro",
+        ])
+            for (const directory of ["src", "dist"])
+                await mkdir(
+                    path.join(productRoot, ...base.split("/"), directory),
+                    { recursive: true },
+                );
+        await writeFile(
+            path.join(
+                productRoot,
+                "examples",
+                "viewExamples",
+                "dist",
+                "cli.js",
+            ),
+            childScript,
+        );
+        await writeFile(
+            path.join(
+                productRoot,
+                "examples",
+                "viewExamples",
+                "dist",
+                "protocol.json",
+            ),
+            JSON.stringify(files),
+        );
+        await writeFile(
+            path.join(
+                productRoot,
+                "packages",
+                "memory",
+                "service",
+                "dist",
+                "viewSynthesis.js",
+            ),
+            `// Synthetic ${id} protocol fixture; no model calls.`,
+        );
+        const implementation =
+            await snapshotCampaignImplementation(productRoot);
+        const arm = {
+            ...f.run.arms[0],
+            id,
+            sourceCommit: implementation.sourceCommit,
+            patchHash: implementation.patchHash,
+            promptHash: implementation.promptHash,
+            schemaHash: implementation.schemaHash,
+            eligibleSourcesHash: identity(f.packet),
+            nodeVersion: process.version,
+            configurationIdentity: "synthetic-child-protocol",
+        };
+        arms.push(arm);
+        bindings.push({
+            id,
+            productRoot,
+            implementationHash: identity(implementation),
+            declaredArm: arm,
+        });
+    }
+    f.run.arms = arms;
+    f.campaign.schemaVersion = 2;
+    f.campaign.contract = campaignContractV2;
+    f.run.schemaVersion = 2;
+    f.run.campaignHash = identity(f.campaign);
+    f.run.generations = 2;
+    f.run.budget = { calls, tokens: 1000, cost: 10 };
+    const requestBudget = {
+        inputTokens: 10000,
+        outputTokens: 100,
+        safetyTokens: 1,
+        elapsedMs: 10000,
+        tokenizer: "utf8-bytes-v1",
+    };
+    const authorization = {
+        approved: true,
+        identity: "synthetic-child-protocol-test",
+        approvedAt: "2026-11-07T10:00:00Z",
+        campaignHash: identity(f.campaign),
+        caseIds: f.run.caseIds,
+        armIds: arms.map((arm) => arm.id),
+        generations: 2,
+        budget: f.run.budget,
+        maxCostPerCall: 1,
+        bindingsHash: identity(bindings),
+        requestBudgetHash: identity(requestBudget),
+        timeoutMs: 10000,
+    };
+    f.run.permissionRecordHash = identity(authorization);
+    const ownedRoot = path.join(root, "campaign");
+    await mkdir(ownedRoot);
+    await writeFile(
+        path.join(ownedRoot, ".quality-view-campaign-owner.json"),
+        JSON.stringify({
+            schemaVersion: 1,
+            purpose: "quality-view-campaign",
+            ownerId: "synthetic-test",
+        }),
+    );
+    return {
+        project,
+        root: path.relative(project, ownedRoot),
+        packet: f.packet,
+        campaign: f.campaign,
+        run: f.run,
+        authorization,
+        bindings,
+        requestBudget,
+        timeoutMs: 10000,
+    };
+}
+
+function upgradeCampaignV2(f) {
+    const { input } = f;
+    input.campaign.schemaVersion = 2;
+    input.campaign.contract = campaignContractV2;
+    input.run.schemaVersion = 2;
+    input.outputs.schemaVersion = 2;
+    input.annotations.schemaVersion = 2;
+    input.gold.schemaVersion = 2;
+    const canonical = ({ sourceId, sourceVersion, quote }) => ({
+        sourceId,
+        sourceVersion,
+        quote,
+    });
+    for (const entry of input.gold.cases)
+        for (const expected of entry.expectations)
+            expected.witnesses = expected.witnesses.map(canonical);
+    for (const row of input.annotations.records) {
+        const output = input.outputs.records.find(
+            (output) => output.id === row.id,
+        );
+        const gold = input.gold.cases.find(
+            (entry) => entry.id === output.caseId,
+        );
+        for (const label of row.expectations)
+            label.witnesses = gold.expectations.find(
+                (expected) => expected.id === label.id,
+            ).witnesses;
+    }
+    for (const entry of f.rubric.cases) {
+        for (const order of entry.ordering)
+            order.witnesses = order.witnesses.map(canonical);
+        for (const checkpoint of entry.checkpoints)
+            for (const expected of checkpoint.expectations)
+                expected.witnesses = expected.witnesses.map(canonical);
+    }
+    input.mapping = {
+        ...input.mapping,
+        schemaVersion: 2,
+        contract: "informational-view-ingestion-v2",
+        records: input.outputs.records.flatMap((row) =>
+            input.mapping.records
+                .filter((record) => record.caseId === row.caseId)
+                .map((record) => ({ ...record, attemptId: row.id })),
+        ),
+    };
+}
+
+test("campaign coordinator executes all frozen arm/generation slots through child protocol and retains unknown usage", async (t) => {
+    const spec = await executionFixture(t);
+    const result = await executeCampaign(spec);
+    assert.equal(result.qualityQualified, false);
+    assert.equal(result.outputs.records.length, 4);
+    assert.deepEqual(
+        result.outputs.records.map((row) => row.status),
+        ["ok", "ok", "ok", "ok"],
+        JSON.stringify(result.execution),
+    );
+    assert(
+        result.outputs.records.every(
+            (row) =>
+                row.telemetry.tokens === null && row.telemetry.cost === null,
+        ),
+    );
+    assert.equal(result.mapping.records.length, 4);
+    const durable = JSON.parse(
+        await readFile(
+            path.join(spec.project, spec.root, "execution.json"),
+            "utf8",
+        ),
+    );
+    assert(durable.schedule.every((slot) => slot.status === "ok"));
+});
+
+test("campaign coordinator records every unattempted slot after reservation exhaustion", async (t) => {
+    const spec = await executionFixture(t, 1);
+    const result = await executeCampaign(spec);
+    assert.deepEqual(
+        result.outputs.records.map((row) => row.status),
+        ["ok", "missing", "missing", "missing"],
+        JSON.stringify(result.execution),
+    );
+    assert(
+        result.outputs.records
+            .slice(1)
+            .every(
+                (row) =>
+                    row.telemetry.calls === 0 && row.telemetry.tokens === null,
+            ),
+    );
+    assert(
+        result.execution
+            .slice(1)
+            .every((slot) => slot.status === "not-attempted"),
+    );
+});
+
+test("campaign coordinator rejects unauthorized settings and mutated frozen implementations before execution", async (t) => {
+    const spec = await executionFixture(t);
+    spec.requestBudget.inputTokens++;
+    await assert.rejects(executeCampaign(spec), /bind frozen deployments/);
+    spec.requestBudget.inputTokens--;
+    await writeFile(
+        path.join(
+            spec.bindings[0].productRoot,
+            "packages",
+            "memory",
+            "service",
+            "dist",
+            "viewSynthesis.js",
+        ),
+        "// Changed after freeze",
+    );
+    await assert.rejects(
+        executeCampaign(spec),
+        /Frozen arm implementation changed/,
+    );
+});
 
 test("actual example ViewVersion and snapshot artifacts bridge without invented prompts or usage", () => {
     const f = fixture();

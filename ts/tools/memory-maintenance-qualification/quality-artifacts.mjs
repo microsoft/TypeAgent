@@ -563,19 +563,7 @@ function finishComparison(
     const means = [...clusters.values()].map(
         (values) => values.reduce((a, b) => a + b, 0) / values.length,
     );
-    let state = seed >>> 0;
-    const random = () => {
-        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-        return state / 2 ** 32;
-    };
-    const samples = Array.from(
-        { length: resamples },
-        () =>
-            means.reduce(
-                (sum) => sum + means[Math.floor(random() * means.length)],
-                0,
-            ) / means.length,
-    ).sort((a, b) => a - b);
+    const estimate = clusteredMeanInterval(means, { seed, resamples });
     const a = scorecard.arms[baseline];
     const b = scorecard.arms[candidate];
     const reduction =
@@ -590,15 +578,8 @@ function finishComparison(
         scheduledPairs: left.length,
         completePairs: complete,
         failedOrMissingPairs: left.length - complete,
-        qualificationRecallDelta:
-            means.reduce((a, b) => a + b, 0) / means.length,
-        clustered95PercentInterval:
-            means.length < 2
-                ? null
-                : [
-                      samples[Math.floor(resamples * 0.025)],
-                      samples[Math.floor(resamples * 0.975)],
-                  ],
+        qualificationRecallDelta: estimate.mean,
+        clustered95PercentInterval: estimate.interval,
         seed,
         resamples,
         baselineOmissionBearingOutputs: a.omissionBearingOutputs,
@@ -617,5 +598,59 @@ function finishComparison(
                 : "fail",
         interpretation:
             "Paired bundle-cluster pilot estimate, not independent generations or a production guarantee",
+    };
+}
+
+export function clusteredMeanInterval(
+    means,
+    { seed, resamples, confidence = 0.95 },
+) {
+    check(
+        Array.isArray(means) &&
+            means.length > 0 &&
+            means.every(Number.isFinite),
+        "Finite independent cluster means required",
+    );
+    check(Number.isSafeInteger(seed), "Integer bootstrap seed required");
+    check(
+        Number.isSafeInteger(resamples) && resamples >= 100,
+        "At least 100 bootstrap resamples required",
+    );
+    check(
+        Number.isFinite(confidence) && confidence > 0 && confidence < 1,
+        "Confidence must be between zero and one",
+    );
+    let state = seed >>> 0;
+    const random = () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        return state / 2 ** 32;
+    };
+    const samples = Array.from(
+        { length: resamples },
+        () =>
+            means.reduce(
+                (sum) => sum + means[Math.floor(random() * means.length)],
+                0,
+            ) / means.length,
+    ).sort((a, b) => a - b);
+    return {
+        mean: means.reduce((a, b) => a + b, 0) / means.length,
+        interval:
+            means.length < 2
+                ? null
+                : [
+                      samples[
+                          Math.min(
+                              resamples - 1,
+                              Math.floor((resamples * (1 - confidence)) / 2),
+                          )
+                      ],
+                      samples[
+                          Math.min(
+                              resamples - 1,
+                              Math.floor((resamples * (1 + confidence)) / 2),
+                          )
+                      ],
+                  ],
     };
 }

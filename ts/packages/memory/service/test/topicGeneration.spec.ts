@@ -744,6 +744,91 @@ test.each([false, true])(
     },
 );
 
+test.each([1, 8, 9, 17])(
+    "lazy summaries resolve the final supplied citation (%i citations)",
+    async (count) => {
+        const citations = Array.from(
+            { length: count },
+            (_, index) => occurrence(`source-${index}`).citations[0],
+        );
+        const concept = {
+            id: `concept:${"b".repeat(32)}`,
+            label: "Reference",
+            scope: "Synthetic evidence",
+            purpose: "Exercise the summary contract",
+            memberIds: ["topic:one"],
+            summary: "",
+            summaryState: "pending" as const,
+            citations,
+            salience: 4,
+        };
+        const before = structuredClone(concept);
+        let calls = 0;
+        const summarize = createConfiguredTopicConceptSummarizer(undefined, {
+            completionSettings: {},
+            complete: async (messages) => {
+                if (typeof messages === "string")
+                    throw new Error("Expected role messages");
+                const content = messages.find(
+                    (message) => message.role === "user",
+                )!.content;
+                if (typeof content !== "string")
+                    throw new Error("Expected text payload");
+                const payload = JSON.parse(content);
+                expect(payload.evidence).toHaveLength(count);
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        calls++ === 0
+                            ? {
+                                  summary: "Grounded reference.",
+                                  evidenceIds: [count - 1],
+                              }
+                            : { safe: true, failures: [] },
+                    ),
+                };
+            },
+        });
+        expect(await summarize(concept, new AbortController().signal)).toEqual({
+            summary: "Grounded reference.",
+            citations: [citations[count - 1]],
+        });
+        expect(calls).toBe(2);
+        expect(concept).toEqual(before);
+    },
+);
+
+test.each([-1, 0.5, 9, "8"])(
+    "lazy summaries reject unsupplied citation %p",
+    async (id) => {
+        const summarize = createConfiguredTopicConceptSummarizer(undefined, {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: JSON.stringify({
+                    summary: "Rejected.",
+                    evidenceIds: [id],
+                }),
+            }),
+        });
+        await expect(
+            summarize(
+                {
+                    id: `concept:${"b".repeat(32)}`,
+                    label: "Reference",
+                    scope: "Test",
+                    purpose: "Test",
+                    memberIds: ["topic:one"],
+                    summary: "",
+                    citations: occurrence("source").citations,
+                    salience: 4,
+                },
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("unsupplied evidence");
+    },
+);
+
 test("curation checkpoints seed only unchanged policy and exact captured evidence", async () => {
     const frozen = await capture(input(55).topicInput!.occurrences);
     const checkpoints: TopicSnapshot[] = [];

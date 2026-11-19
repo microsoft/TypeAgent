@@ -3,6 +3,7 @@
 
 import { readFile } from "node:fs/promises";
 import { docPartsFromMarkdown } from "@typeagent/conversation-memory";
+import { projectSectionCitations } from "./informationalProjectTestModel.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -86,6 +87,7 @@ function candidate() {
         assignments: [],
         milestoneItems: [],
         decisionItems: [],
+        sectionCitationIds: projectSectionCitations(),
         openQuestions: [],
         riskItems: [],
         goalsScope:
@@ -105,6 +107,89 @@ function candidate() {
         capacityState: "pendingOwnerReview",
     };
 }
+
+test("project relationships cite only the fragments selected for their own section", () => {
+    const input = snapshot("A milestone is proposed; its date is unknown.");
+    const block = {
+        sourceId: "update",
+        revisionId: "current",
+        blockOrdinal: 0,
+        score: 1,
+        text: "Production deployment has not been approved.",
+    };
+    input.inputs.push({
+        ...input.inputs[0],
+        sourceId: block.sourceId,
+        content: block.text,
+        passages: [
+            {
+                sourceId: block.sourceId,
+                revisionId: block.revisionId,
+                locator: indexedLocator(block, 0, block.text.length),
+                excerpt: block.text,
+            },
+        ],
+    });
+    const raw = {
+        ...candidate(),
+        citationIds: ["f0", "f1"],
+        sectionCitationIds: {
+            ...projectSectionCitations([]),
+            milestones: ["f0"],
+            decisions: ["f1"],
+            status: ["f1"],
+        },
+    };
+    const output = hydrateProjectSummary(input, raw);
+    expect(output.relationships).toHaveLength(3);
+    expect(output.relationships.map((edge) => [edge.from, edge.to])).toEqual([
+        [
+            { kind: "section", viewId: "project", sectionId: "project:status" },
+            { kind: "source", sourceId: "update", revisionId: "current" },
+        ],
+        [
+            {
+                kind: "section",
+                viewId: "project",
+                sectionId: "project:milestones",
+            },
+            { kind: "source", sourceId: "selected", revisionId: "current" },
+        ],
+        [
+            {
+                kind: "section",
+                viewId: "project",
+                sectionId: "project:decisions",
+            },
+            { kind: "source", sourceId: "update", revisionId: "current" },
+        ],
+    ]);
+});
+
+test.each(["missing-role", "extra-role", "unknown-fragment"])(
+    "project section citations reject %s",
+    (mode) => {
+        const raw = candidate();
+        if (mode === "missing-role") delete raw.sectionCitationIds.owners;
+        if (mode === "extra-role") raw.sectionCitationIds.invented = [];
+        if (mode === "unknown-fragment") raw.sectionCitationIds.owners = ["f1"];
+        expect(() =>
+            hydrateProjectSummary(snapshot("Original evidence"), raw),
+        ).toThrow();
+    },
+);
+
+test.each(["", "   "])(
+    "project role prose rejects blank input %p rather than filling it silently",
+    (decisions) => {
+        expect(() =>
+            hydrateProjectSummary(snapshot("Original evidence"), {
+                ...candidate(),
+                decisions,
+            }),
+        ).toThrow("Invalid informational project-summary fields");
+    },
+);
 
 test("grounded project structured details and item identities survive refresh without root duplicates", () => {
     const input = snapshot(

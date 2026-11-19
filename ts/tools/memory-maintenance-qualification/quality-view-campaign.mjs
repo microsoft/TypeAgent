@@ -9,8 +9,14 @@ import {
     sha256,
     unique,
 } from "./quality-contract.mjs";
+import {
+    capturedConstructionRequests,
+    capturedRequestContains,
+    validateRequestCapture,
+} from "./quality-request-capture.mjs";
 
 export const campaignContract = "informational-view-campaign-v1";
+export const campaignContractV2 = "informational-view-campaign-v2";
 export const coverageMetrics = [
     "qualification",
     "wikiReference",
@@ -219,7 +225,10 @@ export function validateConstructionPacket(packet) {
 export function validateCampaign(campaign, packet) {
     const constructionHash = validateConstructionPacket(packet);
     check(
-        campaign.schemaVersion === 1 && campaign.contract === campaignContract,
+        (campaign.schemaVersion === 1 &&
+            campaign.contract === campaignContract) ||
+            (campaign.schemaVersion === 2 &&
+                campaign.contract === campaignContractV2),
         "Campaign contract mismatch",
     );
     text(campaign.id, "campaign.id");
@@ -310,7 +319,7 @@ function validateThresholds(thresholds) {
 
 export function validateCampaignRun(run, campaign, packet) {
     check(
-        run.schemaVersion === 1 &&
+        run.schemaVersion === campaign.schemaVersion &&
             run.campaignHash === validateCampaign(campaign, packet),
         "Run campaign identity mismatch",
     );
@@ -386,7 +395,9 @@ export function campaignSchedule(run) {
 
 export function validateIngestionMapping(mapping, packet) {
     check(
-        mapping.schemaVersion === 1 &&
+        (mapping.schemaVersion === 1 ||
+            (mapping.schemaVersion === 2 &&
+                mapping.contract === "informational-view-ingestion-v2")) &&
             mapping.constructionHash === validateConstructionPacket(packet),
         "Mapping construction identity mismatch",
     );
@@ -409,6 +420,9 @@ export function validateIngestionMapping(mapping, packet) {
             row.caseId,
             row.sourceId,
             row.sourceVersion,
+            ...(mapping.schemaVersion === 2
+                ? [text(row.attemptId, "mapping attemptId")]
+                : []),
         ]);
         const actualKey = JSON.stringify([
             row.corpusId,
@@ -426,7 +440,12 @@ export function validateIngestionMapping(mapping, packet) {
     return entries;
 }
 
-export function validateCampaignWitness(witness, bundle, mapping) {
+export function validateCampaignWitness(
+    witness,
+    bundle,
+    mapping,
+    { constructionOnly = false } = {},
+) {
     const source = bundle.sources.find(
         (s) => s.id === witness.sourceId && s.version === witness.sourceVersion,
     );
@@ -436,8 +455,22 @@ export function validateCampaignWitness(witness, bundle, mapping) {
         source.text.includes(witness.quote),
         "Witness quote absent from source",
     );
-    const retained = mapping.get(
-        JSON.stringify([bundle.id, source.id, source.version]),
+    if (constructionOnly) {
+        keys(
+            witness,
+            ["sourceId", "sourceVersion", "quote"],
+            "construction witness",
+        );
+        return source;
+    }
+    const retained = [...mapping.values()].find(
+        (entry) =>
+            entry.caseId === bundle.id &&
+            entry.sourceId === source.id &&
+            entry.sourceVersion === source.version &&
+            entry.corpusId === witness.corpusId &&
+            entry.ingestedSourceId === witness.ingestedSourceId &&
+            entry.revisionId === witness.revisionId,
     );
     check(
         retained &&
@@ -449,13 +482,34 @@ export function validateCampaignWitness(witness, bundle, mapping) {
     return retained;
 }
 
+function constructionRequests(row) {
+    return row.requestCapture === undefined
+        ? row.serializedRequest === null
+            ? []
+            : [row.serializedRequest]
+        : capturedConstructionRequests(row.requestCapture);
+}
+
+function constructionContains(row, quote) {
+    return constructionRequests(row).some((request) =>
+        row.requestCapture === undefined
+            ? request.includes(quote)
+            : capturedRequestContains(request, quote),
+    );
+}
+
 function artifactHashes(row) {
-    return Object.fromEntries(
+    const hashes = Object.fromEntries(
         ["saved", "rendered", "serializedRequest"].map((key) => [
             `${key}Hash`,
             row[key] === null ? null : identity(row[key]),
         ]),
     );
+    if (row.requestCapture !== undefined)
+        hashes.requestCaptureHash = identity(row.requestCapture);
+    if (row.checkpointArtifacts !== undefined)
+        hashes.checkpointArtifactsHash = identity(row.checkpointArtifacts);
+    return hashes;
 }
 
 function validateTelemetry(telemetry) {
@@ -483,13 +537,24 @@ export function validateCampaignOutputs(
     const runHash = validateCampaignRun(run, campaign, packet);
     validateIngestionMapping(mapping, packet);
     check(
-        outputs.schemaVersion === 1 &&
+        outputs.schemaVersion === run.schemaVersion &&
+            mapping.schemaVersion === run.schemaVersion &&
             outputs.runHash === runHash &&
             outputs.mappingHash === identity(mapping),
         "Output run/mapping identity mismatch",
     );
     const rows = unique(outputs.records, "id", "outputs");
     const plan = campaignSchedule(run);
+    if (run.schemaVersion === 2)
+        for (const record of mapping.records)
+            check(
+                plan.some(
+                    (slot) =>
+                        slot.id === record.attemptId &&
+                        slot.caseId === record.caseId,
+                ),
+                "Mapping refers to unknown attempt or case",
+            );
     check(
         rows.size === plan.length,
         "Absent output rows: record every scheduled slot",
@@ -511,6 +576,18 @@ export function validateCampaignOutputs(
             text(row[key], `output.${key}`);
         text(row.targetViewId, "targetViewId");
         validateTelemetry(row.telemetry);
+        if (row.requestCapture !== undefined) {
+            const requests = validateRequestCapture(
+                row.requestCapture,
+                row.caseId,
+                { requireComplete: row.status === "ok" },
+            );
+            if (row.serializedRequest !== null)
+                check(
+                    requests.includes(row.serializedRequest),
+                    "Primary request must be an admitted construction/repair body",
+                );
+        }
         for (const key of ["saved", "rendered", "serializedRequest"]) {
             check(
                 row[key] === null || typeof row[key] === "string",
@@ -756,10 +833,11 @@ function savedContent(row, bundle) {
     return content;
 }
 
-function actualEvidence(evidence, bundle, mapping) {
+function actualEvidence(evidence, bundle, mapping, attemptId) {
     const retained = [...mapping.values()].find(
         (m) =>
             m.caseId === bundle.id &&
+            (m.attemptId === undefined || m.attemptId === attemptId) &&
             m.corpusId === evidence.corpusId &&
             m.ingestedSourceId === evidence.sourceId &&
             m.revisionId === evidence.revisionId,
@@ -802,7 +880,7 @@ function citationResult(row, content, bundle, mapping) {
                     r.excerpt === citation.excerpt,
             );
             check(receipt, "Missing exact citation resolution receipt");
-            actualEvidence(receipt, bundle, mapping);
+            actualEvidence(receipt, bundle, mapping, row.id);
             check(
                 receipt.resolvedText === citation.excerpt,
                 "Service citation excerpt mismatch",
@@ -827,10 +905,11 @@ function citationResult(row, content, bundle, mapping) {
     };
 }
 
-function validateGold(gold, review, packet, mapping) {
+function validateGold(gold, review, packet, mapping, schemaVersion) {
     const constructionHash = validateConstructionPacket(packet);
     check(
-        gold.schemaVersion === 1 && gold.constructionHash === constructionHash,
+        gold.schemaVersion === schemaVersion &&
+            gold.constructionHash === constructionHash,
         "Gold construction identity mismatch",
     );
     check(
@@ -876,7 +955,9 @@ function validateGold(gold, review, packet, mapping) {
                 "Accessible gold needs source witnesses",
             );
             for (const witness of expected.witnesses)
-                validateCampaignWitness(witness, bundle, mapping);
+                validateCampaignWitness(witness, bundle, mapping, {
+                    constructionOnly: schemaVersion === 2,
+                });
         }
     }
     return cases;
@@ -890,6 +971,7 @@ function validateAnnotation(
     mapping,
     goldHash,
     mappingHash,
+    schemaVersion,
 ) {
     check(annotation, `Missing human annotation: ${row.id}`);
     check(
@@ -966,18 +1048,35 @@ function validateAnnotation(
         if (label.selected) {
             text(label.requestQuote, "selected quote");
             check(
-                row.serializedRequest?.includes(label.requestQuote) &&
-                    expectation.witnesses.some(
-                        (w) =>
+                constructionContains(row, label.requestQuote) &&
+                    expectation.witnesses.some((w) => {
+                        const retained =
+                            schemaVersion === 2
+                                ? [...mapping.values()].find(
+                                      (record) =>
+                                          record.attemptId === row.id &&
+                                          record.caseId === bundle.id &&
+                                          record.sourceId === w.sourceId &&
+                                          record.sourceVersion ===
+                                              w.sourceVersion,
+                                  )
+                                : {
+                                      ingestedSourceId: w.ingestedSourceId,
+                                      revisionId: w.revisionId,
+                                      corpusId: w.corpusId,
+                                  };
+                        return (
                             w.quote.includes(label.requestQuote) &&
+                            retained &&
                             row.selectedEvidence.some(
                                 (e) =>
-                                    e.sourceId === w.ingestedSourceId &&
-                                    e.revisionId === w.revisionId &&
-                                    e.corpusId === w.corpusId &&
+                                    e.sourceId === retained.ingestedSourceId &&
+                                    e.revisionId === retained.revisionId &&
+                                    e.corpusId === retained.corpusId &&
                                     e.excerpt.includes(label.requestQuote),
-                            ),
-                    ),
+                            )
+                        );
+                    }),
                 "Selected gold quote absent from actual selected revision/request",
             );
         }
@@ -1134,9 +1233,15 @@ export function scoreCampaignArtifacts(
         mapping,
     );
     const retained = validateIngestionMapping(mapping, packet);
-    const expectedCases = validateGold(gold, review, packet, retained);
+    const expectedCases = validateGold(
+        gold,
+        review,
+        packet,
+        retained,
+        run.schemaVersion,
+    );
     check(
-        annotations.schemaVersion === 1 &&
+        annotations.schemaVersion === run.schemaVersion &&
             annotations.runHash === runHash &&
             annotations.goldHash === identity(gold),
         "Annotations run/gold identity mismatch",
@@ -1150,9 +1255,9 @@ export function scoreCampaignArtifacts(
         const bundle = packet.bundles.find((b) => b.id === slot.caseId);
         const expected = expectedCases.get(slot.caseId);
         for (const evidence of row.selectedEvidence) {
-            actualEvidence(evidence, bundle, retained);
+            actualEvidence(evidence, bundle, retained, row.id);
             check(
-                row.serializedRequest?.includes(evidence.excerpt),
+                constructionContains(row, evidence.excerpt),
                 "Selected excerpt absent from serialized request",
             );
         }
@@ -1166,9 +1271,16 @@ export function scoreCampaignArtifacts(
                   row,
                   expected,
                   bundle,
-                  retained,
+                  run.schemaVersion === 2
+                      ? new Map(
+                            [...retained].filter(
+                                ([, record]) => record.attemptId === row.id,
+                            ),
+                        )
+                      : retained,
                   identity(gold),
                   identity(mapping),
+                  run.schemaVersion,
               )
             : null;
         if (!needsLabel)
@@ -1331,8 +1443,8 @@ export function scoreCampaignArtifacts(
         }),
     );
     return {
-        schemaVersion: 1,
-        contract: campaignContract,
+        schemaVersion: run.schemaVersion,
+        contract: campaign.contract,
         campaignHash: identity(campaign),
         runHash,
         constructionHash: identity(packet),

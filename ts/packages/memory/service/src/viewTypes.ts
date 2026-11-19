@@ -677,9 +677,16 @@ export interface ViewSupportReport {
     missingContext: string[];
     reasons: string[];
     exclusions?: Array<{ itemId: string; supported: boolean; reason: string }>;
+    informational?: import("./informationalSupport.js").InformationalSupport;
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    repairInformational?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        report: ViewSupportReport,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     /** Inspect complete configured schema-generation wire requests, without inference.
      * Implementations must also inspect every schema audit and repair before dispatch.
      */

@@ -2,6 +2,33 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { guardHeadRequest } from "./harness.mjs";
+
+export async function savePublicDraftAtCurrentHead(client, request) {
+    const diagnostics = [];
+    const successfulReturns = [];
+    const deadline = Date.now() + 60_000;
+    const saved = await guardHeadRequest(
+        async () =>
+            client.saveViewDraft({
+                ...request,
+                expectedHead: (await client.listViews(request.corpusId)).head,
+            }),
+        {
+            checkDeadline: () =>
+                assert.ok(
+                    Date.now() < deadline,
+                    "Public save deadline exhausted",
+                ),
+            isStale: (error) =>
+                error instanceof Error &&
+                error.message === "View history head conflict",
+            onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+            onSuccessfulReturn: (receipt) => successfulReturns.push(receipt),
+        },
+    );
+    return { saved, diagnostics, successfulReturns };
+}
 
 export async function publicRoundTrip(
     service,
@@ -133,9 +160,8 @@ export async function publicRoundTrip(
                 expectedVersion: canonical.version + 999,
             }),
         );
-        const saved = protocol.viewHistoryEntrySchema.parse(
-            await client.saveViewDraft(request),
-        );
+        const guardedSave = await savePublicDraftAtCurrentHead(client, request);
+        const saved = protocol.viewHistoryEntrySchema.parse(guardedSave.saved);
         assert.deepEqual(saved.version.content, canonical.content);
         const readBack = await client.getView({
             corpusId,
@@ -174,6 +200,8 @@ export async function publicRoundTrip(
             afterEditPublication,
             hostClosesOwnedService: true,
             guardedStaleWriteDenied: true,
+            optimisticHeadRetries: guardedSave.diagnostics,
+            optimisticHeadRetryReturns: guardedSave.successfulReturns,
             registeredSections: canonical.content.sections.length,
             endpointOrigin: endpoint.origin,
             scope: "Fresh actual service-produced content through real public in-process/RPC/HTTP-MCP methods; no replay fixture or alternate parser",

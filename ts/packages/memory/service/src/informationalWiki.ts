@@ -242,7 +242,7 @@ export function hydrateInformational(
         !value.prose.trim() ||
         !("limits" in value) ||
         typeof value.limits !== "string" ||
-        !value.limits.trim() ||
+        value.limits.length > 4000 ||
         !("citationIds" in value) ||
         !Array.isArray(value.citationIds) ||
         !value.citationIds.length ||
@@ -306,7 +306,7 @@ export function hydrateInformational(
     return {
         content,
         outcome: "knowledgePages",
-        missingEvidence: [value.limits],
+        missingEvidence: value.limits.trim() ? [value.limits.trim()] : [],
         relationships: [...new Set(citations.map(viewSourceKey))].map(
             (key, position) => {
                 const supporting = citations.filter(

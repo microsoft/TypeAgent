@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalValidation } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -990,9 +991,7 @@ async function rehearsal(
                     .map((_, index) => `f${index}`),
             });
         },
-        validate: async () => {
-            throw new Error("Legacy validation must not run");
-        },
+        validate: controlledInformationalValidation,
     };
     const open = () =>
         new FileMemoryService(root, {
@@ -1355,9 +1354,7 @@ test.each([
                     citationIds: fragments.map((_, index) => `f${index}`),
                 });
             },
-            validate: async () => {
-                throw new Error("Unexpected generic support path");
-            },
+            validate: controlledInformationalValidation,
         };
         const open = () =>
             new FileMemoryService(root, {

@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -378,11 +379,8 @@ export function offlineConsolidationAdapter() {
                 citationIds: fragments.map((_, index) => `f${index}`),
             });
         },
-        async validate() {
-            throw new Error(
-                "Informational consolidation must not use universal model checking",
-            );
-        },
+        validate: async (_input, output) =>
+            controlledInformationalSupport(output),
         async checkEditorial() {
             return { safe: true, failures: [] };
         },

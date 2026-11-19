@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { controlledInformationalSupport } from "./informationalSupportTestModel.js";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -28,6 +29,7 @@ import {
 import { ViewBuildRunner } from "../src/viewBuilds.js";
 import { EditorialRejection } from "../src/viewEditorial.js";
 import { viewHash } from "../src/viewMerge.js";
+import { publicationProof } from "../src/viewPublication.js";
 import type {
     ViewBuildJob,
     ViewBuildSnapshot,
@@ -144,6 +146,11 @@ async function preparedStore(root: string) {
         retiringVersion: retiring.version,
         input: captured,
         output: combined.output,
+        validation: publicationProof(
+            captured.fingerprint,
+            combined.output,
+            controlledInformationalSupport(combined.output),
+        ),
         anchors: combined.anchors,
         assessment: {
             relation: "samePurpose",
@@ -531,6 +538,11 @@ test("verified prose repair persists across canonical acceptance, redirect activ
             job.results[1].wikiConsolidation = {
                 ...receipt,
                 ...prepared,
+                validation: publicationProof(
+                    receipt.input.fingerprint,
+                    prepared.output,
+                    controlledInformationalSupport(prepared.output),
+                ),
                 identity: viewHash(prepared),
             };
         });
@@ -685,6 +697,11 @@ test("bounded canonical retirement preserves every original link and rejects the
                 retiringVersion: retiring.version,
                 input: captured,
                 output: combined.output,
+                validation: publicationProof(
+                    captured.fingerprint,
+                    combined.output,
+                    controlledInformationalSupport(combined.output),
+                ),
                 anchors: combined.anchors,
             };
             await fixture.store.updateViewBuild(
@@ -956,9 +973,8 @@ test.each([
             {
                 identity: "offline",
                 generate: async (snapshot) => output(snapshot),
-                validate: async () => {
-                    throw new Error("No universal support checker");
-                },
+                validate: async (_input, output) =>
+                    controlledInformationalSupport(output),
             },
             {
                 update: async (_corpus, _job, update) => {

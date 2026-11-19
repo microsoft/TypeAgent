@@ -481,7 +481,7 @@ export async function installProductPerformance(
         "prepareInventory",
         "consolidateWikiTarget",
         "verifyEditorialUpdate",
-        "verifyContributionRefresh",
+        "verifyFactualOutput",
         "assessWikiAdmission",
         "skipInformationalTarget",
     ])

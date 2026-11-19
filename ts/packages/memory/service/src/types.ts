@@ -267,6 +267,7 @@ export interface SourceContentRequest {
     offset?: number;
     maxChars?: number;
     indexedLocator?: string;
+    includeIndexedBlock?: boolean;
 }
 
 export interface SourceContent {
@@ -279,6 +280,7 @@ export interface SourceContent {
     totalChars: number;
     truncated: boolean;
     nextOffset?: number;
+    indexedBlock?: string;
 }
 
 export interface SourceReplaceRequest {
@@ -1023,6 +1025,11 @@ export interface CorpusIndex {
         request: IndexedFragmentRequest,
     ): Promise<IndexedFragmentSelection>;
     resolveIndexedLocator?(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ): Promise<string>;
+    resolveIndexedBlock?(
         sourceId: string,
         revisionId: string,
         locator: string,
