@@ -78,8 +78,8 @@ elements, or is a record of who did what:
 A member, rule or scenario is therefore either in the agreed blueprint
 or part of a pending proposed change. The pending changes are the
 human's queue, like open pull requests, and agreeing to one is merging
-it. Git may hold them directly, as branches or patches against the
-design files (Proposed).
+it. For now they are patch files against the design files, kept in a
+directory, so the tool doesn't depend on git (Agreed 2026-11-19).
 
 ## Roles
 
@@ -478,8 +478,7 @@ slow; it is off the human's loop.
 ## Not yet decided
 
 - The tools of roles other than the design agent.
-- Where pending proposed changes live (git branches or patches, or
-  something else), and how a view lists them.
+- How a view lists pending proposed changes.
 - What views show (above).
 - Which escalation rule the vibe-coding workflow uses by default.
 - How extraction works: its tooling, its views, and how designers judge
@@ -545,3 +544,6 @@ slow; it is off the human's loop.
   histories is deferred until test porting is explored.
 - 2026-11-19: blame from rules, and the debugging steps as an
   illustration, not a prescription.
+- 2026-11-19: proposed changes are patch files in a directory, for now,
+  with no git dependency. The first project for the tool is a list with
+  undo and redo, smaller than circles.

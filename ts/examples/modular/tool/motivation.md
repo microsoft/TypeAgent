@@ -51,6 +51,15 @@ system will evolve, and noticing when the typical answer is wrong.
 Everything else goes to agents and checks. This is why we record human
 hours (`../design-costs.json`).
 
+**Smaller for the human, more detail for the AI.** When a design choice
+trades size for the human against detail for the AI, prefer what is
+smaller for the human. Paying attention to more details is one of AI's
+great contributions, and the checks back it up. For example, the undo
+list records its history as operations ("replace 0 'oat milk', was
+'milk'") rather than as snapshots of the whole list: each entry is small
+for a person to read, and the rules for undoing each kind of operation,
+which are longer, fall to the AI. (Agreed 2026-11-19.)
+
 **The inner loop of design.** A developer's inner loop is the time from
 making a change to seeing its full effect. Shortening it changes how well
 developers work, human or AI, and the effect is not linear: both a
