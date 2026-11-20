@@ -144,6 +144,74 @@ function ancestorsOf(i: Interface, byName: Map<string, Interface>): string[] {
   return out;
 }
 
+/** Splits text at each occurrence of sep outside brackets and strings. */
+function splitTop(text: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'" || c === "`") i = text.indexOf(c, i + 1);
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (depth === 0 && text.startsWith(sep, i)) {
+      parts.push(text.slice(start, i));
+      start = i + sep.length;
+      i += sep.length - 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((p) => p.trim());
+}
+
+/** The one comparison <, <=, > or >= at depth 0 in text, as [left, operator, right], or undefined. */
+function comparison(text: string): [string, string, string] | undefined {
+  let depth = 0;
+  let found: [string, string, string] | undefined;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'" || c === "`") i = text.indexOf(c, i + 1);
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (depth === 0 && (c === "<" || c === ">") && text[i - 1] !== "=" && text[i - 1] !== c && text[i + 1] !== c) {
+      if (found) return undefined;
+      const op = text[i + 1] === "=" ? `${c}=` : c;
+      found = [text.slice(0, i).trim(), op, text.slice(i + op.length).trim()];
+      i += op.length - 1;
+    }
+  }
+  return found;
+}
+
+/**
+ * The bounds a @requires expression puts on its parameters: for each
+ * conjunct at the top level comparing a parameter with an expression that
+ * doesn't mention it, such as 0 <= index or index < this.length, the
+ * lowest and highest values as expressions. A strict bound is taken as
+ * one past, for integers: index < this.length gives this.length - 1.
+ */
+export function boundsOf(expression: string, params: readonly string[]): Map<string, { lo: string[]; hi: string[] }> {
+  const bounds = new Map<string, { lo: string[]; hi: string[] }>();
+  const mentions = (text: string, p: string) => new RegExp(`\\b${p}\\b`).test(text);
+  // Read every comparison as x <op> other, flipping it when the parameter is on the right.
+  const flip: Record<string, string> = { "<": ">", "<=": ">=", ">": "<", ">=": "<=" };
+  for (const conjunct of splitTop(expression.replace(/\s+/g, " "), "&&")) {
+    const c = comparison(conjunct);
+    if (!c) continue;
+    const [left, op, right] = c;
+    const p = params.find((q) => left === q && !mentions(right, q)) ?? params.find((q) => right === q && !mentions(left, q));
+    if (!p) continue;
+    const [o, other] = left === p ? [op, right] : [flip[op], left];
+    const b = bounds.get(p) ?? { lo: [], hi: [] };
+    if (o === ">=") b.lo.push(other);
+    else if (o === ">") b.lo.push(`(${other}) + 1`);
+    else if (o === "<=") b.hi.push(other);
+    else b.hi.push(`(${other}) - 1`);
+    bounds.set(p, b);
+  }
+  return bounds;
+}
+
 /** The text of the compiled rules module for the project. */
 export async function generateRules(options: RuleGenOptions): Promise<string> {
   const { dir, compiled, typeFiles } = options;
@@ -211,7 +279,15 @@ function post${k}${typeParams}(this: ${thisType}, __old: ReturnType<typeof pre${
   ${destructure(body)}return ${body};
 }`);
       const when = r.tag === "requires" && !/\bnested\(/.test(r.expression) ? "entry" : r.tag === "invariant" ? "invariant" : r.tag === "initially" ? "initially" : "return";
-      entries.push(`  { id: "${r.id}", tag: "${r.tag}", iface: "${i.name}", member: ${member ? `"${member}"` : "null"}, when: "${when}", pre: pre${k}, at: at${k}, post: post${k} },`);
+      const bounds = when === "entry" && isMethod ? boundsOf(r.expression, params) : new Map<string, { lo: string[]; hi: string[] }>();
+      if (bounds.size) {
+        const fields = [...bounds].map(([p, b]) => `${p}: [[${b.lo.join(", ")}], [${b.hi.join(", ")}]]`).join(", ");
+        fns.push(`// ${r.id}: the bounds it puts on ${[...bounds.keys()].join(", ")}
+function bounds${k}${typeParams}(this: ${thisType}, ...args: ${args}): Record<string, readonly [readonly number[], readonly number[]]> {
+  ${destructure([...bounds.values()].flatMap((b) => [...b.lo, ...b.hi]).join(" "))}return { ${fields} };
+}`);
+      }
+      entries.push(`  { id: "${r.id}", tag: "${r.tag}", iface: "${i.name}", member: ${member ? `"${member}"` : "null"}, when: "${when}", pre: pre${k}, at: at${k}, post: post${k}${bounds.size ? `, bounds: bounds${k}` : ""} },`);
     }
   }
   const shapes = all.map((i) => `  ${i.name}: { ancestors: ${JSON.stringify(ancestorsOf(i, byName))}, members: ${JSON.stringify(i.members.map((m) => m.name))} },`);
@@ -239,6 +315,8 @@ export interface CompiledRule {
   readonly pre: Function;
   readonly at: Function;
   readonly post: Function;
+  /** For a @requires rule checked on entry: the lowest and highest values it allows each number parameter, as lists to take the max and min of. */
+  readonly bounds?: Function;
 }
 
 ${fns.join("\n\n")}

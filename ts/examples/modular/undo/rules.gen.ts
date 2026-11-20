@@ -19,6 +19,8 @@ export interface CompiledRule {
   readonly pre: Function;
   readonly at: Function;
   readonly post: Function;
+  /** For a @requires rule checked on entry: the lowest and highest values it allows each number parameter, as lists to take the max and min of. */
+  readonly bounds?: Function;
 }
 
 // ListReader.read-only: Reading items, length, get, canUndo, canRedo, past or future changes nothing.
@@ -77,6 +79,11 @@ function post4(this: ListReader, __old: ReturnType<typeof pre4>, __at: readonly 
   return Number.isInteger(index) && 0 <= index && index < this.length;
 }
 
+// ListReader.get.in-range: the bounds it puts on index
+function bounds4(this: ListReader, ...args: Parameters<ListReader["get"]>): Record<string, readonly [readonly number[], readonly number[]]> {
+  return { index: [[0], [(this.length) - 1]] };
+}
+
 // ListReader.get.reads: Returns the item at index.
 function pre5(this: ListReader, ...args: Parameters<ListReader["get"]>) {
   return [] as const;
@@ -110,6 +117,11 @@ function at7(this: List, ...args: Parameters<List["add"]>) {
 function post7(this: List, __old: ReturnType<typeof pre7>, __at: readonly ReturnType<typeof at7>[], result: ReturnType<List["add"]>, ...args: Parameters<List["add"]>) {
   const [index] = args;
   return Number.isInteger(index) && 0 <= index && index <= this.length;
+}
+
+// List.add.in-range: the bounds it puts on index
+function bounds7(this: List, ...args: Parameters<List["add"]>): Record<string, readonly [readonly number[], readonly number[]]> {
+  return { index: [[0], [this.length]] };
 }
 
 // List.add.inserts: text is inserted at index; the other items keep their order.
@@ -148,6 +160,11 @@ function post10(this: List, __old: ReturnType<typeof pre10>, __at: readonly Retu
   return Number.isInteger(index) && 0 <= index && index < this.length;
 }
 
+// List.remove.in-range: the bounds it puts on index
+function bounds10(this: List, ...args: Parameters<List["remove"]>): Record<string, readonly [readonly number[], readonly number[]]> {
+  return { index: [[0], [(this.length) - 1]] };
+}
+
 // List.remove.removes: The item at index is removed; the others keep their order.
 function pre11(this: List, ...args: Parameters<List["remove"]>) {
   return [this.items, this.items] as const;
@@ -182,6 +199,11 @@ function at13(this: List, ...args: Parameters<List["replace"]>) {
 function post13(this: List, __old: ReturnType<typeof pre13>, __at: readonly ReturnType<typeof at13>[], result: ReturnType<List["replace"]>, ...args: Parameters<List["replace"]>) {
   const [index] = args;
   return Number.isInteger(index) && 0 <= index && index < this.length;
+}
+
+// List.replace.in-range: the bounds it puts on index
+function bounds13(this: List, ...args: Parameters<List["replace"]>): Record<string, readonly [readonly number[], readonly number[]]> {
+  return { index: [[0], [(this.length) - 1]] };
 }
 
 // List.replace.replaces: The item at index becomes text; the others are unchanged.
@@ -239,16 +261,16 @@ export const compiledRules: readonly CompiledRule[] = [
   { id: "ListReader.length", tag: "invariant", iface: "ListReader", member: null, when: "invariant", pre: pre1, at: at1, post: post1 },
   { id: "ListReader.can-undo", tag: "invariant", iface: "ListReader", member: null, when: "invariant", pre: pre2, at: at2, post: post2 },
   { id: "ListReader.can-redo", tag: "invariant", iface: "ListReader", member: null, when: "invariant", pre: pre3, at: at3, post: post3 },
-  { id: "ListReader.get.in-range", tag: "requires", iface: "ListReader", member: "get", when: "entry", pre: pre4, at: at4, post: post4 },
+  { id: "ListReader.get.in-range", tag: "requires", iface: "ListReader", member: "get", when: "entry", pre: pre4, at: at4, post: post4, bounds: bounds4 },
   { id: "ListReader.get.reads", tag: "ensures", iface: "ListReader", member: "get", when: "return", pre: pre5, at: at5, post: post5 },
   { id: "List.empty", tag: "initially", iface: "List", member: null, when: "initially", pre: pre6, at: at6, post: post6 },
-  { id: "List.add.in-range", tag: "requires", iface: "List", member: "add", when: "entry", pre: pre7, at: at7, post: post7 },
+  { id: "List.add.in-range", tag: "requires", iface: "List", member: "add", when: "entry", pre: pre7, at: at7, post: post7, bounds: bounds7 },
   { id: "List.add.inserts", tag: "ensures", iface: "List", member: "add", when: "return", pre: pre8, at: at8, post: post8 },
   { id: "List.add.records", tag: "ensures", iface: "List", member: "add", when: "return", pre: pre9, at: at9, post: post9 },
-  { id: "List.remove.in-range", tag: "requires", iface: "List", member: "remove", when: "entry", pre: pre10, at: at10, post: post10 },
+  { id: "List.remove.in-range", tag: "requires", iface: "List", member: "remove", when: "entry", pre: pre10, at: at10, post: post10, bounds: bounds10 },
   { id: "List.remove.removes", tag: "ensures", iface: "List", member: "remove", when: "return", pre: pre11, at: at11, post: post11 },
   { id: "List.remove.records", tag: "ensures", iface: "List", member: "remove", when: "return", pre: pre12, at: at12, post: post12 },
-  { id: "List.replace.in-range", tag: "requires", iface: "List", member: "replace", when: "entry", pre: pre13, at: at13, post: post13 },
+  { id: "List.replace.in-range", tag: "requires", iface: "List", member: "replace", when: "entry", pre: pre13, at: at13, post: post13, bounds: bounds13 },
   { id: "List.replace.replaces", tag: "ensures", iface: "List", member: "replace", when: "return", pre: pre14, at: at14, post: post14 },
   { id: "List.replace.records", tag: "ensures", iface: "List", member: "replace", when: "return", pre: pre15, at: at15, post: post15 },
   { id: "List.undo.undoes", tag: "ensures", iface: "List", member: "undo", when: "return", pre: pre16, at: at16, post: post16 },

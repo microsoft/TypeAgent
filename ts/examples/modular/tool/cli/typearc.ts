@@ -285,7 +285,7 @@ const historyLines = (g: Generated): string[] => {
   return [];
 };
 
-/** Runs the history generator on each instance maker, as an interface; every rule must be evaluated. An empty label leaves lines unlabeled. */
+/** Runs the history generator on each instance maker, as an interface; every rule must be evaluated, and every category of a bounded parameter reached. An empty label leaves lines unlabeled. */
 async function followRules(p: Project, rules: RuleSet, makers: readonly [string, string, Maker][]): Promise<string[]> {
   const members = memberShapes(p.dir, p.interfaces);
   const problems: string[] = [];
@@ -294,6 +294,7 @@ async function followRules(p: Project, rules: RuleSet, makers: readonly [string,
     const at = label ? `${label}: ` : "";
     problems.push(...historyLines(g).map((l, i) => (i === 0 ? `${at}${l}` : l)));
     if (g.unevaluated.length) problems.push(`${at}no history evaluated ${g.unevaluated.join(", ")}`);
+    if (g.unreached.length) problems.push(`${at}no call reached ${g.unreached.join(", ")}`);
   }
   return problems;
 }

@@ -342,9 +342,14 @@ legacy case, and it ends as those rules get expressions. `typearc
 check` requires an expression for every rule it evaluates. The tool's
 generic history generator is `cli/histories.ts`: it needs no
 hand-written file. It reads the members and their parameter types,
-keeps only calls whose `@requires` holds (searching small numbers for
-arguments that keep it), and fails a check if some rule is never
-evaluated. `typearc check` runs it on the references and on each
+keeps only calls whose `@requires` holds, and fails a check if some
+rule is never evaluated. A number parameter that a `@requires` rule
+bounds, such as `0 <= index && index < this.length`, is chosen in the
+range the rule allows in the current state; each such call falls in one
+of the range's categories (its only position, low edge, high edge or
+middle), and a check fails if some category is never reached. Other
+arguments that break a `@requires` rule are replaced by small numbers
+that keep it. Histories are up to 100 calls long. `typearc check` runs it on the references and on each
 adversary; `typearc test` on the library. References and doubles are
 `*kit.ts`; adversaries are in `adversaries/`; `testkit.ts`
 and `ruleCheck.ts` are shared.

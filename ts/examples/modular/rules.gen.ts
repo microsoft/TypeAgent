@@ -22,6 +22,8 @@ export interface CompiledRule {
   readonly pre: Function;
   readonly at: Function;
   readonly post: Function;
+  /** For a @requires rule checked on entry: the lowest and highest values it allows each number parameter, as lists to take the max and min of. */
+  readonly bounds?: Function;
 }
 
 // MessageProcessor.remote-seq: Each remote operation has an assigned seq, greater than any earlier remote operation's.

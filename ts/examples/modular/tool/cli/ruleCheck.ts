@@ -34,6 +34,8 @@ export interface CompiledRule {
   readonly pre: Function;
   readonly at: Function;
   readonly post: Function;
+  /** For a @requires rule checked on entry: the lowest and highest values it allows each number parameter (ruleGen.ts). */
+  readonly bounds?: Function;
 }
 
 /** A project's compiled rules, and each interface's ancestors (itself first) and own members. */

@@ -72,3 +72,17 @@ Phase 1 decisions, agreed with the human. The design is `list.ts` and
   seeds 1 to 3. Redo from the end needs two undone changes before a
   redo, which short histories rarely reach; full-length histories and
   methods weighted above reads fixed that, with no undo-specific code.
+- 2026-11-20: index ranges and their categories. The generator reads
+  the range each `@requires` rule allows an index (`0` to
+  `this.length - 1`, or to `this.length` for add) and picks the low
+  edge, the high edge or a value between. Counted by category on the
+  reference, over seeds 1 to 3: searching small numbers from 0 reached
+  the low edge about six times as often as the high edge (1292 to 208
+  in 30-call histories); with ranges the edges are even (745 to 727).
+  The middle needs a list of three items, which 30-call histories
+  seldom built (146 calls in the middle against 2238 at a list's only
+  position), so histories are now 100 calls long. No call is out of
+  range: that is the caller's fault in this design, and testing it would
+  first need a rule saying what the list does. `typearc check` now fails
+  when some category of an index is never reached; with 8-call
+  histories it reports the low edge and middle of remove, among others.
