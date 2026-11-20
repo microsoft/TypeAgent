@@ -64,7 +64,7 @@ type ChatCompletionDelta = {
 
 type ChatCompletionChunk = {
     id: string;
-    choices: ChatCompletionDelta[];
+    choices?: ChatCompletionDelta[];
     usage?: ProviderUsage | null;
 };
 
@@ -79,7 +79,7 @@ function flattenUsage(usage: ProviderUsage): CompletionUsageStats {
 }
 
 function verifyStreamContentSafety(data: ChatCompletionChunk): void {
-    data.choices.map((c: ChatCompletionDelta) => {
+    (data.choices ?? []).map((c: ChatCompletionDelta) => {
         if (c.finish_reason === "length") {
             throw new Error(incompleteOutputMessage);
         }
@@ -254,9 +254,12 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
         const state = { emittedPrefix: "" };
         return {
             push: (raw: string): StreamPiece => {
-                const data = JSON.parse(raw) as ChatCompletionChunk;
-                verifyStreamContentSafety(data);
+                const data = JSON.parse(raw) as ChatCompletionChunk | null;
                 const piece: StreamPiece = {};
+                if (typeof data !== "object" || data === null) {
+                    return piece;
+                }
+                verifyStreamContentSafety(data);
                 if (data.choices && data.choices.length > 0) {
                     applyStreamChoice(
                         piece,
