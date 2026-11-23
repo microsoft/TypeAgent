@@ -78,7 +78,7 @@ export type LocalRecipeMatch =
     | { status: "ambiguous"; message: string }
     | { status: "handled"; result: RunMacroResponse };
 
-function operation<S extends z.ZodTypeAny>(
+function operation<S extends z.ZodType>(
     schema: S,
     handler: (args: z.output<S>) => unknown,
 ): (args: unknown[]) => Promise<unknown> {
@@ -330,7 +330,7 @@ export async function createLocalRecipeService(
                 ref
                     .extend({
                         runId: id,
-                        inputs: z.record(z.unknown()).optional(),
+                        inputs: z.record(z.string(), z.unknown()).optional(),
                         timeoutMs: z.number().positive().max(60_000).optional(),
                         dryRun: z.boolean().optional(),
                     })

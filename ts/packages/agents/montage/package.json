@@ -43,7 +43,7 @@
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
-    "body-parser": "1.20.6",
+    "body-parser": "1.20.9",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "debug": "^4.4.0",

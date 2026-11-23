@@ -40,7 +40,7 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "html-to-text": "^9.0.5",
     "yaml": "^2.8.3",
-    "zod": "^3.25.0"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@github/copilot-sdk": "1.0.13",
