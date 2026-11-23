@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@azure/ai-projects": "^2.2.0",
-    "@azure/identity": "^4.10.0",
+    "@azure/identity": "^4.14.1",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",

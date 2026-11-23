@@ -23,6 +23,7 @@ const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
 
 const treeWithScalarArraysSchema: z.ZodType<unknown> = z.lazy(() =>
     z.record(
+        z.string(),
         z.union([
             scalarSchema,
             treeWithScalarArraysSchema,

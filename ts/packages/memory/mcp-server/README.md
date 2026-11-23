@@ -49,7 +49,9 @@ Existing `memory_search`, `memory_answer` and generic result construction are un
 Preview budgets are enforced on serialized UTF-8 data: 8 KiB model-facing
 wrapper, 32 KiB initial UI model, 64 KiB expansion and 400 KiB renderer.
 The original 200 KiB renderer target was raised because the compatible official
-bridge and its validation dependencies exceed it. Whole claims/sections are
+bridge and its validation dependencies exceed it. The English-language renderer
+bundles only Zod's English error messages; server-side validation is unchanged.
+Whole claims/sections are
 omitted explicitly rather than sliced. Expansion is bounded to six timeline
 entries or eight graph nodes/ten edges.
 

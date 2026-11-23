@@ -309,7 +309,7 @@ export class TypeAgentMacroMcpServer {
             {
                 macroId: z.string().min(1),
                 version: z.number().int().positive().optional(),
-                inputs: z.record(z.unknown()).optional(),
+                inputs: z.record(z.string(), z.unknown()).optional(),
                 timeoutMs: z.number().int().positive().max(60_000).optional(),
                 dryRun: z.boolean().optional(),
             },

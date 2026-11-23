@@ -99,7 +99,7 @@
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
     "ws": "^8.21.3",
-    "zod": "^4.1.13"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
