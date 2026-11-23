@@ -89,11 +89,12 @@ supportedArchitectures:
 
 overrides:
   "@azure/core-xml": ">=1.5.0 <2.0.0"
-  # Azure Identity 4.10 uses browser APIs removed in MSAL Browser 5.
-  "@azure/identity": ">=4.13.1 <5.0.0"
+  # This Identity release supports MSAL Browser 5 and uses patched MSAL Node 7.
+  "@azure/identity": ">=4.14.1 <5.0.0"
   "@azure/msal-browser": ">=5.25.1 <6.0.0"
   # Transformers 3.x still pins an older sharp image backend.
   "@huggingface/transformers@3>sharp": ">=0.35.4 <0.36.0"
+  "body-parser@1": ">=1.20.9 <2.0.0"
   "express>path-to-regexp": "0.1.13"
   fast-xml-parser: ">=5.5.7 <6.0.0"
   hono: ">=4.12.8 <5.0.0"
@@ -103,5 +104,9 @@ overrides:
   node-gyp: "^12.2.0"
   "router>path-to-regexp": ">=8.4.0 <9.0.0"
   serialize-javascript: ">=7.0.5 <8.0.0"
+  # 0.1.3 supports Zod 4 with TypeScript 5; 0.1.4 requires TypeScript 7.
+  typechat: "0.1.3"
+  "undici@7": ">=7.30.1 <8.0.0"
   # Update Milkdown's Vue runtime and server renderer together.
   vue: ">=3.5.42 <3.6.0"
+  "zod@4": ">=4.6.6 <5.0.0"

@@ -4,6 +4,7 @@
 import { build } from "esbuild";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 const bundle = await build({
     entryPoints: ["src/previewApp.ts"],
@@ -14,6 +15,22 @@ const bundle = await build({
     platform: "browser",
     target: "es2022",
     charset: "utf8",
+    plugins: [
+        {
+            name: "preview-zod-locales",
+            setup(build) {
+                // The preview is English-only. The MCP SDK imports Zod's
+                // namespace, which otherwise bundles every error translation.
+                build.onLoad(
+                    { filter: /[\\/]zod[\\/]v4[\\/]locales[\\/]index\.js$/ },
+                    ({ path }) => ({
+                        contents: 'export { default as en } from "./en.js";',
+                        resolveDir: dirname(path),
+                    }),
+                );
+            },
+        },
+    ],
 });
 const script = bundle.outputFiles[0].text.replaceAll("</script", "<\\/script");
 const css = `body{font:14px/1.5 var(--font-sans,system-ui);color:var(--color-text-primary,#202124);background:var(--color-background-primary,#fff);margin:16px;overflow-wrap:anywhere}button{font:inherit;color:inherit;background:var(--color-background-secondary,#f4f4f4);border:1px solid var(--color-border-primary,#999);border-radius:8px;padding:6px 10px;margin:4px;cursor:pointer}button:focus-visible{outline:2px solid currentColor;outline-offset:2px}h2{font-size:1.2rem}section{border-top:1px solid var(--color-border-primary,#aaa);padding-top:8px;margin-top:12px}small{display:block}pre{white-space:pre-wrap}ol,ul{padding-left:22px}`;

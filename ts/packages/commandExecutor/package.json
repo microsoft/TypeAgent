@@ -37,7 +37,7 @@
     "dotenv": "^16.3.1",
     "html-to-text": "^9.0.5",
     "isomorphic-ws": "^5.0.0",
-    "zod": "^4.1.13"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -36,11 +36,15 @@ const sdkImports = [
 
 test("lockfile excludes versions affected by the remaining S360 dependency alerts", () => {
     for (const [name, vulnerableRange] of Object.entries({
+        "@azure/msal-node": ">=5.0.0-beta.0 <7.1.0",
         "@modelcontextprotocol/sdk": "<1.32.0",
         "@vue/server-renderer": "<3.5.42 || >=3.6.0-rc.0 <3.6.0-rc.6",
+        "body-parser": "<1.20.9 || >=2.0.0 <2.4.0",
         electron:
             "<41.10.6 || >=42.0.0-alpha.1 <42.9.2 || >=43.0.0-alpha.1 <43.4.1 || >=44.0.0-alpha.1 <44.0.0-beta.5",
         "prosemirror-view": "<1.42.3",
+        undici: ">=4.0.0 <6.29.1 || >=7.0.0 <7.30.1 || >=8.0.0 <8.12.2",
+        zod: "<4.6.6",
     })) {
         const prefix = `${name}@`;
         const versions = Object.keys(lock.packages)

@@ -37,7 +37,7 @@
     "@typeagent/config": "workspace:*",
     "@typeagent/memory-client": "workspace:*",
     "@typeagent/memory-service": "workspace:*",
-    "zod": "^4.1.13"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/jest": "^29.5.7",

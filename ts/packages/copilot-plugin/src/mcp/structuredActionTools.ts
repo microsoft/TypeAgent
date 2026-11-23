@@ -64,7 +64,7 @@ const response = z.discriminatedUnion("type", [
             type: z.literal("form"),
             value: z
                 .object({
-                    answers: z.record(fieldAnswer),
+                    answers: z.record(z.string(), fieldAnswer),
                     cancelled: z.boolean().optional(),
                 })
                 .strict(),
@@ -104,7 +104,7 @@ export function registerStructuredActionTools(
     mode: () => Mode = getMode,
 ): void {
     // MCP arguments are JSON: optional properties are absent, never undefined.
-    // Zod 3 adds undefined to optional inferred types, so the calls below narrow
+    // Zod adds undefined to optional inferred types, so the calls below narrow
     // only that type-level difference. Dispatcher validates the actual contract.
     async function invoke(
         operation: (
@@ -190,7 +190,7 @@ export function registerStructuredActionTools(
                 .object({
                     ...identity,
                     ...envelope,
-                    parameters: z.record(z.unknown()).optional(),
+                    parameters: z.record(z.string(), z.unknown()).optional(),
                 })
                 .strict(),
         },
