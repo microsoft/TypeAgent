@@ -205,6 +205,11 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                 const evt = JSON.parse(raw) as RawMessageStreamEvent;
                 const piece: StreamPiece = {};
 
+                if (evt.type === "error") {
+                    piece.error = new Error(evt.error.message);
+                    return piece;
+                }
+
                 if (
                     evt.type === "content_block_delta" &&
                     evt.delta.type === "text_delta"

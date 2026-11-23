@@ -198,7 +198,16 @@ export interface RawContentBlockStopEvent {
     type: "content_block_stop";
 }
 
+export interface RawMessageErrorEvent {
+    type: "error";
+    error: {
+        type: string;
+        message: string;
+    };
+}
+
 export type RawMessageStreamEvent =
+    | RawMessageErrorEvent
     | RawMessageStartEvent
     | RawMessageDeltaEvent
     | RawMessageStopEvent
