@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Keeps the Knowledge Base in sync with the codebase.
 #
 # Runs daily, when an issue closes, or when started manually. The reusable workflow reads
