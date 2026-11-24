@@ -76,6 +76,7 @@ YAML maps are flattened into the `EnvVars` flat-key shape used by
 | `azure.openai.deployments[].endpoint` (suffix=foo) | `AZURE_OPENAI_ENDPOINT_FOO`            |
 | `openai.api_key`                                   | `OPENAI_API_KEY`                       |
 | `bing.api_key`                                     | `BING_API_KEY`                         |
+| `bing.endpoint`                                    | `BING_ENDPOINT`                        |
 | `extra.<KEY>`                                      | `<KEY>` (passthrough for unknown keys) |
 
 See [src/flatten.ts](./src/flatten.ts) for the full mapping.
