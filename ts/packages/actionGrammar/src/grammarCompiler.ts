@@ -1325,22 +1325,42 @@ function createGrammarRule(
                     !isLocallyDefined &&
                     globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
+                    const partId = allocPartId(
+                        context,
+                        expr.pos,
+                        `<${expr.refName.name}>${expr.optional ? "?" : ""}`,
+                    );
                     parts.push(
-                        createPhraseSetPart(
-                            expr.refName.name,
-                            undefined,
-                            allocPartId(
-                                context,
-                                expr.pos,
-                                `<${expr.refName.name}>`,
-                            ),
-                        ),
+                        expr.optional
+                            ? createRulesPart(
+                                  [
+                                      {
+                                          parts: [
+                                              createPhraseSetPart(
+                                                  expr.refName.name,
+                                              ),
+                                          ],
+                                          value: undefined,
+                                          spacingMode,
+                                      },
+                                  ],
+                                  {
+                                      optional: true,
+                                      name: expr.refName.name,
+                                      partId,
+                                  },
+                              )
+                            : createPhraseSetPart(
+                                  expr.refName.name,
+                                  undefined,
+                                  partId,
+                              ),
                     );
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
                     // don't trip the "Start rule does not produce a value" check.
                     defaultValue = true;
-                    consumedInput(); // phrase sets always consume input
+                    if (!expr.optional) consumedInput();
                     break;
                 }
                 const record = createNamedGrammarRules(
@@ -1354,22 +1374,24 @@ function createGrammarRule(
                 defaultValue = record.hasValue;
                 parts.push(
                     createRulesPart(record.grammarRules, {
+                        optional: expr.optional,
                         name: expr.refName.name,
                         partId: allocPartId(
                             context,
                             expr.pos,
-                            `<${expr.refName.name}>`,
+                            `<${expr.refName.name}>${expr.optional ? "?" : ""}`,
                         ),
                     }),
                 );
-                // RuleRefExpr has no optional modifier; it is always non-optional.
-                // === false: only clear when *definitely* non-nullable (same
-                // asymmetry as the variable ruleRef case above).
-                if (record.nullable === false) {
-                    currentEpr = new Set();
+                if (!expr.optional) {
+                    // === false: only clear when *definitely* non-nullable (same
+                    // asymmetry as the variable ruleRef case above).
+                    if (record.nullable === false) {
+                        currentEpr = new Set();
+                    }
+                    // ?? false: treat undefined (back-ref) as non-nullable.
+                    ruleNullable = ruleNullable && (record.nullable ?? false);
                 }
-                // ?? false: treat undefined (back-ref) as non-nullable.
-                ruleNullable = ruleNullable && (record.nullable ?? false);
                 break;
             }
             case "rules": {
