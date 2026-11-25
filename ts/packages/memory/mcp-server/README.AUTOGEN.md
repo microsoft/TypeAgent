@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f4868a8486e0ad1231ff913a39963c0ed3fe5dc9281469e86814c5678dc100d6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=456ed218b7930fa32a69026e70857470684637ffaa9ad6e5cdc355658ba90258 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-mcp-server — AI-generated documentation
@@ -39,7 +39,7 @@ External: `@modelcontextprotocol/ext-apps`, `@modelcontextprotocol/sdk`, `zod`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/agentSessionTools.ts`, `./src/graphTools.ts`, …and 14 more under `./src/`.
+`./src/index.ts`, `./src/agentSessionTools.ts`, `./src/frameTools.ts`, …and 15 more under `./src/`.
 
 ### Environment variables
 
@@ -51,6 +51,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `dfbb1dd26cd55181537e3d66daacfa5821e02f18` on `2026-11-01T08:18:02.889Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-mcp-server docs:verify-links` to spot-check._
+_Auto-generated against commit `9d0c0c6135eb00ff717e8a30ef83acbb6dfe076c` on `2026-11-15T08:18:54.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-mcp-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
