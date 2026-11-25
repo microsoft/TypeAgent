@@ -1,0 +1,80 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Label each pull request with its review size.
+#
+# Size = added lines, excluding docs, lock files, tests, and generated files.
+#   12 added lines  -> size/S
+#   180             -> size/M
+#   420             -> size/L
+#   900             -> size/XL
+#
+# Uses pull_request_target so fork PRs can be labeled. Safe: no checkout,
+# only the PR file list from the API is read.
+
+name: pr-size-label
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Files that do not count toward review size.
+            const EXCLUDED = [
+              /\.(md|lock|gitignore)$/i,
+              /(^|\/)pnpm-lock\.yaml$/,
+              /(^|\/)(tests?|__tests__)\//i,
+              /\.(test|spec)\.[cm]?[jt]sx?$/i,
+              /\.gen\.[cm]?[jt]s$/i,
+            ];
+            // Upper bound (inclusive) of added lines per label.
+            const SIZES = [
+              { label: "size/S", max: 49 },
+              { label: "size/M", max: 200 },
+              { label: "size/L", max: 500 },
+              { label: "size/XL", max: Infinity },
+            ];
+            const PREFIX = "size/";
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            // Sum added lines over the merge-base diff.
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: issue_number,
+            });
+            const added = files
+              .filter((f) => !EXCLUDED.some((re) => re.test(f.filename)))
+              .reduce((sum, f) => sum + f.additions, 0);
+            const size = SIZES.find((s) => added <= s.max).label;
+            core.info(`Added lines: ${added} -> ${size}`);
+
+            // Replace any stale size label.
+            const { data: current } = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number,
+            });
+            for (const { name } of current) {
+              if (name.startsWith(PREFIX) && name !== size) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              }
+            }
+            if (!current.some((l) => l.name === size)) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [size] });
+            }
