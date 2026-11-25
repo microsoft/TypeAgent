@@ -20,9 +20,10 @@ const usage = [
     "@typeagent recipe owner [plugin|off]",
     "@typeagent recipe list",
     "@typeagent recipe inspect <recipeId> <revision>",
-    "@typeagent recipe status",
+    "@typeagent recipe status [jobId]",
     "@typeagent recipe run <recipeId> <version> [JSON inputs]",
     "@typeagent recipe approve <recipeId> <version>",
+    "@typeagent recipe revise <recipeId> <version> <feedback>",
     "@typeagent recipe disable <recipeId> <revision>",
     "@typeagent recipe delete <recipeId> <revision>",
     "@typeagent recipe cancel job|run <id>",
@@ -52,7 +53,8 @@ export function getRecipeCommandScope(cwd: string) {
 
 function validArguments(parts: string[]) {
     const [command, ...args] = parts;
-    if (command === "list" || command === "status") return args.length === 0;
+    if (command === "list") return args.length === 0;
+    if (command === "status") return args.length <= 1;
     if (["inspect", "approve", "disable", "delete"].includes(command))
         return args.length === 2;
     if (command === "cancel")
@@ -60,13 +62,18 @@ function validArguments(parts: string[]) {
     return false;
 }
 
+function parseRecipeVersion(value: string): number {
+    const version = Number(value);
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(version))
+        throw new Error("A positive integer recipe version is required.");
+    return version;
+}
+
 async function runSavedRecipe(
     connection: MacroOwnerConnection,
     run: RegExpMatchArray,
 ) {
-    const version = Number(run[2]);
-    if (!Number.isSafeInteger(version))
-        throw new Error("A positive integer recipe version is required.");
+    const version = parseRecipeVersion(run[2]);
     const inputs: unknown = JSON.parse(run[3] ?? "{}");
     if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs))
         throw new Error("Recipe inputs must be a JSON object.");
@@ -119,7 +126,10 @@ export async function handleRecipeCommand(
     const run = match[1]
         ?.trim()
         .match(/^run\s+(\S+)\s+([1-9]\d*)(?:\s+([\s\S]+))?$/i);
-    if (!run && !validArguments(parts)) return response(usage);
+    const revise = match[1]
+        ?.trim()
+        .match(/^revise\s+(\S+)\s+([1-9]\d*)\s+([\s\S]+)$/i);
+    if (!run && !revise && !validArguments(parts)) return response(usage);
     const [rawCommand, ...args] = parts;
     const command = rawCommand.toLowerCase();
     const scope = getRecipeCommandScope(input.cwd);
@@ -133,6 +143,16 @@ export async function handleRecipeCommand(
             );
         const connection = await connect();
         try {
+            if (revise) {
+                const job = await connection.reviseMacro({
+                    macroId: revise[1],
+                    version: parseRecipeVersion(revise[2]),
+                    feedback: revise[3],
+                });
+                return response(
+                    `${JSON.stringify(job, null, 2)}\nRevision queued. Wait for needsReview, inspect the new draft, then approve its exact version. Drafts cannot run.`,
+                );
+            }
             if (run) {
                 return response(
                     JSON.stringify(
@@ -149,14 +169,17 @@ export async function handleRecipeCommand(
             if (command === "status")
                 return response(
                     JSON.stringify(
-                        {
-                            scope,
-                            owner,
-                            recording: await connection.getMacroRecordingState(
-                                input.sessionId,
-                            ),
-                            macros: await connection.listMacros(),
-                        },
+                        args[0]
+                            ? await connection.getMacroLearningJob(args[0])
+                            : {
+                                  scope,
+                                  owner,
+                                  recording:
+                                      await connection.getMacroRecordingState(
+                                          input.sessionId,
+                                      ),
+                                  macros: await connection.listMacros(),
+                              },
                         null,
                         2,
                     ),
@@ -169,14 +192,10 @@ export async function handleRecipeCommand(
                     `Cancellation requested for ${args[0]} ${args[1]}. Completed effects are not rolled back.`,
                 );
             }
-            if (
-                !/^[1-9]\d*$/.test(args[1]) ||
-                !Number.isSafeInteger(Number(args[1]))
-            )
-                throw new Error(
-                    "A positive integer recipe version is required.",
-                );
-            const ref = { macroId: args[0], version: Number(args[1]) };
+            const ref = {
+                macroId: args[0],
+                version: parseRecipeVersion(args[1]),
+            };
             if (command === "inspect")
                 return response(
                     JSON.stringify(await connection.inspectMacro(ref), null, 2),

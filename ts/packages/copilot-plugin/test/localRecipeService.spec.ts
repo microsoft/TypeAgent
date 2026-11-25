@@ -106,6 +106,25 @@ test("blocks reflected methods, malformed arguments, cross-session and cross-wor
         ]),
     ).rejects.toThrow();
     await expect(
+        service.dispatch("reviseMacro", [
+            { macroId: "saved", feedback: "Change the name" },
+        ]),
+    ).rejects.toThrow();
+    await expect(
+        service.dispatch("reviseMacro", [
+            { macroId: "saved", version: 1, feedback: " " },
+        ]),
+    ).rejects.toThrow();
+    const client = await connectToMacroOwner(directory, "native-session");
+    await expect(
+        client.reviseMacro({
+            macroId: "missing",
+            version: 1,
+            feedback: "Change the name",
+        }),
+    ).rejects.toThrow("Macro version not found");
+    await client.close();
+    await expect(
         service.dispatch("getMacroRecordingState", ["different"]),
     ).rejects.toThrow("another native session");
     await expect(
