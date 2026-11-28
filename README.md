@@ -136,7 +136,7 @@ See more information about working with the repo [here](./docs/content/help/dev.
   - [Spelunker](./ts/packages/agents/spelunker/)
   - [Turtle](./ts/packages/agents/turtle/)
   - [Phone](.ts/packages/agents/phone/)
-  - [Photo](.ts/packages/agents/photo/)
+  - [Photo](./ts/packages/agents/photo/)
 
 ## Questions
 
